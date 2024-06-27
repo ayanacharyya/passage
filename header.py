@@ -22,10 +22,12 @@ import sys
 import re
 import json
 #import requests
+import regions
 
 from urllib.parse import quote as urlencode
 from datetime import datetime, timedelta
 from collections import defaultdict
+from regions import Regions
 from pathlib import Path
 import pandas as pd
 

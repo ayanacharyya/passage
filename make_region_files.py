@@ -18,7 +18,10 @@ def df_to_region(df, outfilename, color='cyan'):
     '''
     Converts the footprint list into a region file and saves the file
     '''
-    with open(outfilename, 'w') as f: f.write('fk5\nglobal color=' + color + '\n')
+    with open(outfilename, 'w') as f:
+        f.write('fk5\n'
+                'global color=' + color + '\n'
+                'text 150.47 2.55 {JWST-PASSAGE}\n')
 
     df['shape'] = 'box'
     df['ra_width'] = df['ra_width'].astype(str) + '\"' # to specify arcseconds for the width
