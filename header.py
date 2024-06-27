@@ -36,6 +36,7 @@ from astropy.table import Table
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy import wcs
+from astropy.io import fits
 
 # grizli stuff
 import grizli

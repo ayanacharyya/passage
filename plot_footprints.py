@@ -1,6 +1,7 @@
 '''
     Filename: plot_footprints.py
     Notes: Plots all PASSAGE field footprints and overlays with existing large survey footprints from MAST
+           This script is still W.I.P and does not yet work (for now, the workaround is plotting the footprints manually using DS9)
     Author : Ayan
     Created: 18-06-24
     Last modified: 18-06-24
@@ -10,6 +11,7 @@
 
 from header import *
 from util import *
+from make_region_files import get_passage_footprints
 
 start_time = datetime.now()
 
@@ -97,25 +99,6 @@ def plot_footprints(df, args, fig=None):
     plt.show(block=False)
 
     return fig
-
-# -------------------------------------------------------------------------------------------------------
-def get_passage_footprints(filename):
-    '''
-    Reads and returns the footprint list for PASSAGE fields
-    '''
-    NIRISS_WFSS_fov = [133, 133] # FoV in arcseconds
-
-    df = pd.read_csv(filename)
-    df = df[['Par#', 'Target RA (J2000)', 'Target Dec (J2000)']].dropna().reset_index(drop=True)
-    df = df.rename(columns={'Par#':'id', 'Target RA (J2000)':'ra', 'Target Dec (J2000)':'dec'})
-
-    df['ra_width'] = NIRISS_WFSS_fov[0] # arcseconds
-    df['dec_width'] = NIRISS_WFSS_fov[1]
-    df['pa'] = 0 # dummy value; in degrees
-    df['color'] = 'orange'
-
-    return df # df only contains id, ra, dec, ra_width, dec_width, pa (orienation), and color (to plot) for each field
-
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
