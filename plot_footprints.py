@@ -63,7 +63,7 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, table=None):
     return fig, sky_regions
 
 # -------------------------------------------------------------------------------------------------------
-def plot_zCOSMOS(fig, bg_img_hdu, color='salmon'):
+def plot_zCOSMOS(fig, bg_img_hdu, color='aqua'):
     '''
     Plots the location of all zCOSMOS galaxies (with spectra) given on an existing background image, given the header of the background image
     Returns fig handle
