@@ -22,6 +22,7 @@ def plot_zhist(df, args):
     z_min, z_max = 0, 6
 
     fig, ax = plt.subplots(figsize=(8, 6))
+    fig.subplots_adjust(right=0.95, top=0.95, bottom=0.1, left=0.1)
     hist, bin_edges = np.histogram(df['redshift'], bins=args.nbins, range=(z_min, z_max))
     ax.hist(df['redshift'], bins=bin_edges, color='k', histtype='step')
     ax.set_xlim(z_min, z_max) #

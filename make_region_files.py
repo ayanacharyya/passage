@@ -59,6 +59,6 @@ if __name__ == "__main__":
     outfilename = os.path.splitext(infilename.replace(' ', '-'))[0] + '.reg'
 
     df = get_passage_footprints(args.input_dir / infilename) # reading the passage footprints
-    df_to_region(df, args.input_dir / 'footprints/region_files' / outfilename) # making the region files
+    df_to_region(df, args.input_dir / 'footprints/region_files' / outfilename, color='red') # making the region files
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

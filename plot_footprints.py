@@ -16,46 +16,41 @@ from make_region_files import get_passage_footprints
 start_time = datetime.now()
 
 # -------------------------------------------------------------------------------------------------------
-def overlay_footprint(img_hdul_orig, img_hdul_new):
-    '''
-    Borrowed from Peter Watson
-    Not yet used in this script
-    '''
-    xpix, ypix = img_hdul_orig[1].data.shape
-    xx = np.asarray([0, 0, xpix, xpix,0])
-    yy = np.asarray([0, ypix, ypix, 0, 0])
-    orig_celestial = wcs.WCS(img_hdul_orig[0].header).celestial
-    new_celestial = wcs.WCS(img_hdul_new[0].header).celestial
-    x_p, y_p = wcs.utils.pixel_to_pixel(orig_celestial, new_celestial, yy, xx)
-
-    # extent_in_sky_coords = wcs.WCS(img_hdul_orig[0].header).calc_footprint
-
-    return x_p, y_p
-
-# -------------------------------------------------------------------------------------------------------
 def plot_footprints(region_files, bg_img_hdu, fig, args=None):
     '''
     Plots the footprint/s for a given region file and existing figure and header of the background file plotted on the figure
     Returns fig handle
     '''
     col_arr = ['blue', 'green', 'yellow', 'cyan']
+    pix_offset_forlabels = 10
+
     region_files = np.atleast_1d(region_files)
+    ax = fig.gca()
 
     for index, region_file in enumerate(region_files):
         print(f'Reading in region file {region_file}..')
-        all_regions = Regions.read(region_file, format='ds9')
+
+        sky_regions = Regions.read(region_file, format='ds9')
         wcs_header = wcs.WCS(bg_img_hdu[0].header)
 
-        if type(all_regions[0]) == regions.shapes.text.TextSkyRegion: label = all_regions[0].text
-        else: label = os.path.splitext(os.path.split(region_file)[1])[0]
+        if 'color' in sky_regions[0].visual: color = sky_regions[0].visual['color']
+        else: color = col_arr[index]
 
-        ax = fig.gca()
-        ax.text(ax.get_xlim()[0] * 1.01, ax.get_ylim()[1] * 0.98 - index * 0.2, label, c=col_arr[index], ha='left', va='top', fontsize=args.fontsize)
-        for region in all_regions:
-            try: region.to_pixel(wcs_header).plot(ax=ax, lw=2, color=col_arr[index])
-            except AttributeError: pass
 
-    return fig, all_regions
+        for sky_region in sky_regions:
+            if type(sky_region) == regions.shapes.text.TextSkyRegion: # label if it is text
+                label = sky_region.text
+                ax.text(ax.get_xlim()[0] * 1.01, ax.get_ylim()[1] * 0.98 - index * 0.05 * np.diff(ax.get_ylim())[0], label, c=color, ha='left', va='top', fontsize=args.fontsize)
+            else: # otherwise plot it
+                pixel_region = sky_region.to_pixel(wcs_header)
+                pixel_region.plot(ax=ax, lw=2, color=color)
+
+                if type(sky_region) == regions.shapes.rectangle.RectangleSkyRegion:
+                    label_pixcoord_x = pixel_region.center.xy[0] + pixel_region.width/2 + pix_offset_forlabels
+                    label_pixcoord_y = pixel_region.center.xy[1] + pixel_region.height/2 + pix_offset_forlabels
+                    ax.text(label_pixcoord_x, label_pixcoord_y, pixel_region.meta['text'], c=color, ha='left', va='top', fontsize=args.fontsize/1.5)
+
+    return fig, sky_regions
 
 # -------------------------------------------------------------------------------------------------------
 def plot_background(filename, args):
@@ -63,15 +58,16 @@ def plot_background(filename, args):
     Plots the background image for a given input filename
     Returns fig handle
     '''
-    cmap = 'Grays'
+    cmap = 'Greys'
     fig, ax = plt.subplots(figsize=(8, 6))
+    fig.subplots_adjust(right=0.99, top=0.95, bottom=0.1, left=0.01)
 
     print(f'Reading in background image file {filename}')
     bg_img_hdu = fits.open(filename)
     data = np.log10(bg_img_hdu[0].data)
     header = bg_img_hdu[0].header
 
-    ax.imshow(data, origin='lower', cmap=cmap)
+    ax.imshow(data, origin='lower', cmap=cmap, vmin=-4, vmax=-3) # full, relevant range of data, for COSMOS field, is roughly (-6,-1)
 
     ra_offset = header['CRVAL1'] - header['CRPIX1'] * header['CDELT1']
     ra_per_pix = header['CDELT1']
@@ -113,7 +109,7 @@ if __name__ == "__main__":
 
     # ------plotting the footprints---------
     #reg_filenames = ['/Users/acharyya/Work/astro/passage/passage_data/footprints/region_files/COSMOS-Web_NIRCam.reg'] ## only for debugging
-    fig, all_regions = plot_footprints(reg_filenames, bg_img_hdu, fig, args)
+    fig, sky_regions = plot_footprints(reg_filenames, bg_img_hdu, fig, args)
 
     # ------saving figure---------
     figname = args.input_dir / 'footprints' / f'{args.field}_with_footprints.png'
