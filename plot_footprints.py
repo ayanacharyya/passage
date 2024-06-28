@@ -6,32 +6,31 @@
     Created: 18-06-24
     Last modified: 18-06-24
     Example: run plot_footprints.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field COSMOS
-             run plot_footprints.py --field COSMOS
+             run plot_footprints.py --field COSMOS --plot_zcosmos
 '''
 
 from header import *
 from util import *
-from make_region_files import get_passage_footprints
 
 start_time = datetime.now()
 
 # -------------------------------------------------------------------------------------------------------
-def plot_footprints(region_files, bg_img_hdu, fig, args=None):
+def plot_footprints(region_files, bg_img_hdu, fig, args, table=None):
     '''
     Plots the footprint/s for a given region file and existing figure and header of the background file plotted on the figure
     Returns fig handle
     '''
     col_arr = ['blue', 'green', 'yellow', 'cyan']
-    pix_offset_forlabels = 10
+    pix_offset_forlabels = 20
 
-    region_files = np.atleast_1d(region_files)
     ax = fig.gca()
+    wcs_header = wcs.WCS(bg_img_hdu[0].header)
+    region_files = np.atleast_1d(region_files)
 
     for index, region_file in enumerate(region_files):
         print(f'Reading in region file {region_file}..')
 
         sky_regions = Regions.read(region_file, format='ds9')
-        wcs_header = wcs.WCS(bg_img_hdu[0].header)
 
         if 'color' in sky_regions[0].visual: color = sky_regions[0].visual['color']
         else: color = col_arr[index]
@@ -40,17 +39,55 @@ def plot_footprints(region_files, bg_img_hdu, fig, args=None):
         for sky_region in sky_regions:
             if type(sky_region) == regions.shapes.text.TextSkyRegion: # label if it is text
                 label = sky_region.text
-                ax.text(ax.get_xlim()[0] * 1.01, ax.get_ylim()[1] * 0.98 - index * 0.05 * np.diff(ax.get_ylim())[0], label, c=color, ha='left', va='top', fontsize=args.fontsize)
+                ax.text(ax.get_xlim()[0] * 1.1, ax.get_ylim()[1] * 0.98 - index * 0.05 * np.diff(ax.get_ylim())[0], label, c=color, ha='left', va='top', fontsize=args.fontsize)
             else: # otherwise plot it
+                # plotting the region
                 pixel_region = sky_region.to_pixel(wcs_header)
                 pixel_region.plot(ax=ax, lw=2, color=color)
 
+                # labeling the region
                 if type(sky_region) == regions.shapes.rectangle.RectangleSkyRegion:
                     label_pixcoord_x = pixel_region.center.xy[0] + pixel_region.width/2 + pix_offset_forlabels
                     label_pixcoord_y = pixel_region.center.xy[1] + pixel_region.height/2 + pix_offset_forlabels
-                    ax.text(label_pixcoord_x, label_pixcoord_y, pixel_region.meta['text'], c=color, ha='left', va='top', fontsize=args.fontsize/1.5)
+                    label_text = f'P{pixel_region.meta["text"]}'
+                    ax.text(label_pixcoord_x, label_pixcoord_y, label_text, c=color, ha='left', va='top', fontsize=args.fontsize/1.5)
+
+                    # detecting sources from <table> that lie within this region, if <table> provided
+                    if table is not None:
+                        n_sources = np.sum(sky_region.contains(SkyCoord(table['RAJ2000'], table['DEJ2000'], unit='deg'), wcs_header))
+                        if n_sources > 0:
+                            print(f'Region {label_text} contains {n_sources} zCOSMOS sources') #
+                            ax.text(label_pixcoord_x + 90, label_pixcoord_y, f'({n_sources})', c=color, ha='left', va='top', fontsize=args.fontsize/1.5)
+
 
     return fig, sky_regions
+
+# -------------------------------------------------------------------------------------------------------
+def plot_zCOSMOS(fig, bg_img_hdu, color='salmon'):
+    '''
+    Plots the location of all zCOSMOS galaxies (with spectra) given on an existing background image, given the header of the background image
+    Returns fig handle
+    '''
+    zCOSMOS_catalog_file = '/Users/acharyya/Work/astro/passage/passage_data/zCOSMOS-DR3/zCOSMOS_VIMOS_BRIGHT_DR3_CATALOGUE.fits'
+
+    data = fits.open(zCOSMOS_catalog_file)
+    table = Table(data[1].data)
+    sky_coords = SkyCoord(table['RAJ2000'], table['DEJ2000'], unit='deg')
+
+    wcs_header = wcs.WCS(bg_img_hdu[0].header)
+    ax=fig.gca()
+    #'''
+    # use this option for a quicker plot, but not with scale-able scatter points
+    ra_coords, dec_coords = sky_coords.to_pixel(wcs_header)
+    ax.scatter(ra_coords, dec_coords, color=color, s=1, alpha=0.3, zorder=-1)
+    '''
+    # use this option for a slower plot, but with scale-able scatter points
+    pix_coords = np.transpose(sky_coords.to_pixel(wcs_header))
+    for index in range(len(table)):
+        circle = plt.Circle(xy=pix_coords[index], radius=1, color=color, alpha=0.5)
+        ax.add_patch(circle)
+    '''
+    return fig, table
 
 # -------------------------------------------------------------------------------------------------------
 def plot_background(filename, args):
@@ -108,11 +145,12 @@ if __name__ == "__main__":
     fig, bg_img_hdu = plot_background(bg_filename, args)
 
     # ------plotting the footprints---------
-    #reg_filenames = ['/Users/acharyya/Work/astro/passage/passage_data/footprints/region_files/COSMOS-Web_NIRCam.reg'] ## only for debugging
-    fig, sky_regions = plot_footprints(reg_filenames, bg_img_hdu, fig, args)
+    if args.plot_zcosmos: fig, table = plot_zCOSMOS(fig, bg_img_hdu)
+    fig, sky_regions = plot_footprints(reg_filenames, bg_img_hdu, fig, args, table=table if 'table' in locals() else None)
 
     # ------saving figure---------
-    figname = args.input_dir / 'footprints' / f'{args.field}_with_footprints.png'
+    zCOSMOS_text = '_with_zCOSMOS' if args.plot_zcosmos else ''
+    figname = args.input_dir / 'footprints' / f'{args.field}_with_footprints{zCOSMOS_text}.png'
     fig.savefig(figname)
     print(f'Saved plot to {figname}')
     plt.show(block=False)

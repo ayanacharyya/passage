@@ -44,6 +44,7 @@ def parse_args():
 
     # ------- args added for plot_footprints.py ------------------------------
     parser.add_argument('--bg_file', metavar='bg_file', type=str, action='store', default=None, help='Which file to be used for plotting the background image?')
+    parser.add_argument('--plot_zcosmos', dest='plot_zcosmos', action='store_true', default=False, help='Overplot the (thousands of) zCOSMOS targets? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
