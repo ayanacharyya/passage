@@ -1,11 +1,11 @@
 '''
     Filename: make_spectra_from_flt.py
     Notes: Makes 1D and 2D spectra from grism flt files, for a given object in a given field
-           This script is heavily based on grizli-notebooks/NIRISS-Demo-grizli.ipynb and grizli-notebooks/JWST/glass-niriss-wfs.ipynb
+           This script is heavily based on grizli-notebooks/JWST/grizli-niriss-2023.ipynb (NB2)
     Author : Ayan
     Created: 11-06-24
     Example: run make_spectra_from_flt.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --id 3667
-             run make_spectra_from_flt.py --id 3617 --line_list OII,Hb,OIII,Ha,Ha+NII,PaA,PaB
+             run make_spectra_from_flt.py --line_list OII,Hb,OIII,Ha,Ha+NII,PaA,PaB --id 3
 '''
 
 from header import *
@@ -18,39 +18,85 @@ if __name__ == "__main__":
     args = parse_args()
 
     # ------determining directories and global variables---------
-    args.input_dir = args.input_dir / args.field / 'Extractions'
+    args.raw_dir = args.input_dir / args.field / 'RAW'
+    args.work_dir = args.input_dir / args.field / 'Extractions'
     args.output_dir = args.output_dir / args.field / f'{args.id:05d}'
     args.output_dir.mkdir(parents=True, exist_ok=True)
-
+    os.chdir(args.work_dir)
     root = args.field
-    fit_args_file = args.output_dir / f'tfit_{args.id:05d}.npy'
-    os.chdir(args.input_dir)
 
-    # -----generating fit_params dict-----------
+    # ---------determine file and filter names--------------------
+    files = glob.glob(str(args.raw_dir / '*rate.fits'))
+    res = visit_processor.res_query_from_local(files=files)
+    un = utils.Unique(res['pupil']) # Process by blocking filter
+
+    all_grism_files = glob.glob(os.path.join(args.input_dir, args.field, 'Extractions', '*GrismFLT.fits'))
+    all_grism_files.sort()
+
+    # ----------------read in the grism flt files--------------------
+    file_filters = {}
+    for f in all_grism_files:
+        with fits.open(f) as im:
+            filt = im[1].header['DFILTER'].split('-')[0]
+            if filt not in file_filters:
+                file_filters[filt] = []
+
+            file_filters[filt].append(f)
+
+    filts = un.values
+    grism_files = []
+    for filt in filts:
+        if filt in file_filters:
+            grism_files += file_filters[filt]
+
+    catalog = glob.glob(f'{root}-*.cat.fits')[0]
+    seg_file = glob.glob(f'{root}-*_seg.fits')[0]
+
+    grp = {}
+    for filt in filts:
+        if filt not in file_filters: continue
+        grp[filt] = multifit.GroupFLT(grism_files=file_filters[filt], direct_files=[], ref_file=None, seg_file=seg_file, catalog=catalog, cpu_count=1, sci_extn=1, pad=800)
+
+   # -------initialise redshift fit defaults-------------------
     pline = {'kernel': 'square', 'pixfrac': 0.5, 'pixscale': 0.04, 'size': 8, 'wcs': None}
-    dummy_args = auto_script.generate_fit_params(pline=pline, field_root=root, min_sens=0.0, min_mask=0.0, include_photometry=args.include_photometry, save_file=str(fit_args_file), full_line_list=args.line_list)
-    '''
-    #### the following part is from Peter, and atm it is redundant #######
-    # ----loading multibeam file---------------
-    #beams = grp.get_beams(args.id, size=50, min_mask=0, min_sens=0, show_exception=True, beam_id='A')
+    if args.line_list == 'all': args.linelist = ['Lya', 'OII', 'Hb', 'OIII', 'Ha', 'NII','Ha+NII', 'SII', 'SIII', 'PaD','PaG','PaB','HeI-1083','PaA']
 
-    mb = MultiBeam(str(args.input_dir / f'{root}_{args.id:05d}.beams.fits'), group_name=root, fcontam=0.2, min_sens=0.0, min_mask=0.0)
-    mb.fit_trace_shift()
+    fit_args = auto_script.generate_fit_params(field_root=root,
+                                           zr=[0.02, 8], # full redshift range to fit
+                                           dz=[0.004, 0.0004], # two-pass redshift grid steps in (1+z)
+                                           sys_err=0.03,
+                                           include_photometry=False,
+                                           fit_trace_shift=False, # this can help with some trace misalignment
+                                           dscale=0.01,
+                                           fwhm=500. * u.km / u.second, # velocity width of emission line templates
+                                           full_line_list=args.line_list, # Make line maps of these
+                                           min_sens=1.e-6, min_mask=1.e-6,  # masking around sensitivity edges
+                                           mask_resid=True,
+                                           fcontam=0.2,
+                                           # include a contribution of the contamination model in the uncertainties
+                                           pline=pline,  # line map parameters
+                                           )
 
-    fig_1d = mb.oned_figure()
-    fig_2d = mb.drizzle_grisms_and_PAs(size=32, scale=1.0, diff=False)
+    # ------------make beams files--------------------------------
+    size = 48
+    beams = []
+    mbf = {}
+    beam_groups = {}
+
+    for filt in grp:
+        beams_i = grp[filt].get_beams(args.id, size=size, min_mask=fit_args['min_mask'], min_sens=fit_args['min_sens'], mask_resid=False)
+        msg = f'{filt} {len(beams_i)}'
+        beams += beams_i
+
+    mb = multifit.MultiBeam(beams, **fit_args)
+    print(id, len(beams))
 
     mb.write_master_fits()
 
-    # -----fitting redshift---------------
-    mb_out, st, fit_table, template_fit, line_hdu = fitting.run_all_parallel(args.id, zr=[args.zmin, args.zmax], verbose=~args.silent, get_output_data=True, args_file=str(fit_args_file), group_name=str(args.output_dir / args.field))
+    for b in mb.beams: print(b.grism.filter, b.grism.pupil, b.beam.conf.conf_file)
 
-    # -------------regenerate the emission line maps----------------
-    line_hdu = mb.drizzle_fit_lines(template_fit, pline, force_line=utils.DEFAULT_LINE_LIST, save_fits=False, mask_lines=True, min_line_sn=1, mask_sn_limit=3, verbose=~args.silent, get_ir_psfs=False)
-    ##############################################
-    '''
     # -----fitting redshift---------------
-    _fit = fitting.run_all_parallel(args.id, zr=[args.zmin, args.zmax], verbose=~args.silent, get_output_data=True, args_file=str(fit_args_file), group_name=str(args.output_dir / args.field))
+    _fit = fitting.run_all_parallel(args.id, zr=[args.zmin, args.zmax], verbose=~args.silent, get_output_data=True, group_name=str(args.output_dir / args.field))
 
     os.chdir(args.code_dir)
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
