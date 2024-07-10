@@ -28,7 +28,7 @@ def parse_args():
     parser.add_argument('--silent', dest='silent', action='store_true', default=False, help='Suppress some generic pritn statements? Default is no.')
     parser.add_argument('--keep', dest='keep', action='store_true', default=False, help='Keep existing plot windows open? Default is no.')
 
-    parser.add_argument('--field', metavar='field', type=str, action='store', default='Par50', help='Which passage field? Default is Par50')
+    parser.add_argument('--field', metavar='field', type=str, action='store', default='Par008', help='Which passage field? Default is Par50')
     parser.add_argument('--id', metavar='id', type=int, action='store', default=100, help='Object ID. Default is 100')
 
     # ------- args added for get_spectra_from_beam.py ------------------------------

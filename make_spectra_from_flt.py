@@ -1,12 +1,11 @@
 '''
-    Filename: get_spectra_from_beam.py
-    Notes: Makes 1D and 2D spectra from beam files, for a given object in a given field
+    Filename: make_spectra_from_flt.py
+    Notes: Makes 1D and 2D spectra from grism flt files, for a given object in a given field
            This script is heavily based on grizli-notebooks/NIRISS-Demo-grizli.ipynb and grizli-notebooks/JWST/glass-niriss-wfs.ipynb
     Author : Ayan
     Created: 11-06-24
-    Last modified: 11-06-24
-    Example: run get_spectra_from_beam.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --id 3667
-             run get_spectra_from_beam.py --id 3617 --line_list OII,Hb,OIII,Ha,Ha+NII,PaA,PaB
+    Example: run make_spectra_from_flt.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --id 3667
+             run make_spectra_from_flt.py --id 3617 --line_list OII,Hb,OIII,Ha,Ha+NII,PaA,PaB
 '''
 
 from header import *
@@ -19,7 +18,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     # ------determining directories and global variables---------
-    args.input_dir = args.input_dir / args.field / 'beams'
+    args.input_dir = args.input_dir / args.field / 'Extractions'
     args.output_dir = args.output_dir / args.field / f'{args.id:05d}'
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
