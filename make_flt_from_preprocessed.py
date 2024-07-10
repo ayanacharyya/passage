@@ -60,8 +60,10 @@ if __name__ == "__main__":
     # ----------making grism models------------------
     pad = 800
     un = utils.Unique(res['pupil']) # Process by blocking filter
+    all_grism_files = glob.glob(str(args.input_dir / args.field / 'Extractions') + '*GrismFLT.fits')
+    all_grism_files.sort()
 
-    if len(glob.glob(str(args.input_dir / args.field / 'Extractions') + '*GrismFLT.fits')) == 0:
+    if len(all_grism_files) == 0:
         grp = {}
         for filt in un.values:
             grism_files = ['{dataset}_rate.fits'.format(**row) for row in res[is_grism & un[filt]]]
@@ -71,8 +73,6 @@ if __name__ == "__main__":
                                                files=grism_files, model_kwargs={'compute_size': False, 'size': 48}, subtract_median_filter=False, use_jwst_crds=False, cpu_count=1)
     else:
         os.chdir(os.path.join(args.input_dir, args.field, 'Extractions'))
-        all_grism_files = glob.glob('*GrismFLT.fits')
-        all_grism_files.sort()
 
         file_filters = {}
         for f in all_grism_files:
