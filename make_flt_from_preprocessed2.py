@@ -1,7 +1,7 @@
 '''
     Filename: make_flt_from_preprocessed2.py
     Notes: Makes grism flt files from pre-processed *rate.fits files, for a given field
-           This script is heavily based mostly on grizli-notebooks/JWST/grizli-niriss-2023.ipynb (NB2), and in some places on grizli-notebooks/glass-niriss-wfss.ipynb (NB1) as indicated
+           This script is heavily based on grizli-notebooks/JWST/grizli-niriss-2023.ipynb (NB2)
     Author : Ayan
     Created: 10-07-24
     Example: run make_flt_from_preprocessed2.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par008
@@ -25,45 +25,34 @@ if __name__ == "__main__":
     files = glob.glob(str(args.raw_dir / '*rate.fits'))
     files.sort()
 
-    ############### BEGIN part based on NB1 ##########################
-    # --------drizzle full mosaics-----
-    if len(glob.glob('*failed')) > 0: os.remove('*failed')
-    kwargs = get_yml_parameters()
-
-    mosaic_args = kwargs['mosaic_args']
-    mosaic_args['fill_mosaics'] = False
-
-    # Set the mosaic pixel scale here
-    mosaic_args['wcs_params']['pixel_scale'] = 0.04 # native 0.065 for NIRISS
-    mosaic_args['half_optical_pixscale'] = True
-
-    mosaic_args['ir_filters'] = ['F115W', 'F150W', 'F200W', 'F277W', 'F356W', 'F444W']
-    # mosaic_args['optical_filters'] = ['F115W','F150W','F200W'] # NIRCam
-
-    mosaic_args['wcs_params']['pad_reference'] = 6  # small padding around edge, arcsec
-    kwargs['mosaic_drizzle_args']['static'] = False
-
-    auto_script.make_combined_mosaics(root, mosaic_args=mosaic_args, mosaic_drizzle_args=kwargs['mosaic_drizzle_args'])
-
-    # -------catalog detection image--------------
-    auto_script.make_filter_combinations(root, weight_fnu=True, min_count=1, filter_combinations={'ir': ['F115W', 'F150W', 'F200W', 'F277W', 'F356W', 'F444W']})
-
-    # -------source detection and aperture photometry--------------
-    utils.set_warnings()
-    phot = auto_script.multiband_catalog(field_root=root, detection_filter='ir', get_all_filters=True)
-
-    ############### BEGIN part based on NB2 ##########################
-    # ----------determining file names------------------
-    pad = 800
-
+    # ------making mosaics----------
     res = visit_processor.res_query_from_local(files=files)
     is_grism = np.array(['GR' in filt for filt in res['filter']])
-    un = utils.Unique(res['pupil']) # Process by blocking filter
 
+    hdu = utils.make_maximal_wcs(files=files, pixel_scale=0.04, pad=4, get_hdu=True, verbose=False)
+    ref_wcs = pywcs.WCS(hdu.header)
+    _ = visit_processor.cutout_mosaic(args.field,
+                                      res=res[~is_grism], # Pass the exposure information table for the direct images
+                                      ir_wcs=ref_wcs,
+                                      half_optical=False, # Otherwise will make JWST exposures at half pixel scale of ref_wcs
+                                      kernel='square',  # Drizzle parameters
+                                      pixfrac=0.8,
+                                      clean_flt=False, # Otherwise removes "rate.fits" files from the working directory!
+                                      s3output=None,
+                                      make_exptime_map=False,
+                                      weight_type='jwst',
+                                      skip_existing=True,
+                                      )
+
+    # ----------making source catalog----------------
+    _cat = prep.make_SEP_catalog('indef-01571-292.0-nis-f200w-clear', threshold=1.2) # this part still does not work
+
+    # ----------making grism models------------------
+    pad = 800
+    un = utils.Unique(res['pupil']) # Process by blocking filter
     all_grism_files = glob.glob(str(args.input_dir / args.field / 'Extractions') + '*GrismFLT.fits')
     all_grism_files.sort()
 
-    # ----------making grism models------------------
     if len(all_grism_files) == 0:
         grp = {}
         for filt in un.values:

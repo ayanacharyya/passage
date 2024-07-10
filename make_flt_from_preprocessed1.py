@@ -71,7 +71,7 @@ if __name__ == "__main__":
     axes[1].scatter(dx.value[hasm], dy.value[hasm], alpha=0.1)
     for ax in axes: ax.grid()
     '''
-    # ----------make grism contamination model-----------------------------
+    # ----------make grism contamination model: only works for ONE filter, rather than combining different filers-----------------------------
     files = glob.glob('*GrismFLT.fits')
 
     if len(files) == 0:
@@ -80,6 +80,7 @@ if __name__ == "__main__":
         grism_prep_args['init_coeffs'] = [1.0] # Flat-flambda spectra
         grism_prep_args['mask_mosaic_edges'] = False
         grism_prep_args['gris_ref_filters'] = {'GR150R': ['F115W', 'F150W', 'F200W'], 'GR150C': ['F115W', 'F150W', 'F200W']}
+        grism_prep_args['force_ref'] = glob.glob(f'{root}-*_dr*_sci.fits*')[0]
 
         # Fairly bright for speedup, these can be adjusted based on how deep the spectra/visits are
         grism_prep_args['refine_mag_limits'] = [18, 22]
