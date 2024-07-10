@@ -1,11 +1,11 @@
 '''
-    Filename: make_flt_from_preprocessed2.py
+    Filename: make_flt_from_preprocessed.py
     Notes: Makes grism flt files from pre-processed *rate.fits files, for a given field
            This script is heavily based mostly on grizli-notebooks/JWST/grizli-niriss-2023.ipynb (NB2), and in some places on grizli-notebooks/glass-niriss-wfss.ipynb (NB1) as indicated
     Author : Ayan
     Created: 10-07-24
-    Example: run make_flt_from_preprocessed2.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par008
-             run make_flt_from_preprocessed2.py --Par008
+    Example: run make_flt_from_preprocessed.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par008
+             run make_flt_from_preprocessed.py --Par008
 '''
 
 from header import *
