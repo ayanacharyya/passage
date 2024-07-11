@@ -25,9 +25,11 @@ if __name__ == "__main__":
     files = glob.glob(str(args.raw_dir / '*rate.fits'))
     files.sort()
 
-    ############### BEGIN part based on NB1 ##########################
-    do_source_extraction = False
-    if do_source_extraction:
+    # ------drizzle and source extraction---------
+    if args.skip_sep:
+        print('Skipping source extraction step because --skip_sep was specified..')
+    else:
+        ############### BEGIN part based on NB1 ##########################
         # --------drizzle full mosaics-----
         if len(glob.glob('*failed')) > 0: os.remove('*failed')
         kwargs = get_yml_parameters()
@@ -68,12 +70,19 @@ if __name__ == "__main__":
     # ----------making grism models------------------
     if len(all_grism_files) == 0 or args.clobber:
         grp = {}
-        for filt in un.values:
+        for index, filt in enumerate(un.values):
+            start_time2 = datetime.now()
+            print(f'\nMaking grism model for filter {filt} which is {index+1} out of {len(un.values)}..')
+
+            os.chdir(args.work_dir) # needs to be done on every instance of the loop because grism_prep() changes the cwd to Extractions/ everytime
             grism_files = ['{dataset}_rate.fits'.format(**row) for row in res[is_grism & un[filt]]]
-            reference_file = glob.glob(f'{root}-{filt.lower()}_dr*_sci.fits*')[0]
+            reference_file = glob.glob(f'*{filt.lower()}-clear_drz_sci.fits')[0]
             grp[filt] = auto_script.grism_prep(field_root=root, PREP_PATH='../Prep', EXTRACT_PATH='../Extractions/', gris_ref_filters={'GR150R': ['F115W', 'F150W', 'F200W'], 'GR150C': ['F115W', 'F150W', 'F200W']},
                                                refine_niter=0, refine_mag_limits=[18, 22], prelim_mag_limit=24, init_coeffs=[1], pad=800, force_ref=reference_file,
                                                files=grism_files, model_kwargs={'compute_size': False, 'size': 48}, subtract_median_filter=False, use_jwst_crds=False, cpu_count=1)
+
+            print(f'Completed filter {filt} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}')
+
         # ------------drizzle combined images--------------
         utils.set_warnings()
         for k in grp:

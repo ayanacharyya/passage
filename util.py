@@ -29,7 +29,7 @@ def parse_args():
     parser.add_argument('--keep', dest='keep', action='store_true', default=False, help='Keep existing plot windows open? Default is no.')
 
     parser.add_argument('--field', metavar='field', type=str, action='store', default='Par008', help='Which passage field? Default is Par50')
-    parser.add_argument('--id', metavar='id', type=int, action='store', default=100, help='Object ID. Default is 100')
+    parser.add_argument('--id', metavar='id', type=str, action='store', default='100', help='Object ID. Default is 100')
 
     # ------- args added for get_spectra_from_beam.py ------------------------------
     parser.add_argument('--include_photometry', dest='include_photometry', action='store_true', default=False, help='Include photometry while computing fit parameters? Default is no.')
@@ -46,10 +46,16 @@ def parse_args():
     parser.add_argument('--bg_file', metavar='bg_file', type=str, action='store', default=None, help='Which file to be used for plotting the background image?')
     parser.add_argument('--plot_zcosmos', dest='plot_zcosmos', action='store_true', default=False, help='Overplot the (thousands of) zCOSMOS targets? Default is no.')
 
+    # ------- args added for plot_footprints.py ------------------------------
+    parser.add_argument('--skip_sep', dest='skip_sep', action='store_true', default=False, help='Skip the Source Extraction Pipeline? Default is no.')
+    parser.add_argument('--do_all_obj', dest='do_all_obj', action='store_true', default=False, help='Reduce spectra and make beam files for ALL detected objects? Default is no.')
+
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if args.line_list is not 'all': args.line_list = [item for item in args.line_list.split(',')]
     args.field = f'Par{int(args.field.split("Par")[1]):03d}'
+    args.id = [int(item) for item in args.id.split(',')]
+
     args.input_dir = Path(args.input_dir)
     args.output_dir = Path(args.output_dir)
     args.code_dir = Path(args.code_dir)

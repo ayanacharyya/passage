@@ -18,7 +18,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     # ------determining directories and global variables---------
-    subdirectories_required = ['Prep', 'RAW', 'MAST', 'Products', 'Extractions']
+    subdirectories_required = ['Prep', 'RAW', 'MAST', 'Extractions']
     for this_dir in subdirectories_required:
         sub_dir = args.input_dir / args.field / this_dir
         sub_dir.mkdir(parents=True, exist_ok=True)

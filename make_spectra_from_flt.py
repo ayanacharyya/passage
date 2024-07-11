@@ -20,8 +20,6 @@ if __name__ == "__main__":
     # ------determining directories and global variables---------
     args.raw_dir = args.input_dir / args.field / 'RAW'
     args.work_dir = args.input_dir / args.field / 'Extractions'
-    args.output_dir = args.output_dir / args.field / f'{args.id:05d}'
-    args.output_dir.mkdir(parents=True, exist_ok=True)
     os.chdir(args.work_dir)
     root = args.field
 
@@ -77,26 +75,42 @@ if __name__ == "__main__":
                                            pline=pline,  # line map parameters
                                            )
 
-    # ------------make beams files--------------------------------
+    # ------------prep for beam files--------------------------------
     size = 48
-    beams = []
-    mbf = {}
-    beam_groups = {}
+    id_arr = grp[list(grp.keys())[0]].catalog['NUMBER'] if args.do_all_obj else args.id
 
-    for filt in grp:
-        beams_i = grp[filt].get_beams(args.id, size=size, min_mask=fit_args['min_mask'], min_sens=fit_args['min_sens'], mask_resid=False)
-        msg = f'{filt} {len(beams_i)}'
-        beams += beams_i
+    # ------------make beams files--------------------------------
+    for index, this_id in enumerate(id_arr):
+        start_time2 = datetime.now()
+        print(f'\nMaking beam file for id {this_id} which is {index+1} out of {len(id_arr)}..')
 
-    mb = multifit.MultiBeam(beams, **fit_args)
-    print(id, len(beams))
+        if os.path.exists(f'{root}_{this_id:05d}.beams.fits') and not args.clobber:
+            print(f'Skipping id {this_id} due to existing file {root}_{this_id:05d}.beams.fits')
+            continue
 
-    mb.write_master_fits()
+        beams = []
+        mbf = {}
+        beam_groups = {}
 
-    for b in mb.beams: print(b.grism.filter, b.grism.pupil, b.beam.conf.conf_file)
+        for filt in grp:
+            beams_i = grp[filt].get_beams(this_id, size=size, min_mask=fit_args['min_mask'], min_sens=fit_args['min_sens'], mask_resid=False)
+            msg = f'{filt} {len(beams_i)}'
+            beams += beams_i
 
-    # -----fitting redshift---------------
-    _fit = fitting.run_all_parallel(args.id, zr=[args.zmin, args.zmax], verbose=~args.silent, get_output_data=True, group_name=str(args.output_dir / args.field))
+        print(this_id, len(beams))
+        if len(beams) == 0: continue
+        mb = multifit.MultiBeam(beams, **fit_args)
+
+        mb.write_master_fits()
+
+        for b in mb.beams: print(b.grism.filter, b.grism.pupil, b.beam.conf.conf_file)
+
+        # -----fitting redshift---------------
+        output_subdirectory = args.output_dir / args.field / f'{this_id:05d}'
+        output_subdirectory.mkdir(parents=True, exist_ok=True)
+
+        _fit = fitting.run_all_parallel(this_id, zr=[args.zmin, args.zmax], verbose=~args.silent, get_output_data=True, group_name=str(output_subdirectory / args.field))
+        print(f'Completed id {this_id} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}')
 
     os.chdir(args.code_dir)
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
