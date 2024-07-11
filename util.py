@@ -49,7 +49,7 @@ def parse_args():
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if args.line_list is not 'all': args.line_list = [item for item in args.line_list.split(',')]
-
+    args.field = f'Par{int(args.field.split("Par")[1]):03d}'
     args.input_dir = Path(args.input_dir)
     args.output_dir = Path(args.output_dir)
     args.code_dir = Path(args.code_dir)
