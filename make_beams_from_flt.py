@@ -1,11 +1,11 @@
 '''
-    Filename: make_spectra_from_flt.py
-    Notes: Makes 1D and 2D spectra from grism flt files, for a given object in a given field
+    Filename: make_beams_from_flt.py
+    Notes: Extract beams file from grism flt files, for a given object/s in a given field
            This script is heavily based on grizli-notebooks/JWST/grizli-niriss-2023.ipynb (NB2)
     Author : Ayan
     Created: 11-06-24
-    Example: run make_spectra_from_flt.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --id 3667
-             run make_spectra_from_flt.py --line_list OII,Hb,OIII,Ha,Ha+NII,PaA,PaB --id 3
+    Example: run make_beams_from_flt.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --id 3667
+             run make_beams_from_flt.py --line_list OII,Hb,OIII,Ha,Ha+NII,PaA,PaB --id 3
 '''
 
 from header import *
@@ -102,14 +102,6 @@ if __name__ == "__main__":
         mb = multifit.MultiBeam(beams, **fit_args)
 
         mb.write_master_fits()
-
-        for b in mb.beams: print(b.grism.filter, b.grism.pupil, b.beam.conf.conf_file)
-
-        # -----fitting redshift---------------
-        output_subdirectory = args.output_dir / args.field / f'{this_id:05d}'
-        output_subdirectory.mkdir(parents=True, exist_ok=True)
-
-        _fit = fitting.run_all_parallel(this_id, zr=[args.zmin, args.zmax], verbose=~args.silent, get_output_data=True, group_name=str(output_subdirectory / args.field))
         print(f'Completed id {this_id} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}')
 
     os.chdir(args.code_dir)
