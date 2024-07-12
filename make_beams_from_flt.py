@@ -63,7 +63,7 @@ if __name__ == "__main__":
                                            zr=[0.02, 8], # full redshift range to fit
                                            dz=[0.004, 0.0004], # two-pass redshift grid steps in (1+z)
                                            sys_err=0.03,
-                                           include_photometry=False,
+                                           include_photometry=True, #False,
                                            fit_trace_shift=False, # this can help with some trace misalignment
                                            dscale=0.01,
                                            fwhm=500. * u.km / u.second, # velocity width of emission line templates

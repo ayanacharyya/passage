@@ -128,7 +128,7 @@ def get_zrange_for_line(line, obs_wave_range=[800, 2200]):
     Input wavelengths must be in nm
     Returns min and max redshift
     '''
-    rest_wave_dict = {'OII': 372.7, 'Hb': 434.0, 'OIII': 436.3, 'Ha+NII': 655.5, 'Ha': 656.2, 'SII': 671.7,
+    rest_wave_dict = {'OII': 372.7, 'Hd': 434.0, 'OIII': 436.3, 'Hb': 486.1, 'Ha+NII': 655.5, 'Ha': 656.2, 'SII': 671.7,
                       'SIII': 953.0, 'PaD': 1004.6, 'PaG': 1093.5, 'PaB': 1281.4,
                       'PaA': 1874.5}  # approximate wavelengths in nm
 
