@@ -21,8 +21,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Produces emission line maps for JWST-PASSAGE data.')
 
     # ---- common args used widely over the full codebase ------------
-    parser.add_argument('--input_dir', metavar='input_dir', type=str, action='store', default='/Users/acharyya/Work/astro/passage/passage_data/', help='Where do the input files reside?')
-    parser.add_argument('--output_dir', metavar='output_dir', type=str, action='store', default='/Users/acharyya/Work/astro/passage/passage_output/', help='Where do you want to store the outputs?')
+    parser.add_argument('--input_dir', metavar='input_dir', type=str, action='store', default=None, help='Where do the input files reside?')
+    parser.add_argument('--output_dir', metavar='output_dir', type=str, action='store', default=None, help='Where do you want to store the outputs?')
+    parser.add_argument('--system', metavar='system', type=str, action='store', default='local', help='Which file system is the code being run on?')
     parser.add_argument('--code_dir', metavar='code_dir', type=str, action='store', default='/Users/acharyya/Work/astro/ayan_codes/passage/', help='Where is the source code?')
     parser.add_argument('--clobber', dest='clobber', action='store_true', default=False, help='Over-write existing plots? Default is no.')
     parser.add_argument('--silent', dest='silent', action='store_true', default=False, help='Suppress some generic pritn statements? Default is no.')
@@ -55,6 +56,11 @@ def parse_args():
     if args.line_list is not 'all': args.line_list = [item for item in args.line_list.split(',')]
     args.field = f'Par{int(args.field.split("Par")[1]):03d}'
     args.id = [int(item) for item in args.id.split(',')]
+
+    if args.input_dir is None:
+        args.input_dir = '/Users/acharyya/Work/astro/passage/passage_data/' if args.system == 'local' else '/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/' if 'hd' in args.system else None
+    if args.output_dir is None:
+        args.output_dir = '/Users/acharyya/Work/astro/passage/passage_output/' if args.system == 'local' else '/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/' if 'hd' in args.system else None
 
     args.input_dir = Path(args.input_dir)
     args.output_dir = Path(args.output_dir)
