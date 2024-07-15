@@ -23,7 +23,7 @@ def parse_args():
     # ---- common args used widely over the full codebase ------------
     parser.add_argument('--input_dir', metavar='input_dir', type=str, action='store', default=None, help='Where do the input files reside?')
     parser.add_argument('--output_dir', metavar='output_dir', type=str, action='store', default=None, help='Where do you want to store the outputs?')
-    parser.add_argument('--system', metavar='system', type=str, action='store', default='local', help='Which file system is the code being run on?')
+    parser.add_argument('--system', metavar='system', type=str, action='store', default='gdrive', help='Which file system is the code being run on?')
     parser.add_argument('--code_dir', metavar='code_dir', type=str, action='store', default='/Users/acharyya/Work/astro/ayan_codes/passage/', help='Where is the source code?')
     parser.add_argument('--clobber', dest='clobber', action='store_true', default=False, help='Over-write existing plots? Default is no.')
     parser.add_argument('--silent', dest='silent', action='store_true', default=False, help='Suppress some generic pritn statements? Default is no.')
@@ -77,10 +77,12 @@ def parse_args():
     args.id = [int(item) for item in args.id.split(',')]
     args.filters = args.filters.split(',')
 
+    root_dir = '/Users/acharyya/Work/astro/passage' if args.system == 'local' else '/Volumes/Elements/acharyya_backup/Work/astro/passage' if 'hd' in args.system else '/Users/acharyya/Library/CloudStorage/GoogleDrive-ayan.acharyya@inaf.it/My Drive/passage' if 'gdrive' in args.system else ''
+    args.root_dir = Path(root_dir)
     if args.input_dir is None:
-        args.input_dir = '/Users/acharyya/Work/astro/passage/passage_data/' if args.system == 'local' else '/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/' if 'hd' in args.system else None
+        args.input_dir = args.root_dir / 'passage_data/'
     if args.output_dir is None:
-        args.output_dir = '/Users/acharyya/Work/astro/passage/passage_output/' if args.system == 'local' else '/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/' if 'hd' in args.system else None
+        args.output_dir = args.root_dir / 'passage_output/'
 
     args.input_dir = Path(args.input_dir)
     args.output_dir = Path(args.output_dir)
