@@ -51,11 +51,31 @@ def parse_args():
     parser.add_argument('--skip_sep', dest='skip_sep', action='store_true', default=False, help='Skip the Source Extraction Pipeline? Default is no.')
     parser.add_argument('--do_all_obj', dest='do_all_obj', action='store_true', default=False, help='Reduce spectra and make beam files for ALL detected objects? Default is no.')
 
+    # ------- args added for run_passagepipe.py ------------------------------
+    parser.add_argument('--dry_run', dest='dry_run', action='store_true', default=False, help='Do a dry run i.e., only make the config file without actually running PASSAGEPipe? Default is no.')
+    parser.add_argument('--do_all_steps', dest='do_all_steps', action='store_true', default=False, help='Do all stages of PASSAGEPipe? Default is no.')
+    parser.add_argument('--start_step', metavar='start_step', type=int, action='store', default=None, help='Starting step for PASSAGEPipe. Default is None')
+    parser.add_argument('--do_download', dest='do_download', action='store_true', default=False, help='Do stage 1 of PASSAGEPipe? Default is no.')
+    parser.add_argument('--do_prep', dest='do_prep', action='store_true', default=False, help='Do stage 2 of PASSAGEPipe? Default is no.')
+    parser.add_argument('--do_image', dest='do_image', action='store_true', default=False, help='Do stage 3 of PASSAGEPipe? Default is no.')
+    parser.add_argument('--do_grism', dest='do_grism', action='store_true', default=False, help='Do stage 4 of PASSAGEPipe? Default is no.')
+    parser.add_argument('--do_extract', dest='do_extract', action='store_true', default=False, help='Do stage 5 of PASSAGEPipe? Default is no.')
+    parser.add_argument('--do_post', dest='do_post', action='store_true', default=False, help='Do stage 6 of PASSAGEPipe? Default is no.')
+    parser.add_argument('--do_upload', dest='do_upload', action='store_true', default=False, help='Do stage 7 of PASSAGEPipe? Default is no.')
+    parser.add_argument('--download_from_mast', dest='download_from_mast', action='store_true', default=False, help='Download from MAST? Default is no.')
+    parser.add_argument('--clobber_download', dest='clobber_download', action='store_true', default=False, help='Over-write existing files during downloading from MAST? Default is no.')
+    parser.add_argument('--redo_level1', dest='redo_level1', action='store_true', default=False, help='Re-do Level1 of processing during stage 1 of PASSAGEPipe? Default is no.')
+    parser.add_argument('--filters', metavar='filters', type=str, action='store', default='F115W', help='Which filters are included for this field? Default is F115W')
+    parser.add_argument('--magmin', metavar='magmin', type=float, action='store', default=16, help='magnitude lower limit for refined magnitude search during PASSAGEPipe; default is 16')
+    parser.add_argument('--start_id', metavar='start_id', type=int, action='store', default=0, help='Starting ID of the object whose spectra is to be extracted. Default is 0')
+    parser.add_argument('--stop_id', metavar='stop_id', type=int, action='store', default=10000, help='Stopping ID of the object whose spectra is to be extracted. Default is all IDs till the end of the list')
+
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if args.line_list is not 'all': args.line_list = [item for item in args.line_list.split(',')]
     args.field = f'Par{int(args.field.split("Par")[1]):03d}'
     args.id = [int(item) for item in args.id.split(',')]
+    args.filters = args.filters.split(',')
 
     if args.input_dir is None:
         args.input_dir = '/Users/acharyya/Work/astro/passage/passage_data/' if args.system == 'local' else '/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/' if 'hd' in args.system else None

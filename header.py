@@ -32,6 +32,7 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 from importlib import reload
+from PIL import Image
 
 import requests
 from urllib.parse import quote as urlencode
