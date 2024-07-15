@@ -5,7 +5,7 @@
     Created: 15-07-24
     Example: run run_passagepipe.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --id 3667
              run run_passagepipe.py --line_list OII,Hb,OIII,Ha,Ha+NII,PaA,PaB --Par 009 --zmin 1.5 --zmax 5 --start_id 70
-             run run_passagepipe.py --field Par6 --zmin 0.5 --zmax 3.8 --filters F115W,F150W --do_all_steps --dry_run
+             run run_passagepipe.py --field Par6 --zmin 0.5 --zmax 3.8 --filters F115W,F150W --start_step 5 --start_id 121
 '''
 
 from header import *
