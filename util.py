@@ -72,7 +72,7 @@ def parse_args():
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
-    if args.line_list is not 'all': args.line_list = [item for item in args.line_list.split(',')]
+    if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
     args.field = f'Par{int(args.field.split("Par")[1]):03d}'
     args.id = [int(item) for item in args.id.split(',')]
     args.filters = args.filters.split(',')
@@ -137,11 +137,10 @@ def print_zranges_for_filters(lines, filters=['F115W', 'F150W', 'F200W']):
     NIRISS filter data taken from Table 1 in https://jwst-docs.stsci.edu/jwst-near-infrared-imager-and-slitless-spectrograph/niriss-instrumentation/niriss-filters#gsc.tab=0
     Prints min and max redshift/s
     '''
-
+    lines = np.atleast_1d(lines)
     filters = fix_filter_names(filters)
     print(f'For given filters {filters}..')
 
-    if len(np.atleast_1d(lines)) == 1: lines = [lines]
     for line in lines:
         z_limits, filters = get_zranges_for_filters(line, filters=filters)
         print(f'{line} is captured between' + ' '.join(['z=[%.2f, %.2f]' %(zr[0], zr[1]) for zr in z_limits]))
@@ -158,8 +157,8 @@ def get_zrange_for_line(line, obs_wave_range=[800, 2200]):
                       'SIII': 953.0, 'PaD': 1004.6, 'PaG': 1093.5, 'PaB': 1281.4,
                       'PaA': 1874.5}  # approximate wavelengths in nm
 
-    if type(line) is float or type(line) is int: rest_wave = line
-    elif type(line) is str: rest_wave = rest_wave_dict[line]
+    if type(line) in [float, int, np.float64, np.int64]: rest_wave = line
+    elif type(line) in [str, np.str_]: rest_wave = rest_wave_dict[line]
 
     z_min = (obs_wave_range[0] / rest_wave) - 1
     z_max = (obs_wave_range[1] / rest_wave) - 1
@@ -172,7 +171,7 @@ def print_zrange_for_lines(lines, obs_wave_range=[800, 2200]):
     Prints the redshift range in which a certain emission line is available, for a given observed wavelength window (by default corresponds to NIRISS WFSS)
     Input wavelengths must be in nm
     '''
-    if len(np.atleast_1d(lines)) == 1: lines = [lines]
+    lines = np.atleast_1d(lines)
 
     for line in lines:
         z_min, z_max = get_zrange_for_line(line, obs_wave_range=obs_wave_range)
