@@ -24,7 +24,7 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, table=None):
     pix_offset_forlabels = 20
 
     ax = fig.gca()
-    wcs_header = wcs.WCS(bg_img_hdu[0].header)
+    wcs_header = pywcs.WCS(bg_img_hdu[0].header)
     region_files = np.atleast_1d(region_files)
 
     for index, region_file in enumerate(region_files):
@@ -74,7 +74,7 @@ def plot_zCOSMOS(fig, bg_img_hdu, color='aqua'):
     table = Table(data[1].data)
     sky_coords = SkyCoord(table['RAJ2000'], table['DEJ2000'], unit='deg')
 
-    wcs_header = wcs.WCS(bg_img_hdu[0].header)
+    wcs_header = pywcs.WCS(bg_img_hdu[0].header)
     ax=fig.gca()
     #'''
     # use this option for a quicker plot, but not with scale-able scatter points

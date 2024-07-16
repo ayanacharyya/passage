@@ -73,7 +73,7 @@ def parse_args():
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
-    args.field = f'Par{int(args.field.split("Par")[1]):03d}'
+    if 'Par' in args.field: args.field = f'Par{int(args.field.split("Par")[1]):03d}'
     args.id = [int(item) for item in args.id.split(',')]
     args.filters = args.filters.split(',')
 
