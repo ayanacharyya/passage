@@ -260,11 +260,11 @@ def watson_function(img_hdul_orig, img_hdul_new):
     xpix, ypix = img_hdul_orig[1].data.shape
     xx = np.asarray([0, 0, xpix, xpix,0])
     yy = np.asarray([0, ypix, ypix, 0, 0])
-    orig_celestial = wcs.WCS(img_hdul_orig[0].header).celestial
-    new_celestial = wcs.WCS(img_hdul_new[0].header).celestial
-    x_p, y_p = wcs.utils.pixel_to_pixel(orig_celestial, new_celestial, yy, xx)
+    orig_celestial = pywcs.WCS(img_hdul_orig[0].header).celestial
+    new_celestial = pywcs.WCS(img_hdul_new[0].header).celestial
+    x_p, y_p = pywcs.utils.pixel_to_pixel(orig_celestial, new_celestial, yy, xx)
 
-    # extent_in_sky_coords = wcs.WCS(img_hdul_orig[0].header).calc_footprint
+    # extent_in_sky_coords = pywcs.WCS(img_hdul_orig[0].header).calc_footprint
 
     return x_p, y_p
 
