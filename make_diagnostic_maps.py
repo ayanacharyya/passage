@@ -507,7 +507,7 @@ if __name__ == "__main__":
             ax_Z_R23, log_OH_R23_map = plot_Z_R23_map(full_hdu, ax_Z_R23, args)
 
         # ---------decorating and saving the figure------------------------------
-        figname = args.output_dir / args.field / f'{this_id:05d}' / f'{args.field}_{this_id:05d}_all_diag_plots.png'
+        figname = output_subdir / f'{args.field}_{this_id:05d}_all_diag_plots.png'
         fig.savefig(figname)
         print(f'Saved figure at {figname}')
         plt.show(block=False)
