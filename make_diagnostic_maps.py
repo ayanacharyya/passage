@@ -4,7 +4,7 @@
     Author : Ayan
     Created: 17-07-24
     Example: run make_diagnostic_maps.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --id 3667
-             run make_diagnostic_maps.py --field Par50 --id 823 --vorbin --voronoi_line Ha --voronoi_snr 3
+             run make_diagnostic_maps.py --field Par50 --id 823 --vorbin --voronoi_line Ha --voronoi_snr 3 --plot_radial_profiles
 '''
 
 from header import *
@@ -35,7 +35,7 @@ def plot_direct_image(full_hdu, ax, args, hide_xaxis=False, hide_yaxis=False):
         ax.set_ylim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
 
         textcolor = mpl_cm.get_cmap(cmap_arr[index])(0.9)
-        ax.text(ax.get_xlim()[0] * 0.9, ax.get_ylim()[1] * 0.75 - index * 0.1, filt, c=textcolor, fontsize=args.fontsize / 2, ha='left', va='top')
+        ax.text(ax.get_xlim()[0] * 0.9, ax.get_ylim()[1] * 0.7 - index * 0.1, filt, c=textcolor, fontsize=args.fontsize / 1.5, ha='left', va='top')
 
     ax.text(ax.get_xlim()[0] * 0.9, ax.get_ylim()[1] * 0.95, f'z={args.z:.2f}', c='k', fontsize=args.fontsize, ha='left', va='top')
     ax.scatter(0, 0, marker='x', s=10, c='grey')
@@ -160,16 +160,79 @@ def plot_1d_spectra(od_hdu, ax, args):
 
     return ax
 
-# --------------------------------------------------------------------------------------------------------------------
-def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False):
+# ---------------------------------------------------------------------------------
+def plot_binned_profile(xdata, ydata, ax, color='darkorange', yerr=None):
     '''
-    Plots the emission map for a given line in the given axes
-    Returns the axes handle
+    Function to overplot binned data on existing plot in a given axis
+    Returns axis handle
+    '''
+    df = pd.DataFrame({'xcol': xdata.flatten(), 'ycol':ydata.flatten()})
+
+    bin_edges = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 10)
+    df['binned_cat'] = pd.cut(df['xcol'], bin_edges)
+
+    if yerr is not None:
+        df['weightcol'] = 1 / yerr.flatten() ** 2
+        agg_func = lambda x: np.sum(x * df.loc[x.index, 'weightcol']) / np.sum(df.loc[x.index, 'weightcol']) # function to get weighted mean
+        agg_u_func = lambda x: np.sqrt(((np.sum(df.loc[x.index, 'weightcol'] * x**2) / np.sum(df.loc[x.index, 'weightcol'])) - (np.sum(x * df.loc[x.index, 'weightcol']) / np.sum(df.loc[x.index, 'weightcol']))**2) * (np.sum(df.loc[x.index, 'weightcol']**2)) / (np.sum(df.loc[x.index, 'weightcol'])**2 - np.sum(df.loc[x.index, 'weightcol']**2))) # eq 6 of http://seismo.berkeley.edu/~kirchner/Toolkits/Toolkit_12.pdf
+    else:
+        agg_func, agg_u_func = np.mean, np.std
+
+    y_binned = df.groupby('binned_cat', as_index=False).agg([('ycol', agg_func)])['ycol'].values.flatten()
+    y_u_binned = df.groupby('binned_cat', as_index=False).agg([('ycol', agg_u_func)])['ycol'].values.flatten()
+    x_bin_centers = bin_edges[:-1] + np.diff(bin_edges) / 2
+
+    # ----------to plot mean binned y vs x profile--------------
+    ax.errorbar(x_bin_centers, y_binned, c=color, yerr=y_u_binned, lw=1, ls='none', zorder=1)
+    ax.scatter(x_bin_centers, y_binned, c=color, s=10, lw=0.2, ec='black', zorder=10)
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_radial_profile(image, ax, args, label=None, cmap=None, ymin=None, ymax=None, hide_xaxis=False, hide_yaxis=False):
+    '''
+    Plots the average radial profile for a given 2D map in the given axis
+    Returns the axis handle
+    '''
+    print(f'Plotting radial profile of {label}..')
+
+    pixscale_kpc = ((args.pixscale * u.arcsec).to(u.radian) * args.distance.to('kpc')).value # kpc
+    center_pix = np.shape(image)[0] / 2.
+    distance_map = np.array([[np.sqrt((i - center_pix)**2 + (j - center_pix)**2) for j in range(np.shape(image)[0])] for i in range(np.shape(image)[0])]) * pixscale_kpc # kpc
+
+    ax.scatter(distance_map, image, c='grey', s=1, alpha=0.2)
+
+    ax.set_xlim(0, 2 * ((args.arcsec_limit * u.arcsec).to(u.radian) * args.distance.to('kpc')).value) # kpc
+    ax.set_ylim(ymin, ymax)
+    ax.set_box_aspect(1)
+
+    ax = plot_binned_profile(distance_map, image, ax)
+
+    if hide_xaxis:
+        ax.set_xticklabels([])
+    else:
+        ax.set_xlabel('Distance (kpc)', fontsize=args.fontsize)
+        #ax.set_xticklabels(['%d' % ((item * u.arcsec).to(u.radian) * args.distance.to('kpc')).value for item in ax.get_xticks()], fontsize=args.fontsize)
+        ax.tick_params(axis='x', which='major', labelsize=args.fontsize)
+
+    if hide_yaxis:
+        ax.set_yticklabels([])
+    else:
+        ax.set_ylabel(label, fontsize=args.fontsize)
+        ax.tick_params(axis='y', which='major', labelsize=args.fontsize)
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, radprof_ax=None):
+    '''
+    Plots the emission map for a given line in the given axis
+    Returns the axis handle
     '''
     if cmap is None: cmap = 'cividis'
     print(f'Plotting 2D map of {label}..')
 
-    p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
+    p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax, aspect=1)
 
     ax.set_xlim(-args.arcsec_limit, args.arcsec_limit) # arcsec
     ax.set_ylim(-args.arcsec_limit, args.arcsec_limit) # arcsec
@@ -198,8 +261,16 @@ def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hi
         ax.tick_params(axis='y', which='major', labelsize=args.fontsize)
 
     if not hide_cbar:
-        cbar = plt.colorbar(p)
-        cbar.ax.tick_params(labelsize=args.fontsize)
+        fig = ax.figure
+        pad = 0.0005
+        [ax_l, ax_b, ax_w, ax_h] = ax.get_position().bounds # left, bottom, width, height
+        cax = fig.add_axes([ax_l + ax_w + pad, ax_b, ax_w * 0.1, ax_h]) # left, bottom, width, height
+        cbar = plt.colorbar(p, ax=cax, orientation='vertical')
+        cax.xaxis.set_visible(False)
+        cax.yaxis.set_visible(False)
+        #cbar.ax.tick_params(labelsize=args.fontsize)
+
+    if args.plot_radial_profiles and radprof_ax is not None: radprof_ax = plot_radial_profile(image, radprof_ax, args, label=label, ymin=vmin, ymax=vmax)
 
     return ax
 
@@ -340,6 +411,7 @@ def calculate_EB_V(full_hdu, args):
     Calculates and returns the color excess given observed integrated H alpha and H beta fluxes
     Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
     '''
+    theoretical_ratio = 2.86
 
     if all([line in args.available_lines for line in ['Ha', 'Hb']]):
         Ha_index = np.where(args.available_lines == 'Ha')[0][0]
@@ -349,8 +421,12 @@ def calculate_EB_V(full_hdu, args):
         Hb_int_flux = full_hdu[0].header[f'FLUX{Hb_index + 1:03d}']
 
         obs_ratio = Ha_int_flux / Hb_int_flux
-        EB_V = 1.97 * np.log10(obs_ratio / 2.86)
-        print(f'Based on integrated fluxes Ha = {Ha_int_flux}, Hb = {Hb_int_flux}, determine E(B-V) = {EB_V}')
+        if obs_ratio < theoretical_ratio:
+            EB_V = 0.
+            print(f'Based on integrated fluxes Ha = {Ha_int_flux:.2e}, Hb = {Hb_int_flux:.2e}, the observed ratio is LOWER than theoretical ratio, so E(B-V) would be unphysical, so just assuming {EB_V}')
+        else:
+            EB_V = 1.97 * np.log10(obs_ratio / theoretical_ratio)
+            print(f'Based on integrated fluxes Ha = {Ha_int_flux:.2e}, Hb = {Hb_int_flux:.2e}, determine E(B-V) = {EB_V:.2f}')
     else:
         EB_V = 0.
         print(f'Assumed E(B-V) = {EB_V}, due to absence of one or more of H alpha, H beta lines')
@@ -374,40 +450,46 @@ def get_EB_V_map(full_hdu, args):
     return EB_V_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_dust_map(full_hdu, ax, args):
+def plot_dust_map(full_hdu, ax, args, radprof_ax=None):
     '''
     Plots the dust extinction map (and the emission line maps that go into it) in the given axes
     Returns the axes handles and the 2D E(B-V) map just produced
     '''
+    lim, label = [0, 1], 'E(B-V)'
+
     EB_V_map = get_EB_V_map(full_hdu, args)
-    ax = plot_2D_map(EB_V_map, ax, args, label='E(B-V)', cmap='YlOrBr', hide_yaxis=True, vmin=None, vmax=None)
+    ax = plot_2D_map(EB_V_map, ax, args, label=label, cmap='YlOrBr', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, EB_V_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_sfr_map(full_hdu, ax, args):
+def plot_sfr_map(full_hdu, ax, args, radprof_ax=None):
     '''
     Plots the SFR map (and the emission line maps that go into it) in the given axes
     Conversion factor is from Kennicutt 1998 (Eq 2 of https://ned.ipac.caltech.edu/level5/Sept01/Rosa/Rosa3.html)
     Returns the axes handles and the 2D SFR density map just produced
     '''
+    lim, label = [-4, -2], 'SFR'
+
     Ha_map, line_wave = get_emission_line_map('Ha', full_hdu, args)
     dered_Ha_map = get_dereddened_flux(Ha_map, line_wave, args.EB_V) # line_map in ergs/s/cm^2
 
     dered_Ha_map = dered_Ha_map * 4 * np.pi * (args.distance.to('cm').value) ** 2 # converting to ergs/s
 
     sfr_map = dered_Ha_map * 7.9e-42 # line_map in args/s; SFR in Msun/yr
-    ax = plot_2D_map(np.log10(sfr_map), ax, args, label='SFR', cmap='Blues', vmin=-4, vmax=-2)
+    ax = plot_2D_map(np.log10(sfr_map), ax, args, label=label, cmap='Blues', radprof_ax=radprof_ax, vmin=lim[0], vmax=lim[1])
 
     return ax, sfr_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_Te_map(full_hdu, ax, args):
+def plot_Te_map(full_hdu, ax, args, radprof_ax=None):
     '''
     Plots the T_e map (and the emission line maps that go into it) in the given axes
     Conversion factor is from Nicholls+2017
     Returns the axes handles and the 2D T_e map just produced
     '''
+    lim, label = [1, 7], r'T$_e$'
+
     OIII4363_map, line_wave = get_emission_line_map('OIII-4363', full_hdu, args)
     dered_OIII4363_map = get_dereddened_flux(OIII4363_map, line_wave, args.EB_V)
 
@@ -417,18 +499,18 @@ def plot_Te_map(full_hdu, ax, args):
     ratio_map = dered_OIII4363_map / dered_OIII5007_map
     logT_map = np.poly1d([0., 9.18962, 3.30355])(np.log10(ratio_map)) / np.poly1d([-0.00935, -0.15034, 2.09136, 1.000])(np.log10(ratio_map))
     Te_map = 10 ** logT_map
-    ax = plot_2D_map(np.log10(Te_map), ax, args, label=r'T$_e$', cmap='OrRd_r', hide_yaxis=True, vmin=1, vmax=7)
+    ax = plot_2D_map(np.log10(Te_map), ax, args, label=label, cmap='OrRd_r', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, Te_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_Z_Te_map(full_hdu, ax, args, Te_map, ne=1e3):
+def plot_Z_Te_map(full_hdu, ax, args, Te_map, ne=1e3, radprof_ax=None):
     '''
     Plots the T_e-based metallicity map (and the emission line maps that go into it) in the given axes
     Conversion factor is from Nicholls+2017
     Returns the axes handles and the 2D metallicity map just produced
     '''
-
+    lim, label = [6, 9], 'Z (Te)'
     t = Te_map * 1e-4
     x = 1e-4 * ne * np.sqrt(t)
 
@@ -450,17 +532,18 @@ def plot_Z_Te_map(full_hdu, ax, args, Te_map, ne=1e3):
     log_O3H2_map = poly(ratio2_map, t, x, 6.200, 1.251, -0.55, -0.014, 0.0) - 12  # coefficients from eqn 5 I06
     log_OH_map = np.log10(10 ** log_O2H2_map + 10 ** log_O3H2_map) + 12
 
-    ax = plot_2D_map(log_OH_map, ax, args, label='Z (Te)', cmap='Greens', hide_yaxis=True, vmin=6, vmax=9)
+    ax = plot_2D_map(log_OH_map, ax, args, label=label, cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, log_OH_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_Z_R23_map(full_hdu, ax, args):
+def plot_Z_R23_map(full_hdu, ax, args, radprof_ax=None):
     '''
     Plots the R23 metallicity map (and the emission line maps that go into it) in the given axes
     Conversion factor is from Kewley+2002
     Returns the axes handles and the 2D metallicity map just produced
     '''
+    lim, label = [6, 9], 'Z (R23)'
 
     def poly(R23, k):
         return  (-k[1] + np.sqrt(k[1]**2 - 4*k[2]*(k[0] - R23)))/(2*k[2])
@@ -478,7 +561,7 @@ def plot_Z_R23_map(full_hdu, ax, args):
     R23 = np.log10(ratio_map)
     log_OH_map = poly(R23, [-44.7026, 10.8052, -0.640113]) #k0-2 parameters for q=8e7 from Table 3 of KD02 last row for q=8e7
 
-    ax = plot_2D_map(log_OH_map, ax, args, label='Z (R23)', cmap='Greens', hide_yaxis=True, vmin=6, vmax=9)
+    ax = plot_2D_map(log_OH_map, ax, args, label=label, cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, log_OH_map
 
@@ -531,14 +614,16 @@ if __name__ == "__main__":
 
         # ---------initialising the figure------------------------------
         if not args.keep: plt.close('all')
-        nrow, ncol = 3, 5
-        fig = plt.figure(figsize=(12, 6))
+        nrow, ncol = 4 if args.plot_radial_profiles else 3, 5
+        fig = plt.figure(figsize=(8, 7))
         axis_dirimg = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 0), colspan=1)
         axis_1dspec = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 1), colspan=ncol - 1)
         ax_em_lines = [plt.subplot2grid(shape=(nrow, ncol), loc=(1, item), colspan=1) for item in np.arange(ncol)] # H alpha, H beta, OII, OIII-4363, OIII
         [ax_SFR, ax_EB_V, ax_Te, ax_Z_Te, ax_Z_R23] = [plt.subplot2grid(shape=(nrow, ncol), loc=(2, item), colspan=1) for item in np.arange(ncol)] # SFR, E(B-V), Te, Z (Te), Z (R23)
+        if args.plot_radial_profiles: [rax_SFR, rax_EB_V, rax_Te, rax_Z_Te, rax_Z_R23] = [plt.subplot2grid(shape=(nrow, ncol), loc=(3, item), colspan=1) for item in np.arange(ncol)] # SFR, E(B-V), Te, Z (Te), Z (R23)
+
         fig.tight_layout()
-        fig.subplots_adjust(top=0.92, bottom=0.08, left=0.01, right=0.97, wspace=0.0, hspace=0.7)
+        fig.subplots_adjust(top=0.92, bottom=0.08, left=0.08, right=0.95, wspace=0.2, hspace=0.7)
 
         # ---------direct imaging------------------------------
         axis_dirimg = plot_direct_image(full_hdu, axis_dirimg, args)
@@ -555,31 +640,39 @@ if __name__ == "__main__":
         # ---------------dust map---------------
         if all([line in args.available_lines for line in ['Ha', 'Hb']]):
             args.EB_V = calculate_EB_V(full_hdu, args)
-            ax_EB_V, dust_map = plot_dust_map(full_hdu, ax_EB_V, args)
+            ax_EB_V, dust_map = plot_dust_map(full_hdu, ax_EB_V, args, radprof_ax=rax_EB_V)
         else:
             fig.delaxes(ax_EB_V)
+            if args.plot_radial_profiles: fig.delaxes(rax_EB_V)
 
         # ---------------SFR map------------------
         if 'Ha' in args.available_lines:
-            ax_SFR, sfr_map = plot_sfr_map(full_hdu, ax_SFR, args)
+            ax_SFR, sfr_map = plot_sfr_map(full_hdu, ax_SFR, args, radprof_ax=rax_SFR)
         else:
             fig.delaxes(ax_SFR)
+            if args.plot_radial_profiles: fig.delaxes(rax_SFR)
 
         # ---------------electron temperature map---------------
         if all([line in args.available_lines for line in ['OIII-4363', 'OIII']]):
-            ax_Te, Te_map = plot_Te_map(full_hdu, ax_Te, args)
+            ax_Te, Te_map = plot_Te_map(full_hdu, ax_Te, args, radprof_ax=rax_Te)
         else:
             fig.delaxes(ax_Te)
+            if args.plot_radial_profiles: fig.delaxes(rax_Te)
 
         # ---------------metallicity maps---------------
         if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
-            ax_Z_Te, log_OH_Te_map = plot_Z_Te_map(full_hdu, ax_Z_Te, args, Te_map)
-            ax_Z_R23, log_OH_R23_map = plot_Z_R23_map(full_hdu, ax_Z_R23, args)
+            ax_Z_Te, log_OH_Te_map = plot_Z_Te_map(full_hdu, ax_Z_Te, args, Te_map, radprof_ax=rax_Z_Te)
+            ax_Z_R23, log_OH_R23_map = plot_Z_R23_map(full_hdu, ax_Z_R23, args, radprof_ax=rax_Z_R23)
         else:
             fig.delaxes(ax_Z_Te)
             fig.delaxes(ax_Z_R23)
+            if args.plot_radial_profiles:
+                fig.delaxes(rax_Z_Te)
+                fig.delaxes(rax_Z_R23)
 
         # ---------decorating and saving the figure------------------------------
+        fig.text(0.05, 0.98, f'{args.field}: ID{this_id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+
         figname = output_subdir / f'{args.field}_{this_id:05d}_all_diag_plots.png'
         fig.savefig(figname)
         print(f'Saved figure at {figname}')
