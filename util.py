@@ -77,6 +77,7 @@ def parse_args():
     parser.add_argument('--vorbin', dest='vorbin', action='store_true', default=False, help='Voronoi bin the 2D emission line maps? Default is no.')
     parser.add_argument('--voronoi_snr', metavar='voronoi_snr', type=float, action='store', default=3, help='Target SNR to Voronoi bin the emission line maps to; default is 3')
     parser.add_argument('--voronoi_line', metavar='voronoi_line', type=str, action='store', default='Ha', help='Which emission line to be used for computing the Voronoi bins? Default is None i.e., the given emission line itself')
+    parser.add_argument('--flam_max', metavar='flam_max', type=float, action='store', default=1, help='Maximum y-axis limit for f_lambda (in units of 1e-19 ergs/s/cm^2/A); default is 1')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()

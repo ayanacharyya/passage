@@ -55,6 +55,70 @@ def plot_direct_image(full_hdu, ax, args, hide_xaxis=False, hide_yaxis=False):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
+def get_MAPPINGS_linelist(wave_lim=None):
+    '''
+    Reads in a MAPPINGS model file to grab the emission line list
+    Returns list of lines that are within the given wavelength limits and above some threshold strength, as a pandas dataframe
+    '''
+    line_list_file = HOME / 'Desktop/Lisa_UV_diag/P_spherical/sp_P70_a05modelfiles/Q700/spec0003.csv'
+
+    lines_df = pd.read_csv(line_list_file, skiprows=55, names=['wave', 'ev', 'flux', 'species', 'kind', 'acc'])
+    if wave_lim is not None: lines_df = lines_df[lines_df['wave'].between(wave_lim[0], wave_lim[1])]
+    lines_df = lines_df[lines_df['flux'] > 0.003]
+    lines_df = lines_df[lines_df['kind'].str.strip().isin(['CM', 'RCAB'])]
+
+    print(f'Found {len(lines_df)} lines in this wavelength regime from {line_list_file}; over-plotting them now..')
+
+    return lines_df
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_MAPPINGS_lines(ax):
+    '''
+    Plots a list of MAPPINGS emission line wavelengths on the given axis
+    Returns axis handle
+    '''
+    lines_df = get_MAPPINGS_linelist(wave_lim=ax.get_xlim())
+    max_flux = lines_df['flux'].max() * 1.001
+    min_flux = lines_df['flux'].min() * 0.999
+
+    for index in range(len(lines_df)):
+        ax.axvline(lines_df.iloc[index]['wave'], c='cornflowerblue', lw=1, alpha= 0.3 + 0.7 * (lines_df.iloc[index]['flux'] - min_flux) / (max_flux - min_flux))
+        ax.text(lines_df.iloc[index]['wave'] + np.diff(ax.get_xlim())[0] * 0.01, ax.get_ylim()[1] * 0.9, lines_df.iloc[index]['species'], rotation=90, va='top', ha='center', fontsize=args.fontsize)
+
+    return ax
+
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_linelist(wave_lim=None):
+    '''
+    Reads in an emission line list
+    Returns list of lines that are within the given wavelength limits, as a pandas dataframe
+    '''
+    line_list_file = HOME / 'Desktop/mage_plot/labframe.shortlinelist'
+
+    lines_df = pd.read_table(line_list_file, comment='#', delim_whitespace=True)
+    if wave_lim is not None: lines_df = lines_df[lines_df['restwave'].between(wave_lim[0], wave_lim[1])]
+
+    print(f'Found {len(lines_df)} lines in this wavelength regime from {line_list_file}; over-plotting them now..')
+
+    return lines_df
+
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_linelist(ax):
+    '''
+    Plots a list of emission line wavelengths on the given axis
+    Returns axis handle
+    '''
+    lines_df = get_linelist(wave_lim=ax.get_xlim())
+
+    for index in range(len(lines_df)):
+        ax.axvline(lines_df.iloc[index]['restwave'], c='cornflowerblue', lw=1)
+        ax.text(lines_df.iloc[index]['restwave'] + np.diff(ax.get_xlim())[0] * 0.01, ax.get_ylim()[1] * 0.9, lines_df.iloc[index]['LineID'], rotation=90, va='top', ha='center', fontsize=args.fontsize)
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_1d_spectra(od_hdu, ax, args):
     '''
     Plots the 1D spectra in the given axis
@@ -78,7 +142,7 @@ def plot_1d_spectra(od_hdu, ax, args):
     ax.set_xlabel(r'Rest-frame wavelength ($\AA$)', fontsize=args.fontsize)
     ax.set_ylabel(r'f$_{\lambda}$ ' + '(%.0e ' % factor + r'ergs/s/cm$^2$/A)', fontsize=args.fontsize)
 
-    ax.set_ylim(-0.1, 1) # x factor
+    ax.set_ylim(0, args.flam_max) # x factor
 
     # ---observed wavelength axis-------
     ax2 = ax.twiny()
@@ -88,19 +152,8 @@ def plot_1d_spectra(od_hdu, ax, args):
     ax2.set_xlabel(r'Observed wavelength ($\mu$)', fontsize=args.fontsize)
 
     # ---vertical lines for emission line wavelengths------
-    line_list_file = HOME / 'Desktop/Lisa_UV_diag/P_spherical/sp_P70_a05modelfiles/Q700/spec0003.csv'
-    lines_df = pd.read_csv(line_list_file, skiprows=55, names=['wave', 'ev', 'flux', 'species', 'kind', 'acc'])
-    lines_df = lines_df[lines_df['wave'].between(ax.get_xlim()[0], ax.get_xlim()[1])]
-    lines_df = lines_df[lines_df['flux'] > 0.003]
-    lines_df = lines_df[lines_df['kind'].str.strip().isin(['CM', 'RCAB'])]
-    print(f'Found {len(lines_df)} lines in this wavelength regime from {line_list_file}; over-plotting them now..')
-
-    max_flux = lines_df['flux'].max() * 1.001
-    min_flux = lines_df['flux'].min() * 0.999
-
-    for index in range(len(lines_df)):
-        ax.axvline(lines_df.iloc[index]['wave'], c='cornflowerblue', lw=1, alpha= 0.3 + 0.7 * (lines_df.iloc[index]['flux'] - min_flux) / (max_flux - min_flux))
-        ax.text(lines_df.iloc[index]['wave'] + np.diff(ax.get_xlim())[0] * 0.01, ax.get_ylim()[1] * 0.9, lines_df.iloc[index]['species'], rotation=90, va='top', ha='center', fontsize=args.fontsize)
+    ax = plot_MAPPINGS_lines(ax)
+    #ax = plot_linelist(ax)
 
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
@@ -189,7 +242,7 @@ def get_emission_line_map(line, full_hdu, args):
     Returns the 2D line image
     '''
 
-    line_index = np.where(np.array(args.available_lines.split(' ')) == line)[0][0]
+    line_index = np.where(args.available_lines == line)[0][0]
     ext = 5 + 2 * args.ndfilt + 4 * line_index
     line_map = full_hdu[ext].data * 1e-17 # this gives 200 x 200 array; in units of ergs/s/cm^2
     line_wave = full_hdu[ext].header['RESTWAVE'] # in Angstrom
@@ -288,10 +341,10 @@ def calculate_EB_V(full_hdu, args):
     '''
 
     if all([line in args.available_lines for line in ['Ha', 'Hb']]):
-        Ha_index = np.where(np.array(args.available_lines.split(' ')) == 'Ha')[0][0]
+        Ha_index = np.where(args.available_lines == 'Ha')[0][0]
         Ha_int_flux = full_hdu[0].header[f'FLUX{Ha_index:03d}']
 
-        Hb_index = np.where(np.array(args.available_lines.split(' ')) == 'Hb')[0][0]
+        Hb_index = np.where(args.available_lines == 'Hb')[0][0]
         Hb_int_flux = full_hdu[0].header[f'FLUX{Hb_index:03d}']
 
         obs_ratio = Ha_int_flux / Hb_int_flux
@@ -448,14 +501,13 @@ if __name__ == "__main__":
             args.work_dir = extract_dir
         elif os.path.exists(output_subdir / full_fits_file): # if the fits files are in sub-directories for individual objects
             args.work_dir = output_subdir
-        os.chdir(args.work_dir)
 
         # ------------read in fits files--------------------------------
         od_hdu = fits.open(args.work_dir / f'{args.field}_{this_id:05d}.1D.fits')
         full_hdu = fits.open(args.work_dir / f'{args.field}_{this_id:05d}.full.fits')
 
         # ----------determining global parameters------------
-        args.available_lines = full_hdu[0].header['HASLINES'].split(' ')
+        args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
         args.z = full_hdu[0].header['REDSHIFT']
         args.distance = cosmo.comoving_distance(args.z)
         args.ndfilt = full_hdu[0].header['NDFILT']
@@ -487,24 +539,44 @@ if __name__ == "__main__":
         fig.tight_layout()
         fig.subplots_adjust(top=0.92, bottom=0.08, left=0.01, right=0.97, wspace=0.0, hspace=0.7)
 
-        # ---------populating the figure------------------------------
+        # ---------direct imaging------------------------------
         axis_dirimg = plot_direct_image(full_hdu, axis_dirimg, args)
+
+        # ---------1D spectra------------------------------
         axis_1dspec = plot_1d_spectra(od_hdu, axis_1dspec, args)
 
+        # -----------------emission line maps---------------
         lines_to_plot = ['Ha', 'Hb', 'OII', 'OIII-4363', 'OIII']
         for ind, line in enumerate(lines_to_plot):
             if line in args.available_lines: _, _, ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False) #ind != len(lines_to_plot) - 1) # line_map in ergs/s/cm^2
+            else: fig.delaxes(ax_em_lines[ind])
 
+        # ---------------dust map---------------
         if all([line in args.available_lines for line in ['Ha', 'Hb']]):
             args.EB_V = calculate_EB_V(full_hdu, args)
             ax_EB_V, dust_map = plot_dust_map(full_hdu, ax_EB_V, args)
+        else:
+            fig.delaxes(ax_EB_V)
+
+        # ---------------SFR map------------------
         if 'Ha' in args.available_lines:
             ax_SFR, sfr_map = plot_sfr_map(full_hdu, ax_SFR, args)
+        else:
+            fig.delaxes(ax_SFR)
+
+        # ---------------electron temperature map---------------
         if all([line in args.available_lines for line in ['OIII-4363', 'OIII']]):
             ax_Te, Te_map = plot_Te_map(full_hdu, ax_Te, args)
+        else:
+            fig.delaxes(ax_Te)
+
+        # ---------------metallicity maps---------------
         if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
             ax_Z_Te, log_OH_Te_map = plot_Z_Te_map(full_hdu, ax_Z_Te, args, Te_map)
             ax_Z_R23, log_OH_R23_map = plot_Z_R23_map(full_hdu, ax_Z_R23, args)
+        else:
+            fig.delaxes(ax_Z_Te)
+            fig.delaxes(ax_Z_R23)
 
         # ---------decorating and saving the figure------------------------------
         figname = output_subdir / f'{args.field}_{this_id:05d}_all_diag_plots.png'
