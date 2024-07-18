@@ -4,7 +4,7 @@
     Author : Ayan
     Created: 17-07-24
     Example: run make_diagnostic_maps.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --id 3667
-             run make_diagnostic_maps.py --field Par50 --id 823 --fontsize 7
+             run make_diagnostic_maps.py --field Par50 --id 823 --vorbin --voronoi_line Ha --voronoi_snr 3
 '''
 
 from header import *
@@ -29,7 +29,7 @@ def plot_direct_image(full_hdu, ax, args, hide_xaxis=False, hide_yaxis=False):
         ext = 5 + index * 2
         image = full_hdu[ext].data
 
-        p = ax.imshow(image, cmap=cmap_arr[index], origin='lower', extent=args.extent, alpha=1, vmin=0, vmax=0.03)
+        p = ax.imshow(image, cmap=cmap_arr[index], origin='lower', extent=args.extent, alpha=1)#, vmin=0, vmax=0.03)
 
         ax.set_xlim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
         ax.set_ylim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
@@ -150,16 +150,57 @@ def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hi
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
+def bin_2D(map, bin_IDs):
+    '''
+    Bin a given 2D map by given bin_IDs
+    Returns the binned 2D map (of same shape as input map)
+    '''
+    binned_map = np.zeros(np.shape(map))
+    for id in np.unique(bin_IDs):
+        binned_map[bin_IDs == id] = map[bin_IDs == id].mean()
+
+    return binned_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_voronoi_bin_IDs(map, map_err, snr_thresh, plot=False, quiet=True):
+    '''
+    Compute the Voronoi bin IDs a given 2D map and corresponding uncertainty and SNR threshold
+    Returns the 2D map (of same shape as input map) with just the IDs
+    '''
+    x_size, y_size = np.shape(map)
+    x_coords = np.repeat(np.arange(x_size), y_size)
+    y_coords = np.tile(np.arange(y_size), x_size)
+
+    map = np.ma.masked_where(~np.isfinite(map_err), map)
+    map_err = np.ma.masked_where(~np.isfinite(map_err), map_err)
+
+    map = np.ma.masked_where(map < 0, map)
+    map_err = np.ma.masked_where(map < 0, map_err)
+
+    binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords, y_coords, map.flatten(), map_err.flatten(), snr_thresh, plot=plot, quiet=quiet, cvt=False)
+    binID_map = binIDs.reshape(np.shape(map))
+
+    return binID_map
+
+# --------------------------------------------------------------------------------------------------------------------
 def get_emission_line_map(line, full_hdu, args):
     '''
-    Retriece the emission map for a given line from the HDU
+    Retrieve the emission map for a given line from the HDU
     Returns the 2D line image
     '''
 
     line_index = np.where(np.array(args.available_lines.split(' ')) == line)[0][0]
     ext = 5 + 2 * args.ndfilt + 4 * line_index
-    line_map = full_hdu[ext].data * 1e-17 # this gives 200 x 200 array; in units of ergs/s/cm^2 (hopefully!)
+    line_map = full_hdu[ext].data * 1e-17 # this gives 200 x 200 array; in units of ergs/s/cm^2
     line_wave = full_hdu[ext].header['RESTWAVE'] # in Angstrom
+
+    if args.vorbin:
+        if args.voronoi_line is None: # No reference emission line specified, so Voronoi IDs need to be computed now
+            line_map_err = 1e-17 / full_hdu[ext + 3].data   # this gives 200 x 200 array; in units of ergs/s/cm^2
+            bin_IDs = get_voronoi_bin_IDs(line_map, line_map_err, args.voronoi_snr)
+        else: # Reference emission line specified for Voronoi binning, so bin IDs have been pre-computed
+            bin_IDs = args.voronoi_bin_IDs
+        line_map = bin_2D(line_map, bin_IDs)
 
     return line_map, line_wave
 
@@ -226,15 +267,15 @@ def get_full_kappa(wave, inAngstrom=True):
     return k
 
 # ------------------Function to calculate extinction and de-redden fluxes-------------
-def get_dereddened_flux(obs_flux_map, wavelength, EB_V_map, inAngstrom=True):
+def get_dereddened_flux(obs_flux_map, wavelength, EB_V, inAngstrom=True):
     '''
     Calculates and returns dereddened fluxes
     Does not deal with uncertainties, for now
     From ayan_codes/mage_project/ayan/mage.py
     '''
-    if EB_V_map is None: EB_V_map = np.zeros(np.shape(obs_flux_map))
+    if EB_V is None: EB_V = np.zeros(np.shape(obs_flux_map))
     kappa = get_full_kappa(wavelength, inAngstrom=inAngstrom)
-    A_map = kappa * EB_V_map
+    A_map = kappa * EB_V
     flux_corrected_map = obs_flux_map * 10 ** (0.4 * A_map)
 
     return flux_corrected_map
@@ -270,21 +311,11 @@ def get_EB_V_map(full_hdu, args):
     Returns the E(B-V) map
     '''
 
-    try:
-        Ha_map, Ha_wave = get_emission_line_map('Ha', full_hdu, args)
-    except KeyError:
-        print('Could not compute extinction due to absence of Ha')
+    Ha_map, Ha_wave = get_emission_line_map('Ha', full_hdu, args)
+    Hb_map, Hb_wave = get_emission_line_map('Hb', full_hdu, args)
 
-    try:
-        Hb_map, Hb_wave = get_emission_line_map('Hb', full_hdu, args)
-    except KeyError:
-        print('Could not compute extinction due to absence of Hb')
-
-    if 'Ha_map' in locals() and 'Hb_map' in locals(): # if both lines exists
-        obs_ratio_map = Ha_map / Hb_map
-        EB_V_map = 1.97 * np.log10(obs_ratio_map / 2.86)
-    else:
-        EB_V_map = 0.
+    obs_ratio_map = Ha_map / Hb_map
+    EB_V_map = 1.97 * np.log10(obs_ratio_map / 2.86)
 
     return EB_V_map
 
@@ -306,9 +337,8 @@ def plot_sfr_map(full_hdu, ax, args):
     Conversion factor is from Kennicutt 1998 (Eq 2 of https://ned.ipac.caltech.edu/level5/Sept01/Rosa/Rosa3.html)
     Returns the axes handles and the 2D SFR density map just produced
     '''
-    EB_V_map = calculate_EB_V(full_hdu, args)
     Ha_map, line_wave = get_emission_line_map('Ha', full_hdu, args)
-    dered_Ha_map = get_dereddened_flux(Ha_map, line_wave, EB_V_map) # line_map in ergs/s/cm^2
+    dered_Ha_map = get_dereddened_flux(Ha_map, line_wave, args.EB_V) # line_map in ergs/s/cm^2
 
     dered_Ha_map = dered_Ha_map * 4 * np.pi * (args.distance.to('cm').value) ** 2 # converting to ergs/s
 
@@ -324,14 +354,11 @@ def plot_Te_map(full_hdu, ax, args):
     Conversion factor is from Nicholls+2017
     Returns the axes handles and the 2D T_e map just produced
     '''
-
-    EB_V_map = calculate_EB_V(full_hdu, args)
-
     OIII4363_map, line_wave = get_emission_line_map('OIII-4363', full_hdu, args)
-    dered_OIII4363_map = get_dereddened_flux(OIII4363_map, line_wave, EB_V_map)
+    dered_OIII4363_map = get_dereddened_flux(OIII4363_map, line_wave, args.EB_V)
 
     OIII5007_map, line_wave = get_emission_line_map('OIII', full_hdu, args)
-    dered_OIII5007_map = get_dereddened_flux(OIII5007_map, line_wave, EB_V_map)
+    dered_OIII5007_map = get_dereddened_flux(OIII5007_map, line_wave, args.EB_V)
 
     ratio_map = dered_OIII4363_map / dered_OIII5007_map
     logT_map = np.poly1d([0., 9.18962, 3.30355])(np.log10(ratio_map)) / np.poly1d([-0.00935, -0.15034, 2.09136, 1.000])(np.log10(ratio_map))
@@ -354,16 +381,14 @@ def plot_Z_Te_map(full_hdu, ax, args, Te_map, ne=1e3):
     def poly(R, t, x, a, b, c, d, e):
         return np.log10(R) + a + b / t - c * np.log10(t) - d * t + np.log10(1 + e * x)  # eqn 3 I06 pattern
 
-    EB_V_map = calculate_EB_V(full_hdu, args)
-
     OIII5007_map, line_wave = get_emission_line_map('OIII', full_hdu, args)
-    dered_OIII5007_map = get_dereddened_flux(OIII5007_map, line_wave, EB_V_map)
+    dered_OIII5007_map = get_dereddened_flux(OIII5007_map, line_wave, args.EB_V)
 
     Hbeta_map, line_wave = get_emission_line_map('Hb', full_hdu, args)
-    dered_Hbeta_map = get_dereddened_flux(Hbeta_map, line_wave, EB_V_map)
+    dered_Hbeta_map = get_dereddened_flux(Hbeta_map, line_wave, args.EB_V)
 
     OII3727_map, line_wave = get_emission_line_map('OII', full_hdu, args)
-    dered_OII3727_map = get_dereddened_flux(OII3727_map, line_wave, EB_V_map)
+    dered_OII3727_map = get_dereddened_flux(OII3727_map, line_wave, args.EB_V)
 
     ratio1_map = dered_OII3727_map / dered_Hbeta_map
     ratio2_map = dered_OIII5007_map / dered_Hbeta_map
@@ -386,16 +411,14 @@ def plot_Z_R23_map(full_hdu, ax, args):
     def poly(R23, k):
         return  (-k[1] + np.sqrt(k[1]**2 - 4*k[2]*(k[0] - R23)))/(2*k[2])
 
-    EB_V_map = calculate_EB_V(full_hdu, args)
-
     OIII5007_map, line_wave = get_emission_line_map('OIII', full_hdu, args)
-    dered_OIII5007_map = get_dereddened_flux(OIII5007_map, line_wave, EB_V_map)
+    dered_OIII5007_map = get_dereddened_flux(OIII5007_map, line_wave, args.EB_V)
 
     Hbeta_map, line_wave = get_emission_line_map('Hb', full_hdu, args)
-    dered_Hbeta_map = get_dereddened_flux(Hbeta_map, line_wave, EB_V_map)
+    dered_Hbeta_map = get_dereddened_flux(Hbeta_map, line_wave, args.EB_V)
 
     OII3727_map, line_wave = get_emission_line_map('OII', full_hdu, args)
-    dered_OII3727_map = get_dereddened_flux(OII3727_map, line_wave, EB_V_map)
+    dered_OII3727_map = get_dereddened_flux(OII3727_map, line_wave, args.EB_V)
 
     ratio_map = (dered_OII3727_map + dered_OIII5007_map) / dered_Hbeta_map
     R23 = np.log10(ratio_map)
@@ -416,7 +439,8 @@ if __name__ == "__main__":
 
         # ------determining directories---------
         extract_dir = args.input_dir / args.field / 'Extractions'
-        output_subdir = args.output_dir / args.field / f'{this_id:05d}'
+        pixscale_text = '' if args.pixscale == 0.04 else f'_{args.pixscale}arcsec_pix'
+        output_subdir = args.output_dir / args.field / f'{this_id:05d}{pixscale_text}'
         output_subdir.mkdir(parents=True, exist_ok=True)
         full_fits_file = f'{args.field}_{this_id:05d}.full.fits'
 
@@ -443,6 +467,14 @@ if __name__ == "__main__":
         imsize_arcsec = full_hdu['DSCI'].data.shape[0] * pix_size
         dp = 0 # -0.5 * pix_size  # FITS reference is center of a pixel, array is edge
         args.extent = (-imsize_arcsec / 2. - dp, imsize_arcsec / 2. - dp, -imsize_arcsec / 2. - dp, imsize_arcsec / 2. - dp)
+        args.EB_V = 0. # until gets over-written, if both H alpha and H beta lines are present
+
+        if args.vorbin and args.voronoi_line is not None:
+            line_index = np.where(np.array(args.available_lines.split(' ')) == args.voronoi_line)[0][0]
+            ext = 5 + 2 * args.ndfilt + 4 * line_index
+            line_map = full_hdu[ext].data * 1e-17  # this gives 200 x 200 array; in units of ergs/s/cm^2
+            line_map_err = 1e-17 / full_hdu[ext + 3].data   # this gives 200 x 200 array; in units of ergs/s/cm^2
+            args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, line_map_err, args.voronoi_snr)#, plot=True, quiet=False)
 
         # ---------initialising the figure------------------------------
         if not args.keep: plt.close('all')
@@ -463,10 +495,11 @@ if __name__ == "__main__":
         for ind, line in enumerate(lines_to_plot):
             if line in args.available_lines: _, _, ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False) #ind != len(lines_to_plot) - 1) # line_map in ergs/s/cm^2
 
+        if all([line in args.available_lines for line in ['Ha', 'Hb']]):
+            args.EB_V = calculate_EB_V(full_hdu, args)
+            ax_EB_V, dust_map = plot_dust_map(full_hdu, ax_EB_V, args)
         if 'Ha' in args.available_lines:
             ax_SFR, sfr_map = plot_sfr_map(full_hdu, ax_SFR, args)
-        if all([line in args.available_lines for line in ['Ha', 'Hb']]):
-            ax_EB_V, dust_map = plot_dust_map(full_hdu, ax_EB_V, args)
         if all([line in args.available_lines for line in ['OIII-4363', 'OIII']]):
             ax_Te, Te_map = plot_Te_map(full_hdu, ax_Te, args)
         if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):

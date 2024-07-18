@@ -32,11 +32,12 @@ def parse_args():
     parser.add_argument('--field', metavar='field', type=str, action='store', default='Par008', help='Which passage field? Default is Par50')
     parser.add_argument('--id', metavar='id', type=str, action='store', default='100', help='Object ID. Default is 100')
 
-    # ------- args added for get_spectra_from_beam.py ------------------------------
+    # ------- args added for make_spectra_from_beam.py ------------------------------
     parser.add_argument('--include_photometry', dest='include_photometry', action='store_true', default=False, help='Include photometry while computing fit parameters? Default is no.')
     parser.add_argument('--zmin', metavar='zmin', type=float, action='store', default=0.5, help='minimum of redshift range within which to search for lines; default is 0.5')
     parser.add_argument('--zmax', metavar='zmax', type=float, action='store', default=1.0, help='maximum of redshift range within which to search for lines; default is None')
     parser.add_argument('--line_list', metavar='line_list', type=str, action='store', default='all', help='Which emission lines to look for? Default is all') # OR set default to 'Lya,OII,Hb,OIII,Ha,Ha+NII,SII,SIII,PaB,He-1083,PaA'
+    parser.add_argument('--pixscale', metavar='pixscale', type=float, action='store', default=0.04, help='Pixel scale (in arcsec/pixel) of the thumbnails produced; default is 0.04')
 
     # ------- args added for read_line_catalog.py ------------------------------
     parser.add_argument('--nbins', metavar='nbins', type=int, action='store', default=30, help='No. of bins for plotting the histogram. Default is 30')
@@ -73,6 +74,9 @@ def parse_args():
     # ------- args added for make_diagnostic_maps.py ------------------------------
     parser.add_argument('--plot_target_frame', dest='plot_target_frame', action='store_true', default=False, help='Annotate plot axes in the object/target frame of reference? Default is no.')
     parser.add_argument('--arcsec_limit', metavar='arcsec_limit', type=float, action='store', default=1.0, help='Half box size (in arcsec) of the thumbnails to plot; default is 1.5')
+    parser.add_argument('--vorbin', dest='vorbin', action='store_true', default=False, help='Voronoi bin the 2D emission line maps? Default is no.')
+    parser.add_argument('--voronoi_snr', metavar='voronoi_snr', type=float, action='store', default=3, help='Target SNR to Voronoi bin the emission line maps to; default is 3')
+    parser.add_argument('--voronoi_line', metavar='voronoi_line', type=str, action='store', default=None, help='Which emission line to be used for computing the Voronoi bins? Default is None i.e., the given emission line itself')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()

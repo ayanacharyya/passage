@@ -34,6 +34,9 @@ from tqdm import tqdm
 from importlib import reload
 from PIL import Image
 
+import vorbin
+from vorbin.voronoi_2d_binning import voronoi_2d_binning
+
 import requests
 from urllib.parse import quote as urlencode
 from mastquery import utils as mastutils
