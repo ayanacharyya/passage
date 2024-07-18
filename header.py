@@ -47,6 +47,7 @@ from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy import wcs as pywcs
 from astropy.io import fits
+from astropy.cosmology import WMAP9 as cosmo
 
 # grizli stuff
 import grizli
