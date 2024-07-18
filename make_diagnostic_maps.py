@@ -10,6 +10,7 @@
 from header import *
 from util import *
 from matplotlib import cm as mpl_cm
+from matplotlib.gridspec import GridSpec
 
 start_time = datetime.now()
 
@@ -128,7 +129,7 @@ def plot_1d_spectra(od_hdu, ax, args):
     nfilters = sum(['GRISM' in item for item in list(od_hdu[0].header.keys())])
     filters = [od_hdu[0].header[f'GRISM{item + 1:03d}'] for item in range(nfilters)]
 
-    col_arr = ['gray', 'black', 'salmon'] # colors in order: for measured flux, fitted continuum, fitted continuum + line flux
+    col_arr = ['gold', 'sandybrown', 'firebrick'] # colors in order: for measured flux, fitted continuum, fitted continuum + line flux
     factor = 1e-19
 
     # -------plot 1D spectra for each filter-----------
@@ -136,12 +137,13 @@ def plot_1d_spectra(od_hdu, ax, args):
         print(f'Plotting 1D spectra for filter {filter} which is {index+1} of {nfilters}..')
         table = Table(od_hdu[filter].data)
         table['rest_wave'] = table['wave'] / (1 + args.z)
-        ax.plot(table['rest_wave'], table['flux'] / table['flat'] / factor, lw=0.5, c=col_arr[0], alpha=0.5) # need to divide all columns with 'flat' to get the right units (ergs/s/cm^2/A)
-        ax.plot(table['rest_wave'], table['cont'] / table['flat'] / factor, lw=0.5, c=col_arr[1])
-        ax.plot(table['rest_wave'], table['line'] / table['flat'] / factor, lw=1, c=col_arr[2])
+        ax.plot(table['rest_wave'], table['flux'] / table['flat'] / factor, lw=0.5, c=col_arr[index], alpha=0.5) # need to divide all columns with 'flat' to get the right units (ergs/s/cm^2/A)
+        ax.plot(table['rest_wave'], table['cont'] / table['flat'] / factor, lw=0.5, c='grey')
+        ax.plot(table['rest_wave'], table['line'] / table['flat'] / factor, lw=1, c='indigo')
+        ax.text(float(filters[0][1:-1]) * 1e2 * 0.85 / (1 + args.z), args.flam_max * 0.95 - index * 0.1, filter, c=col_arr[index], fontsize=args.fontsize, ha='left', va='top')
 
     ax.set_xlabel(r'Rest-frame wavelength ($\AA$)', fontsize=args.fontsize)
-    ax.set_ylabel(r'f$_{\lambda}$ ' + '(%.0e ' % factor + r'ergs/s/cm$^2$/A)', fontsize=args.fontsize)
+    ax.set_ylabel(r'f$_{\lambda}$ ' + '(%.0e ' % factor + r'ergs/s/cm$^2$/A)', fontsize=args.fontsize/1.2)
 
     ax.set_ylim(0, args.flam_max) # x factor
 
@@ -184,7 +186,7 @@ def plot_binned_profile(xdata, ydata, ax, color='darkorange', yerr=None):
 
     # ----------to plot mean binned y vs x profile--------------
     ax.errorbar(x_bin_centers, y_binned, c=color, yerr=y_u_binned, lw=1, ls='none', zorder=1)
-    ax.scatter(x_bin_centers, y_binned, c=color, s=10, lw=0.2, ec='black', zorder=10)
+    ax.scatter(x_bin_centers, y_binned, c=color, s=20, lw=0.2, ec='black', zorder=10)
 
     return ax
 
@@ -204,7 +206,7 @@ def plot_radial_profile(image, ax, args, label=None, cmap=None, ymin=None, ymax=
 
     ax.set_xlim(0, 2 * ((args.arcsec_limit * u.arcsec).to(u.radian) * args.distance.to('kpc')).value) # kpc
     ax.set_ylim(ymin, ymax)
-    ax.set_box_aspect(1)
+    #ax.set_box_aspect(1)
 
     ax = plot_binned_profile(distance_map, image, ax)
 
@@ -232,12 +234,12 @@ def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hi
     if cmap is None: cmap = 'cividis'
     print(f'Plotting 2D map of {label}..')
 
-    p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax, aspect=1)
+    p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
 
     ax.set_xlim(-args.arcsec_limit, args.arcsec_limit) # arcsec
     ax.set_ylim(-args.arcsec_limit, args.arcsec_limit) # arcsec
 
-    ax.text(ax.get_xlim()[0] * 0.9, ax.get_ylim()[1] * 0.9, label, c='k', fontsize=args.fontsize, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+    ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[1] * 0.88, label, c='k', fontsize=args.fontsize, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
     ax.scatter(0, 0, marker='x', s=10, c='grey')
 
     if hide_xaxis:
@@ -262,13 +264,11 @@ def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hi
 
     if not hide_cbar:
         fig = ax.figure
-        pad = 0.0005
+        pad = -0.1
         [ax_l, ax_b, ax_w, ax_h] = ax.get_position().bounds # left, bottom, width, height
         cax = fig.add_axes([ax_l + ax_w + pad, ax_b, ax_w * 0.1, ax_h]) # left, bottom, width, height
-        cbar = plt.colorbar(p, ax=cax, orientation='vertical')
-        cax.xaxis.set_visible(False)
-        cax.yaxis.set_visible(False)
-        #cbar.ax.tick_params(labelsize=args.fontsize)
+        cbar = plt.colorbar(p, cax=cax, orientation='vertical')
+        cbar.ax.tick_params(labelsize=args.fontsize)
 
     if args.plot_radial_profiles and radprof_ax is not None: radprof_ax = plot_radial_profile(image, radprof_ax, args, label=label, ymin=vmin, ymax=vmax)
 
@@ -614,16 +614,27 @@ if __name__ == "__main__":
 
         # ---------initialising the figure------------------------------
         if not args.keep: plt.close('all')
-        nrow, ncol = 4 if args.plot_radial_profiles else 3, 5
-        fig = plt.figure(figsize=(8, 7))
+        lines_to_plot = ['Ha', 'Hb', 'OII', 'OIII-4363', 'OIII']
+        nrow, ncol = 4 if args.plot_radial_profiles else 3, len(lines_to_plot)
+        fig = plt.figure(layout='constrained', figsize=(12, 9) if args.plot_radial_profiles else (12, 6))
+        '''
+        groups = fig.add_gridspec(nrow, 1, hspace=0.1) # spacing between the groups
+        group1 = groups[0].subgridspec(1, ncol, hspace=0, wspace=0.1) # spacing within the group
+        group2 = groups[1].subgridspec(2, ncol, hspace=0, wspace=0.1)
+
+        axis_dirimg = plt.subplot(group1.new_subplotspec((0, 0), colspan=1))
+        axis_1dspec = plt.subplot(group1.new_subplotspec((0, 1), colspan=ncol - 1))
+        [ax_em_lines, [ax_SFR, ax_EB_V, ax_Te, ax_Z_Te, ax_Z_R23]] = group2.subplots()
+
+        if args.plot_radial_profiles:
+            group3 = groups[2].subgridspec(1, ncol, hspace=0, wspace=0.1)
+            [rax_SFR, rax_EB_V, rax_Te, rax_Z_Te, rax_Z_R23] = group3.subplots()
+        '''
         axis_dirimg = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 0), colspan=1)
         axis_1dspec = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 1), colspan=ncol - 1)
-        ax_em_lines = [plt.subplot2grid(shape=(nrow, ncol), loc=(1, item), colspan=1) for item in np.arange(ncol)] # H alpha, H beta, OII, OIII-4363, OIII
-        [ax_SFR, ax_EB_V, ax_Te, ax_Z_Te, ax_Z_R23] = [plt.subplot2grid(shape=(nrow, ncol), loc=(2, item), colspan=1) for item in np.arange(ncol)] # SFR, E(B-V), Te, Z (Te), Z (R23)
-        if args.plot_radial_profiles: [rax_SFR, rax_EB_V, rax_Te, rax_Z_Te, rax_Z_R23] = [plt.subplot2grid(shape=(nrow, ncol), loc=(3, item), colspan=1) for item in np.arange(ncol)] # SFR, E(B-V), Te, Z (Te), Z (R23)
-
-        fig.tight_layout()
-        fig.subplots_adjust(top=0.92, bottom=0.08, left=0.08, right=0.95, wspace=0.2, hspace=0.7)
+        ax_em_lines = [plt.subplot2grid(shape=(nrow, ncol), loc=(1, item), colspan=1) for item in np.arange(ncol)]  # H alpha, H beta, OII, OIII-4363, OIII
+        [ax_SFR, ax_EB_V, ax_Te, ax_Z_Te, ax_Z_R23] = [plt.subplot2grid(shape=(nrow, ncol), loc=(2, item), colspan=1) for item in np.arange(ncol)]  # SFR, E(B-V), Te, Z (Te), Z (R23)
+        if args.plot_radial_profiles: [rax_SFR, rax_EB_V, rax_Te, rax_Z_Te, rax_Z_R23] = [plt.subplot2grid(shape=(nrow, ncol), loc=(3, item), colspan=1) for item in np.arange(ncol)]  # SFR, E(B-V), Te, Z (Te), Z (R23)
 
         # ---------direct imaging------------------------------
         axis_dirimg = plot_direct_image(full_hdu, axis_dirimg, args)
@@ -632,7 +643,6 @@ if __name__ == "__main__":
         axis_1dspec = plot_1d_spectra(od_hdu, axis_1dspec, args)
 
         # -----------------emission line maps---------------
-        lines_to_plot = ['Ha', 'Hb', 'OII', 'OIII-4363', 'OIII']
         for ind, line in enumerate(lines_to_plot):
             if line in args.available_lines: _, _, ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False) #ind != len(lines_to_plot) - 1) # line_map in ergs/s/cm^2
             else: fig.delaxes(ax_em_lines[ind])
@@ -671,7 +681,7 @@ if __name__ == "__main__":
                 fig.delaxes(rax_Z_R23)
 
         # ---------decorating and saving the figure------------------------------
-        fig.text(0.05, 0.98, f'{args.field}: ID{this_id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+        fig.text(0.05, 0.98, f'{args.field}: ID {this_id}', fontsize=args.fontsize, c='k', ha='left', va='top')
 
         figname = output_subdir / f'{args.field}_{this_id:05d}_all_diag_plots.png'
         fig.savefig(figname)
