@@ -177,7 +177,7 @@ def get_voronoi_bin_IDs(map, map_err, snr_thresh, plot=False, quiet=True):
     map = np.ma.masked_where(map < 0, map)
     map_err = np.ma.masked_where(map < 0, map_err)
 
-    binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords, y_coords, map.flatten(), map_err.flatten(), snr_thresh, plot=plot, quiet=quiet, cvt=False)
+    binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords, y_coords, map.flatten(), map_err.flatten(), snr_thresh, plot=plot, quiet=quiet, cvt=False, pixelsize=1)
     binID_map = binIDs.reshape(np.shape(map))
 
     return binID_map

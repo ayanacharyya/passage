@@ -76,7 +76,7 @@ def parse_args():
     parser.add_argument('--arcsec_limit', metavar='arcsec_limit', type=float, action='store', default=1.0, help='Half box size (in arcsec) of the thumbnails to plot; default is 1.5')
     parser.add_argument('--vorbin', dest='vorbin', action='store_true', default=False, help='Voronoi bin the 2D emission line maps? Default is no.')
     parser.add_argument('--voronoi_snr', metavar='voronoi_snr', type=float, action='store', default=3, help='Target SNR to Voronoi bin the emission line maps to; default is 3')
-    parser.add_argument('--voronoi_line', metavar='voronoi_line', type=str, action='store', default=None, help='Which emission line to be used for computing the Voronoi bins? Default is None i.e., the given emission line itself')
+    parser.add_argument('--voronoi_line', metavar='voronoi_line', type=str, action='store', default='Ha', help='Which emission line to be used for computing the Voronoi bins? Default is None i.e., the given emission line itself')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
