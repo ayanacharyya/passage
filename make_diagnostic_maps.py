@@ -455,7 +455,7 @@ if __name__ == "__main__":
         full_hdu = fits.open(args.work_dir / f'{args.field}_{this_id:05d}.full.fits')
 
         # ----------determining global parameters------------
-        args.available_lines = full_hdu[0].header['HASLINES']
+        args.available_lines = full_hdu[0].header['HASLINES'].split(' ')
         args.z = full_hdu[0].header['REDSHIFT']
         args.distance = cosmo.comoving_distance(args.z)
         args.ndfilt = full_hdu[0].header['NDFILT']
