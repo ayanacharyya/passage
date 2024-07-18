@@ -35,8 +35,9 @@ def plot_direct_image(full_hdu, ax, args, hide_xaxis=False, hide_yaxis=False):
         ax.set_ylim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
 
         textcolor = mpl_cm.get_cmap(cmap_arr[index])(0.9)
-        ax.text(ax.get_xlim()[0] * 0.9, ax.get_ylim()[1] * 0.9 - index * 0.1, filt, c=textcolor, fontsize=args.fontsize/2, ha='left', va='top')
+        ax.text(ax.get_xlim()[0] * 0.9, ax.get_ylim()[1] * 0.75 - index * 0.1, filt, c=textcolor, fontsize=args.fontsize / 2, ha='left', va='top')
 
+    ax.text(ax.get_xlim()[0] * 0.9, ax.get_ylim()[1] * 0.95, f'z={args.z:.2f}', c='k', fontsize=args.fontsize, ha='left', va='top')
     ax.scatter(0, 0, marker='x', s=10, c='grey')
     #cbar = plt.colorbar(p)
 
@@ -342,10 +343,10 @@ def calculate_EB_V(full_hdu, args):
 
     if all([line in args.available_lines for line in ['Ha', 'Hb']]):
         Ha_index = np.where(args.available_lines == 'Ha')[0][0]
-        Ha_int_flux = full_hdu[0].header[f'FLUX{Ha_index:03d}']
+        Ha_int_flux = full_hdu[0].header[f'FLUX{Ha_index + 1:03d}']
 
         Hb_index = np.where(args.available_lines == 'Hb')[0][0]
-        Hb_int_flux = full_hdu[0].header[f'FLUX{Hb_index:03d}']
+        Hb_int_flux = full_hdu[0].header[f'FLUX{Hb_index + 1:03d}']
 
         obs_ratio = Ha_int_flux / Hb_int_flux
         EB_V = 1.97 * np.log10(obs_ratio / 2.86)
@@ -379,7 +380,7 @@ def plot_dust_map(full_hdu, ax, args):
     Returns the axes handles and the 2D E(B-V) map just produced
     '''
     EB_V_map = get_EB_V_map(full_hdu, args)
-    ax = plot_2D_map(EB_V_map, ax, args, label='E(B-V)', cmap='YlOrBr', vmin=None, vmax=None, hide_yaxis=True)
+    ax = plot_2D_map(EB_V_map, ax, args, label='E(B-V)', cmap='YlOrBr', hide_yaxis=True, vmin=None, vmax=None)
 
     return ax, EB_V_map
 
@@ -416,7 +417,7 @@ def plot_Te_map(full_hdu, ax, args):
     ratio_map = dered_OIII4363_map / dered_OIII5007_map
     logT_map = np.poly1d([0., 9.18962, 3.30355])(np.log10(ratio_map)) / np.poly1d([-0.00935, -0.15034, 2.09136, 1.000])(np.log10(ratio_map))
     Te_map = 10 ** logT_map
-    ax = plot_2D_map(np.log10(Te_map), ax, args, label=r'T$_e$', cmap='OrRd_r', vmin=1, vmax=7, hide_yaxis=True)
+    ax = plot_2D_map(np.log10(Te_map), ax, args, label=r'T$_e$', cmap='OrRd_r', hide_yaxis=True, vmin=1, vmax=7)
 
     return ax, Te_map
 
@@ -449,7 +450,7 @@ def plot_Z_Te_map(full_hdu, ax, args, Te_map, ne=1e3):
     log_O3H2_map = poly(ratio2_map, t, x, 6.200, 1.251, -0.55, -0.014, 0.0) - 12  # coefficients from eqn 5 I06
     log_OH_map = np.log10(10 ** log_O2H2_map + 10 ** log_O3H2_map) + 12
 
-    ax = plot_2D_map(log_OH_map, ax, args, label='Z (Te)', cmap='Greens', vmin=6, vmax=9, hide_yaxis=True)
+    ax = plot_2D_map(log_OH_map, ax, args, label='Z (Te)', cmap='Greens', hide_yaxis=True, vmin=6, vmax=9)
 
     return ax, log_OH_map
 
@@ -477,7 +478,7 @@ def plot_Z_R23_map(full_hdu, ax, args):
     R23 = np.log10(ratio_map)
     log_OH_map = poly(R23, [-44.7026, 10.8052, -0.640113]) #k0-2 parameters for q=8e7 from Table 3 of KD02 last row for q=8e7
 
-    ax = plot_2D_map(log_OH_map, ax, args, label='Z (R23)', cmap='Greens', vmin=6, vmax=9, hide_yaxis=True)
+    ax = plot_2D_map(log_OH_map, ax, args, label='Z (R23)', cmap='Greens', hide_yaxis=True, vmin=6, vmax=9)
 
     return ax, log_OH_map
 
