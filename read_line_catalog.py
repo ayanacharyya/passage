@@ -32,7 +32,7 @@ def plot_zhist(df, args):
 
     if args.line_list != 'all':
         for index, thisline in enumerate(args.line_list):
-            z_limits, filters = get_zranges_for_filters(thisline)
+            z_limits, filters = get_zranges_for_filters(thisline, filters=args.filters)
             print(f'{thisline} is captured between ' + ', '.join(['z=[%.2f, %.2f]' % (z[0], z[1]) for z in z_limits]))
 
             df_line = pd.DataFrame()
@@ -71,6 +71,7 @@ def plot_zhist(df, args):
     ax.set_ylabel('# of objects', fontsize=args.fontsize)
     ax.set_title(args.field, fontsize=args.fontsize)
 
+    fig.text(0.98, 0.98, f'{args.field}', c='k', ha='right', va='top', fontsize=args.fontsize, transform=ax.transAxes)
     figname = args.output_dir / 'zdist_histogram.png'
     fig.savefig(figname)
     print(f'Saved plot to {figname}')
@@ -104,8 +105,19 @@ if __name__ == "__main__":
 
     # -----reading the file---------------
     filenames = list(args.input_dir.glob('*catalog*'))
-    if len(filenames) > 0: df = get_catalog(filenames[0], nheader=217)
-    else: sys.exit('No catalog file in %s' %args.input_dir)
+    alternate_filename = args.input_dir / 'Products' / f'{args.field}_speccat.fits'
+
+    if len(filenames) > 0: # get catalog from Colbert
+        print(f'Reading spec catalog from {filenames[0]}')
+        df = get_catalog(filenames[0], nheader=217)
+    elif os.path.exists(alternate_filename): # get catalog from my reductions
+        print(f'Reading spec catalog from {alternate_filename}')
+        tab = Table(fits.open(alternate_filename)[1].data)
+        tab = tab['id', 'ra', 'dec', 'redshift']
+        df = tab.to_pandas()
+        df = df.rename(columns={'id': 'objid'})
+    else:
+        sys.exit('No catalog file in %s' %args.input_dir)
 
     # -----computing stats---------------
     df_subz = df[df['redshift'].between(args.zmin, args.zmax)]
