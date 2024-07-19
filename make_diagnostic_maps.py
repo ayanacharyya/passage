@@ -4,7 +4,9 @@
     Author : Ayan
     Created: 17-07-24
     Example: run make_diagnostic_maps.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --id 3667
-             run make_diagnostic_maps.py --field Par50 --id 823 --vorbin --voronoi_line Ha --voronoi_snr 3 --plot_radial_profiles
+             run make_diagnostic_maps.py --field Par50 --id 823 --plot_radial_profiles
+             run make_diagnostic_maps.py --field Par50 --id 823 --pixscale 0.2 --vorbin --voronoi_line Ha --voronoi_snr 3 --plot_radial_profiles
+             run make_diagnostic_maps.py --field Par50 --id 823 --plot_radial_profiles --only_seg --snr_cut 3
 '''
 
 from header import *
@@ -190,6 +192,17 @@ def plot_binned_profile(xdata, ydata, ax, color='darkorange', yerr=None):
 
     return ax
 
+# --------------------------------------------------------------------------------------------------------------
+def get_distance_map(image_shape, args):
+    '''
+    Get map of distances from the center, in target rest-frame, on a given 2D grid
+    Returns 2D distance map
+    '''
+    pixscale_kpc = ((args.pixscale * u.arcsec).to(u.radian) * args.distance.to('kpc')).value # kpc
+    center_pix = image_shape[0] / 2.
+    distance_map = np.array([[np.sqrt((i - center_pix)**2 + (j - center_pix)**2) for j in range(image_shape[1])] for i in range(image_shape[0])]) * pixscale_kpc # kpc
+
+    return distance_map
 # --------------------------------------------------------------------------------------------------------------------
 def plot_radial_profile(image, ax, args, label=None, cmap=None, ymin=None, ymax=None, hide_xaxis=False, hide_yaxis=False):
     '''
@@ -198,14 +211,12 @@ def plot_radial_profile(image, ax, args, label=None, cmap=None, ymin=None, ymax=
     '''
     print(f'Plotting radial profile of {label}..')
 
-    pixscale_kpc = ((args.pixscale * u.arcsec).to(u.radian) * args.distance.to('kpc')).value # kpc
-    center_pix = np.shape(image)[0] / 2.
-    distance_map = np.array([[np.sqrt((i - center_pix)**2 + (j - center_pix)**2) for j in range(np.shape(image)[0])] for i in range(np.shape(image)[0])]) * pixscale_kpc # kpc
-
+    distance_map = get_distance_map(np.shape(image), args)
     ax.scatter(distance_map, image, c='grey', s=1, alpha=0.2)
 
     ax.set_xlim(0, 2 * ((args.arcsec_limit * u.arcsec).to(u.radian) * args.distance.to('kpc')).value) # kpc
     ax.set_ylim(ymin, ymax)
+    ax.set_xlim(0, args.radius_max)
     ax.set_box_aspect(1)
 
     ax = plot_binned_profile(distance_map, image, ax)
@@ -231,8 +242,6 @@ def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hi
     Plots the emission map for a given line in the given axis
     Returns the axis handle
     '''
-    [ax_l, ax_b, ax_w, ax_h] = ax.get_position().bounds  # left, bottom, width, height
-
     if cmap is None: cmap = 'cividis'
     print(f'Plotting 2D map of {label}..')
 
@@ -270,7 +279,11 @@ def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hi
         cbar = plt.colorbar(p, cax=cax, orientation='vertical')
         cbar.ax.tick_params(labelsize=args.fontsize)
 
-    if args.plot_radial_profiles and radprof_ax is not None: radprof_ax = plot_radial_profile(image, radprof_ax, args, label=label, ymin=vmin, ymax=vmax)
+    if args.plot_radial_profiles and radprof_ax is not None:
+        radius_pix = ((args.radius_max / args.distance.to('kpc').value) * u.radian).to(u.arcsec)
+        circle = plt.Circle((0, 0), radius_pix.value, color='k', fill=False, lw=0.5)
+        ax.add_patch(circle)
+        radprof_ax = plot_radial_profile(image, radprof_ax, args, label=label.split(r'$_{\rm int}')[0], ymin=vmin, ymax=vmax)
 
     return ax
 
@@ -308,7 +321,18 @@ def get_voronoi_bin_IDs(map, map_err, snr_thresh, plot=False, quiet=True):
     return binID_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_emission_line_map(line, full_hdu, args):
+def cut_by_segment(map, full_hdu, args):
+    '''
+    Mask a given 2D map according to the segmentation map from the HDU
+    Returns the masked map
+    '''
+    segmentation_map = full_hdu['SEG'].data
+    cut_map = np.ma.masked_where(segmentation_map != args.id, map)
+
+    return cut_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_emission_line_map(line, full_hdu, args, dered=True):
     '''
     Retrieve the emission map for a given line from the HDU
     Returns the 2D line image
@@ -318,16 +342,32 @@ def get_emission_line_map(line, full_hdu, args):
     ext = 5 + 2 * args.ndfilt + 4 * line_index
     line_map = full_hdu[ext].data * 1e-17 # this gives 200 x 200 array; in units of ergs/s/cm^2
     line_wave = full_hdu[ext].header['RESTWAVE'] # in Angstrom
+    line_map_err = 1e-17 / full_hdu[ext + 3].data  # this gives 200 x 200 array; 1/LINEWHT = flux uncertainty; in units of ergs/s/cm^2
+
+    if args.only_seg:
+        line_map = cut_by_segment(line_map, full_hdu, args)
+
+    if args.snr_cut is not None:
+        snr_map = line_map / line_map_err
+        line_map = np.ma.masked_where(~np.isfinite(snr_map), line_map)
+        line_map = np.ma.masked_where(snr_map < args.snr_cut, line_map)
 
     if args.vorbin:
         if args.voronoi_line is None: # No reference emission line specified, so Voronoi IDs need to be computed now
-            line_map_err = 1e-17 / full_hdu[ext + 3].data   # this gives 200 x 200 array; in units of ergs/s/cm^2
             bin_IDs = get_voronoi_bin_IDs(line_map, line_map_err, args.voronoi_snr)
         else: # Reference emission line specified for Voronoi binning, so bin IDs have been pre-computed
             bin_IDs = args.voronoi_bin_IDs
         line_map = bin_2D(line_map, bin_IDs)
 
-    return line_map, line_wave
+    # -----------getting the integrated flux value-----------------
+    line_int = full_hdu[0].header[f'FLUX{line_index + 1:03d}'] # ergs/s/cm^2
+
+    # -----------getting the dereddened flux value-----------------
+    if dered:
+        line_map = get_dereddened_flux(line_map, line_wave, args.EB_V)
+        line_int = get_dereddened_flux(line_int, line_wave, args.EB_V)
+
+    return line_map, line_wave, line_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False):
@@ -336,13 +376,10 @@ def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, 
     Returns the axes handle
     '''
 
-    line_map, line_wave = get_emission_line_map(line, full_hdu, args)
-    dered_line_map = get_dereddened_flux(line_map, line_wave, EB_V)
-    [ax_l, ax_b, ax_w, ax_h] = ax.get_position().bounds  # left, bottom, width, height
-    ax = plot_2D_map(np.log10(line_map), ax, args, label=line, cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
-    [ax_l, ax_b, ax_w, ax_h] = ax.get_position().bounds  # left, bottom, width, height
+    line_map, line_wave, line_int = get_emission_line_map(line, full_hdu, args, dered=False)
+    ax = plot_2D_map(np.log10(line_map), ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
 
-    return dered_line_map, line_wave, ax
+    return line_map, line_wave, ax
 
 # -------------------------------------------------------------------------------
 def get_kappa(x, i):
@@ -408,48 +445,41 @@ def get_dereddened_flux(obs_flux_map, wavelength, EB_V, inAngstrom=True):
     return flux_corrected_map
 
 # ---------------------------------------------------------------------------------------
-def calculate_EB_V(full_hdu, args):
+def compute_EB_V(Ha_flux, Hb_flux, args, verbose=False):
     '''
-    Calculates and returns the color excess given observed integrated H alpha and H beta fluxes
+    Calculates and returns the color excess given observed H alpha and H beta fluxes
     Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
     '''
     theoretical_ratio = 2.86
 
-    if all([line in args.available_lines for line in ['Ha', 'Hb']]):
-        Ha_index = np.where(args.available_lines == 'Ha')[0][0]
-        Ha_int_flux = full_hdu[0].header[f'FLUX{Ha_index + 1:03d}']
+    obs_ratio = Ha_flux / Hb_flux
+    EB_V = 1.97 * np.log10(obs_ratio / theoretical_ratio)
 
-        Hb_index = np.where(args.available_lines == 'Hb')[0][0]
-        Hb_int_flux = full_hdu[0].header[f'FLUX{Hb_index + 1:03d}']
-
-        obs_ratio = Ha_int_flux / Hb_int_flux
+    if type(EB_V) == np.float64:
         if obs_ratio < theoretical_ratio:
             EB_V = 0.
-            print(f'Based on integrated fluxes Ha = {Ha_int_flux:.2e}, Hb = {Hb_int_flux:.2e}, the observed ratio is LOWER than theoretical ratio, so E(B-V) would be unphysical, so just assuming {EB_V}')
+            if verbose: print(f'Based on integrated fluxes Ha = {Ha_flux:.2e}, Hb = {Hb_flux:.2e}, the observed ratio is LOWER than theoretical ratio, so E(B-V) would be unphysical, so just assuming {EB_V}')
         else:
-            EB_V = 1.97 * np.log10(obs_ratio / theoretical_ratio)
-            print(f'Based on integrated fluxes Ha = {Ha_int_flux:.2e}, Hb = {Hb_int_flux:.2e}, determine E(B-V) = {EB_V:.2f}')
+            if verbose: print(f'Based on integrated fluxes Ha = {Ha_flux:.2e}, Hb = {Hb_flux:.2e}, determine E(B-V) = {EB_V:.2f}')
     else:
-        EB_V = 0.
-        print(f'Assumed E(B-V) = {EB_V}, due to absence of one or more of H alpha, H beta lines')
+        EB_V[~np.isfinite(EB_V)] = 0.
 
     return EB_V
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_EB_V_map(full_hdu, args):
+def get_EB_V(full_hdu, args, verbose=False):
     '''
-    Computes and returns the spatially resolved dust extinction map from a given HDU
+    Computes and returns the spatially resolved as well as integrated dust extinction map from a given HDU
     Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
-    Returns the E(B-V) map
     '''
 
-    Ha_map, Ha_wave = get_emission_line_map('Ha', full_hdu, args)
-    Hb_map, Hb_wave = get_emission_line_map('Hb', full_hdu, args)
+    Ha_map, Ha_wave, Ha_int = get_emission_line_map('Ha', full_hdu, args, dered=False) # do not need to deredden the lines when we are fetching the flux in order to compute reddening
+    Hb_map, Hb_wave, Hb_int = get_emission_line_map('Hb', full_hdu, args, dered=False)
 
-    obs_ratio_map = Ha_map / Hb_map
-    EB_V_map = 1.97 * np.log10(obs_ratio_map / 2.86)
+    EB_V_map = compute_EB_V(Ha_map, Hb_map, args)
+    EB_V_int = compute_EB_V(Ha_int, Hb_int, args, verbose=verbose)
 
-    return EB_V_map
+    return EB_V_map, EB_V_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_dust_map(full_hdu, ax, args, radprof_ax=None):
@@ -459,129 +489,189 @@ def plot_dust_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [0, 1], 'E(B-V)'
 
-    EB_V_map = get_EB_V_map(full_hdu, args)
-    ax = plot_2D_map(EB_V_map, ax, args, label=label, cmap='YlOrBr', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    EB_V_map, EB_V_int = get_EB_V(full_hdu, args)
+    ax = plot_2D_map(EB_V_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, EB_V_int), cmap='YlOrBr', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, EB_V_map
+
+
+# --------------------------------------------------------------------------------------------------------------------
+def compute_sfr(Ha_flux, distance):
+    '''
+    Calculates and returns the SFR given observed H alpha fluxes
+    Conversion factor is from Kennicutt 1998 (Eq 2 of https://ned.ipac.caltech.edu/level5/Sept01/Rosa/Rosa3.html)
+    '''
+    Ha_flux = Ha_flux * 4 * np.pi * (distance.to('cm').value) ** 2 # converting to ergs/s
+    sfr = Ha_flux * 7.9e-42 # line_map in args/s; SFR in Msun/yr
+
+    return sfr
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_sfr(full_hdu, args):
+    '''
+    Computes and returns the spatially resolved as well as intregrated SFR from a given HDU
+    '''
+    Ha_map, Ha_wave, Ha_int = get_emission_line_map('Ha', full_hdu, args)
+
+    sfr_map = compute_sfr(Ha_map, args.distance)
+    sfr_int = compute_sfr(Ha_int, args.distance)
+
+    return sfr_map, sfr_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_sfr_map(full_hdu, ax, args, radprof_ax=None):
     '''
     Plots the SFR map (and the emission line maps that go into it) in the given axes
-    Conversion factor is from Kennicutt 1998 (Eq 2 of https://ned.ipac.caltech.edu/level5/Sept01/Rosa/Rosa3.html)
     Returns the axes handles and the 2D SFR density map just produced
     '''
     lim, label = [-4, -2], 'SFR'
-
-    Ha_map, line_wave = get_emission_line_map('Ha', full_hdu, args)
-    dered_Ha_map = get_dereddened_flux(Ha_map, line_wave, args.EB_V) # line_map in ergs/s/cm^2
-
-    dered_Ha_map = dered_Ha_map * 4 * np.pi * (args.distance.to('cm').value) ** 2 # converting to ergs/s
-
-    sfr_map = dered_Ha_map * 7.9e-42 # line_map in args/s; SFR in Msun/yr
-    ax = plot_2D_map(np.log10(sfr_map), ax, args, label=label, cmap='Blues', radprof_ax=radprof_ax, vmin=lim[0], vmax=lim[1])
+    sfr_map, sfr_int = get_sfr(full_hdu, args)
+    ax = plot_2D_map(np.log10(sfr_map), ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, sfr_int), cmap='Blues', radprof_ax=radprof_ax, vmin=lim[0], vmax=lim[1])
 
     return ax, sfr_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def compute_Te(OIII4363_flux, OIII5007_flux, args):
+    '''
+    Calculates and returns the Te given observed line fluxes
+    Conversion factor is from Nicholls+2017
+    '''
+    ratio = OIII4363_flux / OIII5007_flux
+    logTe = np.poly1d([0., 9.18962, 3.30355])(np.log10(ratio)) / np.poly1d([-0.00935, -0.15034, 2.09136, 1.000])(np.log10(ratio))
+    Te = 10 ** logTe
+
+    return Te
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_Te(full_hdu, args):
+    '''
+    Computes and returns the spatially resolved as well as intregrated Te from a given HDU
+    '''
+    OIII4363_map, OIII4363_wave, OIII4363_int = get_emission_line_map('OIII-4363', full_hdu, args)
+    OIII5007_map, OIII5007_wave, OIII5007_int = get_emission_line_map('OIII', full_hdu, args)
+
+    Te_map = compute_Te(OIII4363_map, OIII5007_map, args)
+    Te_int = compute_Te(OIII4363_int, OIII5007_int, args)
+
+    return Te_map, Te_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_Te_map(full_hdu, ax, args, radprof_ax=None):
     '''
     Plots the T_e map (and the emission line maps that go into it) in the given axes
-    Conversion factor is from Nicholls+2017
     Returns the axes handles and the 2D T_e map just produced
     '''
     lim, label = [1, 7], r'T$_e$'
-
-    OIII4363_map, line_wave = get_emission_line_map('OIII-4363', full_hdu, args)
-    dered_OIII4363_map = get_dereddened_flux(OIII4363_map, line_wave, args.EB_V)
-
-    OIII5007_map, line_wave = get_emission_line_map('OIII', full_hdu, args)
-    dered_OIII5007_map = get_dereddened_flux(OIII5007_map, line_wave, args.EB_V)
-
-    ratio_map = dered_OIII4363_map / dered_OIII5007_map
-    logT_map = np.poly1d([0., 9.18962, 3.30355])(np.log10(ratio_map)) / np.poly1d([-0.00935, -0.15034, 2.09136, 1.000])(np.log10(ratio_map))
-    Te_map = 10 ** logT_map
-    ax = plot_2D_map(np.log10(Te_map), ax, args, label=label, cmap='OrRd_r', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    Te_map, Te_int = get_Te(full_hdu, args)
+    ax = plot_2D_map(np.log10(Te_map), ax, args, label=r'%s$_{\rm int}$ = %.1e' % (label, Te_int), cmap='OrRd_r', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, Te_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_Z_Te_map(full_hdu, ax, args, Te_map, ne=1e3, radprof_ax=None):
+def compute_Z_Te(OII3727_flux, OIII5007_flux, Hbeta_flux, Te, args, ne=1e3):
     '''
-    Plots the T_e-based metallicity map (and the emission line maps that go into it) in the given axes
+    Calculates and returns the Te metallicity given observed line fluxes
     Conversion factor is from Nicholls+2017
-    Returns the axes handles and the 2D metallicity map just produced
     '''
-    lim, label = [6, 9], 'Z (Te)'
-    t = Te_map * 1e-4
-    x = 1e-4 * ne * np.sqrt(t)
-
     def poly(R, t, x, a, b, c, d, e):
         return np.log10(R) + a + b / t - c * np.log10(t) - d * t + np.log10(1 + e * x)  # eqn 3 I06 pattern
 
-    OIII5007_map, line_wave = get_emission_line_map('OIII', full_hdu, args)
-    dered_OIII5007_map = get_dereddened_flux(OIII5007_map, line_wave, args.EB_V)
+    t = Te * 1e-4
+    x = 1e-4 * ne * np.sqrt(t)
 
-    Hbeta_map, line_wave = get_emission_line_map('Hb', full_hdu, args)
-    dered_Hbeta_map = get_dereddened_flux(Hbeta_map, line_wave, args.EB_V)
+    ratio1 = OII3727_flux / Hbeta_flux
+    ratio2 = OIII5007_flux / Hbeta_flux
+    log_O2H2 = poly(ratio1, t, x, 5.961, 1.676, 0.4, 0.034, 1.35) - 12  # coefficients from eqn 3 I06
+    log_O3H2 = poly(ratio2, t, x, 6.200, 1.251, -0.55, -0.014, 0.0) - 12  # coefficients from eqn 5 I06
+    log_OH = np.log10(10 ** log_O2H2 + 10 ** log_O3H2) + 12
 
-    OII3727_map, line_wave = get_emission_line_map('OII', full_hdu, args)
-    dered_OII3727_map = get_dereddened_flux(OII3727_map, line_wave, args.EB_V)
+    return log_OH
 
-    ratio1_map = dered_OII3727_map / dered_Hbeta_map
-    ratio2_map = dered_OIII5007_map / dered_Hbeta_map
-    log_O2H2_map = poly(ratio1_map, t, x, 5.961, 1.676, 0.4, 0.034, 1.35) - 12  # coefficients from eqn 3 I06
-    log_O3H2_map = poly(ratio2_map, t, x, 6.200, 1.251, -0.55, -0.014, 0.0) - 12  # coefficients from eqn 5 I06
-    log_OH_map = np.log10(10 ** log_O2H2_map + 10 ** log_O3H2_map) + 12
+# --------------------------------------------------------------------------------------------------------------------
+def get_Z_Te(full_hdu, args):
+    '''
+    Computes and returns the spatially resolved as well as intregrated Te metallicity from a given HDU
+    '''
+    OII3727_map, line_wave, OII3727_int = get_emission_line_map('OII', full_hdu, args)
+    OIII5007_map, line_wave, OIII5007_int = get_emission_line_map('OIII', full_hdu, args)
+    Hbeta_map, line_wave, Hbeta_int = get_emission_line_map('Hb', full_hdu, args)
 
-    ax = plot_2D_map(log_OH_map, ax, args, label=label, cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    Te_map, Te_int = get_Te(full_hdu, args)
 
-    return ax, log_OH_map
+    logOH_map = compute_Z_Te(OII3727_map, OIII5007_map, Hbeta_map, Te_map, args)
+    logOH_int = compute_Z_Te(OII3727_int, OIII5007_int, Hbeta_int, Te_int, args)
+
+    return logOH_map, logOH_int
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_Z_Te_map(full_hdu, ax, args, Te_map, radprof_ax=None):
+    '''
+    Plots the T_e-based metallicity map (and the emission line maps that go into it) in the given axes
+    Returns the axes handles and the 2D metallicity map just produced
+    '''
+    lim, label = [6, 9], 'Z (Te)'
+    logOH_map, logOH_int = get_Z_Te(full_hdu, args)
+    ax = plot_2D_map(logOH_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+
+    return ax, logOH_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux, args):
+    '''
+    Calculates and returns the R23 metallicity given observed line fluxes
+    Conversion factor is from Kewley+2002
+    '''
+    def poly(R23, k):
+        return  (-k[1] + np.sqrt(k[1]**2 - 4*k[2]*(k[0] - R23)))/(2*k[2])
+
+    ratio = (OII3727_flux + OIII5007_flux) / Hbeta_flux
+    R23 = np.log10(ratio)
+    log_OH = poly(R23, [-44.7026, 10.8052, -0.640113]) #k0-2 parameters for q=8e7 from Table 3 of KD02 last row for q=8e7
+
+    return log_OH
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_Z_R23(full_hdu, args, verbose=False):
+    '''
+    Computes and returns the spatially resolved as well as intregrated R23 metallicity from a given HDU
+    '''
+    OII3727_map, line_wave, OII3727_int = get_emission_line_map('OII', full_hdu, args)
+    OIII5007_map, line_wave, OIII5007_int = get_emission_line_map('OIII', full_hdu, args)
+    Hbeta_map, line_wave, Hbeta_int = get_emission_line_map('Hb', full_hdu, args)
+
+    logOH_map = compute_Z_R23(OII3727_map, OIII5007_map, Hbeta_map, args)
+    logOH_int = compute_Z_R23(OII3727_int, OIII5007_int, Hbeta_int, args)
+
+    return logOH_map, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_Z_R23_map(full_hdu, ax, args, radprof_ax=None):
     '''
     Plots the R23 metallicity map (and the emission line maps that go into it) in the given axes
-    Conversion factor is from Kewley+2002
     Returns the axes handles and the 2D metallicity map just produced
     '''
     lim, label = [6, 9], 'Z (R23)'
+    logOH_map, logOH_int = get_Z_R23(full_hdu, args)
+    ax = plot_2D_map(logOH_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
-    def poly(R23, k):
-        return  (-k[1] + np.sqrt(k[1]**2 - 4*k[2]*(k[0] - R23)))/(2*k[2])
-
-    OIII5007_map, line_wave = get_emission_line_map('OIII', full_hdu, args)
-    dered_OIII5007_map = get_dereddened_flux(OIII5007_map, line_wave, args.EB_V)
-
-    Hbeta_map, line_wave = get_emission_line_map('Hb', full_hdu, args)
-    dered_Hbeta_map = get_dereddened_flux(Hbeta_map, line_wave, args.EB_V)
-
-    OII3727_map, line_wave = get_emission_line_map('OII', full_hdu, args)
-    dered_OII3727_map = get_dereddened_flux(OII3727_map, line_wave, args.EB_V)
-
-    ratio_map = (dered_OII3727_map + dered_OIII5007_map) / dered_Hbeta_map
-    R23 = np.log10(ratio_map)
-    log_OH_map = poly(R23, [-44.7026, 10.8052, -0.640113]) #k0-2 parameters for q=8e7 from Table 3 of KD02 last row for q=8e7
-
-    ax = plot_2D_map(log_OH_map, ax, args, label=label, cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
-
-    return ax, log_OH_map
+    return ax, logOH_map
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
-
+    args.id_arr = args.id
+    
     # ------------looping over the provided object IDs-----------------------
-    for index, this_id in enumerate(args.id):
+    for index, args.id in enumerate(args.id_arr):
         start_time2 = datetime.now()
-        print(f'\nCommencing ID {this_id} which is {index+1} of {len(args.id)}..')
+        print(f'\nCommencing ID {args.id} which is {index+1} of {len(args.id_arr)}..')
 
         # ------determining directories---------
         extract_dir = args.input_dir / args.field / 'Extractions'
         pixscale_text = '' if args.pixscale == 0.04 else f'_{args.pixscale}arcsec_pix'
-        output_subdir = args.output_dir / args.field / f'{this_id:05d}{pixscale_text}'
+        output_subdir = args.output_dir / args.field / f'{args.id:05d}{pixscale_text}'
         output_subdir.mkdir(parents=True, exist_ok=True)
-        full_fits_file = f'{args.field}_{this_id:05d}.full.fits'
+        full_fits_file = f'{args.field}_{args.id:05d}.full.fits'
 
         if os.path.exists(extract_dir / full_fits_file): # if the fits files are in Extractions/
             args.work_dir = extract_dir
@@ -589,8 +679,8 @@ if __name__ == "__main__":
             args.work_dir = output_subdir
 
         # ------------read in fits files--------------------------------
-        od_hdu = fits.open(args.work_dir / f'{args.field}_{this_id:05d}.1D.fits')
-        full_hdu = fits.open(args.work_dir / f'{args.field}_{this_id:05d}.full.fits')
+        od_hdu = fits.open(args.work_dir / f'{args.field}_{args.id:05d}.1D.fits')
+        full_hdu = fits.open(args.work_dir / f'{args.field}_{args.id:05d}.full.fits')
 
         # ----------determining global parameters------------
         args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
@@ -608,11 +698,17 @@ if __name__ == "__main__":
         args.EB_V = 0. # until gets over-written, if both H alpha and H beta lines are present
 
         if args.vorbin and args.voronoi_line is not None:
-            line_index = np.where(np.array(args.available_lines.split(' ')) == args.voronoi_line)[0][0]
+            line_index = np.where(args.available_lines == args.voronoi_line)[0][0]
             ext = 5 + 2 * args.ndfilt + 4 * line_index
             line_map = full_hdu[ext].data * 1e-17  # this gives 200 x 200 array; in units of ergs/s/cm^2
             line_map_err = 1e-17 / full_hdu[ext + 3].data   # this gives 200 x 200 array; in units of ergs/s/cm^2
             args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, line_map_err, args.voronoi_snr)#, plot=True, quiet=False)
+
+        if args.plot_radial_profiles:
+            seg_map = full_hdu['SEG'].data
+            distance_map = get_distance_map(np.shape(seg_map), args)
+            distance_map = np.ma.compressed(np.ma.masked_where(seg_map != args.id, distance_map))
+            args.radius_max = np.max(distance_map)
 
         # ---------initialising the figure------------------------------
         if not args.keep: plt.close('all')
@@ -638,11 +734,10 @@ if __name__ == "__main__":
         for ind, line in enumerate(lines_to_plot):
             if line in args.available_lines: _, _, ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False) #ind != len(lines_to_plot) - 1) # line_map in ergs/s/cm^2
             else: fig.delaxes(ax_em_lines[ind])
-            [ax_l, ax_b, ax_w, ax_h] = ax_em_lines[ind].get_position().bounds # left, bottom, width, height
 
         # ---------------dust map---------------
         if all([line in args.available_lines for line in ['Ha', 'Hb']]):
-            args.EB_V = calculate_EB_V(full_hdu, args)
+            _, args.EB_V = get_EB_V(full_hdu, args, verbose=True)
             ax_EB_V, dust_map = plot_dust_map(full_hdu, ax_EB_V, args, radprof_ax=rax_EB_V)
         else:
             fig.delaxes(ax_EB_V)
@@ -674,15 +769,15 @@ if __name__ == "__main__":
                 fig.delaxes(rax_Z_R23)
 
         # ---------decorating and saving the figure------------------------------
-        fig.text(0.05, 0.98, f'{args.field}: ID {this_id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+        fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
 
         radial_plot_text = '_wradprof' if args.plot_radial_profiles else ''
-        figname = output_subdir / f'{args.field}_{this_id:05d}_all_diag_plots{radial_plot_text}.png'
+        figname = output_subdir / f'{args.field}_{args.id:05d}_all_diag_plots{radial_plot_text}.png'
         fig.savefig(figname)
         print(f'Saved figure at {figname}')
         plt.show(block=False)
 
-        print(f'Completed id {this_id} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(args.id) - index - 1} to go!')
+        print(f'Completed id {args.id} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(args.id_arr) - index - 1} to go!')
 
     os.chdir(args.code_dir)
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
