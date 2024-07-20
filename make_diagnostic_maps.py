@@ -186,11 +186,26 @@ def plot_binned_profile(xdata, ydata, ax, color='darkorange', yerr=None):
     y_u_binned = df.groupby('binned_cat', as_index=False).agg([('ycol', agg_u_func)])['ycol'].values.flatten()
     x_bin_centers = bin_edges[:-1] + np.diff(bin_edges) / 2
 
+    # ------getting rid of potential nan values---------
+    indices = np.array(np.logical_not(np.logical_or(np.isnan(x_bin_centers), np.isnan(y_binned))))
+    x_bin_centers = x_bin_centers[indices]
+    y_binned = y_binned[indices]
+    y_u_binned = y_u_binned[indices]
+
+    # ----------to fit and plot the binned profile--------------
+    try:
+        linefit, linecov = np.polyfit(x_bin_centers, y_binned, 1, cov=True, w=1. / (y_u_binned) ** 2)
+        y_fitted = np.poly1d(linefit)(x_bin_centers) # in logspace
+        ax.plot(x_bin_centers, y_fitted, color=color, lw=1, ls='dashed')
+    except np.linalg.LinAlgError:
+        print(f'Could not fit radial profile in this case..')
+        linefit, linecov = [np.nan, np.nan], None
+
     # ----------to plot mean binned y vs x profile--------------
     ax.errorbar(x_bin_centers, y_binned, c=color, yerr=y_u_binned, lw=1, ls='none', zorder=1)
     ax.scatter(x_bin_centers, y_binned, c=color, s=20, lw=0.2, ec='black', zorder=10)
 
-    return ax
+    return ax, linefit
 
 # --------------------------------------------------------------------------------------------------------------
 def get_distance_map(image_shape, args):
@@ -204,7 +219,7 @@ def get_distance_map(image_shape, args):
 
     return distance_map
 # --------------------------------------------------------------------------------------------------------------------
-def plot_radial_profile(image, ax, args, label=None, cmap=None, ymin=None, ymax=None, hide_xaxis=False, hide_yaxis=False):
+def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_xaxis=False, hide_yaxis=False):
     '''
     Plots the average radial profile for a given 2D map in the given axis
     Returns the axis handle
@@ -219,7 +234,7 @@ def plot_radial_profile(image, ax, args, label=None, cmap=None, ymin=None, ymax=
     ax.set_xlim(0, args.radius_max)
     ax.set_box_aspect(1)
 
-    ax = plot_binned_profile(distance_map, image, ax)
+    ax, linefit = plot_binned_profile(distance_map, image, ax)
 
     if hide_xaxis:
         ax.set_xticklabels([])
@@ -234,7 +249,7 @@ def plot_radial_profile(image, ax, args, label=None, cmap=None, ymin=None, ymax=
         ax.set_ylabel(label, fontsize=args.fontsize)
         ax.tick_params(axis='y', which='major', labelsize=args.fontsize)
 
-    return ax
+    return ax, linefit
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, radprof_ax=None):
@@ -283,9 +298,11 @@ def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hi
         radius_pix = ((args.radius_max / args.distance.to('kpc').value) * u.radian).to(u.arcsec)
         circle = plt.Circle((0, 0), radius_pix.value, color='k', fill=False, lw=0.5)
         ax.add_patch(circle)
-        radprof_ax = plot_radial_profile(image, radprof_ax, args, label=label.split(r'$_{\rm int}')[0], ymin=vmin, ymax=vmax)
+        radprof_ax, radprof_fit = plot_radial_profile(image, radprof_ax, args, label=label.split(r'$_{\rm int}')[0], ymin=vmin, ymax=vmax)
+    else:
+        radprof_fit = [np.nan, np.nan] # dummy values for when the fit was not performed
 
-    return ax
+    return ax, radprof_fit
 
 # --------------------------------------------------------------------------------------------------------------------
 def bin_2D(map, bin_IDs):
@@ -377,9 +394,9 @@ def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, 
     '''
 
     line_map, line_wave, line_int = get_emission_line_map(line, full_hdu, args, dered=False)
-    ax = plot_2D_map(np.log10(line_map), ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+    ax, _ = plot_2D_map(np.log10(line_map), ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
 
-    return line_map, line_wave, ax
+    return ax
 
 # -------------------------------------------------------------------------------
 def get_kappa(x, i):
@@ -482,7 +499,7 @@ def get_EB_V(full_hdu, args, verbose=False):
     return EB_V_map, EB_V_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_dust_map(full_hdu, ax, args, radprof_ax=None):
+def plot_EB_V_map(full_hdu, ax, args, radprof_ax=None):
     '''
     Plots the dust extinction map (and the emission line maps that go into it) in the given axes
     Returns the axes handles and the 2D E(B-V) map just produced
@@ -490,13 +507,12 @@ def plot_dust_map(full_hdu, ax, args, radprof_ax=None):
     lim, label = [0, 1], 'E(B-V)'
 
     EB_V_map, EB_V_int = get_EB_V(full_hdu, args)
-    ax = plot_2D_map(EB_V_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, EB_V_int), cmap='YlOrBr', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, EB_V_radfit = plot_2D_map(EB_V_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, EB_V_int), cmap='YlOrBr', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
-    return ax, EB_V_map
-
+    return ax, EB_V_map, EB_V_radfit, EB_V_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def compute_sfr(Ha_flux, distance):
+def compute_SFR(Ha_flux, distance):
     '''
     Calculates and returns the SFR given observed H alpha fluxes
     Conversion factor is from Kennicutt 1998 (Eq 2 of https://ned.ipac.caltech.edu/level5/Sept01/Rosa/Rosa3.html)
@@ -507,28 +523,28 @@ def compute_sfr(Ha_flux, distance):
     return sfr
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_sfr(full_hdu, args):
+def get_SFR(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated SFR from a given HDU
     '''
     Ha_map, Ha_wave, Ha_int = get_emission_line_map('Ha', full_hdu, args)
 
-    sfr_map = compute_sfr(Ha_map, args.distance)
-    sfr_int = compute_sfr(Ha_int, args.distance)
+    SFR_map = compute_SFR(Ha_map, args.distance)
+    SFR_int = compute_SFR(Ha_int, args.distance)
 
-    return sfr_map, sfr_int
+    return SFR_map, SFR_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_sfr_map(full_hdu, ax, args, radprof_ax=None):
+def plot_SFR_map(full_hdu, ax, args, radprof_ax=None):
     '''
     Plots the SFR map (and the emission line maps that go into it) in the given axes
     Returns the axes handles and the 2D SFR density map just produced
     '''
     lim, label = [-4, -2], 'SFR'
-    sfr_map, sfr_int = get_sfr(full_hdu, args)
-    ax = plot_2D_map(np.log10(sfr_map), ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, sfr_int), cmap='Blues', radprof_ax=radprof_ax, vmin=lim[0], vmax=lim[1])
+    SFR_map, SFR_int = get_SFR(full_hdu, args)
+    ax, SFR_radfit = plot_2D_map(np.log10(SFR_map), ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, SFR_int), cmap='Blues', radprof_ax=radprof_ax, vmin=lim[0], vmax=lim[1])
 
-    return ax, sfr_map
+    return ax, SFR_map, SFR_radfit, SFR_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def compute_Te(OIII4363_flux, OIII5007_flux, args):
@@ -563,9 +579,9 @@ def plot_Te_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [1, 7], r'T$_e$'
     Te_map, Te_int = get_Te(full_hdu, args)
-    ax = plot_2D_map(np.log10(Te_map), ax, args, label=r'%s$_{\rm int}$ = %.1e' % (label, Te_int), cmap='OrRd_r', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, Te_radfit = plot_2D_map(np.log10(Te_map), ax, args, label=r'%s$_{\rm int}$ = %.1e' % (label, Te_int), cmap='OrRd_r', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
-    return ax, Te_map
+    return ax, Te_map, Te_radfit, Te_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def compute_Z_Te(OII3727_flux, OIII5007_flux, Hbeta_flux, Te, args, ne=1e3):
@@ -611,9 +627,9 @@ def plot_Z_Te_map(full_hdu, ax, args, Te_map, radprof_ax=None):
     '''
     lim, label = [6, 9], 'Z (Te)'
     logOH_map, logOH_int = get_Z_Te(full_hdu, args)
-    ax = plot_2D_map(logOH_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
-    return ax, logOH_map
+    return ax, logOH_map, logOH_radfit, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux, args):
@@ -652,23 +668,52 @@ def plot_Z_R23_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [6, 9], 'Z (R23)'
     logOH_map, logOH_int = get_Z_R23(full_hdu, args)
-    ax = plot_2D_map(logOH_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
-    return ax, logOH_map
+    return ax, logOH_map, logOH_radfit, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     args.id_arr = args.id
-    
+
+    # ---------determining filename suffixes-------------------------------
+    extract_dir = args.input_dir / args.field / 'Extractions'
+
+    radial_plot_text = '_wradprof' if args.plot_radial_profiles else ''
+    snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
+    only_seg_text = '_onlyseg' if args.only_seg else ''
+    pixscale_text = '' if args.pixscale == 0.04 else f'_{args.pixscale}arcsec_pix'
+
+    outfilename = args.output_dir / args.field / f'{args.field}_all_diag_results.txt'
+
+    # ----------------------initiliasing dataframe-------------------------------
+    lines_to_plot = ['Ha', 'Hb', 'OII', 'OIII-4363', 'OIII']
+    measured_quantities_to_plot = ['EB_V', 'SFR', 'Te', 'logOH_Te', 'logOH_R23']
+
+    if args.write_file:
+        basic_cols = ['field', 'objid', 'ra', 'dec', 'redshift', 'radfit_extent_kpc', 'snr_cut', 'flag_only_seg']
+        cols_in_df = np.hstack([basic_cols, [item + '_int' for item in lines_to_plot], np.hstack([[item + '_int', item + '_cen', item + '_slope'] for item in measured_quantities_to_plot])])
+        df = pd.DataFrame(columns=cols_in_df)
+
+        # -------checking if about to write the same columns-----------
+        if os.path.exists(outfilename) and not args.clobber:
+            existing_df = pd.read_table(outfilename, delim_whitespace=True)
+            existing_cols = existing_df.columns
+            if set(existing_cols) != set(cols_in_df):
+                new_cols = set(cols_in_df) - set(existing_cols)
+                print(
+                f'Existing dataframe at {outfilename} has a different set of columns (the difference being {new_cols}) than currently trying to '
+                f'write it in. Either delete/double check the existing file, OR use --clobber to overwrite the '
+                f'existing file. Aborting.')
+                sys.exit()
+
     # ------------looping over the provided object IDs-----------------------
     for index, args.id in enumerate(args.id_arr):
         start_time2 = datetime.now()
         print(f'\nCommencing ID {args.id} which is {index+1} of {len(args.id_arr)}..')
 
         # ------determining directories---------
-        extract_dir = args.input_dir / args.field / 'Extractions'
-        pixscale_text = '' if args.pixscale == 0.04 else f'_{args.pixscale}arcsec_pix'
         output_subdir = args.output_dir / args.field / f'{args.id:05d}{pixscale_text}'
         output_subdir.mkdir(parents=True, exist_ok=True)
         full_fits_file = f'{args.field}_{args.id:05d}.full.fits'
@@ -709,10 +754,11 @@ if __name__ == "__main__":
             distance_map = get_distance_map(np.shape(seg_map), args)
             distance_map = np.ma.compressed(np.ma.masked_where(seg_map != args.id, distance_map))
             args.radius_max = np.max(distance_map)
+        else:
+            args.radius_max = np.nan
 
         # ---------initialising the figure------------------------------
         if not args.keep: plt.close('all')
-        lines_to_plot = ['Ha', 'Hb', 'OII', 'OIII-4363', 'OIII']
         nrow, ncol = 4 if args.plot_radial_profiles else 3, len(lines_to_plot)
         fig = plt.figure(figsize=(13/1., 9/1.) if args.plot_radial_profiles else (13, 6), layout='constrained')
 
@@ -732,35 +778,36 @@ if __name__ == "__main__":
 
         # -----------------emission line maps---------------
         for ind, line in enumerate(lines_to_plot):
-            if line in args.available_lines: _, _, ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False) #ind != len(lines_to_plot) - 1) # line_map in ergs/s/cm^2
+            if line in args.available_lines: ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False) #ind != len(lines_to_plot) - 1) # line_map in ergs/s/cm^2
             else: fig.delaxes(ax_em_lines[ind])
 
         # ---------------dust map---------------
         if all([line in args.available_lines for line in ['Ha', 'Hb']]):
             _, args.EB_V = get_EB_V(full_hdu, args, verbose=True)
-            ax_EB_V, dust_map = plot_dust_map(full_hdu, ax_EB_V, args, radprof_ax=rax_EB_V)
+            ax_EB_V, EB_V_map, EB_V_radfit, EB_V_int = plot_EB_V_map(full_hdu, ax_EB_V, args, radprof_ax=rax_EB_V)
         else:
             fig.delaxes(ax_EB_V)
             if args.plot_radial_profiles: fig.delaxes(rax_EB_V)
+            EB_V_map, EB_V_radfit, EB_V_int = np.nan, [np.nan, np.nan], np.nan
 
         # ---------------SFR map------------------
         if 'Ha' in args.available_lines:
-            ax_SFR, sfr_map = plot_sfr_map(full_hdu, ax_SFR, args, radprof_ax=rax_SFR)
+            ax_SFR, SFR_map, SFR_radfit, SFR_int = plot_SFR_map(full_hdu, ax_SFR, args, radprof_ax=rax_SFR)
         else:
             fig.delaxes(ax_SFR)
             if args.plot_radial_profiles: fig.delaxes(rax_SFR)
 
         # ---------------electron temperature map---------------
         if all([line in args.available_lines for line in ['OIII-4363', 'OIII']]):
-            ax_Te, Te_map = plot_Te_map(full_hdu, ax_Te, args, radprof_ax=rax_Te)
+            ax_Te, Te_map, Te_radfit, Te_int = plot_Te_map(full_hdu, ax_Te, args, radprof_ax=rax_Te)
         else:
             fig.delaxes(ax_Te)
             if args.plot_radial_profiles: fig.delaxes(rax_Te)
 
         # ---------------metallicity maps---------------
         if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
-            ax_Z_Te, log_OH_Te_map = plot_Z_Te_map(full_hdu, ax_Z_Te, args, Te_map, radprof_ax=rax_Z_Te)
-            ax_Z_R23, log_OH_R23_map = plot_Z_R23_map(full_hdu, ax_Z_R23, args, radprof_ax=rax_Z_R23)
+            ax_Z_Te, logOH_Te_map, logOH_Te_radfit, logOH_Te_int = plot_Z_Te_map(full_hdu, ax_Z_Te, args, Te_map, radprof_ax=rax_Z_Te)
+            ax_Z_R23, logOH_R23_map, logOH_R23_radfit, logOH_R23_int = plot_Z_R23_map(full_hdu, ax_Z_R23, args, radprof_ax=rax_Z_R23)
         else:
             fig.delaxes(ax_Z_Te)
             fig.delaxes(ax_Z_R23)
@@ -771,11 +818,48 @@ if __name__ == "__main__":
         # ---------decorating and saving the figure------------------------------
         fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
 
-        radial_plot_text = '_wradprof' if args.plot_radial_profiles else ''
-        figname = output_subdir / f'{args.field}_{args.id:05d}_all_diag_plots{radial_plot_text}.png'
+        figname = output_subdir / f'{args.field}_{args.id:05d}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.png'
         fig.savefig(figname)
         print(f'Saved figure at {figname}')
         plt.show(block=False)
+
+        # ----------appending and writing to catalog file-----------------
+        if args.write_file:
+
+            # -------collating all the integrated line fluxes from the HDU header----------
+            line_fluxes = []
+            for line in lines_to_plot:
+                try:
+                    line_index = np.where(args.available_lines == line)[0][0]
+                    flux = full_hdu[0].header[f'FLUX{line_index + 1:03d}']
+                    line_fluxes.append(flux)
+                except IndexError:
+                    line_fluxes.append(np.nan)
+
+            # -------collating all the measured quantities----------
+            measured_quants = []
+            for quantity in measured_quantities_to_plot:
+                if quantity + '_int' in locals():
+                    measured_quants += [locals()[quantity + '_int']]
+                else:
+                    measured_quants += [np.nan]
+                if quantity + '_radfit' in locals():
+                    measured_quants += [locals()[quantity + '_radfit'][0], locals()[quantity + '_radfit'][1]]
+                else:
+                    measured_quants += [np.nan, np.nan]
+
+            basic_data = ['field', f'{args.id:05d}{pixscale_text}', full_hdu[0].header['RA'], full_hdu[0].header['DEC'], args.z, \
+                          args.radius_max, args.snr_cut if args.snr_cut is not None else np.nan, args.only_seg]
+            this_row = np.hstack([basic_data, line_fluxes, measured_quants])
+            this_df = pd.DataFrame(dict(map(lambda i, j: (i, [j]), cols_in_df, this_row)))
+            df = pd.concat([df, this_df])
+
+            if not os.path.isfile(outfilename) or (args.clobber and index == 0):
+                this_df.to_csv(outfilename, sep='\t', index=None, header='column_names')
+                print(f'Wrote to catalog file {outfilename}')
+            else:
+                this_df.to_csv(outfilename, sep='\t', index=None, mode='a', header=False)
+                print(f'Appended to catalog file {outfilename}')
 
         print(f'Completed id {args.id} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(args.id_arr) - index - 1} to go!')
 
