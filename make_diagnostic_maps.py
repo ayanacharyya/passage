@@ -6,7 +6,7 @@
     Example: run make_diagnostic_maps.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --id 3667
              run make_diagnostic_maps.py --field Par50 --id 823 --plot_radial_profiles
              run make_diagnostic_maps.py --field Par50 --id 823 --pixscale 0.2 --vorbin --voronoi_line Ha --voronoi_snr 3 --plot_radial_profiles
-             run make_diagnostic_maps.py --field Par50 --id 823 --plot_radial_profiles --only_seg --snr_cut 3
+             run make_diagnostic_maps.py --field Par50 --id 823 --plot_radial_profiles --only_seg --snr_cut 3 --plot_mappings
 '''
 
 from header import *
@@ -44,6 +44,10 @@ def plot_direct_image(full_hdu, ax, args, hide_xaxis=False, hide_yaxis=False):
     ax.scatter(0, 0, marker='x', s=10, c='grey')
     #cbar = plt.colorbar(p)
 
+    if args.only_seg:
+        image = cut_by_segment(image, full_hdu, args)
+        ax.contour(image.mask, levels=0, colors='k', extent=args.extent, linewidths=0.5)
+
     if hide_xaxis:
         ax.set_xticklabels([])
     else:
@@ -70,6 +74,7 @@ def get_MAPPINGS_linelist(wave_lim=None):
     if wave_lim is not None: lines_df = lines_df[lines_df['wave'].between(wave_lim[0], wave_lim[1])]
     lines_df = lines_df[lines_df['flux'] > 0.003]
     lines_df = lines_df[lines_df['kind'].str.strip().isin(['CM', 'RCAB'])]
+    lines_df = lines_df[~lines_df['species'].str.contains('Fe')] # not interested in the numerous Fe lines
 
     print(f'Found {len(lines_df)} lines in this wavelength regime from {line_list_file}; over-plotting them now..')
 
@@ -87,7 +92,9 @@ def plot_MAPPINGS_lines(ax):
 
     for index in range(len(lines_df)):
         ax.axvline(lines_df.iloc[index]['wave'], c='cornflowerblue', lw=1, alpha= 0.3 + 0.7 * (lines_df.iloc[index]['flux'] - min_flux) / (max_flux - min_flux))
-        ax.text(lines_df.iloc[index]['wave'] + np.diff(ax.get_xlim())[0] * 0.01, ax.get_ylim()[1] * 0.98, lines_df.iloc[index]['species'].strip(), rotation=90, va='top', ha='left', fontsize=args.fontsize)
+        xpos = lines_df.iloc[index]['wave'] + np.diff(ax.get_xlim())[0] * 0.01
+        ypos = ax.get_ylim()[1] * 0.98 if index % 2 else 0.05 + ax.get_ylim()[0] * 1.02
+        ax.text(xpos, ypos, lines_df.iloc[index]['species'].strip(), rotation=90, va='top' if index % 2 else 'bottom', ha='left', fontsize=args.fontsize)
 
     return ax
 
@@ -101,6 +108,7 @@ def get_linelist(wave_lim=None):
     line_list_file = HOME / 'Desktop/mage_plot/labframe.shortlinelist'
 
     lines_df = pd.read_table(line_list_file, comment='#', delim_whitespace=True)
+    lines_df = lines_df[~lines_df['LineID'].str.contains('Fe')] # not interested in the numerous Fe lines
     if wave_lim is not None: lines_df = lines_df[lines_df['restwave'].between(wave_lim[0], wave_lim[1])]
 
     print(f'Found {len(lines_df)} lines in this wavelength regime from {line_list_file}; over-plotting them now..')
@@ -118,7 +126,9 @@ def plot_linelist(ax):
 
     for index in range(len(lines_df)):
         ax.axvline(lines_df.iloc[index]['restwave'], c='cornflowerblue', lw=1)
-        ax.text(lines_df.iloc[index]['restwave'] + np.diff(ax.get_xlim())[0] * 0.01, ax.get_ylim()[1] * 0.98, lines_df.iloc[index]['LineID'].strip(), rotation=90, va='top', ha='left', fontsize=args.fontsize)
+        xpos = lines_df.iloc[index]['restwave'] + np.diff(ax.get_xlim())[0] * 0.01
+        ypos = ax.get_ylim()[1] * 0.98 if index % 2 else 0.02 + ax.get_ylim()[0] * 1.02
+        ax.text(xpos, ypos, lines_df.iloc[index]['LineID'].strip(), rotation=90, va='top' if index % 2 else 'bottom', ha='left', fontsize=args.fontsize)
 
     return ax
 
@@ -157,8 +167,8 @@ def plot_1d_spectra(od_hdu, ax, args):
     ax2.set_xlabel(r'Observed wavelength ($\mu$)', fontsize=args.fontsize)
 
     # ---vertical lines for emission line wavelengths------
-    ax = plot_MAPPINGS_lines(ax)
-    #ax = plot_linelist(ax)
+    if args.plot_mappings: ax = plot_MAPPINGS_lines(ax)
+    else: ax = plot_linelist(ax)
 
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
@@ -692,8 +702,9 @@ if __name__ == "__main__":
     measured_quantities_to_plot = ['EB_V', 'SFR', 'Te', 'logOH_Te', 'logOH_R23']
 
     if args.write_file:
-        basic_cols = ['field', 'objid', 'ra', 'dec', 'redshift', 'radfit_extent_kpc', 'snr_cut', 'flag_only_seg']
-        cols_in_df = np.hstack([basic_cols, [item + '_int' for item in lines_to_plot], np.hstack([[item + '_int', item + '_cen', item + '_slope'] for item in measured_quantities_to_plot])])
+        basic_cols = ['field', 'objid', 'ra', 'dec', 'redshift']
+        flag_cols = ['radfit_extent_kpc', 'snr_cut', 'flag_only_seg', 'flag_vorbin', 'vor_snr', 'vor_line']
+        cols_in_df = np.hstack([basic_cols, flag_cols, [item + '_int' for item in lines_to_plot], np.hstack([[item + '_int', item + '_cen', item + '_slope'] for item in measured_quantities_to_plot])])
         df = pd.DataFrame(columns=cols_in_df)
 
         # -------checking if about to write the same columns-----------
@@ -848,9 +859,9 @@ if __name__ == "__main__":
                 else:
                     measured_quants += [np.nan, np.nan]
 
-            basic_data = ['field', f'{args.id:05d}{pixscale_text}', full_hdu[0].header['RA'], full_hdu[0].header['DEC'], args.z, \
-                          args.radius_max, args.snr_cut if args.snr_cut is not None else np.nan, args.only_seg]
-            this_row = np.hstack([basic_data, line_fluxes, measured_quants])
+            basic_data = ['field', f'{args.id:05d}{pixscale_text}', full_hdu[0].header['RA'], full_hdu[0].header['DEC'], args.z]
+            flag_data = [args.radius_max, args.snr_cut if args.snr_cut is not None else np.nan, args.only_seg, args.vorbin, args.voronoi_snr if args.vorbin else np.nan, args.voronoi_line if args.vorbin else np.nan]
+            this_row = np.hstack([basic_data, flag_data, line_fluxes, measured_quants])
             this_df = pd.DataFrame(dict(map(lambda i, j: (i, [j]), cols_in_df, this_row)))
             df = pd.concat([df, this_df])
 

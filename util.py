@@ -82,6 +82,7 @@ def parse_args():
     parser.add_argument('--snr_cut', metavar='snr_cut', type=float, action='store', default=None, help='Impose an SNR cut on the emission line maps to; default is None')
     parser.add_argument('--only_seg', dest='only_seg', action='store_true', default=False, help='Cut out the emission line plots corresponding to the grizli segmentation map? Default is no.')
     parser.add_argument('--write_file', dest='write_file', action='store_true', default=False, help='Write the measured quantities to a master dataframe? Default is no.')
+    parser.add_argument('--plot_mappings', dest='plot_mappings', action='store_true', default=False, help='Plot emission line locations as per MAPPINGS predictions (will lead to crowding of many lines)? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
