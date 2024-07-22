@@ -60,6 +60,8 @@ from grizli.pipeline import auto_script
 from grizli.multifit import MultiBeam
 from grizli.aws import visit_processor
 from grizli.pipeline.auto_script import get_yml_parameters
+from grizli.utils import GTable
+
 
 import warnings
 warnings.filterwarnings("ignore")

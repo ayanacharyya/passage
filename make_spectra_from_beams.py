@@ -10,7 +10,6 @@
 
 from header import *
 from util import *
-from grizli.utils import GTable
 
 start_time = datetime.now()
 

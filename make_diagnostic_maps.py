@@ -7,6 +7,7 @@
              run make_diagnostic_maps.py --field Par50 --id 823 --plot_radial_profiles
              run make_diagnostic_maps.py --field Par50 --id 823 --pixscale 0.2 --vorbin --voronoi_line Ha --voronoi_snr 3 --plot_radial_profiles
              run make_diagnostic_maps.py --field Par50 --id 823 --plot_radial_profiles --only_seg --snr_cut 3 --plot_mappings
+             run make_diagnostic_maps.py --field Par51 --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
 '''
 
 from header import *
@@ -685,7 +686,6 @@ def plot_Z_R23_map(full_hdu, ax, args, radprof_ax=None):
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
-    args.id_arr = args.id
 
     # ---------determining filename suffixes-------------------------------
     extract_dir = args.input_dir / args.field / 'Extractions'
@@ -696,6 +696,15 @@ if __name__ == "__main__":
     pixscale_text = '' if args.pixscale == 0.04 else f'_{args.pixscale}arcsec_pix'
 
     outfilename = args.output_dir / args.field / f'{args.field}_all_diag_results.txt'
+
+    if args.do_all_obj:
+        catalog_file = extract_dir / f'{args.field}-ir.cat.fits'
+        catalog = GTable.read(catalog_file)
+        args.id_arr = catalog['NUMBER']
+    else:
+        args.id_arr = args.id
+
+    if len(args.id_arr) > 10: args.hide = True # if too many plots, do not display them, just save them
 
     # ----------------------initiliasing dataframe-------------------------------
     lines_to_plot = ['Ha', 'Hb', 'OII', 'OIII-4363', 'OIII']
@@ -832,7 +841,8 @@ if __name__ == "__main__":
         figname = output_subdir / f'{args.field}_{args.id:05d}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.png'
         fig.savefig(figname)
         print(f'Saved figure at {figname}')
-        plt.show(block=False)
+        if args.hide: plt.close('all')
+        else: plt.show(block=False)
 
         # ----------appending and writing to catalog file-----------------
         if args.write_file:

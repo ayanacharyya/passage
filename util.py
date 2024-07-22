@@ -48,7 +48,7 @@ def parse_args():
     parser.add_argument('--bg_file', metavar='bg_file', type=str, action='store', default=None, help='Which file to be used for plotting the background image?')
     parser.add_argument('--plot_zcosmos', dest='plot_zcosmos', action='store_true', default=False, help='Overplot the (thousands of) zCOSMOS targets? Default is no.')
 
-    # ------- args added for plot_footprints.py ------------------------------
+    # ------- args added for make_spectra_from_beams.py ------------------------------
     parser.add_argument('--skip_sep', dest='skip_sep', action='store_true', default=False, help='Skip the Source Extraction Pipeline? Default is no.')
     parser.add_argument('--do_all_obj', dest='do_all_obj', action='store_true', default=False, help='Reduce spectra and make beam files for ALL detected objects? Default is no.')
 
@@ -83,6 +83,7 @@ def parse_args():
     parser.add_argument('--only_seg', dest='only_seg', action='store_true', default=False, help='Cut out the emission line plots corresponding to the grizli segmentation map? Default is no.')
     parser.add_argument('--write_file', dest='write_file', action='store_true', default=False, help='Write the measured quantities to a master dataframe? Default is no.')
     parser.add_argument('--plot_mappings', dest='plot_mappings', action='store_true', default=False, help='Plot emission line locations as per MAPPINGS predictions (will lead to crowding of many lines)? Default is no.')
+    parser.add_argument('--hide', dest='hide', action='store_true', default=False, help='Hide (do not display) the plots just made? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
