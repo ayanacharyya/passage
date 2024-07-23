@@ -18,6 +18,26 @@ from matplotlib.gridspec import GridSpec
 start_time = datetime.now()
 
 # --------------------------------------------------------------------------------------------------------------------
+def annotate_PAs(pa_arr, ax, fontsize=10):
+    '''
+    Annotates a given plot with the PAs of all available filters in the given axis
+    Returns the axis handle
+    '''
+    color = 'grey'
+    x_cen = ax.get_xlim()[1] - 0.1 * np.diff(ax.get_xlim())[0]
+    y_cen = ax.get_ylim()[1] - 0.15 * np.diff(ax.get_ylim())[0]
+    len = np.diff(ax.get_xlim())[0] * 0.1
+
+    for pa in pa_arr:
+        x_comp = len * np.sin(pa * np.pi / 180)
+        y_comp = len * np.cos(pa * np.pi / 180)
+        ax.plot([x_cen, x_cen - x_comp], [y_cen, y_cen + y_comp], lw=1, c=color)
+        ax.text(x_cen - x_comp - 0.02, y_cen + y_comp + 0.02, r'%d$^\circ$' % pa, fontsize=fontsize, ha='center', va='center', rotation=pa)
+        print('Deb36: annotating with pa', pa) ##
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_direct_image(full_hdu, ax, args, hide_xaxis=False, hide_yaxis=False):
     '''
     Plots the combined direct image of all available filters in the given axis
@@ -42,7 +62,9 @@ def plot_direct_image(full_hdu, ax, args, hide_xaxis=False, hide_yaxis=False):
         ax.text(ax.get_xlim()[0] * 0.9, ax.get_ylim()[1] * 0.7 - index * 0.1, filt, c=textcolor, fontsize=args.fontsize / 1.5, ha='left', va='top')
 
     ax.text(ax.get_xlim()[0] * 0.9, ax.get_ylim()[1] * 0.95, f'z={args.z:.2f}', c='k', fontsize=args.fontsize, ha='left', va='top')
+    ax.text(ax.get_xlim()[1] * 0.95, ax.get_ylim()[0] * 0.95, f'Mag={args.mag:.1f}', c='k', fontsize=args.fontsize, ha='right', va='bottom')
     ax.scatter(0, 0, marker='x', s=10, c='grey')
+    ax = annotate_PAs(args.pa_arr, ax, fontsize=args.fontsize/1.5)
     #cbar = plt.colorbar(p)
 
     if args.only_seg:
@@ -697,9 +719,11 @@ if __name__ == "__main__":
 
     outfilename = args.output_dir / args.field / f'{args.field}_all_diag_results.txt'
 
+    catalog_file = extract_dir / f'{args.field}-ir.cat.fits'
+    if os.path.exists(catalog_file): catalog = GTable.read(catalog_file)
+
+
     if args.do_all_obj:
-        catalog_file = extract_dir / f'{args.field}-ir.cat.fits'
-        catalog = GTable.read(catalog_file)
         args.id_arr = catalog['NUMBER']
         if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
     else:
@@ -758,6 +782,9 @@ if __name__ == "__main__":
         args.ndfilt = full_hdu[0].header['NDFILT']
         args.nlines = full_hdu[0].header['NUMLINES']
         args.pix_arcsec = full_hdu[7].header['PIXASEC']
+        args.pa_arr = np.unique([full_hdu[0].header[item] for item in list(full_hdu[0].header.keys()) if 'PA00' in item])
+        try: args.mag = catalog[catalog['NUMBER'] == args.id]['MAG_AUTO'].data.data[0]
+        except: args.mag = np.nan
 
         line_wcs = pywcs.WCS(full_hdu['DSCI'].header)
         pix_size = utils.get_wcs_pscale(line_wcs)
