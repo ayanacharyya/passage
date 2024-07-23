@@ -837,8 +837,8 @@ if __name__ == "__main__":
 
         # ---------decorating and saving the figure------------------------------
         fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-
-        figname = output_subdir / f'{args.field}_{args.id:05d}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.png'
+        figdir = args.output_dir / args.field if args.do_all_obj else output_subdir
+        figname = figdir / f'{args.field}_{args.id:05d}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.png'
         fig.savefig(figname)
         print(f'Saved figure at {figname}')
         if args.hide: plt.close('all')
