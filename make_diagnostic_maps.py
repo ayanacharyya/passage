@@ -763,10 +763,10 @@ if __name__ == "__main__":
         if not args.do_all_obj: output_subdir.mkdir(parents=True, exist_ok=True)
         full_fits_file = f'{args.field}_{args.id:05d}.full.fits'
 
-        if os.path.exists(extract_dir / full_fits_file): # if the fits files are in Extractions/
-            args.work_dir = extract_dir
-        elif os.path.exists(output_subdir / full_fits_file): # if the fits files are in sub-directories for individual objects
+        if os.path.exists(output_subdir / full_fits_file): # if the fits files are in sub-directories for individual objects
             args.work_dir = output_subdir
+        elif os.path.exists(extract_dir / full_fits_file): # if the fits files are in Extractions/
+            args.work_dir = extract_dir
         else:
             print(f'Could not find {full_fits_file} for ID {args.id}, so skipping it.')
             continue
