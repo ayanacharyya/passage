@@ -208,7 +208,7 @@ def plot_binned_profile(xdata, ydata, ax, color='darkorange', yerr=None):
         linefit, linecov = np.polyfit(x_bin_centers, y_binned, 1, cov=True, w=1. / (y_u_binned) ** 2)
         y_fitted = np.poly1d(linefit)(x_bin_centers) # in logspace
         ax.plot(x_bin_centers, y_fitted, color=color, lw=1, ls='dashed')
-    except np.linalg.LinAlgError:
+    except (np.linalg.LinAlgError, TypeError):
         print(f'Could not fit radial profile in this case..')
         linefit, linecov = [np.nan, np.nan], None
 
@@ -735,7 +735,7 @@ if __name__ == "__main__":
 
         # ------determining directories---------
         output_subdir = args.output_dir / args.field / f'{args.id:05d}{pixscale_text}'
-        output_subdir.mkdir(parents=True, exist_ok=True)
+        if not args.do_all_obj: output_subdir.mkdir(parents=True, exist_ok=True)
         full_fits_file = f'{args.field}_{args.id:05d}.full.fits'
 
         if os.path.exists(extract_dir / full_fits_file): # if the fits files are in Extractions/
