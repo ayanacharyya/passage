@@ -208,7 +208,7 @@ def plot_binned_profile(xdata, ydata, ax, color='darkorange', yerr=None):
         linefit, linecov = np.polyfit(x_bin_centers, y_binned, 1, cov=True, w=1. / (y_u_binned) ** 2)
         y_fitted = np.poly1d(linefit)(x_bin_centers) # in logspace
         ax.plot(x_bin_centers, y_fitted, color=color, lw=1, ls='dashed')
-    except (np.linalg.LinAlgError, TypeError):
+    except Exception:
         print(f'Could not fit radial profile in this case..')
         linefit, linecov = [np.nan, np.nan], None
 
@@ -701,6 +701,7 @@ if __name__ == "__main__":
         catalog_file = extract_dir / f'{args.field}-ir.cat.fits'
         catalog = GTable.read(catalog_file)
         args.id_arr = catalog['NUMBER']
+        if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
     else:
         args.id_arr = args.id
 
