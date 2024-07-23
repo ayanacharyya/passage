@@ -742,6 +742,9 @@ if __name__ == "__main__":
             args.work_dir = extract_dir
         elif os.path.exists(output_subdir / full_fits_file): # if the fits files are in sub-directories for individual objects
             args.work_dir = output_subdir
+        else:
+            print(f'Could not find {full_fits_file} for ID {args.id}, so skipping it.')
+            continue
 
         # ------------read in fits files--------------------------------
         od_hdu = fits.open(args.work_dir / f'{args.field}_{args.id:05d}.1D.fits')
