@@ -737,7 +737,7 @@ if __name__ == "__main__":
     # ---------for diplay and amimations----------------
     if len(args.id_arr) > 10: args.hide = True # if too many plots, do not display them, just save them
     if len(args.id_arr) > 20: args.make_anim = True
-    else: args.make_anim = True
+    else: args.make_anim = False
 
     if args.make_anim:
         outputfile = args.output_dir / args.field / f'{args.field}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.mp4'
