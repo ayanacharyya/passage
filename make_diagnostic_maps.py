@@ -745,13 +745,13 @@ if __name__ == "__main__":
         writer = imageio.get_writer(outputfile, mode='I', fps=int(1. / duration_per_frame))
 
     # ----------------------initiliasing dataframe-------------------------------
-    lines_to_plot = ['Ha', 'Hb', 'OII', 'OIII-4363', 'OIII']
+    all_lines_to_consider = ['Ha', 'Hb', 'OII', 'OIII-4363', 'OIII'] # args.line_list
     measured_quantities_to_plot = ['EB_V', 'SFR', 'Te', 'logOH_Te', 'logOH_R23']
 
     if args.write_file:
         basic_cols = ['field', 'objid', 'ra', 'dec', 'redshift']
         flag_cols = ['radfit_extent_kpc', 'snr_cut', 'flag_only_seg', 'flag_vorbin', 'vor_snr', 'vor_line']
-        cols_in_df = np.hstack([basic_cols, flag_cols, np.hstack([[item + '_int', item + '_EW'] for item in lines_to_plot]), np.hstack([[item + '_int', item + '_cen', item + '_slope'] for item in measured_quantities_to_plot])])
+        cols_in_df = np.hstack([basic_cols, flag_cols, np.hstack([[item + '_int', item + '_EW'] for item in all_lines_to_consider]), np.hstack([[item + '_int', item + '_cen', item + '_slope'] for item in measured_quantities_to_plot])])
         df = pd.DataFrame(columns=cols_in_df)
 
         # -------checking if about to write the same columns-----------
@@ -822,7 +822,7 @@ if __name__ == "__main__":
             args.radius_max = np.nan
 
         # ---------initialising the figure------------------------------
-        nrow, ncol = 4 if args.plot_radial_profiles else 3, len(lines_to_plot)
+        nrow, ncol = 4 if args.plot_radial_profiles else 3, len(all_lines_to_consider)
         fig = plt.figure(figsize=(13/1., 9/1.) if args.plot_radial_profiles else (13, 6), layout='constrained')
 
         axis_dirimg = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 0), colspan=1)
@@ -840,8 +840,8 @@ if __name__ == "__main__":
         axis_1dspec = plot_1d_spectra(od_hdu, axis_1dspec, args)
 
         # -----------------emission line maps---------------
-        for ind, line in enumerate(lines_to_plot):
-            if line in args.available_lines: ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False) #ind != len(lines_to_plot) - 1) # line_map in ergs/s/cm^2
+        for ind, line in enumerate(all_lines_to_consider):
+            if line in args.available_lines: ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False) #ind != len(all_lines_to_consider) - 1) # line_map in ergs/s/cm^2
             else: fig.delaxes(ax_em_lines[ind])
 
         # ---------------dust map---------------
@@ -898,7 +898,7 @@ if __name__ == "__main__":
 
             # -------collating all the integrated line fluxes from the HDU header----------
             line_properties = []
-            for line in lines_to_plot:
+            for line in all_lines_to_consider:
                 try:
                     line_index = np.where(args.available_lines == line)[0][0]
                     flux = full_hdu[0].header[f'FLUX{line_index + 1:03d}']

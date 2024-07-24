@@ -57,7 +57,6 @@ if __name__ == "__main__":
 
    # -------initialise redshift fit defaults-------------------
     pline = {'kernel': 'square', 'pixfrac': 0.5, 'pixscale': 0.04, 'size': 8, 'wcs': None}
-    if args.line_list == 'all': args.linelist = ['Lya', 'OII', 'Hb', 'OIII', 'Ha', 'NII','Ha+NII', 'SII', 'SIII', 'PaD','PaG','PaB','HeI-1083','PaA']
 
     fit_args = auto_script.generate_fit_params(field_root=root,
                                            zr=[0.02, 8], # full redshift range to fit
