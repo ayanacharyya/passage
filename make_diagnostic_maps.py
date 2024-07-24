@@ -429,6 +429,13 @@ def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, 
     line_map, line_wave, line_int = get_emission_line_map(line, full_hdu, args, dered=False)
     ax, _ = plot_2D_map(np.log10(line_map), ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
 
+    # ------to annotate with EW--------------------
+    line_index = np.where(args.available_lines == line)[0][0]
+    line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
+    line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}']
+
+    ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[0] * 0.88, f'EW = {line_ew:.1f}', c='k', fontsize=args.fontsize, ha='left', va='bottom', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+
     return ax
 
 # -------------------------------------------------------------------------------
