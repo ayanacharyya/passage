@@ -411,12 +411,16 @@ def get_emission_line_map(line, full_hdu, args, dered=True):
     # -----------getting the integrated flux value-----------------
     line_int = full_hdu[0].header[f'FLUX{line_index + 1:03d}'] # ergs/s/cm^2
 
+    # -----------getting the integrated EW value-----------------
+    line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
+    line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}']
+
     # -----------getting the dereddened flux value-----------------
     if dered:
         line_map = get_dereddened_flux(line_map, line_wave, args.EB_V)
         line_int = get_dereddened_flux(line_int, line_wave, args.EB_V)
 
-    return line_map, line_wave, line_int
+    return line_map, line_wave, line_int, line_ew
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False):
@@ -425,14 +429,8 @@ def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, 
     Returns the axes handle
     '''
 
-    line_map, line_wave, line_int = get_emission_line_map(line, full_hdu, args, dered=False)
+    line_map, line_wave, line_int, line_ew = get_emission_line_map(line, full_hdu, args, dered=False)
     ax, _ = plot_2D_map(np.log10(line_map), ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
-
-    # ------to annotate with EW--------------------
-    line_index = np.where(args.available_lines == line)[0][0]
-    line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
-    line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}']
-
     ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[0] * 0.88, f'EW = {line_ew:.1e}' if line_ew < 1e-3 or line_ew > 1e3 else f'EW = {line_ew:.1f}', c='k', fontsize=args.fontsize, ha='left', va='bottom', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
 
     return ax
@@ -501,7 +499,7 @@ def get_dereddened_flux(obs_flux_map, wavelength, EB_V, inAngstrom=True):
     return flux_corrected_map
 
 # ---------------------------------------------------------------------------------------
-def compute_EB_V(Ha_flux, Hb_flux, args, verbose=False):
+def compute_EB_V(Ha_flux, Hb_flux,verbose=False):
     '''
     Calculates and returns the color excess given observed H alpha and H beta fluxes
     Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
@@ -529,11 +527,11 @@ def get_EB_V(full_hdu, args, verbose=False):
     Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
     '''
 
-    Ha_map, Ha_wave, Ha_int = get_emission_line_map('Ha', full_hdu, args, dered=False) # do not need to deredden the lines when we are fetching the flux in order to compute reddening
-    Hb_map, Hb_wave, Hb_int = get_emission_line_map('Hb', full_hdu, args, dered=False)
+    Ha_map, Ha_wave, Ha_int, _ = get_emission_line_map('Ha', full_hdu, args, dered=False) # do not need to deredden the lines when we are fetching the flux in order to compute reddening
+    Hb_map, Hb_wave, Hb_int, _ = get_emission_line_map('Hb', full_hdu, args, dered=False)
 
-    EB_V_map = compute_EB_V(Ha_map, Hb_map, args)
-    EB_V_int = compute_EB_V(Ha_int, Hb_int, args, verbose=verbose)
+    EB_V_map = compute_EB_V(Ha_map, Hb_map)
+    EB_V_int = compute_EB_V(Ha_int, Hb_int, verbose=verbose)
 
     return EB_V_map, EB_V_int
 
@@ -566,7 +564,7 @@ def get_SFR(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated SFR from a given HDU
     '''
-    Ha_map, Ha_wave, Ha_int = get_emission_line_map('Ha', full_hdu, args)
+    Ha_map, Ha_wave, Ha_int, _ = get_emission_line_map('Ha', full_hdu, args)
 
     SFR_map = compute_SFR(Ha_map, args.distance)
     SFR_int = compute_SFR(Ha_int, args.distance)
@@ -586,7 +584,7 @@ def plot_SFR_map(full_hdu, ax, args, radprof_ax=None):
     return ax, SFR_map, SFR_radfit, SFR_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def compute_Te(OIII4363_flux, OIII5007_flux, args):
+def compute_Te(OIII4363_flux, OIII5007_flux):
     '''
     Calculates and returns the Te given observed line fluxes
     Conversion factor is from Nicholls+2017
@@ -602,11 +600,11 @@ def get_Te(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated Te from a given HDU
     '''
-    OIII4363_map, OIII4363_wave, OIII4363_int = get_emission_line_map('OIII-4363', full_hdu, args)
-    OIII5007_map, OIII5007_wave, OIII5007_int = get_emission_line_map('OIII', full_hdu, args)
+    OIII4363_map, OIII4363_wave, OIII4363_int, _ = get_emission_line_map('OIII-4363', full_hdu, args)
+    OIII5007_map, OIII5007_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
 
-    Te_map = compute_Te(OIII4363_map, OIII5007_map, args)
-    Te_int = compute_Te(OIII4363_int, OIII5007_int, args)
+    Te_map = compute_Te(OIII4363_map, OIII5007_map)
+    Te_int = compute_Te(OIII4363_int, OIII5007_int)
 
     return Te_map, Te_int
 
@@ -623,7 +621,7 @@ def plot_Te_map(full_hdu, ax, args, radprof_ax=None):
     return ax, Te_map, Te_radfit, Te_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def compute_Z_Te(OII3727_flux, OIII5007_flux, Hbeta_flux, Te, args, ne=1e3):
+def compute_Z_Te(OII3727_flux, OIII5007_flux, Hbeta_flux, Te, ne=1e3):
     '''
     Calculates and returns the Te metallicity given observed line fluxes
     Conversion factor is from Nicholls+2017
@@ -647,19 +645,19 @@ def get_Z_Te(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated Te metallicity from a given HDU
     '''
-    OII3727_map, line_wave, OII3727_int = get_emission_line_map('OII', full_hdu, args)
-    OIII5007_map, line_wave, OIII5007_int = get_emission_line_map('OIII', full_hdu, args)
-    Hbeta_map, line_wave, Hbeta_int = get_emission_line_map('Hb', full_hdu, args)
+    OII3727_map, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
+    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    Hbeta_map, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
 
     Te_map, Te_int = get_Te(full_hdu, args)
 
-    logOH_map = compute_Z_Te(OII3727_map, OIII5007_map, Hbeta_map, Te_map, args)
-    logOH_int = compute_Z_Te(OII3727_int, OIII5007_int, Hbeta_int, Te_int, args)
+    logOH_map = compute_Z_Te(OII3727_map, OIII5007_map, Hbeta_map, Te_map)
+    logOH_int = compute_Z_Te(OII3727_int, OIII5007_int, Hbeta_int, Te_int)
 
     return logOH_map, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_Z_Te_map(full_hdu, ax, args, Te_map, radprof_ax=None):
+def plot_Z_Te_map(full_hdu, ax, args, radprof_ax=None):
     '''
     Plots the T_e-based metallicity map (and the emission line maps that go into it) in the given axes
     Returns the axes handles and the 2D metallicity map just produced
@@ -671,7 +669,7 @@ def plot_Z_Te_map(full_hdu, ax, args, Te_map, radprof_ax=None):
     return ax, logOH_map, logOH_radfit, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux, args):
+def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux):
     '''
     Calculates and returns the R23 metallicity given observed line fluxes
     Conversion factor is from Kewley+2002
@@ -686,16 +684,16 @@ def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux, args):
     return log_OH
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_Z_R23(full_hdu, args, verbose=False):
+def get_Z_R23(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated R23 metallicity from a given HDU
     '''
-    OII3727_map, line_wave, OII3727_int = get_emission_line_map('OII', full_hdu, args)
-    OIII5007_map, line_wave, OIII5007_int = get_emission_line_map('OIII', full_hdu, args)
-    Hbeta_map, line_wave, Hbeta_int = get_emission_line_map('Hb', full_hdu, args)
+    OII3727_map, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
+    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    Hbeta_map, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
 
-    logOH_map = compute_Z_R23(OII3727_map, OIII5007_map, Hbeta_map, args)
-    logOH_int = compute_Z_R23(OII3727_int, OIII5007_int, Hbeta_int, args)
+    logOH_map = compute_Z_R23(OII3727_map, OIII5007_map, Hbeta_map)
+    logOH_int = compute_Z_R23(OII3727_int, OIII5007_int, Hbeta_int)
 
     return logOH_map, logOH_int
 
@@ -714,6 +712,7 @@ def plot_Z_R23_map(full_hdu, ax, args, radprof_ax=None):
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
+    if not args.keep: plt.close('all')
 
     # ---------determining filename suffixes-------------------------------
     extract_dir = args.input_dir / args.field / 'Extractions'
@@ -738,7 +737,7 @@ if __name__ == "__main__":
     # ---------for diplay and amimations----------------
     if len(args.id_arr) > 10: args.hide = True # if too many plots, do not display them, just save them
     if len(args.id_arr) > 20: args.make_anim = True
-    else: args.make_anim = False
+    else: args.make_anim = True
 
     if args.make_anim:
         outputfile = args.output_dir / args.field / f'{args.field}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.mp4'
@@ -752,7 +751,7 @@ if __name__ == "__main__":
     if args.write_file:
         basic_cols = ['field', 'objid', 'ra', 'dec', 'redshift']
         flag_cols = ['radfit_extent_kpc', 'snr_cut', 'flag_only_seg', 'flag_vorbin', 'vor_snr', 'vor_line']
-        cols_in_df = np.hstack([basic_cols, flag_cols, [item + '_int' for item in lines_to_plot], np.hstack([[item + '_int', item + '_cen', item + '_slope'] for item in measured_quantities_to_plot])])
+        cols_in_df = np.hstack([basic_cols, flag_cols, np.hstack([[item + '_int', item + '_EW'] for item in lines_to_plot]), np.hstack([[item + '_int', item + '_cen', item + '_slope'] for item in measured_quantities_to_plot])])
         df = pd.DataFrame(columns=cols_in_df)
 
         # -------checking if about to write the same columns-----------
@@ -823,7 +822,6 @@ if __name__ == "__main__":
             args.radius_max = np.nan
 
         # ---------initialising the figure------------------------------
-        if not args.keep: plt.close('all')
         nrow, ncol = 4 if args.plot_radial_profiles else 3, len(lines_to_plot)
         fig = plt.figure(figsize=(13/1., 9/1.) if args.plot_radial_profiles else (13, 6), layout='constrained')
 
@@ -871,7 +869,7 @@ if __name__ == "__main__":
 
         # ---------------metallicity maps---------------
         if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
-            ax_Z_Te, logOH_Te_map, logOH_Te_radfit, logOH_Te_int = plot_Z_Te_map(full_hdu, ax_Z_Te, args, Te_map, radprof_ax=rax_Z_Te)
+            ax_Z_Te, logOH_Te_map, logOH_Te_radfit, logOH_Te_int = plot_Z_Te_map(full_hdu, ax_Z_Te, args, radprof_ax=rax_Z_Te)
             ax_Z_R23, logOH_R23_map, logOH_R23_radfit, logOH_R23_int = plot_Z_R23_map(full_hdu, ax_Z_R23, args, radprof_ax=rax_Z_R23)
         else:
             fig.delaxes(ax_Z_Te)
@@ -899,14 +897,21 @@ if __name__ == "__main__":
         if args.write_file:
 
             # -------collating all the integrated line fluxes from the HDU header----------
-            line_fluxes = []
+            line_properties = []
             for line in lines_to_plot:
                 try:
                     line_index = np.where(args.available_lines == line)[0][0]
                     flux = full_hdu[0].header[f'FLUX{line_index + 1:03d}']
-                    line_fluxes.append(flux)
+                    line_properties += [flux]
                 except IndexError:
-                    line_fluxes.append(np.nan)
+                    line_properties += [np.nan]
+                try:
+                    line_index = np.where(args.available_lines == line)[0][0]
+                    line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
+                    ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}']
+                    line_properties += [ew]
+                except IndexError:
+                    line_properties += [np.nan]
 
             # -------collating all the measured quantities----------
             measured_quants = []
@@ -922,7 +927,7 @@ if __name__ == "__main__":
 
             basic_data = [args.field, f'{args.id:05d}{pixscale_text}', full_hdu[0].header['RA'], full_hdu[0].header['DEC'], args.z]
             flag_data = [args.radius_max, args.snr_cut if args.snr_cut is not None else np.nan, args.only_seg, args.vorbin, args.voronoi_snr if args.vorbin else np.nan, args.voronoi_line if args.vorbin else np.nan]
-            this_row = np.hstack([basic_data, flag_data, line_fluxes, measured_quants])
+            this_row = np.hstack([basic_data, flag_data, line_properties, measured_quants])
             this_df = pd.DataFrame(dict(map(lambda i, j: (i, [j]), cols_in_df, this_row)))
             df = pd.concat([df, this_df])
 
@@ -937,7 +942,3 @@ if __name__ == "__main__":
 
     os.chdir(args.code_dir)
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
-
-run ~/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/as
-     ...: tro/passage/passage_output/Par051/ --rootname Par051_*_all_diag_plots_wradprof_snr3.0_onlyseg
-     ...: .png --delay 0.1
