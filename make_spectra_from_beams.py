@@ -6,6 +6,7 @@
     Created: 12-07-24
     Example: run make_spectra_from_beams.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --id 3667
              run make_spectra_from_beams.py --line_list OII,Hb,OIII,Ha,Ha+NII,PaA,PaB --field Par9 --id 3 --zmin 1.5 --zmax 5
+             run make_spectra_from_beams.py --field Par28 --do_all_obj --zmin 0.1 --zmax 8
 '''
 
 from header import *
@@ -23,9 +24,14 @@ if __name__ == "__main__":
 
     # ------------read in catalog file--------------------------------
     if args.do_all_obj:
-        catalog_file = args.input_dir / args.field / 'Prep' / f'{args.field}-ir.cat.fits'
-        catalog = GTable.read(catalog_file)
-        id_arr = catalog['NUMBER']
+        try:
+            catalog_file = args.input_dir / args.field / 'Prep' / f'{args.field}-ir.cat.fits'
+            catalog = GTable.read(catalog_file)
+            id_arr = catalog['NUMBER']
+        except:
+            catalog_file = args.input_dir / args.field / 'Products' / f'{args.field}_photcat.fits'
+            catalog = GTable.read(catalog_file)
+            id_arr = catalog['id']
     else:
         id_arr = args.id
 

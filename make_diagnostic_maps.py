@@ -724,12 +724,15 @@ if __name__ == "__main__":
 
     outfilename = args.output_dir / args.field / f'{args.field}_all_diag_results.txt'
 
-    catalog_file = extract_dir / f'{args.field}-ir.cat.fits'
-    if os.path.exists(catalog_file): catalog = GTable.read(catalog_file)
-
+    try:
+        catalog_file = extract_dir / f'{args.field}-ir.cat.fits'
+        catalog = GTable.read(catalog_file)
+    except:
+        catalog_file = args.input_dir / args.field / 'Products' / f'{args.field}_photcat.fits'
+        catalog = GTable.read(catalog_file)
 
     if args.do_all_obj:
-        args.id_arr = catalog['NUMBER']
+        args.id_arr = catalog['NUMBER'] if 'NUMBER' in catalog.columns else catalog['id']
         if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
     else:
         args.id_arr = args.id
