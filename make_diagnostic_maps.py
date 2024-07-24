@@ -13,7 +13,7 @@
 from header import *
 from util import *
 from matplotlib import cm as mpl_cm
-from matplotlib.gridspec import GridSpec
+import imageio
 
 start_time = datetime.now()
 
@@ -33,7 +33,6 @@ def annotate_PAs(pa_arr, ax, fontsize=10):
         y_comp = len * np.cos(pa * np.pi / 180)
         ax.plot([x_cen, x_cen - x_comp], [y_cen, y_cen + y_comp], lw=1, c=color)
         ax.text(x_cen - x_comp - 0.02, y_cen + y_comp + 0.02, r'%d$^\circ$' % pa, fontsize=fontsize, ha='center', va='center', rotation=pa)
-        print('Deb36: annotating with pa', pa) ##
 
     return ax
 
@@ -434,7 +433,7 @@ def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, 
     line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
     line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}']
 
-    ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[0] * 0.88, f'EW = {line_ew:.1f}', c='k', fontsize=args.fontsize, ha='left', va='bottom', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+    ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[0] * 0.88, f'EW = {line_ew:.1e}' if line_ew < 1e-3 or line_ew > 1e3 else f'EW = {line_ew:.1f}', c='k', fontsize=args.fontsize, ha='left', va='bottom', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
 
     return ax
 
@@ -736,7 +735,15 @@ if __name__ == "__main__":
     else:
         args.id_arr = args.id
 
+    # ---------for diplay and amimations----------------
     if len(args.id_arr) > 10: args.hide = True # if too many plots, do not display them, just save them
+    if len(args.id_arr) > 20: args.make_anim = True
+    else: args.make_anim = False
+
+    if args.make_anim:
+        outputfile = args.output_dir / args.field / f'{args.field}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.mp4'
+        duration_per_frame = 0.1 #sec
+        writer = imageio.get_writer(outputfile, mode='I', fps=int(1. / duration_per_frame))
 
     # ----------------------initiliasing dataframe-------------------------------
     lines_to_plot = ['Ha', 'Hb', 'OII', 'OIII-4363', 'OIII']
@@ -882,6 +889,12 @@ if __name__ == "__main__":
         if args.hide: plt.close('all')
         else: plt.show(block=False)
 
+        # ------------------making animation--------------------------
+        if args.make_anim:
+            print(f'Appending file {figname} to animation..')  #
+            try: writer.append_data(imageio.imread(figname))
+            except (ValueError, IOError) as e: print(f'Skipping snapshot due to ' + str(e))
+
         # ----------appending and writing to catalog file-----------------
         if args.write_file:
 
@@ -924,3 +937,7 @@ if __name__ == "__main__":
 
     os.chdir(args.code_dir)
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
+
+run ~/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/as
+     ...: tro/passage/passage_output/Par051/ --rootname Par051_*_all_diag_plots_wradprof_snr3.0_onlyseg
+     ...: .png --delay 0.1
