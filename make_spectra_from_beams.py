@@ -7,6 +7,7 @@
     Example: run make_spectra_from_beams.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --id 3667
              run make_spectra_from_beams.py --line_list OII,Hb,OIII,Ha,Ha+NII,PaA,PaB --field Par9 --id 3 --zmin 1.5 --zmax 5
              run make_spectra_from_beams.py --field Par28 --do_all_obj --zmin 0.1 --zmax 8
+             run make_spectra_from_beams.py --field Par51 --re_extract --zmin 0.1 --zmax 8
 '''
 
 from header import *
@@ -32,6 +33,8 @@ if __name__ == "__main__":
             catalog_file = args.input_dir / args.field / 'Products' / f'{args.field}_photcat.fits'
             catalog = GTable.read(catalog_file)
             id_arr = catalog['id']
+    elif args.re_extract:
+        id_arr = ids_to_re_extract_dict[args.field]
     else:
         id_arr = args.id
 

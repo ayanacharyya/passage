@@ -51,6 +51,7 @@ def parse_args():
     # ------- args added for make_spectra_from_beams.py ------------------------------
     parser.add_argument('--skip_sep', dest='skip_sep', action='store_true', default=False, help='Skip the Source Extraction Pipeline? Default is no.')
     parser.add_argument('--do_all_obj', dest='do_all_obj', action='store_true', default=False, help='Reduce spectra and make beam files for ALL detected objects? Default is no.')
+    parser.add_argument('--re_extract', dest='re_extract', action='store_true', default=False, help='Re-extract ALL objects to be re-extracted? Default is no.')
 
     # ------- args added for run_passagepipe.py ------------------------------
     parser.add_argument('--dry_run', dest='dry_run', action='store_true', default=False, help='Do a dry run i.e., only make the config file without actually running PASSAGEPipe? Default is no.')
