@@ -6,6 +6,7 @@
     Last modified: 18-06-24
     Example: run read_line_catalog.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par21
              run read_line_catalog.py --zmin 0 --zmax 0.7 --line_list OII,OIII,Ha --keep --field Par21 --mag_lim 25
+            run read_line_catalog.py --line_list OII,OIII,Ha --field Par61 --zmin 0.1 --zmax 8 --filters F115W,F150W
 '''
 
 from header import *
@@ -19,13 +20,12 @@ def plot_zhist(df, args):
     Plots the redshift distribution function for a given input redshift catalog
     '''
     if not args.keep: plt.close('all')
-    z_min, z_max = 0, 6
 
     fig, ax = plt.subplots(figsize=(8, 6))
     fig.subplots_adjust(right=0.95, top=0.95, bottom=0.1, left=0.1)
-    hist, bin_edges = np.histogram(df['redshift'], bins=args.nbins, range=(z_min, z_max))
+    hist, bin_edges = np.histogram(df['redshift'], bins=args.nbins, range=(args.zmin, args.zmax))
     ax.hist(df['redshift'], bins=bin_edges, color='k', histtype='step')
-    ax.set_xlim(z_min, z_max) #
+    ax.set_xlim(args.zmin, args.zmax) #
 
     line_color_dict = defaultdict(lambda:'grey', OII='mediumpurple', Hb='lightskyblue', OIII='palegreen', Ha='salmon', SII='maroon', SIII='sienna', PaD='peru', PaG='tan', PaB='orange', PaA='firebrick')
     df_all_lines = df
