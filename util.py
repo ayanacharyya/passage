@@ -77,7 +77,7 @@ def parse_args():
     parser.add_argument('--vorbin', dest='vorbin', action='store_true', default=False, help='Voronoi bin the 2D emission line maps? Default is no.')
     parser.add_argument('--voronoi_snr', metavar='voronoi_snr', type=float, action='store', default=3, help='Target SNR to Voronoi bin the emission line maps to; default is 3')
     parser.add_argument('--voronoi_line', metavar='voronoi_line', type=str, action='store', default='Ha', help='Which emission line to be used for computing the Voronoi bins? Default is None i.e., the given emission line itself')
-    parser.add_argument('--flam_max', metavar='flam_max', type=float, action='store', default=1, help='Maximum y-axis limit for f_lambda (in units of 1e-19 ergs/s/cm^2/A); default is 1')
+    parser.add_argument('--flam_max', metavar='flam_max', type=float, action='store', default=None, help='Maximum y-axis limit for f_lambda (in units of 1e-19 ergs/s/cm^2/A); default is None')
     parser.add_argument('--plot_radial_profiles', dest='plot_radial_profiles', action='store_true', default=False, help='Plot radial profiles corresponding to the 2D maps? Default is no.')
     parser.add_argument('--snr_cut', metavar='snr_cut', type=float, action='store', default=None, help='Impose an SNR cut on the emission line maps to; default is None')
     parser.add_argument('--only_seg', dest='only_seg', action='store_true', default=False, help='Cut out the emission line plots corresponding to the grizli segmentation map? Default is no.')

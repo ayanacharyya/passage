@@ -174,18 +174,17 @@ def plot_1d_spectra(od_hdu, ax, args):
         ax.plot(table['rest_wave'], table['flux'] / table['flat'] / factor, lw=0.5, c=col_arr[index], alpha=0.8) # need to divide all columns with 'flat' to get the right units (ergs/s/cm^2/A)
         ax.plot(table['rest_wave'], table['cont'] / table['flat'] / factor, lw=0.5, c='grey')
         ax.plot(table['rest_wave'], table['line'] / table['flat'] / factor, lw=1, c='indigo')
-        ax.text(float(filters[0][1:-1]) * 1e2 * 0.85 / (1 + args.z), args.flam_max * 0.95 - index * 0.1, filter, c=col_arr[index], fontsize=args.fontsize, ha='left', va='top')
+        ax.text(float(filters[0][1:-1]) * 1e2 * 0.85 / (1 + args.z), ax.get_ylim()[1] * 0.95 - index * 0.1, filter, c=col_arr[index], fontsize=args.fontsize, ha='left', va='top')
 
     ax.set_xlabel(r'Rest-frame wavelength ($\AA$)', fontsize=args.fontsize)
     ax.set_ylabel(r'f$_{\lambda}$ ' + '(%.0e ' % factor + r'ergs/s/cm$^2$/A)', fontsize=args.fontsize/1.2)
-
-    ax.set_ylim(0, args.flam_max) # x factor
+    if args.flam_max is not None: ax.set_ylim(0, args.flam_max) # flam_max should be in units of 1e-19 ergs/s/cm^2/A
 
     # ---observed wavelength axis-------
     ax2 = ax.twiny()
     ax2.set_xlim(ax.get_xlim())
     ax2.set_xticks(ax.get_xticks())
-    ax2.set_xticklabels(['%.1F' % (item * (1 + args.z) / 1e4) for item in ax2.get_xticks()], fontsize=args.fontsize)
+    ax2.set_xticklabels(['%.2F' % (item * (1 + args.z) / 1e4) for item in ax2.get_xticks()], fontsize=args.fontsize)
     ax2.set_xlabel(r'Observed wavelength ($\mu$)', fontsize=args.fontsize)
 
     # ---vertical lines for emission line wavelengths------
