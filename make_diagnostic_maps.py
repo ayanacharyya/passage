@@ -722,7 +722,9 @@ if __name__ == "__main__":
     only_seg_text = '_onlyseg' if args.only_seg else ''
     pixscale_text = '' if args.pixscale == 0.04 else f'_{args.pixscale}arcsec_pix'
 
-    outfilename = args.output_dir / args.field / f'{args.field}_all_diag_results.txt'
+    output_dir = args.output_dir / args.field
+    output_dir.mkdir(parents=True, exist_ok=True)
+    outfilename = output_dir / f'{args.field}_all_diag_results.txt'
 
     try:
         catalog_file = extract_dir / f'{args.field}-ir.cat.fits'
