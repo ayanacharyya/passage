@@ -8,6 +8,7 @@
              run make_diagnostic_maps.py --field Par50 --id 823 --pixscale 0.2 --vorbin --voronoi_line Ha --voronoi_snr 3 --plot_radial_profiles
              run make_diagnostic_maps.py --field Par50 --id 823 --plot_radial_profiles --only_seg --snr_cut 3 --plot_mappings
              run make_diagnostic_maps.py --field Par51 --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
+             run make_diagnostic_maps.py --field Par51 --re_extract --plot_radial_profiles --only_seg --snr_cut 3 --write_file
 '''
 
 from header import *
@@ -722,6 +723,7 @@ if __name__ == "__main__":
     pixscale_text = '' if args.pixscale == 0.04 else f'_{args.pixscale}arcsec_pix'
 
     output_dir = args.output_dir / args.field
+    if args.re_extract: output_dir = output_dir / 're_extracted'
     output_dir.mkdir(parents=True, exist_ok=True)
     outfilename = output_dir / f'{args.field}_all_diag_results.txt'
 
@@ -735,6 +737,8 @@ if __name__ == "__main__":
     if args.do_all_obj:
         args.id_arr = catalog['NUMBER'] if 'NUMBER' in catalog.columns else catalog['id']
         if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
+    elif args.re_extract:
+            id_arr = ids_to_re_extract_dict[args.field]
     else:
         args.id_arr = args.id
 

@@ -45,7 +45,9 @@ if __name__ == "__main__":
 
         # -----fitting redshift---------------
         pixscale_text = '' if args.pixscale == 0.04 else f'_{args.pixscale}arcsec_pix'
-        output_subdirectory = args.output_dir / args.field / f'{this_id:05d}{pixscale_text}'
+        output_dir = args.output_dir / args.field
+        if args.re_extract: output_dir = output_dir / 're_extracted'
+        output_subdirectory = output_dir / f'{this_id:05d}{pixscale_text}'
         output_subdirectory.mkdir(parents=True, exist_ok=True)
 
         _fit = fitting.run_all_parallel(this_id, zr=[args.zmin, args.zmax], pline={'pixscale': args.pixscale}, verbose=~args.silent, full_line_list=args.line_list, get_output_data=True, group_name=str(output_subdirectory / args.field))
