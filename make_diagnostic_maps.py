@@ -786,7 +786,7 @@ if __name__ == "__main__":
 
         if os.path.exists(output_subdir / full_fits_file): # if the fits files are in sub-directories for individual objects
             args.work_dir = output_subdir
-        elif os.path.exists(extract_dir / full_fits_file): # if the fits files are in Extractions/
+        elif os.path.exists(extract_dir / full_fits_file) and not args.re_extract: # if the fits files are in Extractions/, unless working on re-extractions, in which case they should be in individual sub-directories, as above
             args.work_dir = extract_dir
         else:
             print(f'Could not find {full_fits_file} for ID {args.id}, so skipping it.')
