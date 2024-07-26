@@ -8,7 +8,7 @@
              run make_diagnostic_maps.py --field Par50 --id 823 --pixscale 0.2 --vorbin --voronoi_line Ha --voronoi_snr 3 --plot_radial_profiles
              run make_diagnostic_maps.py --field Par50 --id 823 --plot_radial_profiles --only_seg --snr_cut 3 --plot_mappings
              run make_diagnostic_maps.py --field Par51 --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
-             run make_diagnostic_maps.py --field Par51 --re_extract --plot_radial_profiles --only_seg --snr_cut 3 --write_file
+             run make_diagnostic_maps.py --field Par51 --re_extract --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
 '''
 
 from header import *
@@ -735,12 +735,12 @@ if __name__ == "__main__":
         catalog = GTable.read(catalog_file)
 
     if args.do_all_obj:
-        args.id_arr = catalog['NUMBER'] if 'NUMBER' in catalog.columns else catalog['id']
-        if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
-    elif args.re_extract:
-            id_arr = ids_to_re_extract_dict[args.field]
+        if args.re_extract: args.id_arr = ids_to_re_extract_dict[args.field]
+        else: args.id_arr = catalog['NUMBER'] if 'NUMBER' in catalog.columns else catalog['id']
     else:
         args.id_arr = args.id
+
+    if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
 
     # ---------for diplay and amimations----------------
     if len(args.id_arr) > 10: args.hide = True # if too many plots, do not display them, just save them
