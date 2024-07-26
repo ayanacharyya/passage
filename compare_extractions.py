@@ -3,7 +3,7 @@
     Notes: Compare extracted 1D and 2D spectra of same object args.ids, for a given object/s in a given field
     Author : Ayan
     Created: 26-07-24
-    Example: run compare_extractions.py --field Par51 --id 377
+    Example: run compare_extractions.py --field Par51 --keep --id 420
 '''
 
 from header import *
@@ -18,7 +18,7 @@ def plot_redshift_comparison(field, directory='/Volumes/Elements/acharyya_backup
     Plot redshift distribution of newer and older extractions
     Saves plot as png file, and returns figure handle
     '''
-    path = directory / field / 're_extracted'
+    path = directory / field / 're_extracted' / 'comparisons'
     df = pd.read_table(path / f'{field}_all_diag_results_old_vs_new_comp.txt')
 
     fig, ax = plt.subplots(111)
@@ -42,6 +42,7 @@ def plot_redshift_comparison(field, directory='/Volumes/Elements/acharyya_backup
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
+    if not args.keep: plt.close('all')
 
     # ------determining directories and global variables---------
     orig_path = args.input_dir / args.field / 'Extractions'
@@ -52,18 +53,20 @@ if __name__ == "__main__":
     # fig_zcomp = plot_redshift_comparison(args.field, directory=args.output_dir)
 
     # ------------read in grizli images and plot comparison--------------------------------
-    for args.id in id_arr:
+    for index, args.id in enumerate(id_arr):
+        print(f'\nFitting spectra for id {args.id} which is {index+1} out of {len(id_arr)}..')
+
         fig, axes = plt.subplots(len(quant_arr), 2, figsize=(10, 8))
         for ind, quant in enumerate(quant_arr):
+            print(f'Reading in {quant} png file')
             old = mpimg.imread(orig_path / f'Par051_{args.id:05d}.{quant}.png')
             axes[ind, 0].imshow(old, origin='upper')
             new = mpimg.imread(re_extraction_path / f'{args.id:05d}' / f'Par051_{args.id:05d}.{quant}.png')
             axes[ind, 1].imshow(new, origin='upper')
-            print('Plotted', quant)
 
         fig.subplots_adjust(left=0.05, bottom=0.01, top=0.99, right=0.98, hspace=0.01, wspace=0.1)
 
-        figname = re_extraction_path / f'{args.field}_{args.id:05d}_extraction_old_vs_new_comp.png'
+        figname = re_extraction_path / 'comparisons' / f'{args.field}_{args.id:05d}_extraction_old_vs_new_comp.png'
         fig.savefig(figname)
         print(f'Saved figure at {figname}')
         plt.show(block=False)
