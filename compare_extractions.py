@@ -107,7 +107,7 @@ if __name__ == "__main__":
         fig.subplots_adjust(left=0.01, bottom=0.01, top=0.99, right=0.99, hspace=0.05, wspace=0.0)
 
         figname = re_extraction_path / 'comparisons' / f'{args.field}_{args.id:05d}_extraction_old_vs_new_comp.png'
-        fig.savefig(figname)
+        fig.savefig(figname, dpi=800)
         print(f'Saved figure at {figname}')
         if args.hide: plt.close('all')
         else: plt.show(block=False)
