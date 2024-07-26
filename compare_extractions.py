@@ -104,6 +104,9 @@ if __name__ == "__main__":
         new_diag = mpimg.imread(re_extraction_path / f'{args.field}_{args.id:05d}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.png')
         axes_diag[1].imshow(new_diag, origin='upper')
 
+        for ax in fig.axes:
+            ax.xaxis.set_visible(False)
+            ax.yaxis.set_visible(False)
         fig.subplots_adjust(left=0.01, bottom=0.01, top=0.99, right=0.99, hspace=0.05, wspace=0.0)
 
         figname = re_extraction_path / 'comparisons' / f'{args.field}_{args.id:05d}_extraction_old_vs_new_comp.png'
