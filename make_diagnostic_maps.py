@@ -748,7 +748,7 @@ if __name__ == "__main__":
     else: args.make_anim = False
 
     if args.make_anim:
-        outputfile = args.output_dir / args.field / f'{args.field}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.mp4'
+        outputfile = output_dir / f'{args.field}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.mp4'
         duration_per_frame = 0.1 #sec
         writer = imageio.get_writer(outputfile, mode='I', fps=int(1. / duration_per_frame))
 
@@ -780,7 +780,7 @@ if __name__ == "__main__":
         print(f'\nCommencing ID {args.id} which is {index+1} of {len(args.id_arr)}..')
 
         # ------determining directories---------
-        output_subdir = args.output_dir / args.field / f'{args.id:05d}{pixscale_text}'
+        output_subdir = output_dir / f'{args.id:05d}{pixscale_text}'
         if not args.do_all_obj: output_subdir.mkdir(parents=True, exist_ok=True)
         full_fits_file = f'{args.field}_{args.id:05d}.full.fits'
 
@@ -888,7 +888,7 @@ if __name__ == "__main__":
 
         # ---------decorating and saving the figure------------------------------
         fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-        figdir = args.output_dir / args.field if args.do_all_obj else output_subdir
+        figdir = output_dir if args.do_all_obj else output_subdir
         figname = figdir / f'{args.field}_{args.id:05d}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.png'
         fig.savefig(figname)
         print(f'Saved figure at {figname}')
