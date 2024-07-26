@@ -39,6 +39,8 @@ if __name__ == "__main__":
     else:
         id_arr = args.id
 
+    if args.start_id: id_arr = id_arr[args.start_id - 1:]
+
     # ------------extract spectra--------------------------------
     for index, this_id in enumerate(id_arr):
         start_time2 = datetime.now()
