@@ -179,7 +179,7 @@ def plot_1d_spectra(od_hdu, ax, args):
 
     ax.set_xlabel(r'Rest-frame wavelength ($\AA$)', fontsize=args.fontsize)
     ax.set_ylabel(r'f$_{\lambda}$ ' + '(%.0e ' % factor + r'ergs/s/cm$^2$/A)', fontsize=args.fontsize/1.2)
-    if args.flam_max is not None: ax.set_ylim(0, args.flam_max) # flam_max should be in units of 1e-19 ergs/s/cm^2/A
+    ax.set_ylim(0, args.flam_max) # flam_max should be in units of 1e-19 ergs/s/cm^2/A
 
     # ---observed wavelength axis-------
     ax2 = ax.twiny()
