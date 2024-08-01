@@ -3,7 +3,10 @@
     Notes: Compute histograms by shifting bins from a given star catalog, and plot shaded histograms (for Beena)
     Author : Ayan
     Created: 01-08-24
-    Example: run make_shaded_histograms.py
+    How to use:
+    Detail example: run make_shaded_histograms.py --normalise --plot_bin_edges --plot_individual_iterations --keep --verbose --input_dir /Users/acharyya/Downloads/ --min_shift 0 --max_shift 10 --fontsize 15 --alpha 0.1 --age_max 100 --color_arr salmon,cornflowerblue,khaki
+    Short example: run make_shaded_histograms.py --normalise --plot_bin_edges --plot_individual_iterations
+
 '''
 
 import numpy as np
@@ -13,6 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import hdbscan
 from scipy.stats import binned_statistic
+import argparse
 
 HOME = Path.home()
 start_time = datetime.now()
@@ -34,7 +38,7 @@ def clusterer(df):
     return clusters_AC1, clusters_AC2
 
 # --------------------------------------------------------------------------------------------------------------------
-def make_histogram(df, bin_edges, silent=False):
+def make_histogram(df, bin_edges, verbose=False):
     '''
     To computing histogram of the number of substructures for every age bin, for a given list of bin edges
     Returns number of clusters in each bin as array, for given bin_edges
@@ -55,7 +59,7 @@ def make_histogram(df, bin_edges, silent=False):
         nclusters_arr2.append(nc2_thisbin)
         nstars_arr.append(nstars_thisbin)
 
-        if not silent: print(f'For bin [{left_edge}, {right_edge}]: {nstars_thisbin} total stars, {nc1_thisbin} clusters & {nc2_thisbin} in substructures.')
+        if verbose: print(f'For bin [{left_edge}, {right_edge}]: {nstars_thisbin} total stars, {nc1_thisbin} clusters & {nc2_thisbin} in substructures.')
 
     return nclusters_arr1, nclusters_arr2, nstars_arr
 
@@ -95,26 +99,49 @@ def collapse_and_plot_histogram(data_and_bins, bin_edges, ax, color='grey', alph
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
+def parse_args():
+    '''
+    Parse command line arguments. Returns args object
+    '''
+
+    parser = argparse.ArgumentParser(description='Produces clustering histograms from stellar catalog.')
+
+    parser.add_argument('--input_dir', metavar='input_dir', type=str, action='store', default=str(HOME / 'Downloads'), help='Where does the input file reside?')
+    parser.add_argument('--output_dir', metavar='output_dir', type=str, action='store', default=None, help='Where do you want to store the outputs?')
+    parser.add_argument('--input_file', metavar='input_file', type=str, action='store', default='ngc4449_deproject_ages.txt', help='What is the filename of the input catalog?')
+
+    parser.add_argument('--fontsize', metavar='fontsize', type=int, action='store', default=15, help='fontsize of plot labels, etc.; default is 15')
+    parser.add_argument('--alpha', metavar='alpha', type=float, action='store', default=0.1, help='alpha for the individual histograms, if plotted; default is 0.1')
+    parser.add_argument('--color_arr', metavar='color_arr', type=str, action='store', default='salmon,cornflowerblue,khaki', help='Colors to be used for cluster, substructures and total stars--in order, separated by comma; Default is salom, cornflowerblue and khaki')
+
+    parser.add_argument('--min_shift', metavar='min_shift', type=int, action='store', default=0, help='Minimum amount of shift (in Myr) of the histogram bin edges; default is 0')
+    parser.add_argument('--max_shift', metavar='max_shift', type=int, action='store', default=10, help='Maximum amount of shift (in Myr) of the histogram bin edges; default is 10')
+    parser.add_argument('--age_max', metavar='age_max', type=float, action='store', default=100, help='Maximum age (in Myr) which the analysis is restricted to; default is 100')
+
+    parser.add_argument('--plot_bin_edges', dest='plot_bin_edges', action='store_true', default=False, help='Plot bin edges as vertical lines? Default is no.')
+    parser.add_argument('--plot_individual_iterations', dest='plot_individual_iterations', action='store_true', default=False, help='Plot histograms for individual shifted bin iterations? Default is no.')
+    parser.add_argument('--normalise', dest='normalise', action='store_true', default=False, help='Normalise the histograms so that peak =1? Default is no.')
+    parser.add_argument('--verbose', dest='verbose', action='store_true', default=False, help='Suppress some generic print statements? Default is no.')
+    parser.add_argument('--keep', dest='keep', action='store_true', default=False, help='Keep existing plot windows open? Default is no.')
+
+    # ------- wrap up and processing args ------------------------------
+    args = parser.parse_args()
+    args.input_dir = Path(args.input_dir)
+    if args.output_dir is None: args.output_dir = args.input_dir
+    else: args.output_dir = Path(args.output_dir)
+    args.color_arr = [item for item in args.color_arr.split(',')]
+
+    return args
+
+# --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
 
     # ------------initialising user input variables-------------------
-    col_arr = ['salmon', 'cornflowerblue', 'khaki']
-    alpha, lw, fontsize = 0.1, 2, 15
-    min_shift, max_shift = 0, 10 # amounts to shift each bin edge by, in Myr
-    input_file_path = HOME / 'Downloads'
-    output_path = None
-    age_max = 100 # Myr
-
-    # ------------initialising user input flags-------------------
-    plot_bin_edges = True
-    plot_individual_iterations = True
-    silent = True
-    keep = False
-    normalise = True
+    lw = 2
+    args = parse_args()
 
     # ------------reading data------------------
-    filename = 'ngc4449_deproject_ages.txt'
-    df = read_catalog(input_file_path / filename, age_max=age_max) # age_max in Myr
+    df = read_catalog(args.input_dir / args.input_file, age_max=args.age_max) # age_max in Myr
 
     # ------------declaring varieties of base bin edges------------------
     fiducial_bin_edges = np.array([0, 5, 10, 15, 20, 30, 40, 50, 75, 100])
@@ -127,9 +154,9 @@ if __name__ == "__main__":
     all_base_bins = [bigger_bin_edges, fiducial_bin_edges, smaller_bin_edges]
 
     # --------initialising figure and variables-------------------
-    if not keep: plt.close('all')
+    if not args.keep: plt.close('all')
     fig, axes = plt.subplots(3, 1, figsize=(8, 6), sharex=True)
-    shifts = np.arange(min_shift, max_shift + 1)
+    shifts = np.arange(args.min_shift, args.max_shift + 1)
 
     # ------------loop over base bins------------------
     for index, base_bin_edges in enumerate(all_base_bins):
@@ -143,10 +170,10 @@ if __name__ == "__main__":
             this_bin_centers = (this_bin_edges[:-1] + this_bin_edges[1:])/2
             print(f'Shifting base-bin-{index+1} by {this_shift}, which is {index2 + 1} out of {len(shifts)} shifts')
 
-            nc1_arr_thisbin, nc2_arr_thisbin, nstars_arr_thisbin = make_histogram(df, this_bin_edges, silent=silent)
+            nc1_arr_thisbin, nc2_arr_thisbin, nstars_arr_thisbin = make_histogram(df, this_bin_edges, verbose=args.verbose)
 
             # ------normalising by the max--------
-            if normalise:
+            if args.normalise:
                 nc1_arr_thisbin /= np.max(nc1_arr_thisbin)
                 nc2_arr_thisbin /= np.max(nc2_arr_thisbin)
                 nstars_arr_thisbin /= np.max(nstars_arr_thisbin)
@@ -157,38 +184,40 @@ if __name__ == "__main__":
             nstars_and_bins_arr.append([nstars_arr_thisbin, this_bin_centers])
 
             # -----plotting histograms of individual iterations--------
-            if plot_individual_iterations:
-                axes[index].plot(this_bin_centers, nc1_arr_thisbin, c=col_arr[0], alpha=alpha)
-                axes[index].plot(this_bin_centers, nc2_arr_thisbin, c=col_arr[1], alpha=alpha)
-                axes[index].plot(this_bin_centers, nstars_arr_thisbin, c=col_arr[2], alpha=alpha)
+            if args.plot_individual_iterations:
+                axes[index].plot(this_bin_centers, nc1_arr_thisbin, c=args.color_arr[0], alpha=args.alpha)
+                axes[index].plot(this_bin_centers, nc2_arr_thisbin, c=args.color_arr[1], alpha=args.alpha)
+                axes[index].plot(this_bin_centers, nstars_arr_thisbin, c=args.color_arr[2], alpha=args.alpha)
 
             # -----decorating axes tick labels etc--------
-            axes[index].tick_params(axis='both', which='major', labelsize=fontsize)
+            axes[index].tick_params(axis='both', which='major', labelsize=args.fontsize)
 
         # -------plotting bin edges-----------------
-        if plot_bin_edges:
+        if args.plot_bin_edges:
             for edge in base_bin_edges: axes[index].axvline(edge, ls='dashed', lw=0.5, c='grey')
 
         # -----plotting histograms from variants of this base bin--------
-        axes[index] = collapse_and_plot_histogram(nc1_and_bins_arr, base_bin_edges, axes[index], color=col_arr[0], alpha=alpha, lw=lw)
-        axes[index] = collapse_and_plot_histogram(nc2_and_bins_arr, base_bin_edges, axes[index], color=col_arr[1], alpha=alpha, lw=lw)
-        axes[index] = collapse_and_plot_histogram(nstars_and_bins_arr, base_bin_edges, axes[index], color=col_arr[2], alpha=alpha, lw=lw)
+        axes[index] = collapse_and_plot_histogram(nc1_and_bins_arr, base_bin_edges, axes[index], color=args.color_arr[0], alpha=args.alpha, lw=lw)
+        axes[index] = collapse_and_plot_histogram(nc2_and_bins_arr, base_bin_edges, axes[index], color=args.color_arr[1], alpha=args.alpha, lw=lw)
+        axes[index] = collapse_and_plot_histogram(nstars_and_bins_arr, base_bin_edges, axes[index], color=args.color_arr[2], alpha=args.alpha, lw=lw)
 
         # -------annotate figure and save---------------
-        axes[0].text(0.99, 0.98, 'Clusters', color=col_arr[0], ha='right', va='top', fontsize=fontsize, transform=axes[0].transAxes)
-        axes[0].text(0.99, 0.85, 'Substructures', color=col_arr[1], ha='right', va='top', fontsize=fontsize, transform=axes[0].transAxes)
-        axes[0].text(0.99, 0.70, 'Total stars', color=col_arr[2], ha='right', va='top', fontsize=fontsize, transform=axes[0].transAxes)
+        axes[0].text(0.99, 0.98, 'Clusters', color=args.color_arr[0], ha='right', va='top', fontsize=args.fontsize, transform=axes[0].transAxes)
+        axes[0].text(0.99, 0.85, 'Substructures', color=args.color_arr[1], ha='right', va='top', fontsize=args.fontsize, transform=axes[0].transAxes)
+        axes[0].text(0.99, 0.70, 'Total stars', color=args.color_arr[2], ha='right', va='top', fontsize=args.fontsize, transform=axes[0].transAxes)
 
-        if index == len(all_base_bins) - 1: axes[index].set_xlabel('Age (Myr)', fontsize=fontsize)
-        axes[index].set_ylabel('Normalised #', fontsize=fontsize)
+        if index == len(all_base_bins) - 1: axes[index].set_xlabel('Age (Myr)', fontsize=args.fontsize)
 
-        axes[index].set_xlim(0, age_max * 1.05)
-        if normalise: axes[index].set_ylim(0, 1.1)
+        axes[index].set_xlim(0, args.age_max * 1.05)
+        if args.normalise:
+            axes[index].set_ylim(0, 1.1)
+        else:
+            axes[index].set_yscale('log')
+        axes[index].set_ylabel('Normalised #', fontsize=args.fontsize)
 
     fig.subplots_adjust(left=0.11, bottom=0.1, top=0.98, right=0.98, hspace=0.05, wspace=0.0)
 
-    if output_path is None: output_path = input_file_path
-    figname = output_path / f'{filename.split("_")[0]}_clustering_histograms.png'
+    figname = args.output_dir / f'{args.input_file.split("_")[0]}_clustering_histograms.png'
     fig.savefig(figname)
     print(f'Saved figure at {figname}')
     plt.show(block=False)
