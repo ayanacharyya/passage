@@ -211,9 +211,10 @@ if __name__ == "__main__":
         axes[index].set_xlim(0, args.age_max * 1.05)
         if args.normalise:
             axes[index].set_ylim(0, 1.1)
+            axes[index].set_ylabel('Normalised #', fontsize=args.fontsize)
         else:
             axes[index].set_yscale('log')
-        axes[index].set_ylabel('Normalised #', fontsize=args.fontsize)
+            axes[index].set_ylabel('Counts', fontsize=args.fontsize)
 
     fig.subplots_adjust(left=0.11, bottom=0.1, top=0.98, right=0.98, hspace=0.05, wspace=0.0)
 
