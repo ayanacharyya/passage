@@ -1,6 +1,6 @@
 '''
     Filename: make_shaded_histograms.py
-    Notes: Convert given histograms into shaded KDE plots (for Beena)
+    Notes: Compute histograms by shifting bins from a given star catalog, and plot shaded histograms (for Beena)
     Author : Ayan
     Created: 01-08-24
     Example: run make_shaded_histograms.py
