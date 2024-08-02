@@ -877,7 +877,7 @@ if __name__ == "__main__":
 
         # ---------------metallicity maps---------------
         if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
-            ax_Z_Te, logOH_Te_map, logOH_Te_radfit, logOH_Te_int = plot_Z_Te_map(full_hdu, ax_Z_Te, args, radprof_ax=rax_Z_Te)
+            if 'OIII-4363' in args.available_lines: ax_Z_Te, logOH_Te_map, logOH_Te_radfit, logOH_Te_int = plot_Z_Te_map(full_hdu, ax_Z_Te, args, radprof_ax=rax_Z_Te)
             ax_Z_R23, logOH_R23_map, logOH_R23_radfit, logOH_R23_int = plot_Z_R23_map(full_hdu, ax_Z_R23, args, radprof_ax=rax_Z_R23)
         else:
             fig.delaxes(ax_Z_Te)
