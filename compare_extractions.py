@@ -9,7 +9,6 @@
 
 from header import *
 from util import *
-import matplotlib.image as mpimg
 
 start_time = datetime.now()
 
@@ -31,7 +30,7 @@ def plot_redshift_comparison(field, directory='/Volumes/Elements/acharyya_backup
     ax.set_xlabel('Redshift')
     ax.set_ylabel('No. of objects')
 
-    ax.text(8, ax.get_ylim()[1] * 0.7, f'Par051; total {len(df)} objects', c='k', ha='right', va='top')
+    ax.text(8, ax.get_ylim()[1] * 0.7, f'{field}; total {len(df)} objects', c='k', ha='right', va='top')
 
     figname = path / f'{field}_redshift_old_vs_new_comp.png'
     fig.savefig(figname)
@@ -90,10 +89,10 @@ if __name__ == "__main__":
         for ind, quant in enumerate(quant_arr):
             print(f'Reading in {quant} png files..')
 
-            old_ex = mpimg.imread(orig_path / f'Par051_{args.id:05d}.{quant}.png')
+            old_ex = mpimg.imread(orig_path / f'{args.field}_{args.id:05d}.{quant}.png')
             axes_ex[ind].imshow(old_ex, origin='upper')
 
-            new_ex = mpimg.imread(new_path / f'Par051_{args.id:05d}.{quant}.png')
+            new_ex = mpimg.imread(new_path / f'{args.field}_{args.id:05d}.{quant}.png')
             axes_ex[ind + len(quant_arr)].imshow(new_ex, origin='upper')
 
         print(f'Reading in diagnostic png files..')

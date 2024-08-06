@@ -45,6 +45,7 @@ from mastquery import query
 import matplotlib
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
+import matplotlib.image as mpimg
 
 from astropy.table import Table
 from astropy import units as u
