@@ -9,6 +9,7 @@
              run make_diagnostic_maps.py --field Par50 --id 823 --plot_radial_profiles --only_seg --snr_cut 3 --plot_mappings
              run make_diagnostic_maps.py --field Par51 --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
              run make_diagnostic_maps.py --field Par51 --re_extract --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
+    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
 from header import *
@@ -802,7 +803,7 @@ if __name__ == "__main__":
         args.distance = cosmo.comoving_distance(args.z)
         args.ndfilt = full_hdu[0].header['NDFILT']
         args.nlines = full_hdu[0].header['NUMLINES']
-        args.pix_arcsec = full_hdu[7].header['PIXASEC']
+        args.pix_arcsec = full_hdu[5].header['PIXASEC']
         args.pa_arr = np.unique([full_hdu[0].header[item] for item in list(full_hdu[0].header.keys()) if 'PA00' in item])
         try: args.mag = catalog[catalog['NUMBER'] == args.id]['MAG_AUTO'].data.data[0]
         except: args.mag = np.nan
