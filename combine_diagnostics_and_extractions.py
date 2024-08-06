@@ -47,7 +47,7 @@ if __name__ == "__main__":
     # ------------read in grizli images and plot comparison--------------------------------
     for index, args.id in enumerate(args.id_arr):
         print(f'\nCombining extractions and diagnostic maps for id {args.id} which is {index+1} out of {len(args.id_arr)}..')
-
+        alternate_path = args.output_dir / args.field / f'{args.id:05d}'
         fig = plt.figure(figsize=(12, 6))
         gs = fig.add_gridspec(len(quant_arr), 2)
         axes_ex = [fig.add_subplot(gs[item, 0]) for item in range(len(quant_arr))]
@@ -56,11 +56,15 @@ if __name__ == "__main__":
         for ind, quant in enumerate(quant_arr):
             print(f'Reading in {quant} png files..')
             try:
-                ex = mpimg.imread(extraction_path / f'{args.field}_{args.id:05d}.{quant}.png')
+                ex = mpimg.imread(alternate_path / f'{args.field}_{args.id:05d}.{quant}.png')
                 axes_ex[ind].imshow(ex, origin='upper')
             except FileNotFoundError:
-                print('Could not find file, so skipping')
-                continue
+                try:
+                    ex = mpimg.imread(extraction_path / f'{args.field}_{args.id:05d}.{quant}.png')
+                    axes_ex[ind].imshow(ex, origin='upper')
+                except FileNotFoundError:
+                    print('Could not find file, so skipping')
+                    continue
 
         print(f'Reading in diagnostic png files..')
 
