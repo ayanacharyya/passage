@@ -794,8 +794,20 @@ if __name__ == "__main__":
             continue
 
         # ------------read in fits files--------------------------------
-        od_hdu = fits.open(args.work_dir / f'{args.field}_{args.id:05d}.1D.fits')
-        full_hdu = fits.open(args.work_dir / f'{args.field}_{args.id:05d}.full.fits')
+        od_filename = args.work_dir / f'{args.field}_{args.id:05d}.1D.fits'
+        full_filename = args.work_dir / f'{args.field}_{args.id:05d}.full.fits'
+
+        if os.path.exists(full_filename):
+            full_hdu = fits.open(full_filename)
+        else:
+            print('Full fits file does not exists, cannot proceed, so skipping..')
+            continue
+
+        if os.path.exists(od_filename):
+            od_hdu = fits.open(od_filename)
+        else:
+            print('1D fits file does not exists, cannot proceed, so skipping..')
+            continue
 
         # ----------determining global parameters------------
         args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
