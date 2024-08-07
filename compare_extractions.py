@@ -45,16 +45,17 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
 
     # ------determining directories and global variables---------
-    orig_path = args.input_dir / args.field / 'Extractions'
-    output_dir = args.output_dir / args.field
-    re_extraction_path = output_dir / 're_extracted'
-    quant_arr = ['line', 'stack', 'full']
-    id_arr = args.id
-
     args.plot_radial_profiles, args.only_seg, args.snr_cut = True, True, 3 #
     radial_plot_text = '_wradprof' if args.plot_radial_profiles else ''
     only_seg_text = '_onlyseg' if args.only_seg else ''
     snr_text = f'_snr{args.snr_cut:.1f}' if args.snr_cut is not None else ''
+    description_text = f'all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}'
+
+    orig_path = args.input_dir / args.field / 'Extractions'
+    output_dir = args.output_dir / args.field / f'{description_text}'
+    re_extraction_path = args.output_dir / args.field / 're_extracted'
+    quant_arr = ['line', 'stack', 'full']
+    id_arr = args.id
 
     # fig_zcomp = plot_redshift_comparison(args.field, directory=args.output_dir)
 
@@ -97,10 +98,10 @@ if __name__ == "__main__":
 
         print(f'Reading in diagnostic png files..')
 
-        old_diag = mpimg.imread(output_dir / f'{args.field}_{args.id:05d}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.png')
+        old_diag = mpimg.imread(output_dir / f'{args.field}_{args.id:05d}_{description_text}.png')
         axes_diag[0].imshow(old_diag, origin='upper')
 
-        new_diag = mpimg.imread(re_extraction_path / f'{args.field}_{args.id:05d}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.png')
+        new_diag = mpimg.imread(re_extraction_path / f'{args.field}_{args.id:05d}_{description_text}.png')
         axes_diag[1].imshow(new_diag, origin='upper')
 
         for ax in fig.axes:

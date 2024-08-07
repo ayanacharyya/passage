@@ -5,7 +5,7 @@
     Created: 26-07-24
     Example: run combine_diagnostics_and_extractions.py --field Par61 --keep --id 38
              run combine_diagnostics_and_extractions.py --field Par61 --keep --do_all_obj
-    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par061/ --rootname Par061_*_diagnostics_and_extractions.png --delay 0.1
+    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par061/diagnostics_and_extractions/ --rootname Par061_*_diagnostics_and_extractions.png --delay 0.1
 '''
 
 from header import *
@@ -19,15 +19,17 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
 
     # ------determining directories and global variables---------
-    extraction_path = args.input_dir / args.field / 'Extractions'
-    output_dir = args.output_dir / args.field
-    quant_arr = ['line', 'stack', 'full']
-    id_arr = args.id
-
     args.plot_radial_profiles, args.only_seg, args.snr_cut = True, True, 3 #
     radial_plot_text = '_wradprof' if args.plot_radial_profiles else ''
     only_seg_text = '_onlyseg' if args.only_seg else ''
     snr_text = f'_snr{args.snr_cut:.1f}' if args.snr_cut is not None else ''
+    description_text = f'all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}'
+    description_text2 = f'diagnostics_and_extractions'
+
+    extraction_path = args.input_dir / args.field / 'Extractions'
+    input_dir = args.output_dir / args.field / f'{description_text}'
+    quant_arr = ['line', 'stack', 'full']
+    id_arr = args.id
 
     if args.do_all_obj:
         try:
@@ -43,6 +45,9 @@ if __name__ == "__main__":
 
     if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
     if len(args.id_arr) > 10: args.hide = True # if too many plots, do not display them, just save them
+
+    output_dir = args.output_dir / args.field / f'{description_text2}'
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # ------------read in grizli images and plot comparison--------------------------------
     for index, args.id in enumerate(args.id_arr):
@@ -69,7 +74,7 @@ if __name__ == "__main__":
         print(f'Reading in diagnostic png files..')
 
         try:
-            diag = mpimg.imread(output_dir / f'{args.field}_{args.id:05d}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.png')
+            diag = mpimg.imread(input_dir / f'{args.field}_{args.id:05d}_{description_text}.png')
             axes_diag.imshow(diag, origin='upper')
         except FileNotFoundError:
             print('Could not find file, so skipping')
@@ -80,7 +85,7 @@ if __name__ == "__main__":
             ax.yaxis.set_visible(False)
         fig.subplots_adjust(left=0.01, bottom=0.01, top=0.99, right=0.99, hspace=0.0, wspace=0.0)
 
-        figname = output_dir / f'{args.field}_{args.id:05d}_diagnostics_and_extractions.png'
+        figname =  output_dir / f'{args.field}_{args.id:05d}_{description_text2}.png'
         fig.savefig(figname, dpi=400)
         print(f'Saved figure at {figname}')
         if args.hide: plt.close('all')

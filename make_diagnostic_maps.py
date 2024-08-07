@@ -9,7 +9,7 @@
              run make_diagnostic_maps.py --field Par50 --id 823 --plot_radial_profiles --only_seg --snr_cut 3 --plot_mappings
              run make_diagnostic_maps.py --field Par51 --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
              run make_diagnostic_maps.py --field Par51 --re_extract --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
-    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
+    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
 from header import *
@@ -722,10 +722,10 @@ if __name__ == "__main__":
     snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
     only_seg_text = '_onlyseg' if args.only_seg else ''
     pixscale_text = '' if args.pixscale == 0.04 else f'_{args.pixscale}arcsec_pix'
+    description_text = f'all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}'
 
     output_dir = args.output_dir / args.field
     if args.re_extract: output_dir = output_dir / 're_extracted'
-    output_dir.mkdir(parents=True, exist_ok=True)
     outfilename = output_dir / f'{args.field}_all_diag_results.txt'
 
     try:
@@ -738,18 +738,20 @@ if __name__ == "__main__":
     if args.do_all_obj:
         if args.re_extract: args.id_arr = ids_to_re_extract_dict[args.field]
         else: args.id_arr = catalog['NUMBER'] if 'NUMBER' in catalog.columns else catalog['id']
+        output_dir = output_dir / f'{description_text}'
     else:
         args.id_arr = args.id
 
     if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # ---------for diplay and amimations----------------
     if len(args.id_arr) > 10: args.hide = True # if too many plots, do not display them, just save them
-    if len(args.id_arr) > 20: args.make_anim = True
+    if len(args.id_arr) > 20: args.make_anim = False #True
     else: args.make_anim = False
 
     if args.make_anim:
-        outputfile = output_dir / f'{args.field}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.mp4'
+        outputfile = output_dir / f'{args.field}_{description_text}.mp4'
         duration_per_frame = 0.1 #sec
         writer = imageio.get_writer(outputfile, mode='I', fps=int(1. / duration_per_frame))
 
@@ -902,7 +904,7 @@ if __name__ == "__main__":
         # ---------decorating and saving the figure------------------------------
         fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
         figdir = output_dir if args.do_all_obj else output_subdir
-        figname = figdir / f'{args.field}_{args.id:05d}_all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}.png'
+        figname = figdir / f'{args.field}_{args.id:05d}_{description_text}.png'
         fig.savefig(figname)
         print(f'Saved figure at {figname}')
         if args.hide: plt.close('all')
