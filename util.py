@@ -55,8 +55,7 @@ def parse_args():
 
     # ------- args added for run_passagepipe.py ------------------------------
     parser.add_argument('--dry_run', dest='dry_run', action='store_true', default=False, help='Do a dry run i.e., only make the config file without actually running PASSAGEPipe? Default is no.')
-    parser.add_argument('--do_all_steps', dest='do_all_steps', action='store_true', default=False, help='Do all stages of PASSAGEPipe? Default is no.')
-    parser.add_argument('--start_step', metavar='start_step', type=int, action='store', default=None, help='Starting step for PASSAGEPipe. Default is None')
+    parser.add_argument('--start_step', metavar='start_step', type=int, action='store', default=1, help='Starting step for PASSAGEPipe. Default is first step')
     parser.add_argument('--do_download', dest='do_download', action='store_true', default=False, help='Do stage 1 of PASSAGEPipe? Default is no.')
     parser.add_argument('--do_prep', dest='do_prep', action='store_true', default=False, help='Do stage 2 of PASSAGEPipe? Default is no.')
     parser.add_argument('--do_image', dest='do_image', action='store_true', default=False, help='Do stage 3 of PASSAGEPipe? Default is no.')

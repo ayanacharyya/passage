@@ -6,8 +6,9 @@
     Example: run run_passagepipe.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --id 3667
              run run_passagepipe.py --Par 009 --zmin 1.5 --zmax 5 --start_id 70
              run run_passagepipe.py --field Par6 --zmin 0.5 --zmax 3.8 --filters F115W,F150W --start_step 5 --start_id 121
-             run run_passagepipe.py --field Par61 --zmin 0.1 --zmax 8 --filters F115W,F150W --start_step 1
-             run run_passagepipe.py --field Par27 --zmin 0.1 --zmax 8 --filters F115W,F150W,F200W --start_step 1
+             run run_passagepipe.py --field Par61 --zmin 0.1 --zmax 8 --filters F115W,F150W
+             run run_passagepipe.py --field Par27 --zmin 0.1 --zmax 8 --filters F115W,F150W,F200W
+             run run_passagepipe.py --field Par40 --zmin 0.1 --zmax 8 --filters F115W,F150W,F200W
 '''
 
 from header import *
@@ -27,31 +28,20 @@ if __name__ == "__main__":
     filters_text = '\n      '.join([f'- {item}' for item in args.filters])
     force_ref_file = f'{args.field}-ir_drz_sci.fits'
 
-    if args.do_all_steps:
+    if args.start_step <=1:
         args.do_download = True
         args.download_from_mast = True
         args.redo_level1 = True
+    if args.start_step <=2:
         args.do_prep = True
+    if args.start_step <=3:
         args.do_image = True
+    if args.start_step <=4:
         args.do_grism = True
+    if args.start_step <=5:
         args.do_extract = True
+    if args.start_step <=6:
         args.do_post = True
-
-    if args.start_step is not None:
-        if args.start_step <=1:
-            args.do_download = True
-            args.download_from_mast = True
-            args.redo_level1 = True
-        if args.start_step <=2:
-            args.do_prep = True
-        if args.start_step <=3:
-            args.do_image = True
-        if args.start_step <=4:
-            args.do_grism = True
-        if args.start_step <=5:
-            args.do_extract = True
-        if args.start_step <=6:
-            args.do_post = True
 
     # ----------replacing keywords in config file template to make the actual config file---------
     config_template = args.input_dir / 'config_files/passage_config_template.txt'
