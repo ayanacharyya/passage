@@ -295,3 +295,45 @@ def watson_function(img_hdul_orig, img_hdul_new):
 
     return x_p, y_p
 
+# -------------------------------------------------------------------------------------------------------
+def get_detection_fraction(field, line, EW_thresh=300, filters=['F115W', 'F150W', 'F200W']):
+    '''
+    To compute fraction of objects in a given field that have a given line detected (beyond a given EW threshold)
+    out of all objects where the line was accessible in the given filter wavelength regime
+    Prints out results, and returns subset dataframe
+    '''
+    zrange_arr = get_zranges_for_filters(line, filters=filters)[0]
+
+    input_dir = Path('/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output')
+    outfilename = input_dir / f'{field}' / f'{field}_all_diag_results.txt'
+    df = pd.read_table(outfilename, delim_whitespace=True)
+
+    dfline = pd.DataFrame()
+    for zrange in zrange_arr:
+        dfsub = df[(df['redshift'].between(zrange[0], zrange[1]))]
+        print(f'{len(dfsub)} objects within z range {zrange}')
+        dfline = pd.concat([dfline, dfsub])
+
+    dfline_detected = dfline[dfline[f'{line}_EW'] > EW_thresh]
+
+    print(f'{len(dfline_detected)} out of {len(dfline)} (out of total {len(df)}) has strong {line} detections!')
+
+    # ------plot histogram of line EWs--------
+    fig, ax = plt.subplots()
+    ax.hist(np.log10(dfsub[f'{line}_EW']), bins=50)
+    ax.axvline(np.log10(EW_thresh), c='k', lw=2, ls='dashed')
+
+    ax.set_ylabel('#objects')
+    ax.set_xlabel(f'log {line} EW (A)')
+    figname = input_dir / f'{field}' / f'{field}_{line}_EW_histogram.png'
+    fig.savefig(figname)
+    print(f'Saved figure as {figname}')
+    plt.show(block=False)
+
+    return dfline_detected
+
+
+
+
+
+
