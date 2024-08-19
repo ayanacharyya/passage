@@ -7,7 +7,7 @@
              run get_field_stats.py --field Par61 --mag_lim 26 --line_list OII,OIII,Ha
              run get_field_stats.py --mag_lim 26 --line_list OIII --do_all_fields --clobber
              run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --zmin 1 --zmax 2.5 --merge_visual --plot_conditions detected,z,mag,tail,RQ,strong_OIII,PA
-             run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --merge_visual --plot_conditions detected,mag,tail,RQ
+             run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --plot_conditions detected,mag,compact
 '''
 from header import *
 from util import *
