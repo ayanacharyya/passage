@@ -34,7 +34,7 @@ import pandas as pd
 from tqdm import tqdm
 from importlib import reload
 from PIL import Image
-from venn import venn
+from venn import venn,pseudovenn
 
 import vorbin
 from vorbin.voronoi_2d_binning import voronoi_2d_binning

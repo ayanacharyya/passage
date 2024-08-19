@@ -6,12 +6,25 @@
     Example: run get_field_stats.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --re_extract
              run get_field_stats.py --field Par61 --mag_lim 26 --line_list OII,OIII,Ha
              run get_field_stats.py --mag_lim 26 --line_list OIII --do_all_fields --clobber
-             run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --zmin 1 --zmax 2.5 --merge_visual --plot_conditions detected,z,mag,tail
+             run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --zmin 1 --zmax 2.5 --merge_visual --plot_conditions detected,z,mag,tail,RQ,strong_OIII,PA
+             run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --merge_visual --plot_conditions detected,mag,tail,RQ
 '''
 from header import *
 from util import *
 
 start_time = datetime.now()
+
+# -------------------------------------------------------------------------------------------------------
+def atoi(text):
+    return int(text) if text.isdigit() else text
+
+def natural_keys(text):
+    '''
+    alist.sort(key=natural_keys) sorts in human order
+    http://nedbatchelder.com/blog/200712/human_sorting.html
+    (See Toothy's implementation in the comments)
+    '''
+    return [ atoi(c) for c in re.split(r'(\d+)', text) ]
 
 # -------------------------------------------------------------------------------------------------------
 def make_set(df, condition, label, set_arr, label_arr):
@@ -30,9 +43,10 @@ def plot_venn(df, args):
     '''
     To plot Venn diagrams with a given df, for a bunch of criteria
     Plots and saves the figure
-    Returns figure handle
+    Returns intersecting dataframe
     '''
     df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)
+    print(f'\nOut of the total {len(df)} objects..\n')
 
     set_arr = []
     label_arr = []
@@ -54,17 +68,32 @@ def plot_venn(df, args):
     condition = df['mag'] <= mag_lim
     set_arr, label_arr = make_set(df, condition, f'mag <= {mag_lim}', set_arr, label_arr)
 
-    # ---------add sets from visual inspection------------
-    if 'Notes' in df:
-        for attribute in ['compact', 'tail', 'strong', 'merging', 'neighbour', 'clumpy', 'bulge', 'pea', 'bar']:
-            condition1 = df['Notes'].str.contains(attribute)
-            set_arr, label_arr = make_set(df, condition1, attribute, set_arr, label_arr)
-
     # ------add redshift range set-----------
     condition = df['redshift'].between(args.zmin, args.zmax)
     set_arr, label_arr = make_set(df, condition, f'{args.zmin}<z<{args.zmax}', set_arr, label_arr)
 
-    # ----------plot the enn diagrams----------
+    # ---------add sets from visual inspection------------
+    if 'Notes' in df:
+        print('\n')
+        for attribute in ['compact', 'tail', 'merging', 'neighbour', 'clumpy', 'bulge', 'pea', 'bar', 'mg']:
+            condition = df['Notes'].str.contains(attribute)
+            set_arr, label_arr = make_set(df, condition, attribute, set_arr, label_arr)
+
+        print('\n')
+        for strong_line in ['OIII', 'Ha']:
+            condition = (df[f'{strong_line} emission'].str.contains('strong')) & (df_visual['OIII emission'].str != np.nan)
+            set_arr, label_arr = make_set(df, condition, f'strong_{strong_line}', set_arr, label_arr)
+
+        print('\n')
+        condition = df['DQ/RQ'].str.contains('okay')
+        set_arr, label_arr = make_set(df, condition, 'RQ = okay', set_arr, label_arr)
+
+        condition = df['nPA'] == 2
+        set_arr, label_arr = make_set(df, condition, '#PA = 2', set_arr, label_arr)
+
+    print('\n')
+
+    # ----------plot the venn diagrams----------
     which_sets_to_plot = [np.array([item1 in item2 for item1 in args.plot_conditions]).any() for item2 in label_arr]
     cmap = 'plasma'
     set_arr = np.array(set_arr)[which_sets_to_plot]
@@ -76,6 +105,8 @@ def plot_venn(df, args):
 
     venn(dataset_dict, cmap=cmap, fmt='{size}', fontsize=8, legend_loc='upper left', ax=ax)
 
+    # ----------annotate and save the diagram----------
+    fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
     if args.do_all_fields:
         fig.text(0.99, 0.99, f'Par{args.field_text}', c='k', ha='right', va='top', transform=ax.transAxes)
         figname = args.output_dir / f'Par{args.field_text}_venn_diagram.png'
@@ -86,6 +117,17 @@ def plot_venn(df, args):
     fig.savefig(figname)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
+
+    # ----------deriving the dataframe corresponding to the innermost intersection----------
+    intersecting_set = set.intersection(*set_arr)
+    intersecting_par_obj = np.transpose([item.split('-') for item in list(intersecting_set)])
+    df_int = pd.DataFrame({'field': intersecting_par_obj[0], 'objid':intersecting_par_obj[1]})
+    df_int['objid'] = df_int['objid'].astype(int)
+    df_int = df.merge(df_int, on=['field', 'objid'], how='inner')
+    df_int.drop('par_obj', axis=1, inplace=True)
+    if 'NUMBER' in df_int: df_int.drop('NUMBER', axis=1, inplace=True)
+
+    return df_int
 
 
 # -------------------------------------------------------------------------------------------------------
@@ -158,6 +200,7 @@ def read_stats_df(df_filename, args):
         catalog_df = catalog['NUMBER', 'MAG_AUTO'].to_pandas()
         df = df.merge(catalog_df, left_on='objid', right_on='NUMBER', how='inner')
         df.rename(columns={'MAG_AUTO':'mag'}, inplace=True)
+        df.drop('NUMBER', axis=1, inplace=True)
     else:
         df['mag'] = np.nan
 
@@ -196,6 +239,7 @@ if __name__ == "__main__":
     lines_to_consider = args.line_list # ['OII', 'OIII'] # OR
     if args.do_all_fields:
         available_fields = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.output_dir / 'Par*') + '/')]
+        available_fields.sort(key=natural_keys)
     else:
         available_fields = [args.field]
 
@@ -210,7 +254,9 @@ if __name__ == "__main__":
         print(f'Reading in existing {df_visual_filename}')
         df_visual = pd.read_csv(df_visual_filename)
 
-        args.field_text = ','.join([str(int(item[3:])) for item in pd.unique(df_stats['field'])])
+        has_fields = [str(int(item[3:])) for item in pd.unique(df_stats['field'])]
+        has_fields.sort(key=natural_keys)
+        args.field_text = ','.join(has_fields)
     else:
         df_stats = pd.DataFrame()
         df_visual = pd.DataFrame()
@@ -254,8 +300,9 @@ if __name__ == "__main__":
         df_detected = get_detection_fraction(df_stats, line, args)
 
     # ------------doing the venn diagrams--------------------
-    if args.merge_visual: df = pd.merge(df_stats, df_visual, on=['field', 'objid'], how='inner')
+    conditions_from_visual = ['compact', 'tail', 'merging', 'neighbour', 'clumpy', 'bulge', 'pea', 'bar', 'mg', 'RQ', 'PA']
+    if args.merge_visual or len(set(conditions_from_visual).intersection(set(args.plot_conditions))) > 0: df = pd.merge(df_stats, df_visual, on=['field', 'objid'], how='inner')
     else: df = df_stats
-    plot_venn(df, args)
+    df_int = plot_venn(df, args)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
