@@ -120,12 +120,15 @@ def plot_venn(df, args):
 
     # ----------deriving the dataframe corresponding to the innermost intersection----------
     intersecting_set = set.intersection(*set_arr)
-    intersecting_par_obj = np.transpose([item.split('-') for item in list(intersecting_set)])
-    df_int = pd.DataFrame({'field': intersecting_par_obj[0], 'objid':intersecting_par_obj[1]})
-    df_int['objid'] = df_int['objid'].astype(int)
-    df_int = df.merge(df_int, on=['field', 'objid'], how='inner')
-    df_int.drop('par_obj', axis=1, inplace=True)
-    if 'NUMBER' in df_int: df_int.drop('NUMBER', axis=1, inplace=True)
+    if len(intersecting_set) > 0:
+        intersecting_par_obj = np.transpose([item.split('-') for item in list(intersecting_set)])
+        df_int = pd.DataFrame({'field': intersecting_par_obj[0], 'objid':intersecting_par_obj[1]})
+        df_int['objid'] = df_int['objid'].astype(int)
+        df_int = df.merge(df_int, on=['field', 'objid'], how='inner')
+        df_int.drop('par_obj', axis=1, inplace=True)
+        if 'NUMBER' in df_int: df_int.drop('NUMBER', axis=1, inplace=True)
+    else:
+        df_int = pd.DataFrame()
 
     return df_int
 
