@@ -42,7 +42,7 @@ def plot_venn(df, args):
     for line in line_list:
         condition1 = (np.isfinite(df[f'{line}_EW'])) & (df[f'{line}_EW'] > 0)
         df_line = df[condition1]
-        #set_arr, label_arr = make_set(df, condition1, f'{line}_present', set_arr, label_arr)
+        set_arr, label_arr = make_set(df, condition1, f'{line}_present', set_arr, label_arr)
 
         condition2 = df_line[f'{line}_EW'] > args.EW_thresh
         set_arr, label_arr = make_set(df_line, condition2, f'{line}_detected', set_arr, label_arr)
