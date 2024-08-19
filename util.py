@@ -66,7 +66,7 @@ def parse_args():
     parser.add_argument('--download_from_mast', dest='download_from_mast', action='store_true', default=False, help='Download from MAST? Default is no.')
     parser.add_argument('--clobber_download', dest='clobber_download', action='store_true', default=False, help='Over-write existing files during downloading from MAST? Default is no.')
     parser.add_argument('--redo_level1', dest='redo_level1', action='store_true', default=False, help='Re-do Level1 of processing during stage 1 of PASSAGEPipe? Default is no.')
-    parser.add_argument('--filters', metavar='filters', type=str, action='store', default='F115W', help='Which filters are included for this field? Default is F115W')
+    parser.add_argument('--filters', metavar='filters', type=str, action='store', default=None, help='Which filters are included for this field? Default is None')
     parser.add_argument('--magmin', metavar='magmin', type=float, action='store', default=16, help='magnitude lower limit for refined magnitude search during PASSAGEPipe; default is 16')
     parser.add_argument('--start_id', metavar='start_id', type=int, action='store', default=0, help='Starting ID of the object whose spectra is to be extracted. Default is 0')
     parser.add_argument('--stop_id', metavar='stop_id', type=int, action='store', default=10000, help='Stopping ID of the object whose spectra is to be extracted. Default is all IDs till the end of the list')
@@ -85,12 +85,15 @@ def parse_args():
     parser.add_argument('--plot_mappings', dest='plot_mappings', action='store_true', default=False, help='Plot emission line locations as per MAPPINGS predictions (will lead to crowding of many lines)? Default is no.')
     parser.add_argument('--hide', dest='hide', action='store_true', default=False, help='Hide (do not display) the plots just made? Default is no.')
 
+    # ------- args added for get_field_stats.py ------------------------------
+    parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300, help='EW threshold to consider good detection for emission line maps; default is 300')
+    parser.add_argument('--do_all_fields', dest='do_all_fields', action='store_true', default=False, help='Include ALL available fields? Default is no.')
+
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
     if 'Par' in args.field: args.field = f'Par{int(args.field.split("Par")[1]):03d}'
     args.id = [int(item) for item in args.id.split(',')]
-    args.filters = args.filters.split(',')
 
     if args.system == 'hd' and not os.path.exists('/Volumes/Elements/'): args.system = 'local'
     if args.line_list == 'all': args.line_list = ['Lya', 'OII', 'Hb', 'OIII-4363', 'OIII', 'Ha', 'NII','Ha+NII', 'SII', 'SIII', 'PaD','PaG','PaB','HeI-1083','PaA']
@@ -106,6 +109,12 @@ def parse_args():
     args.input_dir = Path(args.input_dir)
     args.output_dir = Path(args.output_dir)
     args.code_dir = Path(args.code_dir)
+
+    if args.filters is None:
+        if args.field in filter_dict: args.filters = filter_dict[args.field]
+        else: args.filters = ['F115W'] # default
+    else:
+        args.filters = args.filters.split(',')
 
     return args
 
@@ -174,7 +183,7 @@ def get_zrange_for_line(line, obs_wave_range=[800, 2200]):
     Input wavelengths must be in nm
     Returns min and max redshift
     '''
-    rest_wave_dict = {'OII': 372.7, 'Hd': 434.0, 'OIII': 436.3, 'Hb': 486.1, 'Ha+NII': 655.5, 'Ha': 656.2, 'SII': 671.7,
+    rest_wave_dict = {'Lya': 121.6, 'OII': 372.7, 'Hd': 434.0, 'OIII-4363': 436.3, 'Hb': 486.1, 'OIII': 500.7, 'Ha+NII': 655.5, 'Ha': 656.2, 'SII': 671.7,
                       'SIII': 953.0, 'PaD': 1004.6, 'PaG': 1093.5, 'PaB': 1281.4,
                       'PaA': 1874.5}  # approximate wavelengths in nm
 

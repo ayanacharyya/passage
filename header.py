@@ -92,3 +92,18 @@ ids_to_re_extract_dict = {'Par051': [141, 159, 179, 207, 220, 239, 285, 304, 315
                2515, 2516, 2584, \
                2655, 2772,
                2777]} # IDs determined by visual inspection, to re-extract the spectra using wider (0.1 < z < 8) z constraints, and perhaps better choices for other parameters too
+
+filter_dict = {'Par061':['F115W', 'F150W'], \
+               'Par009': ['F115W', 'F150W'], \
+               'Par006': ['F115W', 'F150W'], \
+               'Par024': ['F115W', 'F150W'], \
+               'Par040': ['F115W', 'F150W', 'F200W'], \
+               'Par050': ['F115W', 'F150W', 'F200W'], \
+               'Par051': ['F115W'], \
+               'Par042': ['F115W', 'F150W', 'F200W'], \
+               'Par027': ['F115W', 'F150W', 'F200W'], \
+               'Par028': ['F115W', 'F150W', 'F200W'], \
+               'Par008': ['F115W', 'F150W'], \
+               'Par034': ['F115W', 'F150W', 'F200W'], \
+               'Par021': ['F115W', 'F150W', 'F200W'], \
+               }
