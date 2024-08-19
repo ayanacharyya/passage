@@ -6,7 +6,7 @@
     Example: run get_field_stats.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --re_extract
              run get_field_stats.py --field Par61 --mag_lim 26 --line_list OII,OIII,Ha
              run get_field_stats.py --mag_lim 26 --line_list OIII --do_all_fields --clobber
-             run get_field_stats.py --mag_lim 26 --line_list OIII --do_all_fields --plot_venn --merge_visual --zmin 1 --zmax 2.5
+             run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --zmin 1 --zmax 2.5 --merge_visual --plot_conditions detected,z,mag,tail
 '''
 from header import *
 from util import *
@@ -37,12 +37,12 @@ def plot_venn(df, args):
     label_arr = []
 
     # ---------add line sets------------
-    line_list = ['OII', 'OIII']
+    line_list = args.line_list
 
     for line in line_list:
         condition1 = (np.isfinite(df[f'{line}_EW'])) & (df[f'{line}_EW'] > 0)
         df_line = df[condition1]
-        set_arr, label_arr = make_set(df, condition1, f'{line}_present', set_arr, label_arr)
+        #set_arr, label_arr = make_set(df, condition1, f'{line}_present', set_arr, label_arr)
 
         condition2 = df_line[f'{line}_EW'] > args.EW_thresh
         set_arr, label_arr = make_set(df_line, condition2, f'{line}_detected', set_arr, label_arr)
@@ -53,17 +53,20 @@ def plot_venn(df, args):
     condition = df['mag'] <= mag_lim
     set_arr, label_arr = make_set(df, condition, f'mag <= {mag_lim}', set_arr, label_arr)
 
-    # ---------add compactness set------------
+    # ---------add sets from visual inspection------------
     if 'Notes' in df:
-        condition = df['Notes'].str.contains('compact')
-        set_arr, label_arr = make_set(df, condition, f'compact', set_arr, label_arr)
+        condition1 = df['Notes'].str.contains('compact')
+        set_arr, label_arr = make_set(df, condition1, f'compact', set_arr, label_arr)
+
+        condition2 = df['Notes'].str.contains('tail')
+        set_arr, label_arr = make_set(df, condition2, f'tail', set_arr, label_arr)
 
     # ------add redshift range set-----------
     condition = df['redshift'].between(args.zmin, args.zmax)
     set_arr, label_arr = make_set(df, condition, f'{args.zmin}<z<{args.zmax}', set_arr, label_arr)
 
     # ----------plot the enn diagrams----------
-    which_sets_to_plot = [1, 3, 4, 5, 6]
+    which_sets_to_plot = [np.array([item1 in item2 for item1 in args.plot_conditions]).any() for item2 in label_arr]
     cmap = 'plasma'
     set_arr = np.array(set_arr)[which_sets_to_plot]
     label_arr = np.array(label_arr)[which_sets_to_plot]

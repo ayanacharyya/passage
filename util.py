@@ -90,6 +90,7 @@ def parse_args():
     parser.add_argument('--do_all_fields', dest='do_all_fields', action='store_true', default=False, help='Include ALL available fields? Default is no.')
     parser.add_argument('--plot_venn', dest='plot_venn', action='store_true', default=False, help='Plot Venn diagrams? Default is no.')
     parser.add_argument('--merge_visual', dest='merge_visual', action='store_true', default=False, help='Include visually inspected dataframe for Venn diagrams? Default is no.')
+    parser.add_argument('--plot_conditions', metavar='plot_conditions', type=str, action='store', default='detected', help='Which conditions are plotted in the Venn diagram? Default is None')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
@@ -117,6 +118,8 @@ def parse_args():
         else: args.filters = ['F115W'] # default
     else:
         args.filters = args.filters.split(',')
+
+    args.plot_conditions = args.plot_conditions.split(',')
 
     return args
 
