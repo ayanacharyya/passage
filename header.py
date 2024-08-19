@@ -24,6 +24,7 @@ import json
 import regions
 import shutil
 import drizzlepac
+import subprocess
 
 from datetime import datetime, timedelta
 from collections import defaultdict

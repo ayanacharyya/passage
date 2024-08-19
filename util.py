@@ -296,43 +296,27 @@ def watson_function(img_hdul_orig, img_hdul_new):
     return x_p, y_p
 
 # -------------------------------------------------------------------------------------------------------
-def get_detection_fraction(field, line, EW_thresh=300, filters=['F115W', 'F150W', 'F200W']):
+def copy_from_hd_to_local(files_to_move=['*.txt', '*.png']):
     '''
-    To compute fraction of objects in a given field that have a given line detected (beyond a given EW threshold)
-    out of all objects where the line was accessible in the given filter wavelength regime
-    Prints out results, and returns subset dataframe
+    To copy all less heavy files (all txt and png) of each existing field in the HD to corresponding location locally
     '''
-    zrange_arr = get_zranges_for_filters(line, filters=filters)[0]
+    hd_path = Path('/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output')
+    local_path = Path('/Users/acharyya/Work/astro/passage/passage_output')
 
-    input_dir = Path('/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output')
-    outfilename = input_dir / f'{field}' / f'{field}_all_diag_results.txt'
-    df = pd.read_table(outfilename, delim_whitespace=True)
+    available_fields = [os.path.split(item)[-1] for item in glob.glob(str(hd_path / 'Par*'))]
 
-    dfline = pd.DataFrame()
-    for zrange in zrange_arr:
-        dfsub = df[(df['redshift'].between(zrange[0], zrange[1]))]
-        print(f'{len(dfsub)} objects within z range {zrange}')
-        dfline = pd.concat([dfline, dfsub])
+    for index, field in enumerate(available_fields):
+        print(f'Doing field {field} which is {index+1} out of {len(available_fields)}..')
+        dest_dir =local_path / field
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        for files in files_to_move:
+            target_files = str(hd_path / field / files)
+            command = f'cp {target_files} {str(dest_dir)}/.'
+            print(command)
+            try: dummy = subprocess.check_output([command], shell=True)
+            except: print('No such files. Skipping..')
 
-    dfline_detected = dfline[dfline[f'{line}_EW'] > EW_thresh]
-
-    print(f'{len(dfline_detected)} out of {len(dfline)} (out of total {len(df)}) has strong {line} detections!')
-
-    # ------plot histogram of line EWs--------
-    fig, ax = plt.subplots()
-    ax.hist(np.log10(dfsub[f'{line}_EW']), bins=50)
-    ax.axvline(np.log10(EW_thresh), c='k', lw=2, ls='dashed')
-
-    ax.set_ylabel('#objects')
-    ax.set_xlabel(f'log {line} EW (A)')
-    figname = input_dir / f'{field}' / f'{field}_{line}_EW_histogram.png'
-    fig.savefig(figname)
-    print(f'Saved figure as {figname}')
-    plt.show(block=False)
-
-    return dfline_detected
-
-
+    print('All done')
 
 
 
