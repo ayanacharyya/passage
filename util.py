@@ -88,6 +88,8 @@ def parse_args():
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300, help='EW threshold to consider good detection for emission line maps; default is 300')
     parser.add_argument('--do_all_fields', dest='do_all_fields', action='store_true', default=False, help='Include ALL available fields? Default is no.')
+    parser.add_argument('--plot_venn', dest='plot_venn', action='store_true', default=False, help='Plot Venn diagrams? Default is no.')
+    parser.add_argument('--merge_visual', dest='merge_visual', action='store_true', default=False, help='Include visually inspected dataframe for Venn diagrams? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()

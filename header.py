@@ -34,6 +34,7 @@ import pandas as pd
 from tqdm import tqdm
 from importlib import reload
 from PIL import Image
+from venn import venn
 
 import vorbin
 from vorbin.voronoi_2d_binning import voronoi_2d_binning
@@ -47,6 +48,7 @@ import matplotlib
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 import matplotlib.image as mpimg
+from matplotlib_venn import venn2,venn3
 
 from astropy.table import Table
 from astropy import units as u

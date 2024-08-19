@@ -6,11 +6,85 @@
     Example: run get_field_stats.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --re_extract
              run get_field_stats.py --field Par61 --mag_lim 26 --line_list OII,OIII,Ha
              run get_field_stats.py --mag_lim 26 --line_list OIII --do_all_fields --clobber
+             run get_field_stats.py --mag_lim 26 --line_list OIII --do_all_fields --plot_venn --merge_visual --zmin 1 --zmax 2.5
 '''
 from header import *
 from util import *
 
 start_time = datetime.now()
+
+# -------------------------------------------------------------------------------------------------------
+def make_set(df, condition, label, set_arr, label_arr):
+    '''
+    Applies the given condition on given df and appends the ID list into a set and assigns a label
+    '''
+    id_list = df[condition]['par_obj'].values
+    set_arr.append(set(id_list))
+    label_arr.append(label)
+
+    return set_arr, label_arr
+
+# -------------------------------------------------------------------------------------------------------
+def plot_venn(df, args):
+    '''
+    To plot Venn diagrams with a given df, for a bunch of criteria
+    Plots and saves the figure
+    Returns figure handle
+    '''
+    df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)
+
+    set_arr = []
+    label_arr = []
+
+    # ---------add line sets------------
+    line_list = ['OII', 'OIII']
+
+    for line in line_list:
+        condition1 = (np.isfinite(df[f'{line}_EW'])) & (df[f'{line}_EW'] > 0)
+        df_line = df[condition1]
+        set_arr, label_arr = make_set(df, condition1, f'{line}_present', set_arr, label_arr)
+
+        condition2 = df_line[f'{line}_EW'] > args.EW_thresh
+        set_arr, label_arr = make_set(df_line, condition2, f'{line}_detected', set_arr, label_arr)
+
+    # ---------add magnitude set------------
+    if args.mag_lim is None: mag_lim = 26
+    else: mag_lim = args.mag_lim
+    condition = df['mag'] <= mag_lim
+    set_arr, label_arr = make_set(df, condition, f'mag <= {mag_lim}', set_arr, label_arr)
+
+    # ---------add compactness set------------
+    if 'Notes' in df:
+        condition = df['Notes'].str.contains('compact')
+        set_arr, label_arr = make_set(df, condition, f'compact', set_arr, label_arr)
+
+    # ------add redshift range set-----------
+    condition = df['redshift'].between(args.zmin, args.zmax)
+    set_arr, label_arr = make_set(df, condition, f'{args.zmin}<z<{args.zmax}', set_arr, label_arr)
+
+    # ----------plot the enn diagrams----------
+    which_sets_to_plot = [1, 3, 4, 5, 6]
+    cmap = 'plasma'
+    set_arr = np.array(set_arr)[which_sets_to_plot]
+    label_arr = np.array(label_arr)[which_sets_to_plot]
+    dataset_dict = dict(zip(label_arr, set_arr))
+
+    fig = plt.figure()
+    ax = plt.gca()
+
+    venn(dataset_dict, cmap=cmap, fmt='{size}', fontsize=8, legend_loc='upper left', ax=ax)
+
+    if args.do_all_fields:
+        fig.text(0.99, 0.99, f'Par{args.field_text}', c='k', ha='right', va='top', transform=ax.transAxes)
+        figname = args.output_dir / f'Par{args.field_text}_venn_diagram.png'
+    else:
+        fig.text(0.99, 0.99, args.field, c='k', ha='right', va='top', transform=ax.transAxes)
+        figname = args.output_dir / f'{args.field}' / f'{args.field}_venn_diagram.png'
+
+    fig.savefig(figname)
+    print(f'Saved figure as {figname}')
+    plt.show(block=False)
+
 
 # -------------------------------------------------------------------------------------------------------
 def get_detection_fraction(df, line, args):
@@ -98,6 +172,7 @@ def read_visual_df(args):
 
     try:
         df = pd.read_excel(gsheet_url, sheetname,  skiprows=4 if '51' in args.field else 2)
+        df['field'] = args.field
     except ValueError:
         print(f'Field {args.field} has no visual inspection sheet')
         df = pd.DataFrame()
@@ -105,6 +180,8 @@ def read_visual_df(args):
     if 'z1' in df and 'z2' in df:
         df.rename(columns={'z2':'z'}, inplace=True)
         df.drop('z1', axis=1, inplace=True)
+
+    df.rename(columns={'ID':'objid'}, inplace=True)
 
     return df
 
@@ -169,10 +246,14 @@ if __name__ == "__main__":
             df_visual.to_csv(df_visual_filename, index=None, na_rep='NULL')
             print(f'Saved master stats df in {df_visual_filename}')
 
-    # ------------doing the calculations--------------------
+    # ------------doing the line histograms--------------------
     for index, line in enumerate(lines_to_consider):
         print(f'Doing line {line} which is {index+1} of {len(lines_to_consider)}..')
         df_detected = get_detection_fraction(df_stats, line, args)
 
+    # ------------doing the venn diagrams--------------------
+    if args.merge_visual: df = pd.merge(df_stats, df_visual, on=['field', 'objid'], how='inner')
+    else: df = df_stats
+    plot_venn(df, args)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
