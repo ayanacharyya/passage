@@ -19,6 +19,7 @@ def make_set(df, condition, label, set_arr, label_arr):
     Applies the given condition on given df and appends the ID list into a set and assigns a label
     '''
     id_list = df[condition]['par_obj'].values
+    print(f'{len(id_list)} objects meet the {label} condition')
     set_arr.append(set(id_list))
     label_arr.append(label)
 
@@ -55,11 +56,9 @@ def plot_venn(df, args):
 
     # ---------add sets from visual inspection------------
     if 'Notes' in df:
-        condition1 = df['Notes'].str.contains('compact')
-        set_arr, label_arr = make_set(df, condition1, f'compact', set_arr, label_arr)
-
-        condition2 = df['Notes'].str.contains('tail')
-        set_arr, label_arr = make_set(df, condition2, f'tail', set_arr, label_arr)
+        for attribute in ['compact', 'tail', 'strong', 'merging', 'neighbour', 'clumpy', 'bulge', 'pea', 'bar']:
+            condition1 = df['Notes'].str.contains(attribute)
+            set_arr, label_arr = make_set(df, condition1, attribute, set_arr, label_arr)
 
     # ------add redshift range set-----------
     condition = df['redshift'].between(args.zmin, args.zmax)
