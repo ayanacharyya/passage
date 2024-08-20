@@ -101,19 +101,18 @@ def plot_venn(df, args):
     label_arr = np.array(label_arr)[which_sets_to_plot]
     dataset_dict = dict(zip(label_arr, set_arr))
 
-    fig = plt.figure()
-    ax = plt.gca()
+    # ---------manually calling draw_venn() so as to modify petal labels----------
+    petal_labels = generate_petal_labels(dataset_dict.values(), fmt="{size}")
+    petal_labels = {logic: value if int(value) > 0 else '' for logic, value in petal_labels.items()}
+    ax = draw_venn(petal_labels=petal_labels, dataset_labels=dataset_dict.keys(), hint_hidden=False, colors=generate_colors(cmap=cmap, n_colors=len(label_arr)), figsize=(8, 8), fontsize=args.fontsize, legend_loc='upper left', ax=None)
 
-    venn(dataset_dict, cmap=cmap, fmt='{size}', fontsize=8, legend_loc='upper left', ax=ax)
+    #ax = venn(dataset_dict, cmap=cmap, fmt='{size}', fontsize=8, legend_loc='upper left', ax=None)
 
     # ----------annotate and save the diagram----------
+    fig = ax.figure
     fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
-    if args.do_all_fields:
-        fig.text(0.99, 0.99, f'Par{args.field_text}', c='k', ha='right', va='top', transform=ax.transAxes)
-        figname = args.output_dir / f'Par{args.field_text}_venn_diagram.png'
-    else:
-        fig.text(0.99, 0.99, args.field, c='k', ha='right', va='top', transform=ax.transAxes)
-        figname = args.output_dir / f'{args.field}' / f'{args.field}_venn_diagram.png'
+    fig.text(0.99, 0.99, f'Par{args.field_text}', c='k', ha='right', va='top', transform=ax.transAxes)
+    figname = args.output_dir / f'Par{args.field_text}_venn_diagram.png'
 
     fig.savefig(figname)
     print(f'Saved figure as {figname}')
@@ -170,7 +169,7 @@ def get_detection_fraction(df, line, args):
         ax.text(0.02, 0.8, f'Par{args.field_text}', c='k', ha='left', va='top', transform=ax.transAxes)
         figname = args.output_dir / f'Par{args.field_text}_{line}_EW_histogram.png'
     else:
-        ax.text(0.02, 0.8, args.field, c='k', ha='left', va='top', transform=ax.transAxes)
+        ax.text(0.02, 0.8, f'Par{args.field_text}', c='k', ha='left', va='top', transform=ax.transAxes)
         figname = args.output_dir / f'{args.field}' / f'{args.field}_{line}_EW_histogram.png'
 
     fig.savefig(figname)
@@ -249,7 +248,7 @@ if __name__ == "__main__":
         available_fields = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.output_dir / 'Par*') + '/')]
         available_fields.sort(key=natural_keys)
     else:
-        available_fields = np.atleast_1d(args.field)
+        available_fields = args.field_arr
 
     df_stats_filename = args.output_dir / f'all_fields_diag_results.txt'
     df_visual_filename = args.output_dir / f'all_fields_visual_inspection_results.txt'
@@ -308,7 +307,7 @@ if __name__ == "__main__":
         df_detected = get_detection_fraction(df_stats, line, args)
 
     # ------------doing the venn diagrams--------------------
-    conditions_from_visual = ['compact', 'tail', 'merging', 'neighbour', 'clumpy', 'bulge', 'pea', 'bar', 'mg', 'RQ', 'PA']
+    conditions_from_visual = ['compact', 'tail', 'merging', 'neighbour', 'clumpy', 'bulge', 'pea', 'bar', 'mg', 'RQ']
     if args.merge_visual or len(set(conditions_from_visual).intersection(set(args.plot_conditions))) > 0:
         df_visual.drop('nPA', axis=1, inplace=True)
         df = pd.merge(df_stats, df_visual, on=['field', 'objid'], how='inner')

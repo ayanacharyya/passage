@@ -96,10 +96,10 @@ def parse_args():
     args = parser.parse_args()
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
 
-    args.field = args.field.split(',')
-    for index in range(len(args.field)):
-        if 'Par' in args.field[index]: args.field[index] = f'Par{int(args.field[index].split("Par")[1]):03d}'
-    if len(args.field) == 1: args.field = args.field[0]
+    args.field_arr = args.field.split(',')
+    for index in range(len(args.field_arr)):
+        if 'Par' in args.field_arr[index]: args.field_arr[index] = f'Par{int(args.field_arr[index].split("Par")[1]):03d}'
+    args.field = args.field_arr[0]
 
     args.id = [int(item) for item in args.id.split(',')]
 
