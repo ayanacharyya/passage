@@ -304,8 +304,14 @@ if __name__ == "__main__":
 
     # ------------doing the venn diagrams--------------------
     conditions_from_visual = ['compact', 'tail', 'merging', 'neighbour', 'clumpy', 'bulge', 'pea', 'bar', 'mg', 'RQ', 'PA']
-    if args.merge_visual or len(set(conditions_from_visual).intersection(set(args.plot_conditions))) > 0: df = pd.merge(df_stats, df_visual, on=['field', 'objid'], how='inner')
-    else: df = df_stats
+    if args.merge_visual or len(set(conditions_from_visual).intersection(set(args.plot_conditions))) > 0:
+        df = pd.merge(df_stats, df_visual, on=['field', 'objid'], how='inner')
+
+        has_fields = [str(int(item[3:])) for item in pd.unique(df['field'])] # remaining fields after merging
+        has_fields.sort(key=natural_keys)
+        args.field_text = ','.join(has_fields)
+    else:
+        df = df_stats
     df_int = plot_venn(df, args)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
