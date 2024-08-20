@@ -72,6 +72,10 @@ def plot_venn(df, args):
     condition = df['redshift'].between(args.zmin, args.zmax)
     set_arr, label_arr = make_set(df, condition, f'{args.zmin}<z<{args.zmax}', set_arr, label_arr)
 
+    # ------add redshift range set-----------
+    condition = df['nPA'] == 2
+    set_arr, label_arr = make_set(df, condition, '#PA = 2', set_arr, label_arr)
+
     # ---------add sets from visual inspection------------
     if 'Notes' in df:
         print('\n')
@@ -87,9 +91,6 @@ def plot_venn(df, args):
         print('\n')
         condition = df['DQ/RQ'].str.contains('okay')
         set_arr, label_arr = make_set(df, condition, 'RQ = okay', set_arr, label_arr)
-
-        condition = df['nPA'] == 2
-        set_arr, label_arr = make_set(df, condition, '#PA = 2', set_arr, label_arr)
 
     print('\n')
 
@@ -199,6 +200,7 @@ def read_stats_df(df_filename, args):
 
     # -------initiliasing dataframe-------------------------------
     df = pd.read_table(df_filename, delim_whitespace=True)
+
     if catalog is not None and 'MAG_AUTO' in catalog.columns:
         catalog_df = catalog['NUMBER', 'MAG_AUTO'].to_pandas()
         df = df.merge(catalog_df, left_on='objid', right_on='NUMBER', how='inner')
@@ -206,6 +208,9 @@ def read_stats_df(df_filename, args):
         df.drop('NUMBER', axis=1, inplace=True)
     else:
         df['mag'] = np.nan
+
+    if args.field in fields_with_2PA: df['nPA'] = 2
+    else: df['nPA'] = 1
 
     return df
 
@@ -244,7 +249,7 @@ if __name__ == "__main__":
         available_fields = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.output_dir / 'Par*') + '/')]
         available_fields.sort(key=natural_keys)
     else:
-        available_fields = [args.field]
+        available_fields = np.atleast_1d(args.field)
 
     df_stats_filename = args.output_dir / f'all_fields_diag_results.txt'
     df_visual_filename = args.output_dir / f'all_fields_visual_inspection_results.txt'
@@ -305,6 +310,7 @@ if __name__ == "__main__":
     # ------------doing the venn diagrams--------------------
     conditions_from_visual = ['compact', 'tail', 'merging', 'neighbour', 'clumpy', 'bulge', 'pea', 'bar', 'mg', 'RQ', 'PA']
     if args.merge_visual or len(set(conditions_from_visual).intersection(set(args.plot_conditions))) > 0:
+        df_visual.drop('nPA', axis=1, inplace=True)
         df = pd.merge(df_stats, df_visual, on=['field', 'objid'], how='inner')
 
         has_fields = [str(int(item[3:])) for item in pd.unique(df['field'])] # remaining fields after merging

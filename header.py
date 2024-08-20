@@ -108,3 +108,5 @@ filter_dict = {'Par061':['F115W', 'F150W'], \
                'Par034': ['F115W', 'F150W', 'F200W'], \
                'Par021': ['F115W', 'F150W', 'F200W'], \
                }
+
+fields_with_2PA = ['Par027', 'Par028', 'Par006', 'Par051', 'Par009']

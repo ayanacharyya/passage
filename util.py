@@ -95,7 +95,12 @@ def parse_args():
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
-    if 'Par' in args.field: args.field = f'Par{int(args.field.split("Par")[1]):03d}'
+
+    args.field = args.field.split(',')
+    for index in range(len(args.field)):
+        if 'Par' in args.field[index]: args.field[index] = f'Par{int(args.field[index].split("Par")[1]):03d}'
+    if len(args.field) == 1: args.field = args.field[0]
+
     args.id = [int(item) for item in args.id.split(',')]
 
     if args.system == 'hd' and not os.path.exists('/Volumes/Elements/'): args.system = 'local'
