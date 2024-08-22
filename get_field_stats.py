@@ -46,7 +46,7 @@ def plot_venn(df, args):
     Returns intersecting dataframe
     '''
     df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)
-    print(f'\nOut of the total {len(df)} objects..\n')
+    print(f'\nOut of the total {len(df)} objects in {len(pd.unique(df["field"]))} fields..\n')
 
     set_arr = []
     label_arr = []
