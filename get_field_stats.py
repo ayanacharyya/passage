@@ -105,7 +105,7 @@ def plot_venn(df, args):
     # ---------manually calling draw_venn() so as to modify petal labels----------
     petal_labels = generate_petal_labels(dataset_dict.values(), fmt="{size}")
     petal_labels = {logic: value if int(value) > 0 else '' for logic, value in petal_labels.items()}
-    ax = draw_venn(petal_labels=petal_labels, dataset_labels=dataset_dict.keys(), hint_hidden=False, colors=generate_colors(cmap=cmap, n_colors=len(label_arr)), figsize=(8, 8), fontsize=args.fontsize, legend_loc='upper left', ax=None)
+    ax = draw_venn(petal_labels=petal_labels, dataset_labels=dataset_dict.keys(), hint_hidden=False, colors=generate_colors(cmap=cmap, n_colors=len(label_arr)), figsize=(6, 6), fontsize=args.fontsize, legend_loc='upper left', ax=None)
 
     #ax = venn(dataset_dict, cmap=cmap, fmt='{size}', fontsize=8, legend_loc='upper left', ax=None)
 
@@ -303,9 +303,10 @@ if __name__ == "__main__":
             print(f'Saved master stats df in {df_visual_filename}')
 
     # ------------doing the line histograms--------------------
-    for index, line in enumerate(lines_to_consider):
-        print(f'Doing line {line} which is {index+1} of {len(lines_to_consider)}..')
-        df_detected = get_detection_fraction(df_stats, line, args)
+    if args.plot_EW_hist:
+        for index, line in enumerate(lines_to_consider):
+            print(f'Doing line {line} which is {index+1} of {len(lines_to_consider)}..')
+            df_detected = get_detection_fraction(df_stats, line, args)
 
     # ------------doing the venn diagrams--------------------
     conditions_from_visual = ['compact', 'tail', 'merging', 'neighbour', 'clumpy', 'bulge', 'pea', 'bar', 'mg', 'RQ']
