@@ -45,8 +45,9 @@ def plot_venn(df, args):
     Plots and saves the figure
     Returns intersecting dataframe
     '''
+    n_fields = len(pd.unique(df["field"]))
     df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)
-    print(f'\nOut of the total {len(df)} objects in {len(pd.unique(df["field"]))} fields..\n')
+    print(f'\nOut of the total {len(df)} objects in {n_fields} fields..\n')
 
     set_arr = []
     label_arr = []
@@ -111,7 +112,7 @@ def plot_venn(df, args):
     # ----------annotate and save the diagram----------
     fig = ax.figure
     fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
-    fig.text(0.99, 0.99, f'Par{args.field_text}', c='k', ha='right', va='top', transform=ax.transAxes)
+    fig.text(0.99, 0.99, f'Total {n_fields} fields: Par{args.field_text}\nTotal {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes)
     figname = args.output_dir / f'Par{args.field_text}_venn_diagram.png'
 
     fig.savefig(figname)
