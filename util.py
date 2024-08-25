@@ -44,6 +44,9 @@ def parse_args():
     parser.add_argument('--fontsize', metavar='fontsize', type=int, action='store', default=10, help='fontsize of plot labels, etc.; default is 15')
     parser.add_argument('--mag_lim', metavar='mag_lim', type=float, action='store', default=None, help='magnitude limit above which to search for targets; default is None')
 
+    # ------- args added for make_region_files.py ------------------------------
+    parser.add_argument('--survey', metavar='survey', type=str, action='store', default='passage', help='Which survey to be used for making the region files?')
+
     # ------- args added for plot_footprints.py ------------------------------
     parser.add_argument('--bg_file', metavar='bg_file', type=str, action='store', default=None, help='Which file to be used for plotting the background image?')
     parser.add_argument('--plot_zcosmos', dest='plot_zcosmos', action='store_true', default=False, help='Overplot the (thousands of) zCOSMOS targets? Default is no.')
