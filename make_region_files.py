@@ -44,10 +44,12 @@ def df_to_region(df, outfilename, shape='box', label='', label_ra=150.47, label_
     print(f'Saved region file {outfilename}')
 
 # -------------------------------------------------------------------------------------------------------
-def get_passage_footprints(filename):
+def get_passage_footprints(args=None, filename=None):
     '''
     Reads and returns the footprint list for PASSAGE fields
     '''
+    if filename is None: filename = args.input_dir / 'JWST PASSAGE Cycle 1 - Cy1 Executed.csv'
+
     NIRISS_WFSS_fov = [133, 133] # FoV in arcseconds
 
     df = pd.read_csv(filename)
@@ -60,38 +62,23 @@ def get_passage_footprints(filename):
 
     return df # df only contains id, ra, dec, ra_width, dec_width, pa (orienation) for each field
 
-# -------------------------------------------------------------------------------------------------------
-def get_zCOSMOS_footprints(filename):
-    '''
-    Reads and returns the footprint list for all zCOSMOS galaxies (with spectra)
-    '''
-
-    data = fits.open(filename)
-    table = Table(data[1].data)
-    df = table.to_pandas()
-
-    df = df.rename(columns={'OBJECT_ID':'id', 'RAJ2000':'ra', 'DEJ2000':'dec'})
-    df = df[['ra', 'dec', 'id']]
-    df['radius'] = 1 # arcseconds # choice of how big a circle to draw around each RA,DEC combo found in the zCOSMOS catalog
-
-    return df # df only contains id, ra, dec, radius, for each object
-
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
+    output_dir = args.input_dir / 'footprints/region_files'
 
     if args.survey == 'passage':
-        infilename = 'JWST PASSAGE Cycle 1 - Cy1 Executed.csv'
-        outfilename = os.path.splitext(infilename.replace(' ', '-'))[0] + '.reg'
-
-        df = get_passage_footprints(args.input_dir / infilename) # reading the passage footprints
-        df_to_region(df, args.input_dir / 'footprints/region_files' / outfilename, shape='box', label='JWST-PASSAGE', label_ra=150.47, label_dec=2.55, color='red')  # making the region files
+        df = get_passage_footprints(args=args) # reading the passage footprints
+        df_to_region(df, output_dir / 'PASSAGE_fields.reg', shape='box', label='JWST-PASSAGE', label_ra=150.47, label_dec=2.55, color='red')  # making the region files
 
     elif args.survey == 'zcosmos':
-        infilename = 'zCOSMOS_VIMOS_BRIGHT_DR3_CATALOGUE.fits'
-        outfilename = os.path.splitext(infilename.replace(' ', '-'))[0] + '.reg'
+        df = read_zCOSMOS_catalog(args=args)
+        df['radius'] = 1  # arcseconds # choice of how big a circle to draw around each RA,DEC combo found in the zCOSMOS catalog
+        df_to_region(df, output_dir / 'zcosmos_objects.reg', shape='circle', label='zCOSMOS', label_ra=150.47, label_dec=2.55, color='cyan') # making the region files
 
-        df = get_zCOSMOS_footprints(args.input_dir / 'zCOSMOS-DR3' / infilename) # reading the zCOSMOS footprints
-        df_to_region(df, args.input_dir / 'footprints/region_files' / outfilename, shape='circle', label='zCOSMOS', label_ra=150.47, label_dec=2.55, color='cyan') # making the region files
+    elif args.survey == 'cosmos2020':
+        df = read_COSMOS2020_catalog(args=args)
+        df['radius'] = 1  # arcseconds # choice of how big a circle to draw around each RA,DEC combo found in the zCOSMOS catalog
+        df_to_region(df, output_dir / 'cosmos2020_objects.reg', shape='circle', label='COSMOS2020', label_ra=150.47, label_dec=2.55, color='cyan') # making the region files
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

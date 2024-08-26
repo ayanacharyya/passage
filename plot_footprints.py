@@ -54,25 +54,23 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, table=None):
 
                     # detecting sources from <table> that lie within this region, if <table> provided
                     if table is not None:
-                        n_sources = np.sum(sky_region.contains(SkyCoord(table['RAJ2000'], table['DEJ2000'], unit='deg'), wcs_header))
+                        n_sources = np.sum(sky_region.contains(SkyCoord(table['ra'], table['dec'], unit='deg'), wcs_header))
                         if n_sources > 0:
-                            print(f'Region {label_text} contains {n_sources} zCOSMOS sources') #
+                            if args.plot_zcosmos: survey = 'zCOSMOS'
+                            elif args.plot_cosmos2020: survey = 'COSMOS2020'
+                            print(f'Region {label_text} contains {n_sources} {survey} sources') #
                             ax.text(label_pixcoord_x + 90, label_pixcoord_y, f'({n_sources})', c=color, ha='left', va='top', fontsize=args.fontsize/1.5)
 
 
     return fig, sky_regions
 
 # -------------------------------------------------------------------------------------------------------
-def plot_zCOSMOS(fig, bg_img_hdu, color='aqua'):
+def plot_skycoord_from_df(df, fig, bg_img_hdu, color='aqua'):
     '''
-    Plots the location of all zCOSMOS galaxies (with spectra) given on an existing background image, given the header of the background image
+    Plots the location of all RA/DEC from a given dataframe on an existing background image, given the header of the background image
     Returns fig handle
     '''
-    zCOSMOS_catalog_file = '/Users/acharyya/Work/astro/passage/passage_data/zCOSMOS-DR3/zCOSMOS_VIMOS_BRIGHT_DR3_CATALOGUE.fits'
-
-    data = fits.open(zCOSMOS_catalog_file)
-    table = Table(data[1].data)
-    sky_coords = SkyCoord(table['RAJ2000'], table['DEJ2000'], unit='deg')
+    sky_coords = SkyCoord(df['ra'], df['dec'], unit='deg')
 
     wcs_header = pywcs.WCS(bg_img_hdu[0].header)
     ax=fig.gca()
@@ -87,7 +85,7 @@ def plot_zCOSMOS(fig, bg_img_hdu, color='aqua'):
         circle = plt.Circle(xy=pix_coords[index], radius=1, color=color, alpha=0.5)
         ax.add_patch(circle)
     '''
-    return fig, table
+    return fig
 
 # -------------------------------------------------------------------------------------------------------
 def plot_background(filename, args):
@@ -145,11 +143,15 @@ if __name__ == "__main__":
     fig, bg_img_hdu = plot_background(bg_filename, args)
 
     # ------plotting the footprints---------
-    if args.plot_zcosmos: fig, table = plot_zCOSMOS(fig, bg_img_hdu)
-    fig, sky_regions = plot_footprints(reg_filenames, bg_img_hdu, fig, args, table=table if 'table' in locals() else None)
+    if args.plot_zcosmos or args.plot_cosmos2020:
+        if args.plot_zcosmos: df = read_zCOSMOS_catalog(args=args)
+        elif args.plot_cosmos2020: df = read_COSMOS2020_catalog(args=args)
+        fig = plot_skycoord_from_df(df, fig, bg_img_hdu)
+
+    fig, sky_regions = plot_footprints(reg_filenames, bg_img_hdu, fig, args, table=df if 'df' in locals() else None)
 
     # ------saving figure---------
-    zCOSMOS_text = '_with_zCOSMOS' if args.plot_zcosmos else ''
+    zCOSMOS_text = '_with_zCOSMOS' if args.plot_zcosmos else '_with_COSMOS2020' if args.plot_cosmos2020 else ''
     figname = args.input_dir / 'footprints' / f'{args.field}_with_footprints{zCOSMOS_text}.png'
     fig.savefig(figname)
     print(f'Saved plot to {figname}')

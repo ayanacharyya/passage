@@ -319,6 +319,12 @@ if __name__ == "__main__":
         args.field_text = ','.join(has_fields)
     else:
         df = df_stats
+
+    conditions_from_cosmos = ['mass']
+    if len(set(conditions_from_cosmos).intersection(set(args.plot_conditions))) > 0:
+        df_cosmos = read_COSMOS2020_catalog(args=args)
+        df = pd.merge(df, df_cosmos, on=['field', 'objid'], how='inner')
+
     df_int = plot_venn(df, args)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

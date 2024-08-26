@@ -50,6 +50,7 @@ def parse_args():
     # ------- args added for plot_footprints.py ------------------------------
     parser.add_argument('--bg_file', metavar='bg_file', type=str, action='store', default=None, help='Which file to be used for plotting the background image?')
     parser.add_argument('--plot_zcosmos', dest='plot_zcosmos', action='store_true', default=False, help='Overplot the (thousands of) zCOSMOS targets? Default is no.')
+    parser.add_argument('--plot_cosmos2020', dest='plot_cosmos2020', action='store_true', default=False, help='Overplot the (millions of) COSMOS2020 targets? Default is no.')
 
     # ------- args added for make_spectra_from_beams.py ------------------------------
     parser.add_argument('--skip_sep', dest='skip_sep', action='store_true', default=False, help='Skip the Source Extraction Pipeline? Default is no.')
@@ -340,6 +341,63 @@ def copy_from_hd_to_local(files_to_move=['*.txt', '*.png']):
             except: print('No such files. Skipping..')
 
     print('All done')
+
+# -------------------------------------------------------------------------------------------------------
+def read_COSMOS2020_catalog(args=None, filename=None):
+    '''
+    Reads in the zCOSMOS galaxy catalog
+    Returns as pandas dataframe
+    '''
+    if filename is None:
+        if args is None: input_dir = '/Users/acharyya/Work/astro/passage/passage_data'
+        else: input_dir = args.input_dir
+        filename = input_dir / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3_subsetcolumns.fits'
+
+    if not os.path.exists(filename): make_COSMOS_subset_table(filename)
+
+    data = fits.open(filename)
+    table = Table(data[1].data)
+    df  = table.to_pandas()
+    df = df.rename(columns={'ID':'id', 'ALPHA_J2000':'ra', 'DELTA_J2000':'dec'})
+
+    return df
+
+# -------------------------------------------------------------------------------------------------------
+def read_zCOSMOS_catalog(args=None, filename=None):
+    '''
+    Reads in the zCOSMOS galaxy catalog
+    Returns as pandas dataframe
+    '''
+    if filename is None:
+        if args is None: input_dir = '/Users/acharyya/Work/astro/passage/passage_data'
+        else: input_dir = args.input_dir
+        filename = input_dir / 'COSMOS/zCOSMOS-DR3' / 'zCOSMOS_VIMOS_BRIGHT_DR3_CATALOGUE.fits'
+
+    data = fits.open(filename)
+    table = Table(data[1].data)
+    df  = table.to_pandas()
+    df = df.rename(columns={'OBJECT_ID':'id', 'RAJ2000':'ra', 'DEJ2000':'dec'})
+
+    return df
+
+# -------------------------------------------------------------------------------------------------------
+def make_COSMOS_subset_table(filename):
+    '''
+    Reads in the massive COSMOS2020 catalog and makes a smaller table with subset of columns and saves it
+    '''
+    suffix = '_subsetcolumns'
+    if suffix in filename: filename = filename[:filename.find(suffix)] + '.fits'
+    cols_to_extract = ['ID', 'ALPHA_J2000', 'DELTA_J2000', 'ID_COSMOS2015', 'ez_z_phot', 'lp_MK', 'lp_SFR_best', 'lp_sSFR_best', 'lp_mass_best']
+
+    print(f'Trying to read in  {filename}; can take a while..')
+    data = fits.open(filename)
+    table = Table(data[1].data)
+    table_sub = table[cols_to_extract]
+
+    outfilename = str(filename).split('.fits')[0] + suffix + '.fits'
+    table_sub.write(outfilename)
+    print(f'Saved subset table as {outfilename}')
+
 
 
 
