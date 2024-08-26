@@ -6,8 +6,8 @@
     Example: run get_field_stats.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --re_extract
              run get_field_stats.py --field Par61 --mag_lim 26 --line_list OII,OIII,Ha
              run get_field_stats.py --mag_lim 26 --line_list OIII --do_all_fields --clobber
-             run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --zmin 1 --zmax 2.5 --merge_visual --plot_conditions detected,z,mag,tail,RQ,strong_OIII,PA
-             run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --plot_conditions detected,mag,compact
+             run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --zmin 1 --zmax 2.5 --merge_visual --plot_conditions EW,z,mag,tail,RQ,strong_OIII,PA
+             run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --plot_conditions EW,mag,compact
 '''
 from header import *
 from util import *
@@ -61,7 +61,7 @@ def plot_venn(df, args):
         set_arr, label_arr = make_set(df, condition1, f'{line}_present', set_arr, label_arr)
 
         condition2 = df_line[f'{line}_EW'] > args.EW_thresh
-        set_arr, label_arr = make_set(df_line, condition2, f'{line}_detected', set_arr, label_arr)
+        set_arr, label_arr = make_set(df_line, condition2, f'{line} EW > {args.EW_thresh}', set_arr, label_arr)
 
     # ---------add magnitude set------------
     if args.mag_lim is None: mag_lim = 26
@@ -92,6 +92,22 @@ def plot_venn(df, args):
         print('\n')
         condition = df['DQ/RQ'].str.contains('okay')
         set_arr, label_arr = make_set(df, condition, 'RQ = okay', set_arr, label_arr)
+
+    print('\n')
+
+    # ---------add sets from cosmos dataset------------
+    if 'lp_mass_best' in df:
+        print('\n')
+        condition = (np.isfinite(df['lp_mass_best'])) & (df['lp_mass_best'] > 0)
+        set_arr, label_arr = make_set(df, condition, 'mass available', set_arr, label_arr)
+
+        print('\n')
+        condition = df['lp_SFR_best'] > args.log_SFR_thresh
+        set_arr, label_arr = make_set(df, condition, f'SFR > {args.log_sSFR_thresh}', set_arr, label_arr)
+
+        print('\n')
+        condition = df['lp_sSFR_best'] > args.log_sSFR_thresh
+        set_arr, label_arr = make_set(df, condition, f'sSFR > {args.log_sSFR_thresh}', set_arr, label_arr)
 
     print('\n')
 
@@ -308,7 +324,7 @@ if __name__ == "__main__":
             print(f'Doing line {line} which is {index+1} of {len(lines_to_consider)}..')
             df_detected = get_detection_fraction(df_stats, line, args)
 
-    # ------------doing the venn diagrams--------------------
+    # ------------merging visual dataframes for the venn diagrams--------------------
     conditions_from_visual = ['compact', 'tail', 'merging', 'neighbour', 'clumpy', 'bulge', 'pea', 'bar', 'mg', 'RQ']
     if args.merge_visual or len(set(conditions_from_visual).intersection(set(args.plot_conditions))) > 0:
         df_visual.drop('nPA', axis=1, inplace=True)
@@ -320,11 +336,27 @@ if __name__ == "__main__":
     else:
         df = df_stats
 
-    conditions_from_cosmos = ['mass']
+    # ------------merging cosmos datasets for the venn diagrams--------------------
+    conditions_from_cosmos = ['mass', 'sfr', 'ssfr']
     if len(set(conditions_from_cosmos).intersection(set(args.plot_conditions))) > 0:
-        df_cosmos = read_COSMOS2020_catalog(args=args)
-        df = pd.merge(df, df_cosmos, on=['field', 'objid'], how='inner')
+        fields = pd.unique(df['field'])
 
+        # -------collating only those COSMOS objects that lie within the FoV of available PASSAGE fields------
+        df_cosmos = pd.DataFrame()
+
+        for index, thisfield in enumerate(fields):
+            filename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
+            if os.path.exists(filename):
+                print(f'{index+1} of {len(fields)} fields: Reading COSMOS subset table from {filename}')
+                df_cosmos_thisfield = read_COSMOS2020_catalog(filename=filename)
+                df_cosmos_thisfield['field'] = thisfield
+                df_cosmos = pd.concat([df_cosmos, df_cosmos_thisfield])
+            else:
+                print(f'{index+1} of {len(fields)} fields: Could not find COSMOS subset table for {thisfield}, so skipping.')
+
+        df = pd.merge(df, df_cosmos, on=['field', 'objid'], how='outer')
+
+    # ------------doing the venn diagrams--------------------
     df_int = plot_venn(df, args)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

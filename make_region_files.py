@@ -6,6 +6,7 @@
     Last modified: 26-06-24
     Example: run make_region_files.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
              run make_region_files.py --survey zcosmos
+             run make_region_files.py --survey cosmos2020 --split_regions_by_fields
 '''
 
 from header import *
@@ -80,5 +81,35 @@ if __name__ == "__main__":
         df = read_COSMOS2020_catalog(args=args)
         df['radius'] = 1  # arcseconds # choice of how big a circle to draw around each RA,DEC combo found in the zCOSMOS catalog
         df_to_region(df, output_dir / 'cosmos2020_objects.reg', shape='circle', label='COSMOS2020', label_ra=150.47, label_dec=2.55, color='cyan') # making the region files
+
+        # -----------to save multiple region files split by whatever is contained within the PASSAGE fields------
+        if args.split_regions_by_fields:
+            dummy_dataset = regions.make_example_dataset(data='simulated') # creating dummy data to generate dummy wcs, needed for sky_region.contains()
+            dummy_wcs = dummy_dataset.wcs
+
+            sky_regions = sky_regions = Regions.read(output_dir / 'PASSAGE_fields.reg', format='ds9') # if this file does not exist, first run this script with "--survey passage" option, before attemtping --split_regions_by_fields
+            df = read_COSMOS2020_catalog(args=args)
+
+            passage_fields_in_cosmos = [3, 5, 6, 17, 20, 23, 23, 25, 26, 28, 29, 46, 47, 48, 49, 51, 52, 53]
+            sky_regions = np.array(sky_regions)[passage_fields_in_cosmos] # this is to reduce run time, based on pre-calculated index array above; for a fresh run, comment out this line
+
+            for index, sky_region in enumerate(sky_regions):
+                if not type(sky_region) == regions.shapes.text.TextSkyRegion: # consider it if it is not just text
+                    label_text = f'Par{sky_region.meta["text"]:03}'
+                    print(f'Splitting by fields. Doing field {label_text}, which is {index + 1} out of {len(sky_regions)}..')  #
+
+                    contained_ids = sky_region.contains(SkyCoord(df['ra'], df['dec'], unit='deg'), dummy_wcs)
+                    n_sources = np.sum(contained_ids)
+
+                    if n_sources > 0:
+                        df_contained = df[contained_ids]
+                        outfilename = args.input_dir / 'COSMOS' / f'{args.survey}_objects_in_{label_text}.fits'
+                        Table.from_pandas(df_contained).write(outfilename, overwrite=True)
+                        print(f'Saved contained dataframe as {outfilename}')
+
+                        df_contained['radius'] = 1  # arcseconds # choice of how big a circle to draw around each RA,DEC combo found in the zCOSMOS catalog
+                        df_to_region(df_contained, output_dir / f'{args.survey}_objects_in_{label_text}.reg', shape='circle', label='COSMOS2020', label_ra=150.47, label_dec=2.55, color='cyan')  # making the region files
+                        print(f'Region {label_text} contains {n_sources} {args.survey} sources') #
+
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

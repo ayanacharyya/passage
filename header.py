@@ -21,20 +21,21 @@ import glob
 import sys
 import re
 import json
-import regions
 import shutil
 import drizzlepac
 import subprocess
 
 from datetime import datetime, timedelta
 from collections import defaultdict
-from regions import Regions
 from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 from importlib import reload
 from PIL import Image
 from venn import venn, pseudovenn, generate_petal_labels, draw_venn, generate_colors
+
+import regions
+from regions import Regions
 
 import vorbin
 from vorbin.voronoi_2d_binning import voronoi_2d_binning

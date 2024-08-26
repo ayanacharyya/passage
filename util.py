@@ -46,6 +46,7 @@ def parse_args():
 
     # ------- args added for make_region_files.py ------------------------------
     parser.add_argument('--survey', metavar='survey', type=str, action='store', default='passage', help='Which survey to be used for making the region files?')
+    parser.add_argument('--split_regions_by_fields', dest='split_regions_by_fields', action='store_true', default=False, help='Split regions into different files based on if they are contained within each PASSAGE fields? Default is no.')
 
     # ------- args added for plot_footprints.py ------------------------------
     parser.add_argument('--bg_file', metavar='bg_file', type=str, action='store', default=None, help='Which file to be used for plotting the background image?')
@@ -91,6 +92,8 @@ def parse_args():
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300, help='EW threshold to consider good detection for emission line maps; default is 300')
+    parser.add_argument('--log_SFR_thresh', metavar='log_SFR_thresh', type=float, action='store', default=0, help='SFR threshold (in log) to consider highly star-forming; default is 0')
+    parser.add_argument('--log_sSFR_thresh', metavar='log_sSFR_thresh', type=float, action='store', default=-9, help='specific SFR threshold (in log) to consider highly star-forming; default is 0')
     parser.add_argument('--do_all_fields', dest='do_all_fields', action='store_true', default=False, help='Include ALL available fields? Default is no.')
     parser.add_argument('--plot_venn', dest='plot_venn', action='store_true', default=False, help='Plot Venn diagrams? Default is no.')
     parser.add_argument('--merge_visual', dest='merge_visual', action='store_true', default=False, help='Include visually inspected dataframe for Venn diagrams? Default is no.')
@@ -353,7 +356,7 @@ def read_COSMOS2020_catalog(args=None, filename=None):
         else: input_dir = args.input_dir
         filename = input_dir / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3_subsetcolumns.fits'
 
-    if not os.path.exists(filename): make_COSMOS_subset_table(filename)
+    if not os.path.exists(filename) or (args is not None and args.clobber): make_COSMOS_subset_table(filename)
 
     data = fits.open(filename)
     table = Table(data[1].data)

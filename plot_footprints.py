@@ -15,7 +15,7 @@ from util import *
 start_time = datetime.now()
 
 # -------------------------------------------------------------------------------------------------------
-def plot_footprints(region_files, bg_img_hdu, fig, args, table=None):
+def plot_footprints(region_files, bg_img_hdu, fig, args, df=None):
     '''
     Plots the footprint/s for a given region file and existing figure and header of the background file plotted on the figure
     Returns fig handle
@@ -36,7 +36,7 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, table=None):
         else: color = col_arr[index]
 
 
-        for sky_region in sky_regions:
+        for index, sky_region in enumerate(sky_regions):
             if type(sky_region) == regions.shapes.text.TextSkyRegion: # label if it is text
                 label = sky_region.text
                 ax.text(ax.get_xlim()[0] * 1.1, ax.get_ylim()[1] * 0.98 - index * 0.05 * np.diff(ax.get_ylim())[0], label, c=color, ha='left', va='top', fontsize=args.fontsize)
@@ -53,19 +53,24 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, table=None):
                     ax.text(label_pixcoord_x, label_pixcoord_y, label_text, c=color, ha='left', va='top', fontsize=args.fontsize/1.5)
 
                     # detecting sources from <table> that lie within this region, if <table> provided
-                    if table is not None:
-                        n_sources = np.sum(sky_region.contains(SkyCoord(table['ra'], table['dec'], unit='deg'), wcs_header))
+                    if df is not None:
+                        print(f'Doing field {label_text}, which is {index + 1} out of {len(sky_regions)}..')  #
+                        contained_ids = sky_region.contains(SkyCoord(df['ra'], df['dec'], unit='deg'), wcs_header)
+                        n_sources = np.sum(contained_ids)
                         if n_sources > 0:
+                            df_contained = df[contained_ids]
+                            fig = plot_skycoord_from_df(df_contained, fig, bg_img_hdu, color='red', alpha=1, size=10) # plotting contained objects in a different color
+
                             if args.plot_zcosmos: survey = 'zCOSMOS'
                             elif args.plot_cosmos2020: survey = 'COSMOS2020'
                             print(f'Region {label_text} contains {n_sources} {survey} sources') #
-                            ax.text(label_pixcoord_x + 90, label_pixcoord_y, f'({n_sources})', c=color, ha='left', va='top', fontsize=args.fontsize/1.5)
+                            ax.text(label_pixcoord_x + 40, label_pixcoord_y, f'({n_sources})', c=color, ha='left', va='top', fontsize=args.fontsize/1.5)
 
 
     return fig, sky_regions
 
 # -------------------------------------------------------------------------------------------------------
-def plot_skycoord_from_df(df, fig, bg_img_hdu, color='aqua'):
+def plot_skycoord_from_df(df, fig, bg_img_hdu, color='aqua', alpha=0.3, size=1):
     '''
     Plots the location of all RA/DEC from a given dataframe on an existing background image, given the header of the background image
     Returns fig handle
@@ -77,12 +82,12 @@ def plot_skycoord_from_df(df, fig, bg_img_hdu, color='aqua'):
     #'''
     # use this option for a quicker plot, but not with scale-able scatter points
     ra_coords, dec_coords = sky_coords.to_pixel(wcs_header)
-    ax.scatter(ra_coords, dec_coords, color=color, s=1, alpha=0.3, zorder=-1)
+    ax.scatter(ra_coords, dec_coords, color=color, s=size, alpha=alpha, zorder=-1)
     '''
     # use this option for a slower plot, but with scale-able scatter points
     pix_coords = np.transpose(sky_coords.to_pixel(wcs_header))
     for index in range(len(table)):
-        circle = plt.Circle(xy=pix_coords[index], radius=1, color=color, alpha=0.5)
+        circle = plt.Circle(xy=pix_coords[index], radius=1, color=color, alpha=alpha)
         ax.add_patch(circle)
     '''
     return fig
@@ -146,9 +151,9 @@ if __name__ == "__main__":
     if args.plot_zcosmos or args.plot_cosmos2020:
         if args.plot_zcosmos: df = read_zCOSMOS_catalog(args=args)
         elif args.plot_cosmos2020: df = read_COSMOS2020_catalog(args=args)
-        fig = plot_skycoord_from_df(df, fig, bg_img_hdu)
+        fig = plot_skycoord_from_df(df, fig, bg_img_hdu, color='aqua', alpha=0.3, size=1)
 
-    fig, sky_regions = plot_footprints(reg_filenames, bg_img_hdu, fig, args, table=df if 'df' in locals() else None)
+    fig, sky_regions = plot_footprints(reg_filenames, bg_img_hdu, fig, args, df=df if 'df' in locals() else None)
 
     # ------saving figure---------
     zCOSMOS_text = '_with_zCOSMOS' if args.plot_zcosmos else '_with_COSMOS2020' if args.plot_cosmos2020 else ''
