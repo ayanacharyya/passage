@@ -52,7 +52,7 @@ import matplotlib.image as mpimg
 
 from astropy.table import Table
 from astropy import units as u
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import SkyCoord, angular_separation
 from astropy import wcs as pywcs
 from astropy.io import fits
 from astropy.cosmology import WMAP9 as cosmo

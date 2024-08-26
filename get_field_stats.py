@@ -8,6 +8,7 @@
              run get_field_stats.py --mag_lim 26 --line_list OIII --do_all_fields --clobber
              run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --zmin 1 --zmax 2.5 --merge_visual --plot_conditions EW,z,mag,tail,RQ,strong_OIII,PA
              run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --plot_conditions EW,mag,compact
+             run get_field_stats.py --mag_lim 24 --EW_thresh 300 --log_SFR_thresh 0 --line_list OIII,Ha --plot_venn --do_all_fields --plot_conditions EW,mag,PA,mass
 '''
 from header import *
 from util import *
@@ -46,7 +47,7 @@ def plot_venn(df, args):
     Returns intersecting dataframe
     '''
     n_fields = len(pd.unique(df["field"]))
-    df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)
+    if 'par_obj' not in df: df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)
     print(f'\nOut of the total {len(df)} objects in {n_fields} fields..\n')
 
     set_arr = []
@@ -93,23 +94,17 @@ def plot_venn(df, args):
         condition = df['DQ/RQ'].str.contains('okay')
         set_arr, label_arr = make_set(df, condition, 'RQ = okay', set_arr, label_arr)
 
-    print('\n')
-
     # ---------add sets from cosmos dataset------------
     if 'lp_mass_best' in df:
         print('\n')
-        condition = (np.isfinite(df['lp_mass_best'])) & (df['lp_mass_best'] > 0)
+        condition = np.isfinite(df['lp_mass_best'])
         set_arr, label_arr = make_set(df, condition, 'mass available', set_arr, label_arr)
 
-        print('\n')
         condition = df['lp_SFR_best'] > args.log_SFR_thresh
-        set_arr, label_arr = make_set(df, condition, f'SFR > {args.log_sSFR_thresh}', set_arr, label_arr)
+        set_arr, label_arr = make_set(df, condition, f'log sfr > {args.log_SFR_thresh}', set_arr, label_arr)
 
-        print('\n')
         condition = df['lp_sSFR_best'] > args.log_sSFR_thresh
-        set_arr, label_arr = make_set(df, condition, f'sSFR > {args.log_sSFR_thresh}', set_arr, label_arr)
-
-    print('\n')
+        set_arr, label_arr = make_set(df, condition, f'log sSFR > {args.log_sSFR_thresh}', set_arr, label_arr)
 
     # ----------plot the venn diagrams----------
     which_sets_to_plot = [np.array([item1 in item2 for item1 in args.plot_conditions]).any() for item2 in label_arr]
@@ -132,7 +127,7 @@ def plot_venn(df, args):
     figname = args.output_dir / f'Par{args.field_text}_venn_diagram.png'
 
     fig.savefig(figname)
-    print(f'Saved figure as {figname}')
+    print(f'\nSaved figure as {figname}')
     plt.show(block=False)
 
     # ----------deriving the dataframe corresponding to the innermost intersection----------
@@ -324,6 +319,9 @@ if __name__ == "__main__":
             print(f'Doing line {line} which is {index+1} of {len(lines_to_consider)}..')
             df_detected = get_detection_fraction(df_stats, line, args)
 
+    df_stats['par_obj'] = df_stats['field'].astype(str) + '-' + df_stats['objid'].astype(str)  # making a unique combination of field and object id
+    df_stats = df_stats.drop_duplicates('par_obj', keep='last')
+
     # ------------merging visual dataframes for the venn diagrams--------------------
     conditions_from_visual = ['compact', 'tail', 'merging', 'neighbour', 'clumpy', 'bulge', 'pea', 'bar', 'mg', 'RQ']
     if args.merge_visual or len(set(conditions_from_visual).intersection(set(args.plot_conditions))) > 0:
@@ -337,11 +335,12 @@ if __name__ == "__main__":
         df = df_stats
 
     # ------------merging cosmos datasets for the venn diagrams--------------------
-    conditions_from_cosmos = ['mass', 'sfr', 'ssfr']
+    conditions_from_cosmos = ['mass', 'sfr', 'sSFR']
     if len(set(conditions_from_cosmos).intersection(set(args.plot_conditions))) > 0:
         fields = pd.unique(df['field'])
 
         # -------collating only those COSMOS objects that lie within the FoV of available PASSAGE fields------
+        print(f'\nTrying to read in COSMOS catalogs..')
         df_cosmos = pd.DataFrame()
 
         for index, thisfield in enumerate(fields):
@@ -349,12 +348,23 @@ if __name__ == "__main__":
             if os.path.exists(filename):
                 print(f'{index+1} of {len(fields)} fields: Reading COSMOS subset table from {filename}')
                 df_cosmos_thisfield = read_COSMOS2020_catalog(filename=filename)
-                df_cosmos_thisfield['field'] = thisfield
                 df_cosmos = pd.concat([df_cosmos, df_cosmos_thisfield])
             else:
                 print(f'{index+1} of {len(fields)} fields: Could not find COSMOS subset table for {thisfield}, so skipping.')
 
-        df = pd.merge(df, df_cosmos, on=['field', 'objid'], how='outer')
+        # -------cross-matching RA/DEC of both catalogs------
+        print(f'\nDoing cross-matching between PASSAGE and COSMOS catalogs..')
+        passage_coords = SkyCoord(df['ra'], df['dec'], unit='deg')
+        cosmos_coords = SkyCoord(df_cosmos['ra'], df_cosmos['dec'], unit='deg')
+        nearest_id_in_cosmos, sep_from_nearest_id_in_cosmos, _ = passage_coords.match_to_catalog_sky(cosmos_coords)
+
+        df_crossmatch = pd.DataFrame({'passage_id': df['par_obj'].values, 'cosmos_id': df_cosmos['id'].iloc[nearest_id_in_cosmos].values, 'sep': sep_from_nearest_id_in_cosmos.arcsec})
+        df_crossmatch = df_crossmatch[df_crossmatch['sep'] < 1.] # separation within 1 arcsecond
+        df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='cosmos_id', keep='first').reset_index(drop=True) # to avoid multiple PASSAGE objects being linked to the same COSMOS object
+        df_crossmatch = pd.merge(df_crossmatch[['passage_id', 'cosmos_id']], df_cosmos, left_on='cosmos_id', right_on='id', how = 'inner').drop(['id', 'ra', 'dec'], axis=1)
+
+        print(f'\nFound a total of {len(df_crossmatch)} matching objects')
+        df = pd.merge(df, df_crossmatch, left_on='par_obj', right_on='passage_id', how='outer').drop('passage_id', axis = 1)
 
     # ------------doing the venn diagrams--------------------
     df_int = plot_venn(df, args)
