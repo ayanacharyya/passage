@@ -117,4 +117,4 @@ filter_dict = {'Par061':['F115W', 'F150W'], \
 
 fields_with_2PA = ['Par027', 'Par028', 'Par006', 'Par051', 'Par009']
 
-passage_fields_in_cosmos = [3, 5, 6, 17, 20, 23, 23, 25, 26, 28, 29, 46, 47, 48, 49, 51, 52, 53]
+passage_fields_in_cosmos = [3, 5, 6, 17, 20, 23, 25, 26, 28, 29, 46, 47, 48, 49, 51, 52, 53]
