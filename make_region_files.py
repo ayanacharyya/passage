@@ -90,7 +90,6 @@ if __name__ == "__main__":
             sky_regions = sky_regions = Regions.read(output_dir / 'PASSAGE_fields.reg', format='ds9') # if this file does not exist, first run this script with "--survey passage" option, before attemtping --split_regions_by_fields
             df = read_COSMOS2020_catalog(args=args)
 
-            passage_fields_in_cosmos = [3, 5, 6, 17, 20, 23, 23, 25, 26, 28, 29, 46, 47, 48, 49, 51, 52, 53]
             sky_regions = np.array(sky_regions)[passage_fields_in_cosmos] # this is to reduce run time, based on pre-calculated index array above; for a fresh run, comment out this line
 
             for index, sky_region in enumerate(sky_regions):
