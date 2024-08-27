@@ -100,6 +100,11 @@ def parse_args():
     parser.add_argument('--plot_conditions', metavar='plot_conditions', type=str, action='store', default='detected', help='Which conditions are plotted in the Venn diagram? Default is None')
     parser.add_argument('--plot_EW_hist', dest='plot_EW_hist', action='store_true', default=False, help='Plot EW histograms for each line? Default is no.')
 
+    # ------- args added for make_cosmos_plots.py ------------------------------
+    parser.add_argument('--xcol', metavar='xcol', type=str, action='store', default='lp_mass_best', help='Column name in COSMOS2020 catalog to be used as the quantity on x-axis? Default is lp_mass_best')
+    parser.add_argument('--ycol', metavar='ycol', type=str, action='store', default='lp_SFR_best', help='Column name in COSMOS2020 catalog to be used as the quantity on y-axis? Default is lp_SFR_best')
+    parser.add_argument('--colorcol', metavar='colorcol', type=str, action='store', default='ez_z_phot', help='Column name in COSMOS2020 catalog to be used as the color axis? Default is ez_z_phot')
+
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
@@ -354,7 +359,7 @@ def read_COSMOS2020_catalog(args=None, filename=None):
     if filename is None:
         if args is None: input_dir = '/Users/acharyya/Work/astro/passage/passage_data'
         else: input_dir = args.input_dir
-        filename = input_dir / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3_subsetcolumns.fits'
+        filename = Path(input_dir) / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3_subsetcolumns.fits'
 
     if not os.path.exists(filename) or (args is not None and args.clobber): make_COSMOS_subset_table(filename)
 
@@ -389,6 +394,7 @@ def make_COSMOS_subset_table(filename):
     Reads in the massive COSMOS2020 catalog and makes a smaller table with subset of columns and saves it
     '''
     suffix = '_subsetcolumns'
+    filename = str(filename)
     if suffix in filename: filename = filename[:filename.find(suffix)] + '.fits'
     cols_to_extract = ['ID', 'ALPHA_J2000', 'DELTA_J2000', 'ID_COSMOS2015', 'ez_z_phot', 'lp_MK', 'lp_SFR_best', 'lp_sSFR_best', 'lp_mass_best']
 

@@ -49,6 +49,8 @@ import matplotlib
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 import matplotlib.image as mpimg
+from matplotlib import colors as mplcolors
+from matplotlib import colormaps as mplcolormaps
 
 from astropy.table import Table
 from astropy import units as u
@@ -67,6 +69,9 @@ from grizli.aws import visit_processor
 from grizli.pipeline.auto_script import get_yml_parameters
 from grizli.utils import GTable
 
+import datashader as dsh
+from datashader.mpl_ext import dsshow
+from datashader import transfer_functions as dstf
 
 import warnings
 warnings.filterwarnings("ignore")

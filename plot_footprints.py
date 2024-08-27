@@ -1,7 +1,6 @@
 '''
     Filename: plot_footprints.py
     Notes: Plots all PASSAGE field footprints and overlays with existing large survey footprints from MAST
-           This script is still W.I.P and does not yet work fully (for now, the workaround is plotting the footprints manually using DS9)
     Author : Ayan
     Created: 18-06-24
     Last modified: 18-06-24
