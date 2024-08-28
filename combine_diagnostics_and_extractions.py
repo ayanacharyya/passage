@@ -23,6 +23,7 @@ if __name__ == "__main__":
     radial_plot_text = '_wradprof' if args.plot_radial_profiles else ''
     only_seg_text = '_onlyseg' if args.only_seg else ''
     snr_text = f'_snr{args.snr_cut:.1f}' if args.snr_cut is not None else ''
+    pixscale_text = '' if args.pixscale == 0.04 else f'_{args.pixscale}arcsec_pix'
     description_text = f'all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}'
     description_text2 = f'diagnostics_and_extractions'
 
@@ -41,14 +42,14 @@ if __name__ == "__main__":
             catalog = GTable.read(catalog_file)
 
         args.id_arr = catalog['NUMBER'] if 'NUMBER' in catalog.columns else catalog['id']
+        output_dir = args.output_dir / args.field / f'{description_text2}'
+        output_dir.mkdir(parents=True, exist_ok=True)
     else:
         args.id_arr = args.id
 
     if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
     if len(args.id_arr) > 10: args.hide = True # if too many plots, do not display them, just save them
 
-    output_dir = args.output_dir / args.field / f'{description_text2}'
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     # ------------read in grizli images and plot comparison--------------------------------
     for index, args.id in enumerate(args.id_arr):
@@ -58,6 +59,10 @@ if __name__ == "__main__":
         gs = fig.add_gridspec(len(quant_arr), 2)
         axes_ex = [fig.add_subplot(gs[item, 0]) for item in range(len(quant_arr))]
         axes_diag = fig.add_subplot(gs[:, 1])
+
+        if not args.do_all_obj:
+            output_dir = args.output_dir / args.field / f'{args.id:05d}{pixscale_text}'
+            output_dir.mkdir(parents=True, exist_ok=True)
 
         found_individual_plots = False
         for ind, quant in enumerate(quant_arr):
@@ -87,7 +92,7 @@ if __name__ == "__main__":
                 fig = plt.figure(figsize=(12, 6))
                 gs = fig.add_gridspec(1, 2)
                 axes_merged, axes_diag = [fig.add_subplot(gs[:, item]) for item in range(2)]
-                axes_merged.imshow(ex, origin='lower') # origin ='lower' because PASSAGEPipe originally stitched these plots in a flipped way
+                axes_merged.imshow(ex, origin='upper') # use origin ='lower' for cases when PASSAGEPipe originally stitched these plots in a flipped way
 
             except FileNotFoundError:
                 print('Could not find grizli-made plot-group, so skipping')
@@ -96,11 +101,15 @@ if __name__ == "__main__":
         print(f'Reading in diagnostic png files..')
 
         try:
-            diag = mpimg.imread(input_dir / f'{args.field}_{args.id:05d}_{description_text}.png')
+            diag = mpimg.imread(alternate_path / f'{args.field}_{args.id:05d}_{description_text}.png')
             axes_diag.imshow(diag, origin='upper')
         except FileNotFoundError:
-            print('Could not find file, so skipping')
-            continue
+            try:
+                diag = mpimg.imread(input_dir / f'{args.field}_{args.id:05d}_{description_text}.png')
+                axes_diag.imshow(diag, origin='upper')
+            except FileNotFoundError:
+                print('Could not find file, so skipping')
+                continue
 
         for ax in fig.axes:
             ax.xaxis.set_visible(False)

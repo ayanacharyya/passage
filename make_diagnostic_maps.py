@@ -790,7 +790,7 @@ if __name__ == "__main__":
 
         elif os.path.exists(maps_fits_file): # if the fits files are in Products/
             full_filename = maps_fits_file
-            od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.spec1D.fits'
+            od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.1D.fits'
 
         else:
             print(f'Could not find {full_fits_file} or {maps_fits_file} for ID {args.id}, so skipping it.')

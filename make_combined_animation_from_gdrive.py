@@ -16,6 +16,8 @@ from googleapiclient.http import MediaIoBaseDownload
 from google_auth_oauthlib.flow import InstalledAppFlow
 import io
 
+from get_field_stats import natural_keys
+
 start_time = datetime.now()
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -56,14 +58,18 @@ def download_folder_from_google_drive(folder_id, destination_folder):
     items, drive_downloader = query_google_drive_folder(folder_id)
 
     for item in items:
-        request = drive_downloader.files().get_media(fileId=item['id'])
-        f = io.FileIO(destination_folder / item['name'], 'wb')
-        downloader = MediaIoBaseDownload(f, request)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-            print(f'Downloaded {item["name"]}: {int(status.progress() * 100)}\%', end='\r')
-        print('\n')
+        if item['mimeType'].endswith('.folder'):
+            print(f'Downloading folder {item["name"]} from google drive..')
+            download_folder_from_google_drive(item['id'], products_path / id['name'])
+        else:
+            request = drive_downloader.files().get_media(fileId=item['id'])
+            f = io.FileIO(destination_folder / item['name'], 'wb')
+            downloader = MediaIoBaseDownload(f, request)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+                print(f'Downloaded {item["name"]}: {int(status.progress() * 100)}\%', end='\r')
+            print('\n')
 
     print(f'Downloaded {len(items)} files from the folder.')
 
@@ -73,7 +79,7 @@ if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
 
-    field_list = passage_fields_in_cosmos
+    fields_of_interest = [f'Par{item}' for item in passage_fields_in_cosmos]
     passage_url_id = '1oE1V76aeDlR8vxZNefyzk3yp0eO1rkHw'
 
     # ------determining directories and global variables---------
@@ -87,15 +93,18 @@ if __name__ == "__main__":
     # --------query passage folder and see which fields available------------------
     items, _ = query_google_drive_folder(passage_url_id)
     field_url_dict = {item['name']:item['id'] for item in items if item['name'].startswith('Par') and item ['mimeType'].endswith('.folder')}
-    field_list = field_url_dict.keys()
-    print(f'Found {len(field_list)} PASSAGE fields in the folder.')
+    fields_in_gdrive = list(field_url_dict.keys())
+    print(f'\nFound {len(fields_in_gdrive)} PASSAGE fields in the google drive folder...')
+
+    field_list = list(set(fields_of_interest).intersection(fields_in_gdrive))
+    field_list.sort(key=natural_keys)
+    print(f'...out of which {len(field_list)} fields are of interest.')
 
     # --------loop over all fields------------------
     for index, field in enumerate(field_list):
         start_time2 = datetime.now()
-        args.field = f'Par{field:03}'
-        short_field_name = f'Par{field}'
-        print(f'\nCommencing field {args.field} which is {index+1} of {len(field_list)}..')
+        args.field = f'Par{int(field[3:]):03}'
+        print(f'\n\nCommencing field {args.field} which is {index+1} of {len(field_list)}..')
 
         # ----------determining filenames etc. to check for presence----------
         products_path = args.input_dir / args.field / 'Products'
@@ -108,61 +117,71 @@ if __name__ == "__main__":
         else:
             # ------------download the files------------------
             if os.path.exists(products_path / 'spec1D'):
-                print(f'Downloads already present, so moving to the next step.')
+                print(f'Downloads already present, so proceeding to unzipping.')
             else:
-                print(f'Downloading form google drive..')
+                print(f'Downloading folder {field} from google drive..')
                 folder_id = field_url_dict[field]
                 download_folder_from_google_drive(folder_id, products_path)
 
             # ------------unzip the downloaded files------------------
             zipped_files = glob.glob(str(products_path) + '/*.gz')
             if len(zipped_files) == 0:
-                print(f'All files already unzipped, so moving to the next step.')
+                print(f'All files already unzipped, so proceeding to renaming.')
             else:
                 for ind, thisfile in zipped_files:
                     print(f'Unzipping {ind + 1} of {len(zipped_files)} zipped files..')
                     shutil.unpack_archive(thisfile, products_path)
                     os.remove(thisfile) #remove zipped files after unzipping
 
+            # ------------rename the files within the downloaded folders------------------
+            subfolders = glob.glob(str(products_path) + '/*/')
+            for subfolder in subfolders:
+                files_to_rename = glob.glob(str(subfolder) + '/' + field + '*')
+                if len(files_to_rename) == 0:
+                    print(f'All files within sub-folder {subfolder.split("/")[-2]} already have the correct nomenclature, so proceeding to next subfolder.')
+                else:
+                    print(f'Renaming files within sub-folder {subfolder.split("/")[-2]}/..')
+                    for thisfile in files_to_rename:
+                        os.rename(thisfile, thisfile.replace(field, args.field))
+
             # ------------rename the downloaded files------------------
-            files_to_rename = glob.glob(str(products_path) + '/' + short_field_name + '*')
+            files_to_rename = glob.glob(str(products_path) + '/' + field + '*')
             if len(files_to_rename) == 0:
-                print(f'All files/folders already have the correct nomenclature, so moving to the next step.')
+                print(f'All other files already have the correct nomenclature, so proceeding to making diagnostic plots.')
             else:
-                print(f'Renaming files/folders..')
+                print(f'Renaming other files..')
                 for thisfile in files_to_rename:
-                    os.rename(thisfile, thisfile.replace(short_field_name, args.field))
+                    os.rename(thisfile, thisfile.replace(field, args.field))
 
             # ------------run make_diagnostic_maps.py------------------
             diag_results_file = output_dir / f'{args.field}_all_diag_results.txt'
             if os.path.exists(diag_results_file) and not args.clobber:
-                print(f'Diagnostic results file already present, so moving to the next step.')
+                print(f'Diagnostic results file already present, so proceeding to making combined diagnostics and extraction images.')
             else:
                 print(f'Running make_diagnostic_maps.py..')
-                dummy = subprocess.check_output([f'python make_diagnostic_maps.py --field {args.field} --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file'], shell=True)
+                dummy = subprocess.run(['python', 'make_diagnostic_maps.py', '--field', f'{args.field}', '--do_all_obj', '--plot_radial_profiles', '--only_seg', '--snr_cut', '3', '--hide'])
 
             # ------------run combine_diagnostics_and_extractions.py------------------
             diagnostic_img_files = glob.glob(str(output_dir / f'{description_text1}') + f'/{args.field}_*_{description_text1}.png')
             extraction_img_files = glob.glob(str(output_dir / f'{description_text2}') + f'/{args.field}_*_{description_text2}.png')
             if len(extraction_img_files) == len(diagnostic_img_files):
-                print(f'All extraction images already present, so moving to the next step.')
+                print(f'All combined extraction images already present, so proceeding to the next step.')
             else:
                 print(f'Running combine_diagnostics_and_extractions.py..')
-                dummy = subprocess.check_output([f'python combine_diagnostics_and_extractions.py --field {args.field} --keep --do_all_obj'], shell=True)
+                dummy = subprocess.run(['python', 'combine_diagnostics_and_extractions.py' '--field', f'{args.field}', '--do_all_obj', '--hide'])
 
             # ------------make the final animation with the combined images------------------
             file_to_move = output_dir / f'{description_text2}' / f'{args.field}__{description_text2}_anim.mp4'
             if os.path.exists(file_to_move):
-                print(f'Animation already present, so moving to the next step.')
+                print(f'Animation already present, but in {file_to_move}, so proceeding to moving it.')
             else:
                 print(f'Running animate_png.py..')
-                dummy = subprocess.check_output([f'python /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath {output_dir}/{description_text2} --rootname {args.field}_*_{description_text2}.png - -delay 0.1'], shell=True)
+                dummy = subprocess.run(['python', '/Users/acharyya/Work/astro/ayan_codes/animate_png.py', '--inpath', f'{output_dir}/{description_text2}', '--rootname', f'{args.field}_*_{description_text2}.png', '--delay', '0.1'])
 
-            # ------------moving the final animation------------------
-            print(f'Moving the animation file..')
+            # ------------move the final animation------------------
+            print(f'Moving the animation file to {file_to_check_for}..')
             dummy = shutil.move(file_to_move, file_to_check_for)
-
 
         print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
 
-    print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
+    print(f'All {len(field_list)} fields done. Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
