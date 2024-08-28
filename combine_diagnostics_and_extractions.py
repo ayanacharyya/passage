@@ -27,6 +27,7 @@ if __name__ == "__main__":
     description_text2 = f'diagnostics_and_extractions'
 
     extraction_path = args.input_dir / args.field / 'Extractions'
+    products_path = args.input_dir / args.field / 'Products'
     input_dir = args.output_dir / args.field / f'{description_text}'
     quant_arr = ['line', 'stack', 'full']
     id_arr = args.id
@@ -58,19 +59,40 @@ if __name__ == "__main__":
         axes_ex = [fig.add_subplot(gs[item, 0]) for item in range(len(quant_arr))]
         axes_diag = fig.add_subplot(gs[:, 1])
 
+        found_individual_plots = False
         for ind, quant in enumerate(quant_arr):
             print(f'Reading in {quant} png files..')
             try:
                 ex = mpimg.imread(alternate_path / f'{args.field}_{args.id:05d}.{quant}.png')
                 axes_ex[ind].imshow(ex, origin='upper')
+                found_individual_plots = True
             except FileNotFoundError:
                 try:
                     ex = mpimg.imread(extraction_path / f'{args.field}_{args.id:05d}.{quant}.png')
                     axes_ex[ind].imshow(ex, origin='upper')
+                    found_individual_plots = True
                 except FileNotFoundError:
-                    print('Could not find file, so skipping')
+                    print('Could not find file, so trying to plot pre-made plot-group')
                     continue
 
+        # ------------------opening grizli-made group of plots if individual plots not found-----------------------
+        if not found_individual_plots:
+            try:
+                print(f'Reading in group-plot png file..')
+                ex = mpimg.imread(products_path / 'plots' / f'{args.field}_{args.id:05d}.png')
+                ex = ex[int(np.shape(ex)[0] * 0.23):, :, :] # to crop out the additional direct image that this group of plot includes, and we do not need that
+
+                # ------to delete existing fig with 3 separate axis and make a new one with only axis because this is already a group of plots------
+                plt.close(fig)
+                fig = plt.figure(figsize=(12, 6))
+                gs = fig.add_gridspec(1, 2)
+                axes_merged, axes_diag = [fig.add_subplot(gs[:, item]) for item in range(2)]
+                axes_merged.imshow(ex, origin='lower') # origin ='lower' because PASSAGEPipe originally stitched these plots in a flipped way
+
+            except FileNotFoundError:
+                print('Could not find grizli-made plot-group, so skipping')
+
+        # ------------------opening diagnostic plots-----------------------
         print(f'Reading in diagnostic png files..')
 
         try:

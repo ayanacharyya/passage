@@ -716,7 +716,7 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
 
     # ---------determining filename suffixes-------------------------------
-    extract_dir = args.input_dir / args.field / 'Extractions'
+    product_dir = args.input_dir / args.field / 'Products'
 
     radial_plot_text = '_wradprof' if args.plot_radial_profiles else ''
     snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
@@ -728,12 +728,8 @@ if __name__ == "__main__":
     if args.re_extract: output_dir = output_dir / 're_extracted'
     outfilename = output_dir / f'{args.field}_all_diag_results.txt'
 
-    try:
-        catalog_file = extract_dir / f'{args.field}-ir.cat.fits'
-        catalog = GTable.read(catalog_file)
-    except:
-        catalog_file = args.input_dir / args.field / 'Products' / f'{args.field}_photcat.fits'
-        catalog = GTable.read(catalog_file)
+    catalog_file = product_dir / f'{args.field}_photcat.fits'
+    catalog = GTable.read(catalog_file)
 
     if args.do_all_obj:
         if args.re_extract: args.id_arr = ids_to_re_extract_dict[args.field]
@@ -785,19 +781,22 @@ if __name__ == "__main__":
         # ------determining directories---------
         output_subdir = output_dir / f'{args.id:05d}{pixscale_text}'
         if not args.do_all_obj: output_subdir.mkdir(parents=True, exist_ok=True)
-        full_fits_file = f'{args.field}_{args.id:05d}.full.fits'
+        full_fits_file = output_subdir / f'{args.field}_{args.id:05d}.full.fits'
+        maps_fits_file = product_dir / 'maps' / f'{args.field}_{args.id:05d}.maps.fits'
 
-        if os.path.exists(output_subdir / full_fits_file): # if the fits files are in sub-directories for individual objects
-            args.work_dir = output_subdir
-        elif os.path.exists(extract_dir / full_fits_file) and not args.re_extract: # if the fits files are in Extractions/, unless working on re-extractions, in which case they should be in individual sub-directories, as above
-            args.work_dir = extract_dir
+        if os.path.exists(full_fits_file): # if the fits files are in sub-directories for individual objects
+            full_filename = full_fits_file
+            od_filename = output_subdir/ f'{args.field}_{args.id:05d}.1D.fits'
+
+        elif os.path.exists(maps_fits_file): # if the fits files are in Products/
+            full_filename = maps_fits_file
+            od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.spec1D.fits'
+
         else:
-            print(f'Could not find {full_fits_file} for ID {args.id}, so skipping it.')
+            print(f'Could not find {full_fits_file} or {maps_fits_file} for ID {args.id}, so skipping it.')
             continue
 
         # ------------read in fits files--------------------------------
-        od_filename = args.work_dir / f'{args.field}_{args.id:05d}.1D.fits'
-        full_filename = args.work_dir / f'{args.field}_{args.id:05d}.full.fits'
 
         if os.path.exists(full_filename):
             full_hdu = fits.open(full_filename)
