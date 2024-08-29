@@ -742,7 +742,7 @@ if __name__ == "__main__":
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # ---------for diplay and amimations----------------
-    if len(args.id_arr) > 10: args.hide = True # if too many plots, do not display them, just save them
+    if len(args.id_arr) > 20: args.hide = True # if too many plots, do not display them, just save them
     if len(args.id_arr) > 20: args.make_anim = False #True
     else: args.make_anim = False
 
