@@ -187,7 +187,7 @@ if __name__ == "__main__":
                 print(f'Animation already present, but in {file_to_move}, so proceeding to moving it.')
             else:
                 print(f'Running animate_png.py..')
-                dummy = subprocess.run(['python', '/Users/acharyya/Work/astro/ayan_codes/animate_png.py', '--inpath', f'{output_dir}/{description_text2}', '--rootname', f'{args.field}_*_{description_text2}.png', '--delay', '0.1'])
+                dummy = subprocess.run(['python', '/Users/acharyya/Work/astro/ayan_codes/animate_png.py', '--inpath', f'{output_dir}/{description_text2}/', '--rootname', f'{args.field}_*_{description_text2}.png', '--delay', '0.1'])
 
             # ------------move the final animation------------------
             print(f'Moving the animation file to {file_to_check_for}..')
