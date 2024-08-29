@@ -133,7 +133,7 @@ if __name__ == "__main__":
             if len(zipped_files) == 0:
                 print(f'All files already unzipped, so proceeding to renaming.')
             else:
-                for ind, thisfile in zipped_files:
+                for ind, thisfile in enumerate(zipped_files):
                     print(f'Unzipping {ind + 1} of {len(zipped_files)} zipped files..')
                     shutil.unpack_archive(thisfile, products_path)
                     os.remove(thisfile) #remove zipped files after unzipping
