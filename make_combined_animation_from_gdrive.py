@@ -5,7 +5,7 @@
     Author : Ayan
     Created: 28-08-24
     Example: run make_combined_animation_from_gdrive.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
-             run make_combined_animation_from_gdrive.py
+             run make_combined_animation_from_gdrive.py --only_download
 '''
 
 from header import *
@@ -60,7 +60,7 @@ def download_folder_from_google_drive(folder_id, destination_folder):
     for item in items:
         if item['mimeType'].endswith('.folder'):
             print(f'Downloading folder {item["name"]} from google drive..')
-            download_folder_from_google_drive(item['id'], products_path / id['name'])
+            download_folder_from_google_drive(item['id'], products_path / item['name'])
         else:
             request = drive_downloader.files().get_media(fileId=item['id'])
             f = io.FileIO(destination_folder / item['name'], 'wb')
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     items, _ = query_google_drive_folder(passage_url_id)
     field_url_dict = {item['name']:item['id'] for item in items if item['name'].startswith('Par') and item ['mimeType'].endswith('.folder')}
     fields_in_gdrive = list(field_url_dict.keys())
-    print(f'\nFound {len(fields_in_gdrive)} PASSAGE fields in the google drive folder...')
+    print(f'..out of which {len(fields_in_gdrive)} are PASSAGE fields...')
 
     field_list = list(set(fields_of_interest).intersection(fields_in_gdrive))
     field_list.sort(key=natural_keys)
