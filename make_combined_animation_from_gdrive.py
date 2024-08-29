@@ -68,8 +68,8 @@ def download_folder_from_google_drive(folder_id, destination_folder):
             done = False
             while not done:
                 status, done = downloader.next_chunk()
-                print(f'Downloaded {item["name"]}: {int(status.progress() * 100)}\%', end='\r')
-            print('\n')
+                print(f'Downloaded {item["name"]}: {int(status.progress() * 100)}%', end='\r')
+            #print('\n')
 
     print(f'Downloaded {len(items)} files from the folder.')
 
@@ -108,6 +108,7 @@ if __name__ == "__main__":
 
         # ----------determining filenames etc. to check for presence----------
         products_path = args.input_dir / args.field / 'Products'
+        extraction_path = args.input_dir / args.field / 'Extractions'
         output_dir = args.output_dir / args.field
         file_to_check_for = f'{args.field}__{description_text2}_anim.mp4'
 
@@ -161,6 +162,9 @@ if __name__ == "__main__":
             diag_results_file = output_dir / f'{args.field}_all_diag_results.txt'
             if os.path.exists(diag_results_file) and not args.clobber:
                 print(f'Diagnostic results file already present, so proceeding to making combined diagnostics and extraction images.')
+            elif not os.path.exists(products_path / 'maps'):
+                print(f'Supposed to run make_diagnostic_maps.py but {str(products_path / "maps")} does not exist, therefore cannot run. Moving to the next field.')
+                continue
             else:
                 print(f'Running make_diagnostic_maps.py..')
                 dummy = subprocess.run(['python', 'make_diagnostic_maps.py', '--field', f'{args.field}', '--do_all_obj', '--plot_radial_profiles', '--only_seg', '--snr_cut', '3', '--hide'])
@@ -170,6 +174,9 @@ if __name__ == "__main__":
             extraction_img_files = glob.glob(str(output_dir / f'{description_text2}') + f'/{args.field}_*_{description_text2}.png')
             if len(extraction_img_files) == len(diagnostic_img_files):
                 print(f'All combined extraction images already present, so proceeding to the next step.')
+            elif not (os.path.exists(products_path / 'plots') or os.path.exists(extraction_path)):
+                print(f'Supposed to run combine_diagnostics_and_extractions.py but neither {extraction_path} nor {str(products_path / "plots")} exist, therefore cannot run. Moving to the next field.')
+                continue
             else:
                 print(f'Running combine_diagnostics_and_extractions.py..')
                 dummy = subprocess.run(['python', 'combine_diagnostics_and_extractions.py', '--field', f'{args.field}', '--do_all_obj', '--hide'])
