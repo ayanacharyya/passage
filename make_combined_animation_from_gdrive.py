@@ -167,7 +167,7 @@ if __name__ == "__main__":
                 continue
             else:
                 print(f'Running make_diagnostic_maps.py..')
-                dummy = subprocess.run(['python', 'make_diagnostic_maps.py', '--field', f'{args.field}', '--do_all_obj', '--plot_radial_profiles', '--only_seg', '--snr_cut', '3', '--hide'])
+                dummy = subprocess.run(['python', 'make_diagnostic_maps.py', '--field', f'{args.field}', '--do_all_obj', '--plot_radial_profiles', '--only_seg', '--snr_cut', '3', '--write_file', '--hide'])
 
             # ------------run combine_diagnostics_and_extractions.py------------------
             diagnostic_img_files = glob.glob(str(output_dir / f'{description_text1}') + f'/{args.field}_*_{description_text1}.png')
