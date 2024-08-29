@@ -123,6 +123,10 @@ if __name__ == "__main__":
                 folder_id = field_url_dict[field]
                 download_folder_from_google_drive(folder_id, products_path)
 
+            if args.only_download:
+                print('--only_download option was used, hence skipping all other steps. Remove this option to access subsequent steps')
+                continue
+
             # ------------unzip the downloaded files------------------
             zipped_files = glob.glob(str(products_path) + '/*.gz')
             if len(zipped_files) == 0:
@@ -168,7 +172,7 @@ if __name__ == "__main__":
                 print(f'All combined extraction images already present, so proceeding to the next step.')
             else:
                 print(f'Running combine_diagnostics_and_extractions.py..')
-                dummy = subprocess.run(['python', 'combine_diagnostics_and_extractions.py' '--field', f'{args.field}', '--do_all_obj', '--hide'])
+                dummy = subprocess.run(['python', 'combine_diagnostics_and_extractions.py', '--field', f'{args.field}', '--do_all_obj', '--hide'])
 
             # ------------make the final animation with the combined images------------------
             file_to_move = output_dir / f'{description_text2}' / f'{args.field}__{description_text2}_anim.mp4'
@@ -180,7 +184,7 @@ if __name__ == "__main__":
 
             # ------------move the final animation------------------
             print(f'Moving the animation file to {file_to_check_for}..')
-            dummy = shutil.move(file_to_move, file_to_check_for)
+            dummy = shutil.move(file_to_move, output_dir / file_to_check_for)
 
         print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
 

@@ -104,6 +104,9 @@ def parse_args():
     parser.add_argument('--xcol', metavar='xcol', type=str, action='store', default='lp_mass_best', help='Column name in COSMOS2020 catalog to be used as the quantity on x-axis? Default is lp_mass_best')
     parser.add_argument('--ycol', metavar='ycol', type=str, action='store', default='lp_SFR_best', help='Column name in COSMOS2020 catalog to be used as the quantity on y-axis? Default is lp_SFR_best')
     parser.add_argument('--colorcol', metavar='colorcol', type=str, action='store', default='ez_z_phot', help='Column name in COSMOS2020 catalog to be used as the color axis? Default is ez_z_phot')
+    parser.add_argument('--only_download', dest='only_download', action='store_true', default=False, help='Perform only the downloading (from GDrive) step for each field? Default is no.')
+
+    # ------- args added for make_combined_animation_from_gdrive.py ------------------------------
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
