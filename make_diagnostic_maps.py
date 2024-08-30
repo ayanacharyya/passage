@@ -797,6 +797,8 @@ if __name__ == "__main__":
             print(f'Could not find {full_fits_file} or {maps_fits_file} for ID {args.id}, so skipping it.')
             continue
 
+        if not os.path.exists(od_filename): od_filename = Path(str(od_filename).replace('.1D.', '.spec1D.'))
+
         # ------------read in fits files--------------------------------
 
         if os.path.exists(full_filename):
