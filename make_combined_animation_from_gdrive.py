@@ -13,31 +13,35 @@ from util import *
 
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import InstalledAppFlow, Flow
 import io
 
 from get_field_stats import natural_keys
 
 start_time = datetime.now()
 
+
 # --------------------------------------------------------------------------------------------------------------------
-def query_google_drive_folder(folder_id):
+def get_credentials():
+    '''
+    Obtain your Google credentials
+    Based on top answer in https://stackoverflow.com/questions/76485003/how-do-i-download-all-files-from-a-google-drive-folder-with-more-than-50-files
+    '''
+    SCOPES = ['https://www.googleapis.com/auth/drive.readonly'] # Define the scopes
+
+    flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+    creds = flow.run_local_server(port=0)
+
+    return creds
+
+# --------------------------------------------------------------------------------------------------------------------
+def query_google_drive_folder(folder_id, credentials):
     '''
     Queries google drive folder and returns file/folder list
     Based on top answer in https://stackoverflow.com/questions/76485003/how-do-i-download-all-files-from-a-google-drive-folder-with-more-than-50-files
     '''
-    # Define the scopes
-    SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
-
-    # Obtain your Google credentials
-    def get_credentials():
-        flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-        creds = flow.run_local_server(port=0)
-        return creds
-
     # Build the downloader
-    creds = get_credentials()
-    drive_downloader = build('drive', 'v3', credentials=creds)
+    drive_downloader = build('drive', 'v3', credentials=credentials)
 
     query = f"'{folder_id}' in parents"  # this works  ref https://stackoverflow.com/q/73119251/248616
 
@@ -49,18 +53,19 @@ def query_google_drive_folder(folder_id):
     return items, drive_downloader
 
 # --------------------------------------------------------------------------------------------------------------------
-def download_folder_from_google_drive(folder_id, destination_folder):
+def download_folder_from_google_drive(folder_id, destination_folder, credentials):
     '''
     Downloads the given file IDs from google drive
     Based on top answer in https://stackoverflow.com/questions/76485003/how-do-i-download-all-files-from-a-google-drive-folder-with-more-than-50-files
     '''
     destination_folder.mkdir(parents=True, exist_ok=True)
-    items, drive_downloader = query_google_drive_folder(folder_id)
+    items, drive_downloader = query_google_drive_folder(folder_id, credentials)
+    items = items[:1] ##
 
     for item in items:
         if item['mimeType'].endswith('.folder'):
             print(f'Downloading folder {item["name"]} from google drive..')
-            download_folder_from_google_drive(item['id'], products_path / item['name'])
+            download_folder_from_google_drive(item['id'], products_path / item['name'], credentials)
         else:
             request = drive_downloader.files().get_media(fileId=item['id'])
             f = io.FileIO(destination_folder / item['name'], 'wb')
@@ -91,7 +96,8 @@ if __name__ == "__main__":
     description_text2 = f'diagnostics_and_extractions'
 
     # --------query passage folder and see which fields available------------------
-    items, _ = query_google_drive_folder(passage_url_id)
+    credentials = get_credentials()
+    items, _ = query_google_drive_folder(passage_url_id, credentials)
     field_url_dict = {item['name']:item['id'] for item in items if item['name'].startswith('Par') and item ['mimeType'].endswith('.folder')}
     fields_in_gdrive = list(field_url_dict.keys())
     print(f'..out of which {len(fields_in_gdrive)} are PASSAGE fields...')
@@ -117,12 +123,13 @@ if __name__ == "__main__":
 
         else:
             # ------------download the files------------------
-            if os.path.exists(products_path / 'spec1D'):
+            spec1D_files = glob.glob(str(products_path) + '/*spec1D*')
+            if len(spec1D_files) > 0:
                 print(f'Downloads already present, so proceeding to unzipping.')
             else:
                 print(f'Downloading folder {field} from google drive..')
                 folder_id = field_url_dict[field]
-                download_folder_from_google_drive(folder_id, products_path)
+                download_folder_from_google_drive(folder_id, products_path, credentials=credentials)
 
             if args.only_download:
                 print('--only_download option was used, hence skipping all other steps. Remove this option to access subsequent steps')

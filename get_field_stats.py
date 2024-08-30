@@ -39,6 +39,19 @@ def make_set(df, condition, label, set_arr, label_arr):
 
     return set_arr, label_arr
 
+# -----------------------------------------------------------------------------------------------
+def is_line_within_filter(line, redshift, filters, trim_factor=0.):
+    '''
+    Determines whether a given line is within the "good" part of a given list of filters' wavelength range
+    Returns boolean
+    '''
+    line_obs_wave = rest_wave_dict[line] * (1 + redshift) / 1e3 # factor 1e3 to convert nm to microns
+    all_wave_ranges = [filter_waverange_dict[item] for item in filters] # "good" part of wavelength ranges for each filter, in microns
+    trimmed_wave_ranges = [[item[0] * (1 + trim_factor), item[1] * (1 - trim_factor)] for item in all_wave_ranges]
+    is_line_available = np.array([item[0] < line_obs_wave and item[1] > line_obs_wave for item in trimmed_wave_ranges]).any()
+
+    return is_line_available
+
 # -------------------------------------------------------------------------------------------------------
 def plot_venn(df, args):
     '''
@@ -57,12 +70,14 @@ def plot_venn(df, args):
     line_list = args.line_list
 
     for line in line_list:
-        condition1 = (np.isfinite(df[f'{line}_EW'])) & (df[f'{line}_EW'] > 0)
-        df_line = df[condition1]
-        set_arr, label_arr = make_set(df, condition1, f'{line}_present', set_arr, label_arr)
+        condition1 = df['redshift'].map(lambda x: is_line_within_filter(line, x, args.filters, trim_factor=args.trim_filter_by_wavelength_factor))
+        set_arr, label_arr = make_set(df, condition1, f'{line} available', set_arr, label_arr)
 
-        condition2 = df_line[f'{line}_EW'] > args.EW_thresh
-        set_arr, label_arr = make_set(df_line, condition2, f'{line} EW > {args.EW_thresh}', set_arr, label_arr)
+        condition2 = (np.isfinite(df[f'{line}_EW'])) & (df[f'{line}_EW'] > 0)
+        set_arr, label_arr = make_set(df, condition1 & condition2, f'{line} present', set_arr, label_arr)
+
+        condition3 = df[f'{line}_EW'] > args.EW_thresh
+        set_arr, label_arr = make_set(df, condition1 & condition2 & condition3, f'{line} EW > {args.EW_thresh}', set_arr, label_arr)
 
     # ---------add magnitude set------------
     if args.mag_lim is None: mag_lim = 26
@@ -284,7 +299,7 @@ if __name__ == "__main__":
         # ---------looping over fields-----------
         for index, args.field in enumerate(available_fields):
             print(f'Doing field {args.field} which is {index+1} of {len(available_fields)}..')
-            args.filters = filter_dict[args.field]
+            args.filters = available_filters_for_field_dict[args.field]
             if '51' in args.field:
                 args.re_extract = True
             else:

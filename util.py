@@ -89,6 +89,8 @@ def parse_args():
     parser.add_argument('--write_file', dest='write_file', action='store_true', default=False, help='Write the measured quantities to a master dataframe? Default is no.')
     parser.add_argument('--plot_mappings', dest='plot_mappings', action='store_true', default=False, help='Plot emission line locations as per MAPPINGS predictions (will lead to crowding of many lines)? Default is no.')
     parser.add_argument('--hide', dest='hide', action='store_true', default=False, help='Hide (do not display) the plots just made? Default is no.')
+    parser.add_argument('--trim_filter_by_wavelength_factor', metavar='trim_filter_by_wavelength_factor', type=float, action='store', default=0.05, help='Impose a trimming factor on wavelength for each filter, to be applied on both blue and red ends of a filter; default is 0.05 (i.e. 5%)')
+
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300, help='EW threshold to consider good detection for emission line maps; default is 300')
@@ -135,7 +137,7 @@ def parse_args():
     args.code_dir = Path(args.code_dir)
 
     if args.filters is None:
-        if args.field in filter_dict: args.filters = filter_dict[args.field]
+        if args.field in available_filters_for_field_dict: args.filters = available_filters_for_field_dict[args.field]
         else: args.filters = ['F115W'] # default
     else:
         args.filters = args.filters.split(',')
@@ -164,16 +166,13 @@ def get_zranges_for_filters(line, filters=['F115W', 'F150W', 'F200W']):
     Computes the redshift range in which a certain emission line is available, for a given JWST filter,
     considering the lambda boundaries where sensitivity drops to 50% (by default corresponds to the set of filters used in PASSAGE)
     Input filter name/s must be from the known JWST filters
-    NIRISS filter data taken from Table 1 in https://jwst-docs.stsci.edu/jwst-near-infrared-imager-and-slitless-spectrograph/niriss-instrumentation/niriss-filters#gsc.tab=0
     Returns min and max redshift/s
     '''
-    filter_dict = {'F090W':[0.796, 1.005], 'F115W':[1.013, 1.283], 'F150W':[1.330, 1.671], 'F200W':[1.751, 2.226], 'F277W':[2.413, 3.143], 'F356W':[3.140, 4.068], 'F444W':[3.880, 5.023], \
-                   'F140M':[1.331, 1.480], 'F158M':[1.488, 1.688], 'F380M':[3.726, 3.931], 'F430M':[4.182, 4.395], 'F480M':[4.668, 4.971]} # microns
     filters = fix_filter_names(filters)
 
     z_limits = []
     for index, filter in enumerate(filters):
-        obs_wave_range = np.array(filter_dict[filter])
+        obs_wave_range = np.array(filter_waverange_dict[filter])
         z_min, z_max = get_zrange_for_line(line, obs_wave_range=obs_wave_range * 1e3)  # x1e3 to convert um to nm
         if index == 0:
             z_limits.extend([z_min, z_max])
@@ -209,10 +208,6 @@ def get_zrange_for_line(line, obs_wave_range=[800, 2200]):
     Input wavelengths must be in nm
     Returns min and max redshift
     '''
-    rest_wave_dict = {'Lya': 121.6, 'OII': 372.7, 'Hd': 434.0, 'OIII-4363': 436.3, 'Hb': 486.1, 'OIII': 500.7, 'Ha+NII': 655.5, 'Ha': 656.2, 'SII': 671.7,
-                      'SIII': 953.0, 'PaD': 1004.6, 'PaG': 1093.5, 'PaB': 1281.4,
-                      'PaA': 1874.5}  # approximate wavelengths in nm
-
     if type(line) in [float, int, np.float64, np.int64]: rest_wave = line
     elif type(line) in [str, np.str_]: rest_wave = rest_wave_dict[line]
 

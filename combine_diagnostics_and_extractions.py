@@ -42,13 +42,14 @@ if __name__ == "__main__":
             catalog = GTable.read(catalog_file)
 
         args.id_arr = catalog['NUMBER'] if 'NUMBER' in catalog.columns else catalog['id']
-        output_dir = args.output_dir / args.field / f'{description_text2}'
-        output_dir.mkdir(parents=True, exist_ok=True)
     else:
         args.id_arr = args.id
 
     if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
     if len(args.id_arr) > 10: args.hide = True # if too many plots, do not display them, just save them
+
+    output_dir = args.output_dir / args.field / f'{description_text2}'
+    output_dir.mkdir(parents=True, exist_ok=True)
 
 
     # ------------read in grizli images and plot comparison--------------------------------
@@ -59,10 +60,6 @@ if __name__ == "__main__":
         gs = fig.add_gridspec(len(quant_arr), 2)
         axes_ex = [fig.add_subplot(gs[item, 0]) for item in range(len(quant_arr))]
         axes_diag = fig.add_subplot(gs[:, 1])
-
-        if not args.do_all_obj:
-            output_dir = args.output_dir / args.field / f'{args.id:05d}{pixscale_text}'
-            output_dir.mkdir(parents=True, exist_ok=True)
 
         found_individual_plots = False
         for ind, quant in enumerate(quant_arr):

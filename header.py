@@ -83,6 +83,17 @@ pp = pprint.PrettyPrinter(indent=4)
 
 HOME = Path.home()
 
+rest_wave_dict = {'Lya': 121.6, 'OII': 372.7, 'Hd': 434.0, 'OIII-4363': 436.3, 'Hb': 486.1, 'OIII': 500.7,
+                  'Ha+NII': 655.5, 'Ha': 656.2, 'SII': 671.7,
+                  'SIII': 953.0, 'PaD': 1004.6, 'PaG': 1093.5, 'PaB': 1281.4,
+                  'PaA': 1874.5}  # approximate wavelengths in nm
+
+# Below: NIRISS filter data taken from Table 1 in https://jwst-docs.stsci.edu/jwst-near-infrared-imager-and-slitless-spectrograph/niriss-instrumentation/niriss-filters#gsc.tab=0
+filter_waverange_dict = {'F090W': [0.796, 1.005], 'F115W': [1.013, 1.283], 'F150W': [1.330, 1.671],
+                         'F200W': [1.751, 2.226], 'F277W': [2.413, 3.143], 'F356W': [3.140, 4.068],
+                         'F444W': [3.880, 5.023], 'F140M': [1.331, 1.480], 'F158M': [1.488, 1.688],
+                         'F380M': [3.726, 3.931], 'F430M': [4.182, 4.395], 'F480M': [4.668, 4.971]}  # microns
+
 ids_to_re_extract_dict = {'Par051': [141, 159, 179, 207, 220, 239, 285, 304, 315, 333, 337, 383, 393, 406, 416, 420, 461, 520, 539, 549, 576,
                585, 586, \
                601, 607, 620, 672, 673, 700, 709, 733, 735, 744, 751, 761, 785, 806, 807, 820, 851, 858, 891, 899, 934,
@@ -100,7 +111,7 @@ ids_to_re_extract_dict = {'Par051': [141, 159, 179, 207, 220, 239, 285, 304, 315
                2655, 2772,
                2777]} # IDs determined by visual inspection, to re-extract the spectra using wider (0.1 < z < 8) z constraints, and perhaps better choices for other parameters too
 
-filter_dict = {'Par061':['F115W', 'F150W'], \
+available_filters_for_field_dict = {'Par061':['F115W', 'F150W'], \
                'Par009': ['F115W', 'F150W'], \
                'Par006': ['F115W', 'F150W'], \
                'Par024': ['F115W', 'F150W'], \

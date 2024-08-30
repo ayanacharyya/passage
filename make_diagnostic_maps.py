@@ -166,20 +166,21 @@ def plot_1d_spectra(od_hdu, ax, args):
     filters = [od_hdu[0].header[f'GRISM{item + 1:03d}'] for item in range(nfilters)]
 
     col_arr = ['orange', 'orangered', 'firebrick'] # colors in order: for measured flux, fitted continuum, fitted continuum + line flux
-    factor = 1e-19
+    norm_factor = 1e-19
 
     # -------plot 1D spectra for each filter-----------
     for index, filter in enumerate(filters):
         print(f'Plotting 1D spectra for filter {filter} which is {index+1} of {nfilters}..')
-        table = Table(od_hdu[filter].data)
+        table = Table(od_hdu[filter].data).to_pandas()
+        table = table[table['wave'].between(table['wave'].min() * (1 + args.trim_filter_by_wavelength_factor), table['wave'].max() * (1 - args.trim_filter_by_wavelength_factor))]
         table['rest_wave'] = table['wave'] / (1 + args.z)
-        ax.plot(table['rest_wave'], table['flux'] / table['flat'] / factor, lw=0.5, c=col_arr[index], alpha=0.8) # need to divide all columns with 'flat' to get the right units (ergs/s/cm^2/A)
-        ax.plot(table['rest_wave'], table['cont'] / table['flat'] / factor, lw=0.5, c='grey')
-        ax.plot(table['rest_wave'], table['line'] / table['flat'] / factor, lw=1, c='indigo')
+        ax.plot(table['rest_wave'], table['flux'] / table['flat'] / norm_factor, lw=0.5, c=col_arr[index], alpha=0.8) # need to divide all columns with 'flat' to get the right units (ergs/s/cm^2/A)
+        ax.plot(table['rest_wave'], table['cont'] / table['flat'] / norm_factor, lw=0.5, c='grey')
+        ax.plot(table['rest_wave'], table['line'] / table['flat'] / norm_factor, lw=1, c='indigo')
         ax.text(float(filters[0][1:-1]) * 1e2 * 0.85 / (1 + args.z), ax.get_ylim()[1] * 0.95 - index * 0.1, filter, c=col_arr[index], fontsize=args.fontsize, ha='left', va='top')
 
     ax.set_xlabel(r'Rest-frame wavelength ($\AA$)', fontsize=args.fontsize)
-    ax.set_ylabel(r'f$_{\lambda}$ ' + '(%.0e ' % factor + r'ergs/s/cm$^2$/A)', fontsize=args.fontsize/1.2)
+    ax.set_ylabel(r'f$_{\lambda}$ ' + '(%.0e ' % norm_factor + r'ergs/s/cm$^2$/A)', fontsize=args.fontsize/1.2)
     ax.set_ylim(0, args.flam_max) # flam_max should be in units of 1e-19 ergs/s/cm^2/A
 
     # ---observed wavelength axis-------
@@ -726,6 +727,7 @@ if __name__ == "__main__":
 
     output_dir = args.output_dir / args.field
     if args.re_extract: output_dir = output_dir / 're_extracted'
+    output_dir.mkdir(parents=True, exist_ok=True)
     outfilename = output_dir / f'{args.field}_all_diag_results.txt'
 
     catalog_file = product_dir / f'{args.field}_photcat.fits'
@@ -734,12 +736,12 @@ if __name__ == "__main__":
     if args.do_all_obj:
         if args.re_extract: args.id_arr = ids_to_re_extract_dict[args.field]
         else: args.id_arr = catalog['NUMBER'] if 'NUMBER' in catalog.columns else catalog['id']
-        output_dir = output_dir / f'{description_text}'
     else:
         args.id_arr = args.id
 
     if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
-    output_dir.mkdir(parents=True, exist_ok=True)
+    fig_dir = output_dir / f'{description_text}'
+    fig_dir.mkdir(parents=True, exist_ok=True)
 
     # ---------for diplay and amimations----------------
     if len(args.id_arr) > 20: args.hide = True # if too many plots, do not display them, just save them
@@ -780,7 +782,6 @@ if __name__ == "__main__":
 
         # ------determining directories---------
         output_subdir = output_dir / f'{args.id:05d}{pixscale_text}'
-        if not args.do_all_obj: output_subdir.mkdir(parents=True, exist_ok=True)
         full_fits_file = output_subdir / f'{args.field}_{args.id:05d}.full.fits'
         maps_fits_file = product_dir / 'maps' / f'{args.field}_{args.id:05d}.maps.fits'
 
@@ -902,8 +903,7 @@ if __name__ == "__main__":
 
         # ---------decorating and saving the figure------------------------------
         fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-        figdir = output_dir if args.do_all_obj else output_subdir
-        figname = figdir / f'{args.field}_{args.id:05d}_{description_text}.png'
+        figname = fig_dir / f'{args.field}_{args.id:05d}_{description_text}.png'
         fig.savefig(figname)
         print(f'Saved figure at {figname}')
         if args.hide: plt.close('all')
