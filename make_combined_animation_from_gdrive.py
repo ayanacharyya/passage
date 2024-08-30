@@ -60,7 +60,6 @@ def download_folder_from_google_drive(folder_id, destination_folder, credentials
     '''
     destination_folder.mkdir(parents=True, exist_ok=True)
     items, drive_downloader = query_google_drive_folder(folder_id, credentials)
-    items = items[:1] ##
 
     for item in items:
         if item['mimeType'].endswith('.folder'):
