@@ -122,8 +122,8 @@ if __name__ == "__main__":
 
         else:
             # ------------download the files------------------
-            spec1D_files = glob.glob(str(products_path) + '/*spec1D*')
-            if len(spec1D_files) > 0:
+            test_filenames = glob.glob(str(products_path) + f'*photcat.fits')
+            if len(test_filenames) > 0:
                 print(f'Downloads already present, so proceeding to unzipping.')
             else:
                 print(f'Downloading folder {field} from google drive..')
@@ -168,8 +168,8 @@ if __name__ == "__main__":
             diag_results_file = output_dir / f'{args.field}_all_diag_results.txt'
             if os.path.exists(diag_results_file) and not args.clobber:
                 print(f'Diagnostic results file already present, so proceeding to making combined diagnostics and extraction images.')
-            elif not os.path.exists(products_path / 'maps'):
-                print(f'Supposed to run make_diagnostic_maps.py but {str(products_path / "maps")} does not exist, therefore cannot run. Moving to the next field.')
+            elif not (os.path.exists(products_path / 'maps') and os.path.exists(products_path / 'spec1D')):
+                print(f'Supposed to run make_diagnostic_maps.py but either {str(products_path / "maps")} OR spec_1D/ does not exist, therefore cannot run. Moving to the next field.')
                 continue
             else:
                 print(f'Running make_diagnostic_maps.py..')
@@ -181,7 +181,7 @@ if __name__ == "__main__":
             if len(extraction_img_files) == len(diagnostic_img_files):
                 print(f'All combined extraction images already present, so proceeding to the next step.')
             elif not (os.path.exists(products_path / 'plots') or os.path.exists(extraction_path)):
-                print(f'Supposed to run combine_diagnostics_and_extractions.py but neither {extraction_path} nor {str(products_path / "plots")} exist, therefore cannot run. Moving to the next field.')
+                print(f'Supposed to run combine_diagnostics_and_extractions.py but neither {extraction_path} nor {str(products_path / "plots")} exists, therefore cannot run. Moving to the next field.')
                 continue
             else:
                 print(f'Running combine_diagnostics_and_extractions.py..')
