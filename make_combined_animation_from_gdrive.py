@@ -122,7 +122,7 @@ if __name__ == "__main__":
 
         else:
             # ------------download the files------------------
-            test_filenames = glob.glob(str(products_path) + f'*photcat.fits')
+            test_filenames = glob.glob(str(products_path) + f'/*photcat.fits')
             if len(test_filenames) > 0:
                 print(f'Downloads already present, so proceeding to unzipping.')
             else:
