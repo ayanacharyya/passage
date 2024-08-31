@@ -96,13 +96,19 @@ if __name__ == "__main__":
     description_text2 = f'diagnostics_and_extractions'
 
     # --------query passage folder and see which fields available------------------
-    credentials = get_credentials()
-    items, _ = query_google_drive_folder(passage_url_id, credentials)
-    field_url_dict = {item['name']:item['id'] for item in items if item['name'].startswith('Par') and item ['mimeType'].endswith('.folder')}
-    fields_in_gdrive = list(field_url_dict.keys())
-    print(f'..out of which {len(fields_in_gdrive)} are PASSAGE fields...')
+    all_photcat_files = [args.input_dir / f'Par{int(field[3:]):03}' / 'Products' / f'Par{int(field[3:]):03}_photcat.fits' for field in fields_of_interest]
+    if np.array([os.path.exists(file) for file in all_photcat_files]).all():
+        field_list = fields_of_interest
+        print(f'All fields are of interest have been downloaded already, so skipping the goggle drive query step.')
+    else:
+        credentials = get_credentials()
+        items, _ = query_google_drive_folder(passage_url_id, credentials)
+        field_url_dict = {item['name']:item['id'] for item in items if item['name'].startswith('Par') and item ['mimeType'].endswith('.folder')}
+        fields_in_gdrive = list(field_url_dict.keys())
+        print(f'..out of which {len(fields_in_gdrive)} are PASSAGE fields...')
 
-    field_list = list(set(fields_of_interest).intersection(fields_in_gdrive))
+        field_list = list(set(fields_of_interest).intersection(fields_in_gdrive))
+
     field_list = np.unique(field_list + [f'Par{int(item.split("Par")[1])}' for item in args.field_arr]).tolist() # adding some additional fields to the mix, if any
     field_list.sort(key=natural_keys)
     print(f'...out of which {len(field_list)} fields are of interest.')
@@ -124,8 +130,8 @@ if __name__ == "__main__":
 
         else:
             # ------------download the files------------------
-            test_filenames = glob.glob(str(products_path) + f'/*photcat.fits')
-            if len(test_filenames) > 0:
+            test_filename = products_path / f'{args.field}_photcat.fits'
+            if os.path.exists(test_filename):
                 print(f'Downloads already present, so proceeding to unzipping.')
             else:
                 print(f'Downloading folder {field} from google drive..')
