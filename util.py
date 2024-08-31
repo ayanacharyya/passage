@@ -405,7 +405,23 @@ def make_COSMOS_subset_table(filename):
     table_sub.write(outfilename)
     print(f'Saved subset table as {outfilename}')
 
+# -------------------------------------------------------------------------------------------------------
+def get_passage_filter_dict(args=None, filename=None):
+    '''
+    Reads PASSAGE spreadsheet and and returns a dictionary with PASSAGE field names and which filters are present in them
+    '''
+    if filename is None:
+        input_dir = Path('/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data') if args is None else args.input_dir
+        filename = input_dir / 'JWST PASSAGE Cycle 1 - Cy1 Executed.csv'
 
+    df = pd.read_csv(filename)
+    df = df[['Par#', 'Obs Date', 'Filter']]
+    df = df.fillna(method='ffill')
+    df = df[~ df['Obs Date'].str.contains('SKIPPED')]
 
+    dictionary = {item: np.unique(df[df['Par#'] == item]['Filter']).tolist() for item in np.unique(df['Par#'])}
 
+    return dictionary
 
+# --------------------------------------------------------------------------------------------------
+available_filters_for_field_dict = get_passage_filter_dict()
