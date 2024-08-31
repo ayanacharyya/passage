@@ -29,7 +29,7 @@ def parse_args():
     parser.add_argument('--silent', dest='silent', action='store_true', default=False, help='Suppress some generic print statements? Default is no.')
     parser.add_argument('--keep', dest='keep', action='store_true', default=False, help='Keep existing plot windows open? Default is no.')
 
-    parser.add_argument('--field', metavar='field', type=str, action='store', default='Par008', help='Which passage field? Default is Par50')
+    parser.add_argument('--field', metavar='field', type=str, action='store', default='Par3', help='Which passage field? Default is Par50')
     parser.add_argument('--id', metavar='id', type=str, action='store', default='100', help='Object ID. Default is 100')
 
     # ------- args added for make_spectra_from_beam.py ------------------------------
@@ -137,8 +137,8 @@ def parse_args():
     args.code_dir = Path(args.code_dir)
 
     if args.filters is None:
-        if args.field in available_filters_for_field_dict: args.filters = available_filters_for_field_dict[args.field]
-        else: args.filters = ['F115W'] # default
+        if 'available_filters_for_field_dict' not in locals(): available_filters_for_field_dict = get_passage_filter_dict(args)
+        args.filters = available_filters_for_field_dict[args.field]
     else:
         args.filters = args.filters.split(',')
 

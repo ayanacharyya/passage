@@ -6,6 +6,7 @@
     Created: 28-08-24
     Example: run make_combined_animation_from_gdrive.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
              run make_combined_animation_from_gdrive.py --only_download
+             run make_combined_animation_from_gdrive.py --field Par47
 '''
 
 from header import *
@@ -102,6 +103,7 @@ if __name__ == "__main__":
     print(f'..out of which {len(fields_in_gdrive)} are PASSAGE fields...')
 
     field_list = list(set(fields_of_interest).intersection(fields_in_gdrive))
+    field_list = np.unique(field_list + [f'Par{int(item.split("Par")[1])}' for item in args.field_arr]).tolist() # adding some additional fields to the mix, if any
     field_list.sort(key=natural_keys)
     print(f'...out of which {len(field_list)} fields are of interest.')
 
