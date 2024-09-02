@@ -4,9 +4,9 @@
     and animate_png.py to finally produce an animation of combined data reduction adn diagnostic frames
     Author : Ayan
     Created: 28-08-24
-    Example: run make_combined_animation_from_gdrive.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
-             run make_combined_animation_from_gdrive.py --only_download
-             run make_combined_animation_from_gdrive.py --field Par47
+    Example: run make_combined_animation_from_gdrive.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --plot_radial_profiles --only_seg --snr_cut 3
+             run make_combined_animation_from_gdrive.py --plot_radial_profiles --only_seg --snr_cut 3 --only_download
+             run make_combined_animation_from_gdrive.py --plot_radial_profiles --only_seg --snr_cut 3 --field Par47
 '''
 
 from header import *
@@ -88,7 +88,6 @@ if __name__ == "__main__":
     passage_url_id = '1oE1V76aeDlR8vxZNefyzk3yp0eO1rkHw'
 
     # ------determining directories and global variables---------
-    args.plot_radial_profiles, args.only_seg, args.snr_cut = True, True, 3 #
     radial_plot_text = '_wradprof' if args.plot_radial_profiles else ''
     only_seg_text = '_onlyseg' if args.only_seg else ''
     snr_text = f'_snr{args.snr_cut:.1f}' if args.snr_cut is not None else ''
@@ -193,7 +192,7 @@ if __name__ == "__main__":
                 continue
             else:
                 print(f'Running combine_diagnostics_and_extractions.py..')
-                dummy = subprocess.run(['python', 'combine_diagnostics_and_extractions.py', '--field', f'{args.field}', '--do_all_obj', '--hide'])
+                dummy = subprocess.run(['python', 'combine_diagnostics_and_extractions.py', '--field', f'{args.field}', '--do_all_obj', '--plot_radial_profiles', '--only_seg', '--snr_cut', '3', '--hide'])
 
             # ------------make the final animation with the combined images------------------
             file_to_move = output_dir / f'{description_text2}' / f'{args.field}__{description_text2}_anim.mp4'

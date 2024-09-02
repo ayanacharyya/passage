@@ -723,6 +723,7 @@ if __name__ == "__main__":
     snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
     only_seg_text = '_onlyseg' if args.only_seg else ''
     pixscale_text = '' if args.pixscale == 0.04 else f'_{args.pixscale}arcsec_pix'
+    vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
     description_text = f'all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}'
 
     output_dir = args.output_dir / args.field
@@ -905,7 +906,7 @@ if __name__ == "__main__":
 
         # ---------decorating and saving the figure------------------------------
         fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-        figname = fig_dir / f'{args.field}_{args.id:05d}_{description_text}.png'
+        figname = fig_dir / f'{args.field}_{args.id:05d}_{description_text}{vorbin_text}.png'
         fig.savefig(figname)
         print(f'Saved figure at {figname}')
         if args.hide: plt.close('all')
