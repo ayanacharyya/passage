@@ -9,6 +9,7 @@
              run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --zmin 1 --zmax 2.5 --merge_visual --plot_conditions EW,z,mag,tail,RQ,strong_OIII,PA
              run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --plot_conditions EW,mag,compact
              run get_field_stats.py --mag_lim 24 --EW_thresh 300 --log_SFR_thresh 0 --line_list OIII,Ha --plot_venn --do_all_fields --plot_conditions EW,mag,PA,mass
+             run get_field_stats.py --line_list OIII,Ha --plot_venn --do_all_fields --plot_conditions EW,mass,PA
 '''
 from header import *
 from util import *
@@ -40,11 +41,13 @@ def make_set(df, condition, label, set_arr, label_arr):
     return set_arr, label_arr
 
 # -----------------------------------------------------------------------------------------------
-def is_line_within_filter(line, redshift, filters, trim_factor=0.):
+def is_line_within_filter(line, redshift, filters=None, field=None, trim_factor=0.):
     '''
     Determines whether a given line is within the "good" part of a given list of filters' wavelength range
     Returns boolean
     '''
+    if filters is None: filters = available_filters_for_field_dict[field]
+
     line_obs_wave = rest_wave_dict[line] * (1 + redshift) / 1e3 # factor 1e3 to convert nm to microns
     all_wave_ranges = [filter_waverange_dict[item] for item in filters] # "good" part of wavelength ranges for each filter, in microns
     trimmed_wave_ranges = [[item[0] * (1 + trim_factor), item[1] * (1 - trim_factor)] for item in all_wave_ranges]
@@ -70,7 +73,7 @@ def plot_venn(df, args):
     line_list = args.line_list
 
     for line in line_list:
-        condition1 = df['redshift'].map(lambda x: is_line_within_filter(line, x, args.filters, trim_factor=args.trim_filter_by_wavelength_factor))
+        condition1 = df.apply(lambda x: is_line_within_filter(line, x['redshift'], field=x['field'], trim_factor=args.trim_filter_by_wavelength_factor), axis=1)
         set_arr, label_arr = make_set(df, condition1, f'{line} available', set_arr, label_arr)
 
         condition2 = (np.isfinite(df[f'{line}_EW'])) & (df[f'{line}_EW'] > 0)
@@ -128,11 +131,12 @@ def plot_venn(df, args):
     label_arr = np.array(label_arr)[which_sets_to_plot]
     dataset_dict = dict(zip(label_arr, set_arr))
 
-    # ---------manually calling draw_venn() so as to modify petal labels----------
+    # ---------manually calling draw_venn() so as to modify petal labels (for 0 counts)----------
     petal_labels = generate_petal_labels(dataset_dict.values(), fmt="{size}")
     petal_labels = {logic: value if int(value) > 0 else '' for logic, value in petal_labels.items()}
-    ax = draw_venn(petal_labels=petal_labels, dataset_labels=dataset_dict.keys(), hint_hidden=False, colors=generate_colors(cmap=cmap, n_colors=len(label_arr)), figsize=(6, 6), fontsize=args.fontsize, legend_loc='upper left', ax=None)
+    ax = draw_venn(petal_labels=petal_labels, dataset_labels=dataset_dict.keys(), hint_hidden=False, colors=generate_colors(cmap=cmap, n_colors=len(label_arr)), figsize=(6, 6), fontsize=args.fontsize, legend_loc='lower left', ax=None)
 
+    # -------calling the wrapper function, with automatic petal labelling (as opposed to manual calling above) but then 0 counts are displayed as such-------
     #ax = venn(dataset_dict, cmap=cmap, fmt='{size}', fontsize=8, legend_loc='upper left', ax=None)
 
     # ----------annotate and save the diagram----------
