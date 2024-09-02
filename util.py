@@ -424,4 +424,5 @@ def get_passage_filter_dict(args=None, filename=None):
     return dictionary
 
 # --------------------------------------------------------------------------------------------------
-available_filters_for_field_dict = get_passage_filter_dict()
+args = parse_args()
+available_filters_for_field_dict = get_passage_filter_dict(args)
