@@ -9,6 +9,10 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 import os
+from astropy.table import Table
+
+import warnings
+warnings.filterwarnings('ignore')
 
 start_time = datetime.now()
 
@@ -18,150 +22,169 @@ def fill_na(df, columns, fill_with='N/A'):
     Function to fill given columns of a given dataframe with fill_na
     Returns dataframe
     '''
+    if columns == 'all': columns = df.columns()
     for column in columns: df[column] = fill_with
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-if __name__ == "__main__":
+def copy_columns(target_df, source_df, columns):
+    '''
+    Function to copy given columns of a source dataframe to target dataframe
+    Returns target dataframe
+    '''
+    if columns == 'all': columns = source_df.columns()
+    for column in columns: target_df[column] = source_df[column]
+    return target_df
 
-    makefull = False
-    surv = False
-    do_strictly = False
+# --------------------------------------------------------------------------------------------------------------------
+if __name__ == "__main__":
+    # -------------modify following if needed------------------------------------
+    make_full = True # keeping this on will make the fully combined df
+    do_survivability = False # keeping this on will add survivability columns
+    do_strictly = False # keeping this on will check if lengths of two dataframes are same before merging them, and therefore ensure it is being done correctly
+                        # but keeping it False will make sure the whole code runs, but the result may not be reliable
 
     input_path = '/Users/acharyya/Downloads/tables/'
     output_path = input_path + 'outputs/'
     os.makedirs(output_path, exist_ok=True)
-    
+
+    halos = ['002392', '002878', '004123', '005016', '005036', '008508']
+    levels = ['1', '2', '3', '4']
+
+    cols_to_grab_from_metfrac = ['envmets', 'metalratio']
+    cols_to_grab_from_survivability = ['Tcool_edge', 'Tshear', 'survivability']
+    cols_to_grab_from_tree = ['sanitycheckmasses', 'avgdensity', 'avgtemp', 'cid']
+
     full_outfilename = output_path + 'fullclumpstable_master2.h5'
     basic_outfilename = output_path + 'basicclumpstable_master2.h5'
     metfrac_outfilename = output_path + 'metfracclumpstable_master2.h5'
     survivability_outfilename = output_path + 'survivabilityclumpstable_master2.h5'
-    
-    fulldf = pd.DataFrame()
-    basicdf = pd.DataFrame()
-    basic_metfrac_df = pd.DataFrame()
-    basic_survivability_df = pd.DataFrame()
-    
-    halos = ['002392', '002878', '004123', '005016', '005036', '008508']
-    levels = ['1', '2', '3', '4']
 
-    if makefull: fulldf.to_hdf(full_outfilename, key='fulldf', mode='w', format='table')
-    basicdf.to_hdf(basic_outfilename, key='basicdf', mode='w', format='table')
-    basic_metfrac_df.to_hdf(metfrac_outfilename, key='basic_metfrac_df', mode='w', format='table')
-    if surv: basic_survivability_df.to_hdf(survivability_outfilename, key='basic_survivability_df', mode='w', format='table')
+    # -------------should not need to modify below------------------------------------
+    combined_all_df = pd.DataFrame()
+    combined_basic_df = pd.DataFrame()
+    combined_metfrac_df = pd.DataFrame()
+    combined_survivability_df = pd.DataFrame()
 
-    # read in the treefile here
+    combined_basic_df.to_hdf(basic_outfilename, key='combined_basic_df', mode='w', format='table')
+    combined_metfrac_df.to_hdf(metfrac_outfilename, key='combined_metfrac_df', mode='w', format='table')
+    if do_survivability: combined_survivability_df.to_hdf(survivability_outfilename, key='combined_survivability_df',
+                                                          mode='w', format='table')
+    if make_full: combined_all_df.to_hdf(full_outfilename, key='combined_all_df', mode='w', format='table')
 
+    # ----------reading in the treefile----------------
+    tree_infilename = input_path + 'treetable.csv'
+    if os.path.exists(tree_infilename):
+        print(f'Reading master tree file {tree_infilename}..')
+        master_tree_df = pd.read_csv(tree_infilename)
+        master_tree_df = master_tree_df.rename(columns={'fullhalo': 'halo', 'fulllevel': 'level'})
+
+    # ----------looping over levels and halos----------------
     for index in range(len(halos) * len(levels)):
         thishalo = halos[int(index / len(levels))]
         thislevel = levels[index % len(levels)]
-        print(f'\nStarting level {thislevel} of halo {thishalo}..')
+        print(
+        f'\nStarting iteration {index+1} out of {len(halos) * len(levels)}: level {thislevel} of halo {thishalo}..')
 
         # -------------do halo stuff------------------------------------
-        halo_filename = input_path + f'shell{thislevel}/halo_{thishalo}_nref11c_nref9f_RD0027_RD0027_box1_clump_measurements.fits'
-        if os.path.exists(halo_filename):
-            print(f'Found halo file {halo_filename}..')
-            halo_level_df = Table.read(thisfile, format='fits').to_pandas()
+        this_basic_infilename = input_path + f'shell{thislevel}/halo_{thishalo}_nref11c_nref9f_RD0027_RD0027_box1_clump_measurements.fits'
+        if os.path.exists(this_basic_infilename):
+            print(f'Reading halo file {this_basic_infilename}..')
+            this_basic_df = Table.read(this_basic_infilename, format='fits').to_pandas()
 
-            halo_level_df['halo'] = thishalo
-            halo_level_df['level'] = thislevel
+            this_basic_df['halo'] = thishalo
+            this_basic_df['level'] = thislevel
 
-            basicdf = pd.concat([basicdf, halo_level_df])
-            halo_level_df.to_hdf(basic_filename, mode='a', append=True, key='basicdf', format='table')
+            combined_basic_df = pd.concat([combined_basic_df, this_basic_df])  # appending to master df
+            this_basic_df.to_hdf(basic_outfilename, mode='a', append=True, key='combined_basic_df', format='table')  # also saving to file, just in case
 
             # -------------do metfrac stuff------------------------------------
-            metfrac_filename = input_path + f'metfracs/halo_{thishalo}_nref11c_nref9f_RD0027_level{thislevel}_clump_mets.fits'
-            if os.path.exists(metfrac_filename):
-                print(f'Found halo file {metfrac_filename}..')
-                metfrac_df = Table.read(metfracfilename, format='fits').to_pandas()
+            this_metfrac_infilename = input_path + f'metfracs/halo_{thishalo}_nref11c_nref9f_RD0027_level{thislevel}_clump_mets.fits'
+            if os.path.exists(this_metfrac_infilename):
+                print(f'Reading metfrac file {this_metfrac_infilename}..')
+                this_metfrac_df = Table.read(this_metfrac_infilename, format='fits').to_pandas()
+                this_metfrac_df['metalratio'] = this_metfrac_df['metallicity'] - this_metfrac_df['envmets']  # adding new column temporarily; subtracting to get 'ratio', because log space?
 
-                if not do_strictly or len(halo_level_df) == len(metfrac_df):
-                    halo_level_df['envmets'] = metfrac_df['envmets']
-                    halo_level_df['metalratio'] = halo_level_df['metallicity'] - halo_level_df['envmets']
+                if not do_strictly or len(this_basic_df) == len(this_metfrac_df):
+                    this_basic_df = copy_columns(this_basic_df, this_metfrac_df, cols_to_grab_from_metfrac)
                 else:
-                    print(f'NOT concatenating metfrac stuff because df lengths do not match: {len(halo_level_df)} and {len(metfrac_df)}, set do_strictly = False to bypass this check.')
-                    halo_df = fill_na(halo_df, ['envmets', 'metalratio'])
+                    print(
+                    f'Concatenating N/A instead of metfrac stuff because df lengths do not match: {len(this_basic_df)} and {len(this_metfrac_df)}, set do_strictly = False to bypass this check.')
+                    this_basic_df = fill_na(this_basic_df, cols_to_grab_from_metfrac)
             else:
-                print(f'Could not find {metfrac_filename}, so not concatenating metfrac stuff.')
-                halo_df = fill_na(halo_df, ['envmets', 'metalratio'])
+                print(f'Could not find {this_metfrac_infilename}, so concatenating N/A instead of metfrac stuff.')
+                this_basic_df = fill_na(this_basic_df, cols_to_grab_from_metfrac)
 
-            basic_metfrac_df = pd.concat([basic_metfrac_df, halo_level_df])
-            halo_level_df.to_hdf(metfrac_filename, key='basic_metfrac_df', mode='a', append=True, format='table')
+            combined_metfrac_df = pd.concat([combined_metfrac_df, this_basic_df])  # appending to master df
+            this_basic_df.to_hdf(metfrac_outfilename, key='combined_metfrac_df', mode='a', append=True, format='table')  # also saving to file, just in case
 
             # -------------do survivability stuff if needed------------------------------------
-            if surv:
-                #basic_survivability_df = pd.concat([basic_metfrac_df, halo_level_df])
-                survivabilityfilename = input_path + f'survivabilityfiles/halo_{thishalo}_nref11c_nref9f_RD0027_RD0027_level{thislevel}_clump_survivability.fits'
-                if os.path.exists(survivabilityfilename):
-                    survdat = Table.read(survivabilityfilename, format='fits')
-                    survdf = survdat.to_pd()
-                    halo_level_df['Tcool_edge'] = survdf['Tcool_edge']
-                    halo_level_df['Tshear'] = survdf['Tshear']
-                    halo_level_df['survivability'] = survdf['survivability']
+            if do_survivability:
+                # combined_survivability_df = pd.concat([combined_metfrac_df, this_basic_df])
+                this_survivability_infilename = input_path + f'survivabilityfiles/halo_{thishalo}_nref11c_nref9f_RD0027_RD0027_level{thislevel}_clump_survivability.fits'
+                if os.path.exists(this_survivability_infilename):
+                    print(f'Reading survivability file {this_survivability_infilename}..')
+                    this_survivability_df = Table.read(this_survivability_infilename, format='fits').to_pandas()
 
+                    if not do_strictly or len(this_basic_df) == len(this_survivability_df):
+                        this_basic_df = copy_columns(this_basic_df, this_survivability_df, cols_to_grab_from_survivability)
+                    else:
+                        print(f'Concatenating N/A instead of survivability stuff because df lengths do not match: {len(this_basic_df)} and {len(this_survivability_df)}, set do_strictly = False to bypass this check.')
+                        this_basic_df = fill_na(this_basic_df, cols_to_grab_from_survivability)
                 else:
-                    print('NOPE')
-                    halo_level_df['Tcool_edge'] = 'N/A'
-                    halo_level_df['Tshear'] = 'N/A'
-                    halo_level_df['survivability'] = 'N/A'
-                basic_survivability_df = pd.concat([basic_survivability_df, halo_level_df])
-                halo_level_df.to_hdf(survivability_filename, key='basic_survivability_df', mode='a')
+                    print(
+                    f'Could not find {this_survivability_infilename}, so concatenating N/A instead of survivability stuff.')
+                    this_basic_df = fill_na(this_basic_df, cols_to_grab_from_survivability)
+
+                combined_survivability_df = pd.concat([combined_survivability_df, this_basic_df])  # appending to master df
+                this_basic_df.to_hdf(survivability_outfilename, key='combined_survivability_df', mode='a')  # also saving to file, just
+
+            # -------------do tree file stuff if needed------------------------------------
+            if make_full:
+                if os.path.exists(tree_infilename):
+                    print(f'Taking subset of tree file {tree_infilename}..')
+                    this_tree_df = master_tree_df[
+                        (master_tree_df['halo'] == thishalo) & (master_tree_df['level'] == thislevel)]
+
+                    if not do_strictly or len(this_basic_df) == len(this_tree_df):
+                        this_basic_df = copy_columns(this_basic_df, this_tree_df, cols_to_grab_from_tree)
+                    else:
+                        print(f'Concatenating N/A instead of tree stuff because df lengths do not match: {len(this_basic_df)} and {len(this_tree_df)}, set do_strictly = False to bypass this check.')
+                        this_basic_df = fill_na(this_basic_df, cols_to_grab_from_tree)
+                else:
+                    print(f'Could not find {tree_infilename}, so concatenating N/A instead of tree stuff.')
+                    this_basic_df = fill_na(this_basic_df, cols_to_grab_from_tree)
+
+                combined_all_df = pd.concat([combined_all_df, this_basic_df])  # appending to master df
+                this_basic_df.to_hdf(full_outfilename, key='combined_all_df', mode='a')  # also saving to file, just
 
         else:
-            print(f'Could not find {halofilename}, so skipping this halo/level.')
-            continue
+            print(f'Could not find {this_basic_infilename}, so skipping this halo/level.')
 
-        #### adding tree files for environment differences:
-        if makefull:
-            if os.path.exists(halofilename) and os.path.exists(treefilename):
-                thisfile = halofilename
-                dat = Table.read(thisfile, format='fits')
-                halo_level_df = dat.to_pd()
-                for leveli in levellist:
-                    if leveli in thisfile: halo_level_df['level'] = leveli
-                for haloi in halos:
-                    if haloi in thisfile: halo_level_df['halo'] = haloi
+    # ----------------------adding columns to combined basic df-------------------------
+    combined_basic_df['HIfraction'] = np.log10(combined_basic_df['HImasses'] / (combined_basic_df['clumpmasses']))
+    combined_basic_df['pressureratio'] = np.log10(combined_basic_df['pressures'] / combined_basic_df['envpressures'])
+    combined_basic_df['velocityratio'] = np.log10(combined_basic_df['radialvelocities'] / combined_basic_df['envvels'])
 
-                t = yt.load(treefilename)
-                sanitycheckmasses = []
-                avgdensity = []
-                avgtemp = []
-                cid = []
+    # ----------------------saving combined basic df-------------------------
+    combined_basic_df.to_hdf(output_path + 'basicclumpstable_master_done.h5', key='combined_basic_df', mode='w')
 
-                for c in t.leaves:
-                    sanitycheckmasses.append(c['grid', 'cell_mass'].sum().in_units("Msun"))
-                    avgdensity.append(c['grid', 'density'].mean())
-                    avgtemp.append(c['grid', 'temperature'].mean())
-                    cid.append(c['clump', 'clump_id'])
+    # ----------------------saving combined metfrac df-------------------------
+    combined_metfrac_df.to_hdf(output_path + 'fullclumpstable_master_withmet.h5', key='combined_metfrac_df', mode='w')
 
-                halo_level_df['sanitycheckmasses'] = np.array(sanitycheckmasses)
-                halo_level_df['avgdensity'] = np.array(avgdensity)
-                halo_level_df['avgtemp'] = np.array(avgtemp)
-                halo_level_df['cid'] = np.array(cid)
+    # ----------------------saving combined sustainability df-------------------------
+    if do_survivability:
+        combined_survivability_df.to_hdf(output_path + 'fullclumpstable_master_survivability.h5', key='combined_metfrac_df', mode='w')
 
-                fulldf = pd.concat([fulldf, halo_level_df])
-                halo_level_df.to_hdf(full_filename, key='fulldf', mode='a')
+    # ----------------------adding columns to combined all df-------------------------
+    if make_full:
+        combined_all_df['HIfraction'] = np.log10(combined_all_df['HImasses'] / (combined_all_df['clumpmasses']))
+        combined_all_df['pressureratio'] = np.log10(combined_all_df['pressures'] / combined_all_df['envpressures'])
+        combined_all_df['densityratio'] = np.log10(combined_all_df['avgdensity'] / combined_all_df['envdensities'])
+        combined_all_df['tempratio'] = np.log10(combined_all_df['avgtemp'] / combined_all_df['envtemps'])
+        combined_all_df['velocityratio'] = np.log10(combined_all_df['radialvelocities'] / combined_all_df['envvels'])
 
-            else:
-                print('Could not find combination of ' + halofilename + ' and ' + treefilename)
-                continue
-
-    if makefull: fulldf['HIfraction'] = np.log10(fulldf['HImasses'] / (fulldf['clumpmasses']))
-    if makefull: fulldf['pressureratio'] = np.log10(fulldf['pressures'] / fulldf['envpressures'])
-    if makefull: fulldf['densityratio'] = np.log10(fulldf['avgdensity'] / fulldf['envdensities'])
-    if makefull: fulldf['tempratio'] = np.log10(fulldf['avgtemp'] / fulldf['envtemps'])
-    if makefull: fulldf['velocityratio'] = np.log10(fulldf['radialvelocities'] / fulldf['envvels'])
-
-    basicdf['HIfraction'] = np.log10(basicdf['HImasses'] / (basicdf['clumpmasses']))
-    basicdf['pressureratio'] = np.log10(basicdf['pressures'] / basicdf['envpressures'])
-    # basicdf['densityratio'] = np.log10(basicdf['avgdensity']/basicdf['envdensities'])
-    # basicdf['tempratio'] = np.log10(basicdf['avgtemp']/basicdf['envtemps'])
-    basicdf['velocityratio'] = np.log10(basicdf['radialvelocities'] / basicdf['envvels'])
-
-    if makefull: fulldf.to_hdf('/Users/ramonaaugustin/WORK/FOGGIE/Outputs/clumptables/fullclumpstable_test_done.h5', key='fulldf', mode='w')
-    basicdf.to_hdf('/Users/ramonaaugustin/WORK/FOGGIE/Outputs/clumptables/basicclumpstable_master_done.h5', key='basicdf', mode='w')
-
-    basic_metfrac_df.to_hdf('/Users/ramonaaugustin/WORK/FOGGIE/Outputs/clumptables/fullclumpstable_master_withmet.h5', key='basic_metfrac_df', mode='w')
-    if surv: basic_survivability_df.to_hdf('/Users/ramonaaugustin/WORK/FOGGIE/Outputs/clumptables/fullclumpstable_master_survivability.h5', key='basic_metfrac_df', mode='w')
+        # ----------------------saving combined all df-------------------------
+        combined_all_df.to_hdf(output_path + 'fullclumpstable_test_done.h5', key='combined_all_df', mode='w')
 
 print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
