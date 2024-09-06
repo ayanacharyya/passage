@@ -93,6 +93,7 @@ if __name__ == "__main__":
 
             except FileNotFoundError:
                 print('Could not find grizli-made plot-group, so skipping')
+                continue
 
         # ------------------opening diagnostic plots-----------------------
         print(f'Reading in diagnostic png files..')
@@ -117,8 +118,12 @@ if __name__ == "__main__":
             diag = mpimg.imread(alternate_path / diag_figname)
             axes_diag.imshow(diag, origin='upper')
         except FileNotFoundError:
-            diag = mpimg.imread(input_dir / diag_figname)
-            axes_diag.imshow(diag, origin='upper')
+            try:
+                diag = mpimg.imread(input_dir / diag_figname)
+                axes_diag.imshow(diag, origin='upper')
+            except FileNotFoundError:
+                print('Could not find diagnostic plots, so skipping')
+                continue
 
         for ax in fig.axes:
             ax.xaxis.set_visible(False)
