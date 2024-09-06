@@ -68,8 +68,7 @@ if __name__ == "__main__":
 
     combined_basic_df.to_hdf(basic_outfilename, key='combined_basic_df', mode='w', format='table')
     combined_metfrac_df.to_hdf(metfrac_outfilename, key='combined_metfrac_df', mode='w', format='table')
-    if do_survivability: combined_survivability_df.to_hdf(survivability_outfilename, key='combined_survivability_df',
-                                                          mode='w', format='table')
+    if do_survivability: combined_survivability_df.to_hdf(survivability_outfilename, key='combined_survivability_df', mode='w', format='table')
     if make_full: combined_all_df.to_hdf(full_outfilename, key='combined_all_df', mode='w', format='table')
 
     # ----------reading in the treefile----------------
@@ -83,8 +82,7 @@ if __name__ == "__main__":
     for index in range(len(halos) * len(levels)):
         thishalo = halos[int(index / len(levels))]
         thislevel = levels[index % len(levels)]
-        print(
-        f'\nStarting iteration {index+1} out of {len(halos) * len(levels)}: level {thislevel} of halo {thishalo}..')
+        print(f'\nStarting iteration {index+1} out of {len(halos) * len(levels)}: level {thislevel} of halo {thishalo}..')
 
         # -------------do halo stuff------------------------------------
         this_basic_infilename = input_path + f'shell{thislevel}/halo_{thishalo}_nref11c_nref9f_RD0027_RD0027_box1_clump_measurements.fits'
@@ -117,6 +115,7 @@ if __name__ == "__main__":
 
             combined_metfrac_df = pd.concat([combined_metfrac_df, this_basic_df])  # appending to master df
             this_basic_df.to_hdf(metfrac_outfilename, key='combined_metfrac_df', mode='a', append=True, format='table')  # also saving to file, just in case
+            print(f'Deb118: {len(this_basic_df)}, {len(combined_metfrac_df)}')  ##
 
             # -------------do survivability stuff if needed------------------------------------
             if do_survivability:
@@ -137,14 +136,13 @@ if __name__ == "__main__":
                     this_basic_df = fill_na(this_basic_df, cols_to_grab_from_survivability)
 
                 combined_survivability_df = pd.concat([combined_survivability_df, this_basic_df])  # appending to master df
-                this_basic_df.to_hdf(survivability_outfilename, key='combined_survivability_df', mode='a')  # also saving to file, just
+                this_basic_df.to_hdf(survivability_outfilename, key='combined_survivability_df', mode='a', append=True, format='table')  # also saving to file, just
 
             # -------------do tree file stuff if needed------------------------------------
             if make_full:
                 if os.path.exists(tree_infilename):
                     print(f'Taking subset of tree file {tree_infilename}..')
-                    this_tree_df = master_tree_df[
-                        (master_tree_df['halo'] == thishalo) & (master_tree_df['level'] == thislevel)]
+                    this_tree_df = master_tree_df[(master_tree_df['halo'] == thishalo) & (master_tree_df['level'] == thislevel)]
 
                     if not do_strictly or len(this_basic_df) == len(this_tree_df):
                         this_basic_df = copy_columns(this_basic_df, this_tree_df, cols_to_grab_from_tree)
@@ -156,7 +154,8 @@ if __name__ == "__main__":
                     this_basic_df = fill_na(this_basic_df, cols_to_grab_from_tree)
 
                 combined_all_df = pd.concat([combined_all_df, this_basic_df])  # appending to master df
-                this_basic_df.to_hdf(full_outfilename, key='combined_all_df', mode='a')  # also saving to file, just
+                this_basic_df.to_hdf(full_outfilename, key='combined_all_df', mode='a', append=True, format='table')  # also saving to file, just
+                print(f'Deb157: {len(this_basic_df)}, {len(combined_all_df)}') ##
 
         else:
             print(f'Could not find {this_basic_infilename}, so skipping this halo/level.')
