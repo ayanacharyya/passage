@@ -115,7 +115,6 @@ if __name__ == "__main__":
 
             combined_metfrac_df = pd.concat([combined_metfrac_df, this_basic_df])  # appending to master df
             this_basic_df.to_hdf(metfrac_outfilename, key='combined_metfrac_df', mode='a', append=True, format='table')  # also saving to file, just in case
-            print(f'Deb118: {len(this_basic_df)}, {len(combined_metfrac_df)}')  ##
 
             # -------------do survivability stuff if needed------------------------------------
             if do_survivability:
@@ -155,7 +154,6 @@ if __name__ == "__main__":
 
                 combined_all_df = pd.concat([combined_all_df, this_basic_df])  # appending to master df
                 this_basic_df.to_hdf(full_outfilename, key='combined_all_df', mode='a', append=True, format='table')  # also saving to file, just
-                print(f'Deb157: {len(this_basic_df)}, {len(combined_all_df)}') ##
 
         else:
             print(f'Could not find {this_basic_infilename}, so skipping this halo/level.')
