@@ -92,7 +92,7 @@ def plot_venn(df, args):
     condition = df['redshift'].between(args.zmin, args.zmax)
     set_arr, label_arr = make_set(df, condition, f'{args.zmin}<z<{args.zmax}', set_arr, label_arr)
 
-    # ------add redshift range set-----------
+    # ------add number of grism orientations set-----------
     condition = df['nPA'] == 2
     set_arr, label_arr = make_set(df, condition, '#PA = 2', set_arr, label_arr)
 
