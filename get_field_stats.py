@@ -6,10 +6,12 @@
     Example: run get_field_stats.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --re_extract
              run get_field_stats.py --field Par61 --mag_lim 26 --line_list OII,OIII,Ha
              run get_field_stats.py --mag_lim 26 --line_list OIII --do_all_fields --clobber
-             run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --zmin 1 --zmax 2.5 --merge_visual --plot_conditions EW,z,mag,tail,RQ,strong_OIII,PA
-             run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_venn --plot_conditions EW,mag,compact
-             run get_field_stats.py --mag_lim 24 --EW_thresh 300 --log_SFR_thresh 0 --line_list OIII,Ha --plot_venn --do_all_fields --plot_conditions EW,mag,PA,mass
-             run get_field_stats.py --line_list OIII,Ha --plot_venn --do_all_fields --plot_conditions EW,mass,PA
+             run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --zmin 1 --zmax 2.5 --merge_visual --plot_conditions EW,z,mag,tail,RQ,strong_OIII,PA
+             run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_conditions EW,mag,compact
+             run get_field_stats.py --mag_lim 24 --EW_thresh 300 --log_SFR_thresh 0 --line_list OIII,Ha --do_all_fields --plot_conditions EW,mag,PA,mass
+             run get_field_stats.py --line_list OIII,Ha --do_all_fields --plot_conditions EW,mass,PA
+             run get_field_stats.py --line_list OIII,Ha --do_all_fields --plot_conditions EW,mass,PA --clobber_venn_df
+             run get_field_stats.py
 '''
 from header import *
 from util import *
@@ -134,7 +136,7 @@ def plot_venn(df, args):
     # ---------manually calling draw_venn() so as to modify petal labels (for 0 counts)----------
     petal_labels = generate_petal_labels(dataset_dict.values(), fmt="{size}")
     petal_labels = {logic: value if int(value) > 0 else '' for logic, value in petal_labels.items()}
-    ax = draw_venn(petal_labels=petal_labels, dataset_labels=dataset_dict.keys(), hint_hidden=False, colors=generate_colors(cmap=cmap, n_colors=len(label_arr)), figsize=(6, 6), fontsize=args.fontsize, legend_loc='lower left', ax=None)
+    ax = draw_venn(petal_labels=petal_labels, dataset_labels=dataset_dict.keys(), hint_hidden=False, colors=generate_colors(cmap=cmap, n_colors=len(label_arr)), figsize=(8, 6), fontsize=args.fontsize, legend_loc='lower left', ax=None)
 
     # -------calling the wrapper function, with automatic petal labelling (as opposed to manual calling above) but then 0 counts are displayed as such-------
     #ax = venn(dataset_dict, cmap=cmap, fmt='{size}', fontsize=8, legend_loc='upper left', ax=None)
@@ -269,6 +271,16 @@ def read_visual_df(args):
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
+def get_SFMS_Popesso22(log_mass, time):
+    '''
+    Calculates empirical SFMS based on Popesso+22 (https://arxiv.org/abs/2203.10487) Eq 10, for given log_mass array and time
+    Returns log_SFR array
+    '''
+    a0, a1, b0, b1, b2 = 0.2, -0.034, -26.134, 4.722, -0.1925  # Table 2, Eq 10
+    log_SFR = (a1 * time + b1) * log_mass + b2 * (log_mass) ** 2 + b0 + a0 * time
+    return log_SFR
+
+# --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
@@ -283,109 +295,152 @@ if __name__ == "__main__":
 
     df_stats_filename = args.output_dir / f'all_fields_diag_results.txt'
     df_visual_filename = args.output_dir / f'all_fields_visual_inspection_results.txt'
+    df_outfilename = args.output_dir / f'allpar_venn_df.txt'
 
     # -------------------------------------------------------------------
-    if args.do_all_fields and os.path.exists(df_stats_filename) and not args.clobber:
-        print(f'Reading in existing {df_stats_filename}')
-        df_stats = pd.read_table(df_stats_filename, delim_whitespace=True)
+    if not os.path.exists(df_outfilename) or args.clobber_venn_df:
+        if args.do_all_fields and os.path.exists(df_stats_filename) and not args.clobber:
+            print(f'Reading in existing {df_stats_filename}')
+            df_stats = pd.read_table(df_stats_filename, delim_whitespace=True)
 
-        print(f'Reading in existing {df_visual_filename}')
-        df_visual = pd.read_csv(df_visual_filename)
+            print(f'Reading in existing {df_visual_filename}')
+            df_visual = pd.read_csv(df_visual_filename)
 
-        has_fields = [str(int(item[3:])) for item in pd.unique(df_stats['field'])]
-        has_fields.sort(key=natural_keys)
-        args.field_text = ','.join(has_fields)
+            has_fields = [str(int(item[3:])) for item in pd.unique(df_stats['field'])]
+            has_fields.sort(key=natural_keys)
+            args.field_text = ','.join(has_fields)
+        else:
+            df_stats = pd.DataFrame()
+            df_visual = pd.DataFrame()
+            args.field_text = ''
+
+            # ---------looping over fields-----------
+            for index, args.field in enumerate(available_fields):
+                print(f'Doing field {args.field} which is {index+1} of {len(available_fields)}..')
+                args.filters = available_filters_for_field_dict[args.field]
+                if '51' in args.field:
+                    args.re_extract = True
+                else:
+                    args.re_extract = False
+
+                # ---------determining filename suffixes-------------------------------
+                output_dir = args.output_dir / args.field
+                if args.re_extract: output_dir = output_dir / 're_extracted'
+                df_filename = output_dir / f'{args.field}_all_diag_results.txt'
+
+                if os.path.exists(df_filename):
+                    thisdf_stat = read_stats_df(df_filename, args)  # read in the stats dataframe
+                    df_stats = pd.concat([df_stats, thisdf_stat], ignore_index=True)
+                    args.field_text += f'{int(args.field[4:])},'
+
+                    thisdf_visual = read_visual_df(args)  # read in the visually inspected dataframe
+                    df_visual = pd.concat([df_visual, thisdf_visual], ignore_index=True)
+                else:
+                    print(f'{df_filename} does not exists. Skipping this field.')
+
+            # ------------saving the master dfs--------------------
+            if args.do_all_fields:
+                df_stats.to_csv(df_stats_filename, sep='\t', index=None, na_rep='NULL')
+                print(f'Saved master stats df in {df_stats_filename}')
+
+                df_visual.to_csv(df_visual_filename, index=None, na_rep='NULL')
+                print(f'Saved master stats df in {df_visual_filename}')
+
+        # ------------doing the line histograms--------------------
+        if args.plot_EW_hist:
+            for index, line in enumerate(lines_to_consider):
+                print(f'Doing line {line} which is {index+1} of {len(lines_to_consider)}..')
+                df_detected = get_detection_fraction(df_stats, line, args)
+
+        df_stats['par_obj'] = df_stats['field'].astype(str) + '-' + df_stats['objid'].astype(str)  # making a unique combination of field and object id
+        df_stats = df_stats.drop_duplicates('par_obj', keep='last')
+
+        # ------------merging visual dataframes for the venn diagrams--------------------
+        conditions_from_visual = ['compact', 'tail', 'merging', 'neighbour', 'clumpy', 'bulge', 'pea', 'bar', 'mg', 'RQ']
+        if args.merge_visual or len(set(conditions_from_visual).intersection(set(args.plot_conditions))) > 0:
+            df_visual.drop('nPA', axis=1, inplace=True)
+            df = pd.merge(df_stats, df_visual, on=['field', 'objid'], how='inner')
+
+            has_fields = [str(int(item[3:])) for item in pd.unique(df['field'])] # remaining fields after merging
+            has_fields.sort(key=natural_keys)
+            args.field_text = ','.join(has_fields)
+        else:
+            df = df_stats
+
+        # ------------merging cosmos datasets for the venn diagrams--------------------
+        conditions_from_cosmos = ['mass', 'sfr', 'sSFR']
+        if len(set(conditions_from_cosmos).intersection(set(args.plot_conditions))) > 0:
+            fields = pd.unique(df['field'])
+
+            # -------collating only those COSMOS objects that lie within the FoV of available PASSAGE fields------
+            print(f'\nTrying to read in COSMOS catalogs..')
+            df_cosmos = pd.DataFrame()
+
+            for index, thisfield in enumerate(fields):
+                filename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
+                if os.path.exists(filename):
+                    print(f'{index+1} of {len(fields)} fields: Reading COSMOS subset table from {filename}')
+                    df_cosmos_thisfield = read_COSMOS2020_catalog(filename=filename)
+                    df_cosmos = pd.concat([df_cosmos, df_cosmos_thisfield])
+                else:
+                    print(f'{index+1} of {len(fields)} fields: Could not find COSMOS subset table for {thisfield}, so skipping.')
+
+            # -------cross-matching RA/DEC of both catalogs------
+            print(f'\nDoing cross-matching between PASSAGE and COSMOS catalogs..')
+            passage_coords = SkyCoord(df['ra'], df['dec'], unit='deg')
+            cosmos_coords = SkyCoord(df_cosmos['ra'], df_cosmos['dec'], unit='deg')
+            nearest_id_in_cosmos, sep_from_nearest_id_in_cosmos, _ = passage_coords.match_to_catalog_sky(cosmos_coords)
+
+            df_crossmatch = pd.DataFrame({'passage_id': df['par_obj'].values, 'cosmos_id': df_cosmos['id'].iloc[nearest_id_in_cosmos].values, 'sep': sep_from_nearest_id_in_cosmos.arcsec})
+            df_crossmatch = df_crossmatch[df_crossmatch['sep'] < 1.] # separation within 1 arcsecond
+            df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='cosmos_id', keep='first').reset_index(drop=True) # to avoid multiple PASSAGE objects being linked to the same COSMOS object
+            df_crossmatch = pd.merge(df_crossmatch[['passage_id', 'cosmos_id']], df_cosmos, left_on='cosmos_id', right_on='id', how = 'inner').drop(['id', 'ra', 'dec'], axis=1)
+
+            print(f'\nFound a total of {len(df_crossmatch)} matching objects')
+            df = pd.merge(df, df_crossmatch, left_on='par_obj', right_on='passage_id', how='outer').drop('passage_id', axis = 1)
+
+        # ------------doing the venn diagrams--------------------
+        df_int = plot_venn(df, args)
+
+        # ------------saving the resultant intersecting dataframe--------------------
+
+        df_int.to_csv(df_outfilename, index=None)
+        print(f'Saved intersecting dataframe as {df_outfilename}')
+
     else:
-        df_stats = pd.DataFrame()
-        df_visual = pd.DataFrame()
-        args.field_text = ''
+        print(f'Reading from existing {df_outfilename}')
+        df_int = pd.read_csv(df_outfilename)
 
-        # ---------looping over fields-----------
-        for index, args.field in enumerate(available_fields):
-            print(f'Doing field {args.field} which is {index+1} of {len(available_fields)}..')
-            args.filters = available_filters_for_field_dict[args.field]
-            if '51' in args.field:
-                args.re_extract = True
-            else:
-                args.re_extract = False
+    # --------------------------------------------------------------------------------------------------------------------
+    label_dict = {'lp_mass_best':r'log M$_*$/M$_{\odot}$', 'lp_SFR_best':r'log SFR (M$_{\odot}$/yr)', 'ez_z_phot':'Redshift', 'redshift':'Redshift'}
+    colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma')
 
-            # ---------determining filename suffixes-------------------------------
-            output_dir = args.output_dir / args.field
-            if args.re_extract: output_dir = output_dir / 're_extracted'
-            df_filename = output_dir / f'{args.field}_all_diag_results.txt'
+    # -----------plotting stuff with the resultant intersecting dataframe--------
+    fig, ax = plt.subplots(1, figsize=(8, 6))
+    fig.subplots_adjust(left=0.1, right=0.85, bottom=0.1, top=0.95)
+    figname = args.output_dir / f'allpar_venn_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
 
-            if os.path.exists(df_filename):
-                thisdf_stat = read_stats_df(df_filename, args)  # read in the stats dataframe
-                df_stats = pd.concat([df_stats, thisdf_stat], ignore_index=True)
-                args.field_text += f'{int(args.field[4:])},'
+    # ---------SFMS from df-------
+    p = ax.scatter(df_int[args.xcol], df_int[args.ycol], c=df_int[args.colorcol], marker='s', s=100, lw=1, edgecolor='k')
+    cbar = plt.colorbar(p)
+    cbar.set_label(label_dict[args.colorcol] if args.colorcol in label_dict else args.colorcol)
 
-                thisdf_visual = read_visual_df(args)  # read in the visually inspected dataframe
-                df_visual = pd.concat([df_visual, thisdf_visual], ignore_index=True)
-            else:
-                print(f'{df_filename} does not exists. Skipping this field.')
+    # ---------SFMS from literature-------
+    if args.xcol == 'lp_mass_best' and args.ycol == 'lp_SFR_best':
+        z = 1.8 # just an assumption, for which SFMS to draw
+        t = 10 # Gyr; roughly corresponding to the z
 
-        # ------------saving the master dfs--------------------
-        if args.do_all_fields:
-            df_stats.to_csv(df_stats_filename, sep='\t', index=None, na_rep='NULL')
-            print(f'Saved master stats df in {df_stats_filename}')
+        log_mass = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 20)
+        log_SFR = get_SFMS_Popesso22(log_mass, t)
+        ax.plot(log_mass, log_SFR, c='cornflowerblue', lw=2, label=f'Popesso+22: z~{z}')
+        plt.legend()
 
-            df_visual.to_csv(df_visual_filename, index=None, na_rep='NULL')
-            print(f'Saved master stats df in {df_visual_filename}')
+    # ---------annotate axes and save figure-------
+    ax.set_xlabel(label_dict[args.xcol] if args.xcol in label_dict else args.xcol)
+    ax.set_ylabel(label_dict[args.ycol] if args.ycol in label_dict else args.ycol)
 
-    # ------------doing the line histograms--------------------
-    if args.plot_EW_hist:
-        for index, line in enumerate(lines_to_consider):
-            print(f'Doing line {line} which is {index+1} of {len(lines_to_consider)}..')
-            df_detected = get_detection_fraction(df_stats, line, args)
-
-    df_stats['par_obj'] = df_stats['field'].astype(str) + '-' + df_stats['objid'].astype(str)  # making a unique combination of field and object id
-    df_stats = df_stats.drop_duplicates('par_obj', keep='last')
-
-    # ------------merging visual dataframes for the venn diagrams--------------------
-    conditions_from_visual = ['compact', 'tail', 'merging', 'neighbour', 'clumpy', 'bulge', 'pea', 'bar', 'mg', 'RQ']
-    if args.merge_visual or len(set(conditions_from_visual).intersection(set(args.plot_conditions))) > 0:
-        df_visual.drop('nPA', axis=1, inplace=True)
-        df = pd.merge(df_stats, df_visual, on=['field', 'objid'], how='inner')
-
-        has_fields = [str(int(item[3:])) for item in pd.unique(df['field'])] # remaining fields after merging
-        has_fields.sort(key=natural_keys)
-        args.field_text = ','.join(has_fields)
-    else:
-        df = df_stats
-
-    # ------------merging cosmos datasets for the venn diagrams--------------------
-    conditions_from_cosmos = ['mass', 'sfr', 'sSFR']
-    if len(set(conditions_from_cosmos).intersection(set(args.plot_conditions))) > 0:
-        fields = pd.unique(df['field'])
-
-        # -------collating only those COSMOS objects that lie within the FoV of available PASSAGE fields------
-        print(f'\nTrying to read in COSMOS catalogs..')
-        df_cosmos = pd.DataFrame()
-
-        for index, thisfield in enumerate(fields):
-            filename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
-            if os.path.exists(filename):
-                print(f'{index+1} of {len(fields)} fields: Reading COSMOS subset table from {filename}')
-                df_cosmos_thisfield = read_COSMOS2020_catalog(filename=filename)
-                df_cosmos = pd.concat([df_cosmos, df_cosmos_thisfield])
-            else:
-                print(f'{index+1} of {len(fields)} fields: Could not find COSMOS subset table for {thisfield}, so skipping.')
-
-        # -------cross-matching RA/DEC of both catalogs------
-        print(f'\nDoing cross-matching between PASSAGE and COSMOS catalogs..')
-        passage_coords = SkyCoord(df['ra'], df['dec'], unit='deg')
-        cosmos_coords = SkyCoord(df_cosmos['ra'], df_cosmos['dec'], unit='deg')
-        nearest_id_in_cosmos, sep_from_nearest_id_in_cosmos, _ = passage_coords.match_to_catalog_sky(cosmos_coords)
-
-        df_crossmatch = pd.DataFrame({'passage_id': df['par_obj'].values, 'cosmos_id': df_cosmos['id'].iloc[nearest_id_in_cosmos].values, 'sep': sep_from_nearest_id_in_cosmos.arcsec})
-        df_crossmatch = df_crossmatch[df_crossmatch['sep'] < 1.] # separation within 1 arcsecond
-        df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='cosmos_id', keep='first').reset_index(drop=True) # to avoid multiple PASSAGE objects being linked to the same COSMOS object
-        df_crossmatch = pd.merge(df_crossmatch[['passage_id', 'cosmos_id']], df_cosmos, left_on='cosmos_id', right_on='id', how = 'inner').drop(['id', 'ra', 'dec'], axis=1)
-
-        print(f'\nFound a total of {len(df_crossmatch)} matching objects')
-        df = pd.merge(df, df_crossmatch, left_on='par_obj', right_on='passage_id', how='outer').drop('passage_id', axis = 1)
-
-    # ------------doing the venn diagrams--------------------
-    df_int = plot_venn(df, args)
+    fig.savefig(figname)
+    print(f'\nSaved figure as {figname}')
+    plt.show(block=False)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

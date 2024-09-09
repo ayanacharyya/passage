@@ -97,10 +97,10 @@ def parse_args():
     parser.add_argument('--log_SFR_thresh', metavar='log_SFR_thresh', type=float, action='store', default=0, help='SFR threshold (in log) to consider highly star-forming; default is 0')
     parser.add_argument('--log_sSFR_thresh', metavar='log_sSFR_thresh', type=float, action='store', default=-9, help='specific SFR threshold (in log) to consider highly star-forming; default is 0')
     parser.add_argument('--do_all_fields', dest='do_all_fields', action='store_true', default=False, help='Include ALL available fields? Default is no.')
-    parser.add_argument('--plot_venn', dest='plot_venn', action='store_true', default=False, help='Plot Venn diagrams? Default is no.')
     parser.add_argument('--merge_visual', dest='merge_visual', action='store_true', default=False, help='Include visually inspected dataframe for Venn diagrams? Default is no.')
     parser.add_argument('--plot_conditions', metavar='plot_conditions', type=str, action='store', default='detected', help='Which conditions are plotted in the Venn diagram? Default is None')
     parser.add_argument('--plot_EW_hist', dest='plot_EW_hist', action='store_true', default=False, help='Plot EW histograms for each line? Default is no.')
+    parser.add_argument('--clobber_venn_df', dest='clobber_venn_df', action='store_true', default=False, help='Over-write existing dataframe which is a result of intersection of Venn diagram? Default is no.')
 
     # ------- args added for make_cosmos_plots.py ------------------------------
     parser.add_argument('--xcol', metavar='xcol', type=str, action='store', default='lp_mass_best', help='Column name in COSMOS2020 catalog to be used as the quantity on x-axis? Default is lp_mass_best')
