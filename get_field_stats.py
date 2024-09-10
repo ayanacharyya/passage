@@ -271,16 +271,6 @@ def read_visual_df(args):
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_SFMS_Popesso22(log_mass, time):
-    '''
-    Calculates empirical SFMS based on Popesso+22 (https://arxiv.org/abs/2203.10487) Eq 10, for given log_mass array and time
-    Returns log_SFR array
-    '''
-    a0, a1, b0, b1, b2 = 0.2, -0.034, -26.134, 4.722, -0.1925  # Table 2, Eq 10
-    log_SFR = (a1 * time + b1) * log_mass + b2 * (log_mass) ** 2 + b0 + a0 * time
-    return log_SFR
-
-# --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
@@ -403,44 +393,11 @@ if __name__ == "__main__":
         df_int = plot_venn(df, args)
 
         # ------------saving the resultant intersecting dataframe--------------------
-
         df_int.to_csv(df_outfilename, index=None)
         print(f'Saved intersecting dataframe as {df_outfilename}')
 
     else:
         print(f'Reading from existing {df_outfilename}')
         df_int = pd.read_csv(df_outfilename)
-
-    # --------------------------------------------------------------------------------------------------------------------
-    label_dict = {'lp_mass_best':r'log M$_*$/M$_{\odot}$', 'lp_SFR_best':r'log SFR (M$_{\odot}$/yr)', 'ez_z_phot':'Redshift', 'redshift':'Redshift'}
-    colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma')
-
-    # -----------plotting stuff with the resultant intersecting dataframe--------
-    fig, ax = plt.subplots(1, figsize=(8, 6))
-    fig.subplots_adjust(left=0.1, right=0.85, bottom=0.1, top=0.95)
-    figname = args.output_dir / f'allpar_venn_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
-
-    # ---------SFMS from df-------
-    p = ax.scatter(df_int[args.xcol], df_int[args.ycol], c=df_int[args.colorcol], marker='s', s=100, lw=1, edgecolor='k')
-    cbar = plt.colorbar(p)
-    cbar.set_label(label_dict[args.colorcol] if args.colorcol in label_dict else args.colorcol)
-
-    # ---------SFMS from literature-------
-    if args.xcol == 'lp_mass_best' and args.ycol == 'lp_SFR_best':
-        z = 1.8 # just an assumption, for which SFMS to draw
-        t = 10 # Gyr; roughly corresponding to the z
-
-        log_mass = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 20)
-        log_SFR = get_SFMS_Popesso22(log_mass, t)
-        ax.plot(log_mass, log_SFR, c='cornflowerblue', lw=2, label=f'Popesso+22: z~{z}')
-        plt.legend()
-
-    # ---------annotate axes and save figure-------
-    ax.set_xlabel(label_dict[args.xcol] if args.xcol in label_dict else args.xcol)
-    ax.set_ylabel(label_dict[args.ycol] if args.ycol in label_dict else args.ycol)
-
-    fig.savefig(figname)
-    print(f'\nSaved figure as {figname}')
-    plt.show(block=False)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
