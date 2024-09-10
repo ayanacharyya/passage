@@ -731,12 +731,14 @@ if __name__ == "__main__":
     output_dir.mkdir(parents=True, exist_ok=True)
     outfilename = output_dir / f'{args.field}_all_diag_results.txt'
 
+    # ---------prep the catalog file--------------------
     catalog_file = product_dir / f'{args.field}_photcat.fits'
     catalog = GTable.read(catalog_file)
 
+    # --------determine which objects to loop over----------
     if args.do_all_obj:
         if args.re_extract: args.id_arr = ids_to_re_extract_dict[args.field]
-        else: args.id_arr = catalog['NUMBER'] if 'NUMBER' in catalog.columns else catalog['id']
+        else: args.id_arr = catalog['id']
     else:
         args.id_arr = args.id
 
@@ -822,7 +824,7 @@ if __name__ == "__main__":
         args.nlines = full_hdu[0].header['NUMLINES']
         args.pix_arcsec = full_hdu[5].header['PIXASEC']
         args.pa_arr = np.unique([full_hdu[0].header[item] for item in list(full_hdu[0].header.keys()) if 'PA00' in item])
-        try: args.mag = catalog[catalog['NUMBER'] == args.id]['MAG_AUTO'].data.data[0]
+        try: args.mag = catalog[catalog['id'] == args.id]['mag_auto'].data.data[0]
         except: args.mag = np.nan
 
         line_wcs = pywcs.WCS(full_hdu['DSCI'].header)

@@ -79,8 +79,11 @@ def plot_venn(df, args):
         condition2 = (np.isfinite(df[f'{line}_EW'])) & (df[f'{line}_EW'] > 0)
         set_arr, label_arr = make_set(df, condition1 & condition2, f'{line} present', set_arr, label_arr)
 
-        condition3 = df[f'{line}_EW'] > args.EW_thresh
-        set_arr, label_arr = make_set(df, condition1 & condition2 & condition3, f'{line} EW > {args.EW_thresh}', set_arr, label_arr)
+        condition3 = df[f'{line}_SNR'] > args.SNR_thresh
+        set_arr, label_arr = make_set(df, condition1 & condition2 & condition3, f'{line} SNR > {args.SNR_thresh}', set_arr, label_arr)
+
+        condition4 = df[f'{line}_EW'] > args.EW_thresh
+        set_arr, label_arr = make_set(df, condition1 & condition2 & condition3 & condition4, f'{line} EW > {args.EW_thresh}', set_arr, label_arr)
 
     # ---------add magnitude set------------
     if args.mag_lim is None: mag_lim = 26
@@ -217,30 +220,54 @@ def read_stats_df(df_filename, args):
     Returns dataframe
     '''
     extract_dir = args.input_dir / args.field / 'Extractions'
-    # ------------getting magnitudes from catalog----------------------
-    try:
-        catalog_file = extract_dir / f'{args.field}-ir.cat.fits'
-        catalog = GTable.read(catalog_file)
-    except:
-        try:
-            catalog_file = args.input_dir / args.field / 'Products' / f'{args.field}_photcat.fits'
-            catalog = GTable.read(catalog_file)
-        except:
-            catalog = None
-
     # -------initiliasing dataframe-------------------------------
     df = pd.read_table(df_filename, delim_whitespace=True)
 
-    if catalog is not None and 'MAG_AUTO' in catalog.columns:
-        catalog_df = catalog['NUMBER', 'MAG_AUTO'].to_pandas()
-        df = df.merge(catalog_df, left_on='objid', right_on='NUMBER', how='inner')
-        df.rename(columns={'MAG_AUTO':'mag'}, inplace=True)
-        df.drop('NUMBER', axis=1, inplace=True)
+    # ------------getting magnitudes from phot catalog----------------------
+    try:
+        phot_catalog_file = extract_dir / f'{args.field}_phot.fits'
+        phot_catalog = GTable.read(phot_catalog_file)
+    except:
+        try:
+            phot_catalog_file = args.input_dir / args.field / 'Products' / f'{args.field}_photcat.fits'
+            phot_catalog = GTable.read(phot_catalog_file)
+        except:
+            phot_catalog = None
+
+    if phot_catalog is not None:
+        print(f'Merging photcat for {args.field}..')
+        phot_catalog.rename_column('id', 'objid')
+        phot_catalog.rename_column('mag_auto', 'mag')
+        phot_catalog_df = phot_catalog['objid', 'mag'].to_pandas()
+        df = df.merge(phot_catalog_df, on='objid', how='inner')
     else:
         df['mag'] = np.nan
 
     if args.field in fields_with_2PA: df['nPA'] = 2
     else: df['nPA'] = 1
+
+    # ------------getting EW error and SNR from spec catalog----------------------
+    grab_for_each_line = ['ewhw', 'sn']
+    columns_to_extract = ['objid']
+    line_list = args.line_list
+    for line in line_list: columns_to_extract += [f'{item}_{line}' for item in grab_for_each_line]
+
+    try:
+        spec_catalog_file = args.input_dir / args.field / 'Products' / f'{args.field}_speccat.fits'
+        spec_catalog = GTable.read(spec_catalog_file)
+    except:
+        spec_catalog = None
+
+    if spec_catalog is not None:
+        print(f'Merging speccat for {args.field}..')
+        spec_catalog.rename_column('id', 'objid')
+        spec_catalog_df = spec_catalog[columns_to_extract].to_pandas()
+        df = df.merge(spec_catalog_df, on='objid', how='inner')
+    else:
+        for col in columns_to_extract[1:]: df[col] = np.nan
+
+    df = df.rename(columns={f'sn_{item}':f'{item}_SNR' for item in line_list})
+    df = df.rename(columns={f'ewhw_{item}':f'{item}_EW_u' for item in line_list})
 
     return df
 

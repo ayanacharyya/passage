@@ -12,6 +12,7 @@ from PIL import Image
 from datetime import datetime, timedelta
 from pathlib import Path
 import shutil
+import os, subprocess, re
 
 start_time = datetime.now()
 
@@ -45,9 +46,13 @@ if __name__ == "__main__":
 
     output_dir = Path('/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/')
     df = pd.read_csv(output_dir / 'allpar_venn_EW,PA_df.txt')
-    suffix = 'diagnostics_and_extractions'
 
+    df = df[df['field']=='Par028']
+    df = df[df['Hb_EW']/df['OIII_EW'] > 0.05]
+
+    suffix = 'diagnostics_and_extractions'
     new_dir = output_dir / f'allpar_venn_EW,PA_{suffix}'
+    shutil.rmtree(new_dir)
     new_dir.mkdir(parents=True, exist_ok=True)
 
     count = 0
@@ -63,4 +68,7 @@ if __name__ == "__main__":
         except (FileNotFoundError, ValueError) as e:
             print(f'Skipping {thisid} due to {e}')
             pass
+
+    dummy = subprocess.run(['python', '/Users/acharyya/Work/astro/ayan_codes/animate_png.py', '--inpath', f'{new_dir}', '--rootname', f'Par*_*_{suffix}.png', '--delay', '0.1'])
+
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
