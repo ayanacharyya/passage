@@ -47,9 +47,6 @@ if __name__ == "__main__":
     output_dir = Path('/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/')
     df = pd.read_csv(output_dir / 'allpar_venn_EW,PA_df.txt')
 
-    df = df[df['field']=='Par028']
-    df = df[df['Hb_EW']/df['OIII_EW'] > 0.05]
-
     suffix = 'diagnostics_and_extractions'
     new_dir = output_dir / f'allpar_venn_EW,PA_{suffix}'
     shutil.rmtree(new_dir)
