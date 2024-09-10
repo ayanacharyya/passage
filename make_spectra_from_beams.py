@@ -29,13 +29,12 @@ if __name__ == "__main__":
             id_arr = ids_to_re_extract_dict[args.field]
         else:
             try:
-                catalog_file = args.input_dir / args.field / 'Prep' / f'{args.field}-ir.cat.fits'
+                catalog_file = args.input_dir / args.field / 'Prep' / f'{args.field}_phot.fits'
                 catalog = GTable.read(catalog_file)
-                id_arr = catalog['NUMBER']
             except:
                 catalog_file = args.input_dir / args.field / 'Products' / f'{args.field}_photcat.fits'
                 catalog = GTable.read(catalog_file)
-                id_arr = catalog['id']
+            id_arr = catalog['id']
     else:
         id_arr = args.id
 

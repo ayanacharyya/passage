@@ -47,7 +47,7 @@ if __name__ == "__main__":
         if filt in file_filters:
             grism_files += file_filters[filt]
 
-    catalog = glob.glob(f'{root}-*.cat.fits')[0]
+    catalog = glob.glob(f'{root}-*phot.fits')[0]
     seg_file = glob.glob(f'{root}-*_seg.fits')[0]
 
     grp = {}
@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
     # ------------prep for beam files--------------------------------
     size = 48
-    id_arr = grp[list(grp.keys())[0]].catalog['NUMBER'] if args.do_all_obj else args.id
+    id_arr = grp[list(grp.keys())[0]].catalog['id'] if args.do_all_obj else args.id
 
     # ------------make beams files--------------------------------
     for index, this_id in enumerate(id_arr):

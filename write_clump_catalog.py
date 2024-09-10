@@ -1,6 +1,6 @@
 '''
     Filename: write_clump_catalog.py
-    Notes: Writes out combined clump catalog from several individual catalogs
+    Notes: Writes out combined clump catalog from several individual catalogs (for Ramona)
     Author : RA, AA
     Created: 06-09-24
     Example: run write_clump_catalog.py
