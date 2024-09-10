@@ -83,7 +83,7 @@ def plot_venn(df, args):
         set_arr, label_arr = make_set(df, condition1 & condition2 & condition3, f'{line} SNR > {args.SNR_thresh}', set_arr, label_arr)
 
         condition4 = df[f'{line}_EW'] > args.EW_thresh
-        set_arr, label_arr = make_set(df, condition1 & condition2 & condition3 & condition4, f'{line} EW > {args.EW_thresh}', set_arr, label_arr)
+        set_arr, label_arr = make_set(df, condition1 & condition2 & condition3 & condition4, f'{line} EW > {args.EW_thresh}; SNR > {args.SNR_thresh}', set_arr, label_arr)
 
     # ---------add magnitude set------------
     if args.mag_lim is None: mag_lim = 26
