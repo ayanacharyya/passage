@@ -249,7 +249,7 @@ def read_stats_df(df_filename, args):
     # ------------getting EW error and SNR from spec catalog----------------------
     grab_for_each_line = ['ewhw', 'sn']
     columns_to_extract = ['objid']
-    line_list = args.line_list
+    line_list = list(rest_wave_dict.keys())
     for line in line_list: columns_to_extract += [f'{item}_{line}' for item in grab_for_each_line]
 
     try:
