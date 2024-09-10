@@ -9,7 +9,7 @@
              run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --zmin 1 --zmax 2.5 --merge_visual --plot_conditions EW,z,mag,tail,RQ,strong_OIII,PA
              run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_conditions EW,mag,compact
              run get_field_stats.py --mag_lim 24 --EW_thresh 300 --log_SFR_thresh 0 --line_list OIII,Ha --do_all_fields --plot_conditions EW,mag,PA,mass
-             run get_field_stats.py --line_list OIII,Ha --do_all_fields --plot_conditions EW,mass,PA
+             run get_field_stats.py --line_list OIII,Ha --do_all_fields --plot_conditions EW,mass,PA --clobber_venn
 '''
 from header import *
 from util import *
