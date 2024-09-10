@@ -321,13 +321,9 @@ if __name__ == "__main__":
             print(f'Reading in existing {df_visual_filename}')
             df_visual = pd.read_csv(df_visual_filename)
 
-            has_fields = [str(int(item[3:])) for item in pd.unique(df_stats['field'])]
-            has_fields.sort(key=natural_keys)
-            args.field_text = ','.join(has_fields)
         else:
             df_stats = pd.DataFrame()
             df_visual = pd.DataFrame()
-            args.field_text = ''
 
             # ---------looping over fields-----------
             for index, args.field in enumerate(available_fields):
@@ -346,7 +342,6 @@ if __name__ == "__main__":
                 if os.path.exists(df_filename):
                     thisdf_stat = read_stats_df(df_filename, args)  # read in the stats dataframe
                     df_stats = pd.concat([df_stats, thisdf_stat], ignore_index=True)
-                    args.field_text += f'{int(args.field[4:])},'
 
                     thisdf_visual = read_visual_df(args)  # read in the visually inspected dataframe
                     df_visual = pd.concat([df_visual, thisdf_visual], ignore_index=True)
@@ -375,12 +370,12 @@ if __name__ == "__main__":
         if args.merge_visual or len(set(conditions_from_visual).intersection(set(args.plot_conditions))) > 0:
             df_visual.drop('nPA', axis=1, inplace=True)
             df = pd.merge(df_stats, df_visual, on=['field', 'objid'], how='inner')
-
-            has_fields = [str(int(item[3:])) for item in pd.unique(df['field'])] # remaining fields after merging
-            has_fields.sort(key=natural_keys)
-            args.field_text = ','.join(has_fields)
         else:
             df = df_stats
+
+        has_fields = [str(int(item[3:])) for item in pd.unique(df_stats['field'])]
+        has_fields.sort(key=natural_keys)
+        args.field_text = ','.join(has_fields)
 
         # ------------merging cosmos datasets for the venn diagrams--------------------
         conditions_from_cosmos = ['mass', 'sfr', 'sSFR']
