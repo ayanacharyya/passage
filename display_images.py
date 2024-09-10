@@ -4,6 +4,7 @@
     Author : Ayan
     Created: 15-07-24
     Example: run display_images.py
+    Afterwards, to make animations, one can do something like: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par061/diagnostics_and_extractions/ --rootname Par061_*_diagnostics_and_extractions.png --delay 0.1
 '''
 
 import pandas as pd
@@ -17,6 +18,7 @@ start_time = datetime.now()
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
 
+    '''
     df=pd.read_table('/Users/acharyya/Work/astro/passage/passage_data/Par050/id_list_spatially_resolved_galaxies_Par50.txt', comment='#', names=['id'])
     image_path = Path('/Users/acharyya/Work/astro/passage/passage_output/Par050/')
 
@@ -39,5 +41,26 @@ if __name__ == "__main__":
         except (FileNotFoundError, ValueError) as e:
             print('Skipping', this_id)
             pass
+    '''
 
+    output_dir = Path('/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/')
+    df = pd.read_csv(output_dir / 'allpar_venn_EW,PA_df.txt')
+    suffix = 'diagnostics_and_extractions'
+
+    new_dir = output_dir / f'allpar_venn_EW,PA_{suffix}'
+    new_dir.mkdir(parents=True, exist_ok=True)
+
+    count = 0
+    for index in range(len(df)):
+        thisfield = df.iloc[index]['field']
+        thisid = df.iloc[index]['objid']
+        print(f'Doing {thisfield}:{thisid}, which is {index + 1} out of {len(df)}..')
+        try:
+            inpath = output_dir / thisfield / suffix
+            file = inpath / f'{thisfield}_{thisid:05d}_{suffix}.png'
+            shutil.copy(file, new_dir / '.')
+            count += 1
+        except (FileNotFoundError, ValueError) as e:
+            print(f'Skipping {thisid} due to {e}')
+            pass
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
