@@ -66,6 +66,6 @@ if __name__ == "__main__":
             print(f'Skipping {thisid} due to {e}')
             pass
 
-    dummy = subprocess.run(['python', '/Users/acharyya/Work/astro/ayan_codes/animate_png.py', '--inpath', f'{new_dir}', '--rootname', f'Par*_*_{suffix}.png', '--delay', '0.1'])
+    dummy = subprocess.run(['python', '/Users/acharyya/Work/astro/ayan_codes/animate_png.py', '--inpath', f'{new_dir}/', '--rootname', f'Par*_*_{suffix}.png', '--delay', '0.1'])
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
