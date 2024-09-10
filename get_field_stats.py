@@ -283,7 +283,7 @@ if __name__ == "__main__":
 
     df_stats_filename = args.output_dir / f'all_fields_diag_results.txt'
     df_visual_filename = args.output_dir / f'all_fields_visual_inspection_results.txt'
-    df_outfilename = args.output_dir / f'allpar_venn_df.txt'
+    df_outfilename = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df.txt'
 
     # -------------------------------------------------------------------
     if not os.path.exists(df_outfilename) or args.clobber_venn_df:

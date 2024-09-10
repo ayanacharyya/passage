@@ -4,7 +4,7 @@
     Author : Ayan
     Created: 10-09-24
     Example: run make_passage_plots.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
-             run make_passage_plots.py --xcol lp_mass_best --ycol lp_SFR_best --colorcol OIII_EW
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol lp_mass_best --ycol lp_SFR_best --colorcol OIII_EW
 '''
 
 from header import *
@@ -57,7 +57,7 @@ def plot_MZR_literature(ax):
     # ---------Zahid+14-----------
     log_mass_TO, logOH_asym, gamma = 9.08, 10.06, 0.61 # COSMOS row of Table 2 in https://iopscience.iop.org/article/10.1088/0004-637X/791/2/130#apj498704t2
     log_OH = logOH_asym + np.log10(1 - np.exp(-(log_mass/log_mass_TO)**gamma)) # Eq 5 of Z14
-    ax.plot(log_mass, log_OH, c='deepblue', lw=2, label=f'Zahid+14:COSMOS')
+    ax.plot(log_mass, log_OH, c='blue', lw=2, label=f'Zahid+14:COSMOS')
 
     return ax
 
@@ -78,13 +78,13 @@ if __name__ == "__main__":
     # args.colormap = colormap_dict[args.colorcol]
 
     # -------reading in dataframe produced by get_field_stats.py----------------
-    df_infilename = args.output_dir / f'allpar_venn_df.txt'
+    df_infilename = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df.txt'
     df = pd.read_csv(df_infilename)
 
     # -----------plotting stuff with the resultant intersecting dataframe--------
     fig, ax = plt.subplots(1, figsize=(8, 6))
     fig.subplots_adjust(left=0.1, right=0.85, bottom=0.1, top=0.95)
-    figname = args.output_dir / f'allpar_venn_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
+    figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
 
     # ---------SFMS from df-------
     p = ax.scatter(df[args.xcol], df[args.ycol], c=df[args.colorcol], marker='s', s=100, lw=1, edgecolor='k')
