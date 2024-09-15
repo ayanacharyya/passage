@@ -157,10 +157,10 @@ if __name__ == "__main__":
     # ------saving figure---------
     if args.fortalk:
         mplcyberpunk.add_glow_effects()
-        # try: mplcyberpunk.make_lines_glow()
-        # except: pass
-        # try: mplcyberpunk.make_scatter_glow()
-        # except: pass
+        try: mplcyberpunk.make_lines_glow()
+        except: pass
+        try: mplcyberpunk.make_scatter_glow()
+        except: pass
 
     zCOSMOS_text = '_with_zCOSMOS' if args.plot_zcosmos else '_with_COSMOS2020' if args.plot_cosmos2020 else ''
     figname = args.input_dir / 'footprints' / f'{args.bg}_with_footprints{zCOSMOS_text}.png'

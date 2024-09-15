@@ -165,7 +165,7 @@ def plot_1d_spectra(od_hdu, ax, args):
     nfilters = sum(['GRISM' in item for item in list(od_hdu[0].header.keys())])
     filters = [od_hdu[0].header[f'GRISM{item + 1:03d}'] for item in range(nfilters)]
 
-    col_arr = ['orange', 'orangered', 'firebrick'] # colors in order: for measured flux, fitted continuum, fitted continuum + line flux
+    col_arr = ['palegreen', 'gold', 'coral'] if args.fortalk else ['orange', 'orangered', 'firebrick'] # colors in order: for measured flux, fitted continuum, fitted continuum + line flux
     norm_factor = 1e-19
 
     # -------plot 1D spectra for each filter-----------
@@ -175,9 +175,10 @@ def plot_1d_spectra(od_hdu, ax, args):
         table = table[table['wave'].between(table['wave'].min() * (1 + args.trim_filter_by_wavelength_factor), table['wave'].max() * (1 - args.trim_filter_by_wavelength_factor))]
         table['rest_wave'] = table['wave'] / (1 + args.z)
         ax.plot(table['rest_wave'], table['flux'] / table['flat'] / norm_factor, lw=0.5, c=col_arr[index], alpha=0.8) # need to divide all columns with 'flat' to get the right units (ergs/s/cm^2/A)
-        ax.plot(table['rest_wave'], table['cont'] / table['flat'] / norm_factor, lw=0.5, c='grey')
-        ax.plot(table['rest_wave'], table['line'] / table['flat'] / norm_factor, lw=1, c='indigo')
-        ax.text(float(filters[0][1:-1]) * 1e2 * 0.85 / (1 + args.z), ax.get_ylim()[1] * 0.95 - index * 0.1, filter, c=col_arr[index], fontsize=args.fontsize, ha='left', va='top')
+        ax.plot(table['rest_wave'], table['cont'] / table['flat'] / norm_factor, lw=0.5, c='lightgray' if args.fortalk else 'grey')
+        ax.plot(table['rest_wave'], table['line'] / table['flat'] / norm_factor, lw=1, c='cyan' if args.fortalk else 'indigo')
+    for index, filter in enumerate(filters): # so that the filter labels come out at right y coordinate
+        ax.text(float(filters[0][1:-1]) * 1e2 * 0.85 / (1 + args.z), ax.get_ylim()[1] * 0.98 - (index + 1) * 0.1 * np.diff(ax.get_ylim())[0], filter, c=col_arr[index], fontsize=args.fontsize, ha='left', va='top')
 
     ax.set_xlabel(r'Rest-frame wavelength ($\AA$)', fontsize=args.fontsize)
     ax.set_ylabel(r'f$_{\lambda}$ ' + '(%.0e ' % norm_factor + r'ergs/s/cm$^2$/A)', fontsize=args.fontsize/1.2)
@@ -195,6 +196,14 @@ def plot_1d_spectra(od_hdu, ax, args):
     else: ax = plot_linelist(ax)
 
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+
+    # --------for talk plots--------------
+    if args.fortalk:
+        mplcyberpunk.add_glow_effects()
+        try: mplcyberpunk.make_lines_glow()
+        except: pass
+        try: mplcyberpunk.make_scatter_glow()
+        except: pass
 
     return ax
 
@@ -909,7 +918,15 @@ if __name__ == "__main__":
         # ---------decorating and saving the figure------------------------------
         fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
         figname = fig_dir / f'{args.field}_{args.id:05d}_{description_text}{vorbin_text}.png'
-        fig.savefig(figname)
+        # --------for talk plots--------------
+        if args.fortalk:
+            mplcyberpunk.add_glow_effects()
+            try: mplcyberpunk.make_lines_glow()
+            except: pass
+            try: mplcyberpunk.make_scatter_glow()
+            except: pass
+
+        fig.savefig(figname, transparent=args.fortalk)
         print(f'Saved figure at {figname}')
         if args.hide: plt.close('all')
         else: plt.show(block=False)

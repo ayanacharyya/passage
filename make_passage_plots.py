@@ -105,7 +105,15 @@ if __name__ == "__main__":
     ax.set_xlabel(label_dict[args.xcol] if args.xcol in label_dict else args.xcol)
     ax.set_ylabel(label_dict[args.ycol] if args.ycol in label_dict else args.ycol)
 
-    fig.savefig(figname)
+    # --------for talk plots--------------
+    if args.fortalk:
+        mplcyberpunk.add_glow_effects()
+        try: mplcyberpunk.make_lines_glow()
+        except: pass
+        try: mplcyberpunk.make_scatter_glow()
+        except: pass
+
+    fig.savefig(figname, transparent=args.fortalk)
     print(f'\nSaved figure as {figname}')
     plt.show(block=False)
 

@@ -148,7 +148,15 @@ def plot_venn(df, args):
     fig.text(0.99, 0.99, f'Total {n_fields} fields: Par{args.field_text}\nTotal {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes)
     figname = args.output_dir / f'Par{args.field_text}_venn_diagram.png'
 
-    fig.savefig(figname)
+    # --------for talk plots--------------
+    if args.fortalk:
+        mplcyberpunk.add_glow_effects()
+        try: mplcyberpunk.make_lines_glow()
+        except: pass
+        try: mplcyberpunk.make_scatter_glow()
+        except: pass
+
+    fig.savefig(figname, transparent=args.fortalk)
     print(f'\nSaved figure as {figname}')
     plt.show(block=False)
 
@@ -206,7 +214,15 @@ def get_detection_fraction(df, line, args):
         ax.text(0.02, 0.8, f'Par{args.field_text}', c='k', ha='left', va='top', transform=ax.transAxes)
         figname = args.output_dir / f'{args.field}' / f'{args.field}_{line}_EW_histogram.png'
 
-    fig.savefig(figname)
+    # --------for talk plots--------------
+    if args.fortalk:
+        mplcyberpunk.add_glow_effects()
+        try: mplcyberpunk.make_lines_glow()
+        except: pass
+        try: mplcyberpunk.make_scatter_glow()
+        except: pass
+
+    fig.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
 
