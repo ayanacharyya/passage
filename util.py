@@ -436,10 +436,11 @@ def setup_plots_for_talks():
     '''
     Function to setup plto themes etc for talks
     '''
+    plt.style.use('cyberpunk')
     background_for_talks = 'cyberpunk'  # 'dark_background' #'Solarize_Light2' #
     plt.style.use(background_for_talks)
     new_foreground_color = '#FFF1D0'
-    plt.rcParams['grid.color'] = new_foreground_color
+    #plt.rcParams['grid.color'] = new_foreground_color
     plt.rcParams['text.color'] = new_foreground_color
     plt.rcParams['xtick.color'] = new_foreground_color
     plt.rcParams['ytick.color'] = new_foreground_color

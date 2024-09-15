@@ -20,7 +20,7 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, df=None):
     Plots the footprint/s for a given region file and existing figure and header of the background file plotted on the figure
     Returns fig handle
     '''
-    col_arr = ['blue', 'green', 'yellow', 'cyan']
+    col_arr = ['cornflowerblue', 'lightsalmon', 'gold', 'cyan'] if args.fortalk else ['blue', 'green', 'yellow', 'cyan']
     pix_offset_forlabels = 20
 
     ax = fig.gca()
@@ -32,14 +32,14 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, df=None):
 
         sky_regions = Regions.read(region_file, format='ds9')
 
-        if 'color' in sky_regions[0].visual: color = sky_regions[0].visual['color']
+        if 'color' in sky_regions[0].visual and not args.fortalk: color = sky_regions[0].visual['color']
         else: color = col_arr[index]
 
 
         for index2, sky_region in enumerate(sky_regions):
             if type(sky_region) == regions.shapes.text.TextSkyRegion: # label if it is text
                 label = sky_region.text
-                ax.text(ax.get_xlim()[0] + 0.1 * np.diff(ax.get_xlim())[0], ax.get_ylim()[1] - (index + 1) * 0.05 * np.diff(ax.get_ylim())[0], label, c=color, ha='left', va='top', fontsize=args.fontsize)
+                ax.text(ax.get_xlim()[0] + 0.1 * np.diff(ax.get_xlim())[0], ax.get_ylim()[1] * 0.98 - (index + 1) * 0.05 * np.diff(ax.get_ylim())[0], label, c=color, ha='left', va='top', fontsize=args.fontsize, bbox=dict(facecolor='k', edgecolor='black', alpha=0.5) if args.fortalk else None)
             else: # otherwise plot it
                 # plotting the region
                 pixel_region = sky_region.to_pixel(wcs_header)
@@ -50,7 +50,7 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, df=None):
                     label_pixcoord_x = pixel_region.center.xy[0] + pixel_region.width/2 + pix_offset_forlabels
                     label_pixcoord_y = pixel_region.center.xy[1] + pixel_region.height/2 + pix_offset_forlabels
                     label_text = f'P{pixel_region.meta["text"]}'
-                    ax.text(label_pixcoord_x, label_pixcoord_y, label_text, c=color, ha='left', va='top', fontsize=args.fontsize/1.5)
+                    ax.text(label_pixcoord_x, label_pixcoord_y, label_text, c=color, ha='left', va='top', fontsize=args.fontsize/1.5, bbox=dict(facecolor='k', edgecolor='black', alpha=0.5) if args.fortalk else None)
 
                     # detecting sources from <table> that lie within this region, if <table> provided
                     if df is not None:
@@ -155,6 +155,13 @@ if __name__ == "__main__":
     fig, sky_regions = plot_footprints(reg_filenames, bg_img_hdu, fig, args, df=df if 'df' in locals() else None)
 
     # ------saving figure---------
+    if args.fortalk:
+        mplcyberpunk.add_glow_effects()
+        # try: mplcyberpunk.make_lines_glow()
+        # except: pass
+        # try: mplcyberpunk.make_scatter_glow()
+        # except: pass
+
     zCOSMOS_text = '_with_zCOSMOS' if args.plot_zcosmos else '_with_COSMOS2020' if args.plot_cosmos2020 else ''
     figname = args.input_dir / 'footprints' / f'{args.bg}_with_footprints{zCOSMOS_text}.png'
     fig.savefig(figname, transparent=args.fortalk)
