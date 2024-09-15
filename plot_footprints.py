@@ -5,7 +5,8 @@
     Created: 18-06-24
     Last modified: 18-06-24
     Example: run plot_footprints.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field COSMOS
-             run plot_footprints.py --field COSMOS --plot_zcosmos
+             run plot_footprints.py --bg COSMOS --plot_zcosmos
+             run plot_footprints.py --fortalk
 '''
 
 from header import *
@@ -35,10 +36,10 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, df=None):
         else: color = col_arr[index]
 
 
-        for index, sky_region in enumerate(sky_regions):
+        for index2, sky_region in enumerate(sky_regions):
             if type(sky_region) == regions.shapes.text.TextSkyRegion: # label if it is text
                 label = sky_region.text
-                ax.text(ax.get_xlim()[0] * 1.1, ax.get_ylim()[1] * 0.98 - index * 0.05 * np.diff(ax.get_ylim())[0], label, c=color, ha='left', va='top', fontsize=args.fontsize)
+                ax.text(ax.get_xlim()[0] + 0.1 * np.diff(ax.get_xlim())[0], ax.get_ylim()[1] - (index + 1) * 0.05 * np.diff(ax.get_ylim())[0], label, c=color, ha='left', va='top', fontsize=args.fontsize)
             else: # otherwise plot it
                 # plotting the region
                 pixel_region = sky_region.to_pixel(wcs_header)
@@ -53,7 +54,7 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, df=None):
 
                     # detecting sources from <table> that lie within this region, if <table> provided
                     if df is not None:
-                        print(f'Doing field {label_text}, which is {index + 1} out of {len(sky_regions)}..')  #
+                        print(f'Doing field {label_text}, which is {index2 + 1} out of {len(sky_regions)}..')  #
                         contained_ids = sky_region.contains(SkyCoord(df['ra'], df['dec'], unit='deg'), wcs_header)
                         n_sources = np.sum(contained_ids)
                         if n_sources > 0:
@@ -97,7 +98,7 @@ def plot_background(filename, args):
     Plots the background image for a given input filename
     Returns fig handle
     '''
-    cmap = 'Greys'
+    cmap = 'Greys_r' if args.fortalk else 'Greys'
     fig, ax = plt.subplots(figsize=(8, 6))
     fig.subplots_adjust(right=0.99, top=0.95, bottom=0.1, left=0.01)
 
@@ -132,16 +133,15 @@ if __name__ == "__main__":
     bg_image_dir = args.input_dir / 'footprints/survey_images'
     reg_files_dir = args.input_dir / 'footprints/region_files'
 
-    if 'Par' in args.field: args.field = 'COSMOS' # defaults to COSMOS field
     if args.bg_file is None:
-        if args.field == 'COSMOS': bg_filename = bg_image_dir / 'COSMOS-HST-ACS_mosaic_Shrink100.fits' # if field is COSMOS, by default use this background image
-        else: bg_filename = list(bg_image_dir.glob('*%s*.fits' %args.field))[0] # for other fields, look for available background image files
+        if args.bg == 'COSMOS': bg_filename = bg_image_dir / 'COSMOS-HST-ACS_mosaic_Shrink100.fits' # if field is COSMOS, by default use this background image
+        else: bg_filename = list(bg_image_dir.glob('*%s*.fits' %args.bg))[0] # for other fields, look for available background image files
     else:
         bg_filename = bg_image_dir / args.bg_file
 
-    reg_filenames = list(reg_files_dir.glob('*%s*.reg' %args.field))
+    reg_filenames = list(reg_files_dir.glob('*%s*.reg' %args.bg))
     reg_filenames += list(reg_files_dir.glob('*PASSAGE*.reg'))
-    if len(reg_filenames) == 0: sys.exit(f'No {args.field} reg file in {reg_files_dir}')
+    if len(reg_filenames) == 0: sys.exit(f'No {args.bg} reg file in {reg_files_dir}')
 
     # ------plotting the background------------
     fig, bg_img_hdu = plot_background(bg_filename, args)
@@ -156,8 +156,8 @@ if __name__ == "__main__":
 
     # ------saving figure---------
     zCOSMOS_text = '_with_zCOSMOS' if args.plot_zcosmos else '_with_COSMOS2020' if args.plot_cosmos2020 else ''
-    figname = args.input_dir / 'footprints' / f'{args.field}_with_footprints{zCOSMOS_text}.png'
-    fig.savefig(figname)
+    figname = args.input_dir / 'footprints' / f'{args.bg}_with_footprints{zCOSMOS_text}.png'
+    fig.savefig(figname, transparent=args.fortalk)
     print(f'Saved plot to {figname}')
     plt.show(block=False)
 

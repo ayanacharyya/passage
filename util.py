@@ -28,6 +28,8 @@ def parse_args():
     parser.add_argument('--clobber', dest='clobber', action='store_true', default=False, help='Over-write existing plots? Default is no.')
     parser.add_argument('--silent', dest='silent', action='store_true', default=False, help='Suppress some generic print statements? Default is no.')
     parser.add_argument('--keep', dest='keep', action='store_true', default=False, help='Keep existing plot windows open? Default is no.')
+    parser.add_argument('--forpaper', dest='forpaper', action='store_true', default=False, help='Format plots to paper quality? Default is no.')
+    parser.add_argument('--fortalk', dest='fortalk', action='store_true', default=False, help='Format plots suitable for putting in talks? Default is no.')
 
     parser.add_argument('--field', metavar='field', type=str, action='store', default='Par3', help='Which passage field? Default is Par50')
     parser.add_argument('--id', metavar='id', type=str, action='store', default='100', help='Object ID. Default is 100')
@@ -49,6 +51,7 @@ def parse_args():
     parser.add_argument('--split_regions_by_fields', dest='split_regions_by_fields', action='store_true', default=False, help='Split regions into different files based on if they are contained within each PASSAGE fields? Default is no.')
 
     # ------- args added for plot_footprints.py ------------------------------
+    parser.add_argument('--bg', metavar='bg', type=str, action='store', default='COSMOS', help='Which survey to be used to plot background? Default is COSMOS')
     parser.add_argument('--bg_file', metavar='bg_file', type=str, action='store', default=None, help='Which file to be used for plotting the background image?')
     parser.add_argument('--plot_zcosmos', dest='plot_zcosmos', action='store_true', default=False, help='Overplot the (thousands of) zCOSMOS targets? Default is no.')
     parser.add_argument('--plot_cosmos2020', dest='plot_cosmos2020', action='store_true', default=False, help='Overplot the (millions of) COSMOS2020 targets? Default is no.')
@@ -144,6 +147,10 @@ def parse_args():
         args.filters = args.filters.split(',')
 
     args.plot_conditions = args.plot_conditions.split(',')
+
+    if args.fortalk:
+        print(f'Setting up plots for talks..')
+        setup_plots_for_talks()
 
     return args
 
@@ -423,6 +430,33 @@ def get_passage_filter_dict(args=None, filename=None):
     dictionary = {item: np.unique(df[df['Par#'] == item]['Filter']).tolist() for item in np.unique(df['Par#'])}
 
     return dictionary
+
+# ------------------------------------------------------------------------
+def setup_plots_for_talks():
+    '''
+    Function to setup plto themes etc for talks
+    '''
+    background_for_talks = 'cyberpunk'  # 'dark_background' #'Solarize_Light2' #
+    plt.style.use(background_for_talks)
+    new_foreground_color = '#FFF1D0'
+    plt.rcParams['grid.color'] = new_foreground_color
+    plt.rcParams['text.color'] = new_foreground_color
+    plt.rcParams['xtick.color'] = new_foreground_color
+    plt.rcParams['ytick.color'] = new_foreground_color
+    plt.rcParams['xtick.color'] = new_foreground_color
+    plt.rcParams['axes.titlecolor'] = new_foreground_color
+    plt.rcParams['axes.labelcolor'] = new_foreground_color
+    plt.rcParams['axes.edgecolor'] = new_foreground_color
+    plt.rcParams['figure.edgecolor'] = new_foreground_color
+    plt.rcParams['savefig.edgecolor'] = new_foreground_color
+    plt.rcParams['axes.linewidth'] = 2
+
+    new_background_color = '#120000'
+    plt.rcParams['axes.facecolor'] = new_background_color
+    plt.rcParams['figure.facecolor'] = new_background_color
+    plt.rcParams['savefig.facecolor'] = new_background_color
+    plt.rcParams['grid.alpha'] = 0.5
+    plt.rcParams['grid.linewidth'] = 0.3
 
 # --------------------------------------------------------------------------------------------------
 args = parse_args()
