@@ -78,6 +78,7 @@ def parse_args():
     parser.add_argument('--magmin', metavar='magmin', type=float, action='store', default=16, help='magnitude lower limit for refined magnitude search during PASSAGEPipe; default is 16')
     parser.add_argument('--start_id', metavar='start_id', type=int, action='store', default=0, help='Starting ID of the object whose spectra is to be extracted. Default is 0')
     parser.add_argument('--stop_id', metavar='stop_id', type=int, action='store', default=10000, help='Stopping ID of the object whose spectra is to be extracted. Default is all IDs till the end of the list')
+    parser.add_argument('--remake_figures', dest='remake_figures', action='store_true', default=False, help='Re-make the figures made by PASSAGEPipe and tarball them? Default is no.')
 
     # ------- args added for make_diagnostic_maps.py ------------------------------
     parser.add_argument('--plot_target_frame', dest='plot_target_frame', action='store_true', default=False, help='Annotate plot axes in the object/target frame of reference? Default is no.')

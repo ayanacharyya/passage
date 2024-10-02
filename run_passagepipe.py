@@ -9,6 +9,7 @@
              run run_passagepipe.py --field Par61 --zmin 0.1 --zmax 8 --filters F115W,F150W
              run run_passagepipe.py --field Par27 --zmin 0.1 --zmax 8 --filters F115W,F150W,F200W
              run run_passagepipe.py --field Par40 --zmin 0.1 --zmax 8 --filters F115W,F150W,F200W
+             run run_passagepipe.py --field Par61 --zmin 0.1 --zmax 8 --filters F115W,F150W --remake_figures
 '''
 
 from header import *
@@ -17,7 +18,7 @@ start_time = datetime.now()
 
 import passagepipe as pp
 import passagepipe.pipeline as pipe
-
+from passagepipe.post_process import makeSummaryFigures, createTarballs
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -72,6 +73,11 @@ if __name__ == "__main__":
     # ------------running the pipeline-----------------------
     if args.dry_run:
         print('\nThis is just a dry-run, NOT calling the PASSAGEPipe. Omit the --dry_run option in order to actually run the pipeline. Print config if you want to check the loaded configurations.\n')
+    elif args.remake_figures: # to only remake the figures and tarball them
+        print('\n Only re-making the figures in Products/plots/ and re-making the tarball, assuming all other steps have already been done and all other files are already present.')
+        product_subdirs = ['plots']
+        makeSummaryFigures(CONFIG=config)
+        createTarballs(CONFIG=config)
     else:
         pipe.run_pipeline(CONFIG=config, objList=objList)
 
