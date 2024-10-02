@@ -75,9 +75,8 @@ if __name__ == "__main__":
         print('\nThis is just a dry-run, NOT calling the PASSAGEPipe. Omit the --dry_run option in order to actually run the pipeline. Print config if you want to check the loaded configurations.\n')
     elif args.remake_figures: # to only remake the figures and tarball them
         print('\n Only re-making the figures in Products/plots/ and re-making the tarball, assuming all other steps have already been done and all other files are already present.')
-        product_subdirs = ['plots']
         makeSummaryFigures(CONFIG=config)
-        createTarballs(CONFIG=config)
+        createTarballs(CONFIG=config, product_subdirs=['plots'])
     else:
         pipe.run_pipeline(CONFIG=config, objList=objList)
 
