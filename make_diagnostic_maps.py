@@ -11,7 +11,7 @@
              run make_diagnostic_maps.py --field Par51 --re_extract --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
              run make_diagnostic_maps.py --field Par28 --id 1457 --snr_cut 3 --plot_starburst
              run make_diagnostic_maps.py --field Par28 --id 58,1457,1585,1588 --snr_cut 3 --plot_starburst --keep
-             run make_diagnostic_maps.py --field Par28 --id 58,1457,1585,1588 --snr_cut 3 --plot_starburst --vorbin --voronoi_snr 10 --keep
+             run make_diagnostic_maps.py --field Par28 --id 58,1457,1585,1588 --snr_cut 3 --plot_starburst --vorbin --voronoi_snr 10 --plot_radial_profile
     Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -211,15 +211,13 @@ def plot_1d_spectra(od_hdu, ax, args):
     return ax
 
 # ---------------------------------------------------------------------------------
-def plot_binned_profile(xdata, ydata, ax, color='darkorange', yerr=None):
+def plot_binned_profile(df, ax, color='darkorange', yerr=None, xcol='radius', ycol='data'):
     '''
     Function to overplot binned data on existing plot in a given axis
     Returns axis handle
     '''
-    df = pd.DataFrame({'xcol': xdata.flatten(), 'ycol':ydata.flatten()})
-
     bin_edges = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 10)
-    df['binned_cat'] = pd.cut(df['xcol'], bin_edges)
+    df['binned_cat'] = pd.cut(df[xcol], bin_edges)
 
     if yerr is not None:
         df['weightcol'] = 1 / yerr.flatten() ** 2
@@ -228,8 +226,8 @@ def plot_binned_profile(xdata, ydata, ax, color='darkorange', yerr=None):
     else:
         agg_func, agg_u_func = np.mean, np.std
 
-    y_binned = df.groupby('binned_cat', as_index=False).agg([('ycol', agg_func)])['ycol'].values.flatten()
-    y_u_binned = df.groupby('binned_cat', as_index=False).agg([('ycol', agg_u_func)])['ycol'].values.flatten()
+    y_binned = df.groupby('binned_cat', as_index=False).agg([(ycol, agg_func)])[ycol].values.flatten()
+    y_u_binned = df.groupby('binned_cat', as_index=False).agg([(ycol, agg_u_func)])[ycol].values.flatten()
     x_bin_centers = bin_edges[:-1] + np.diff(bin_edges) / 2
 
     # ------getting rid of potential nan values---------
@@ -259,7 +257,7 @@ def get_distance_map(image_shape, args):
     Get map of distances from the center, in target rest-frame, on a given 2D grid
     Returns 2D distance map
     '''
-    pixscale_kpc = ((args.pixscale * u.arcsec).to(u.radian) * args.distance.to('kpc')).value # kpc
+    pixscale_kpc = args.pixscale / cosmo.arcsec_per_kpc_proper(args.z).value # kpc
     center_pix = image_shape[0] / 2.
     distance_map = np.array([[np.sqrt((i - center_pix)**2 + (j - center_pix)**2) for j in range(image_shape[1])] for i in range(image_shape[0])]) * pixscale_kpc # kpc
 
@@ -273,20 +271,36 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     print(f'Plotting radial profile of {label}..')
 
     distance_map = get_distance_map(np.shape(image), args)
-    ax.scatter(distance_map, image, c='grey', s=1, alpha=0.2)
+    distance_map = np.ma.masked_where(image.mask, distance_map)
 
-    ax.set_xlim(0, 2 * ((args.arcsec_limit * u.arcsec).to(u.radian) * args.distance.to('kpc')).value) # kpc
+    # ----making the dataframe before radial profile plot--------------
+    xcol, ycol = 'radius', 'data'
+    df = pd.DataFrame({xcol: np.ma.compressed(distance_map), ycol: np.ma.compressed(image)})
+    df = df[df[xcol] <= args.radius_max]
+    df = df.sort_values(by=xcol)
+
+    # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
+    df_vorbinned = pd.DataFrame()
+    counts = df.groupby([ycol], as_index=False).count()[xcol]
+    df_vorbinned[xcol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[xcol]['mean']
+    #df_vorbinned[ycol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[ycol] * counts
+    df_vorbinned[ycol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[ycol]
+    df = df_vorbinned
+
+    # -------proceeding with plotting--------
+    ax.scatter(df[xcol], df[ycol], c='grey', s=1, alpha=0.2)
+
+    ax.set_xlim(0, args.radius_max) # kpc
     ax.set_ylim(ymin, ymax)
-    ax.set_xlim(0, args.radius_max)
     ax.set_box_aspect(1)
 
-    ax, linefit = plot_binned_profile(distance_map, image, ax)
+    ax, linefit = plot_binned_profile(df, ax, xcol=xcol, ycol=ycol)
 
     if hide_xaxis:
         ax.set_xticklabels([])
     else:
         ax.set_xlabel('Distance (kpc)', fontsize=args.fontsize)
-        #ax.set_xticklabels(['%d' % ((item * u.arcsec).to(u.radian) * args.distance.to('kpc')).value for item in ax.get_xticks()], fontsize=args.fontsize)
+        #ax.set_xticklabels(['%d' % item / cosmo.arcsec_per_kpc_proper(args.z).value for item in ax.get_xticks()], fontsize=args.fontsize)
         ax.tick_params(axis='x', which='major', labelsize=args.fontsize)
 
     if hide_yaxis:
@@ -319,7 +333,7 @@ def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hi
     else:
         if args.plot_target_frame:
             ax.set_xlabel('Offset (kpc)', fontsize=args.fontsize)
-            ax.set_xticklabels(['%d' % ((item * u.arcsec).to(u.radian) * args.distance.to('kpc')).value for item in ax.get_xticks()], fontsize=args.fontsize)
+            ax.set_xticklabels(['%d' % (item / cosmo.arcsec_per_kpc_proper(args.z).value) for item in ax.get_xticks()], fontsize=args.fontsize)
         else:
             ax.set_xlabel('RA (")', fontsize=args.fontsize)
         ax.tick_params(axis='x', which='major', labelsize=args.fontsize)
@@ -329,7 +343,7 @@ def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hi
     else:
         if args.plot_target_frame:
             ax.set_ylabel('Offset (kpc)', fontsize=args.fontsize)
-            ax.set_yticklabels(['%d' % ((item * u.arcsec).to(u.radian) * args.distance.to('kpc')).value for item in ax.get_xticks()], fontsize=args.fontsize)
+            ax.set_yticklabels(['%d' % (item / cosmo.arcsec_per_kpc_proper(args.z).value) for item in ax.get_xticks()], fontsize=args.fontsize)
         else:
             ax.set_ylabel('Dec (")', fontsize=args.fontsize)
         ax.tick_params(axis='y', which='major', labelsize=args.fontsize)
@@ -341,8 +355,8 @@ def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hi
         cbar.ax.tick_params(labelsize=args.fontsize)
 
     if args.plot_radial_profiles and radprof_ax is not None:
-        radius_pix = ((args.radius_max / args.distance.to('kpc').value) * u.radian).to(u.arcsec)
-        circle = plt.Circle((0, 0), radius_pix.value, color='k', fill=False, lw=0.5)
+        radius_pix = args.radius_max * cosmo.arcsec_per_kpc_proper(args.z).value # arcsec
+        circle = plt.Circle((0, 0), radius_pix, color='k', fill=False, lw=0.5)
         ax.add_patch(circle)
         radprof_ax, radprof_fit = plot_radial_profile(image, radprof_ax, args, label=label.split(r'$_{\rm int}')[0], ymin=vmin, ymax=vmax)
     else:
@@ -359,6 +373,8 @@ def bin_2D(map, bin_IDs):
     binned_map = np.zeros(np.shape(map))
     for id in np.unique(bin_IDs):
         binned_map[bin_IDs == id] = map[bin_IDs == id].mean()
+
+    binned_map = np.ma.masked_where(map.mask, binned_map) # propagating the masks from the original 2D image
 
     return binned_map
 
@@ -729,7 +745,15 @@ def plot_starburst_map(full_hdu, args):
     Plots the Ha map, direct F115W map and their ratio (starbursty-ness map) in a new figure
     Returns the figure handle and the ratio map just produced
     '''
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+    if args.plot_radial_profiles:
+        fig, axes = plt.subplots(2, 3, figsize=(14, 7))
+        radprof_axes = axes[1,:]
+        axes = axes[0, :]
+        fig.subplots_adjust(left=0.02, right=0.98, bottom=0.07, top=0.95, wspace=0.05, hspace=0.2)
+    else:
+        fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+        radprof_axes = np.tile(None, 3)
+        fig.subplots_adjust(left=0.05, right=0.97, bottom=0.15, top=0.9, wspace=0.2)
 
     # ---------getting the Ha map-------------
     ha_map, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=False)
@@ -737,12 +761,7 @@ def plot_starburst_map(full_hdu, args):
     # ---------getting the direct image-------------
     direct_ext = 5
     direct_map = full_hdu[direct_ext].data
-    # direct_map_err = 1 / full_hdu[direct_ext + 1].data # 1/WHT = flux uncertainty
-    #
-    # if args.snr_cut is not None:
-    #     snr_map = direct_map / direct_map_err
-    #     direct_map = np.ma.masked_where(~np.isfinite(snr_map), direct_map)
-    #     direct_map = np.ma.masked_where(snr_map < args.snr_cut, direct_map)
+    direct_map = np.ma.masked_where(~np.isfinite(direct_map), direct_map)
 
     if args.vorbin:
         direct_map = bin_2D(direct_map, args.voronoi_bin_IDs)
@@ -754,13 +773,12 @@ def plot_starburst_map(full_hdu, args):
     # --------making arrays for subplots-------------
     maps = [direct_map, ha_map, ratio_map]
     labels = ['Continuum', r'H$\alpha$', r'H$\alpha$/Continuum']
+    lims = [[-8, -1], [-21, -16], [-18, -12]]
 
     # ---------plotting-------------
     for index, ax in enumerate(axes):
-        ax, _ = plot_2D_map(np.log10(maps[index]), ax, args, label=labels[index], cmap='viridis')
+        ax, _ = plot_2D_map(np.log10(maps[index]), ax, args, label=labels[index], cmap='viridis', vmin=lims[index][0], vmax=lims[index][1], radprof_ax=radprof_axes[index])
         ax.contour(image.mask, levels=0, colors='k', extent=args.extent, linewidths=2)
-
-    fig.subplots_adjust(left=0.05, right=0.97, bottom=0.15, top=0.9, wspace=0.2)
 
     return fig, ratio_map
 
@@ -871,10 +889,10 @@ if __name__ == "__main__":
         # ----------determining global parameters------------
         args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
         args.z = full_hdu[0].header['REDSHIFT']
-        args.distance = cosmo.comoving_distance(args.z)
         args.ndfilt = full_hdu[0].header['NDFILT']
         args.nlines = full_hdu[0].header['NUMLINES']
         args.pix_arcsec = full_hdu[5].header['PIXASEC']
+        args.distance = cosmo.comoving_distance(args.z)
         args.pa_arr = np.unique([full_hdu[0].header[item] for item in list(full_hdu[0].header.keys()) if 'PA00' in item])
         try: args.mag = catalog[catalog['id'] == args.id]['mag_auto'].data.data[0]
         except: args.mag = np.nan

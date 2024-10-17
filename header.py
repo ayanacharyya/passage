@@ -58,7 +58,7 @@ from astropy import units as u
 from astropy.coordinates import SkyCoord, angular_separation
 from astropy import wcs as pywcs
 from astropy.io import fits
-from astropy.cosmology import WMAP9 as cosmo
+from astropy.cosmology import Planck18 as cosmo
 from astropy.cosmology import FlatLambdaCDM
 
 # grizli stuff
