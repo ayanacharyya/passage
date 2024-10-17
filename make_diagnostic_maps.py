@@ -9,6 +9,9 @@
              run make_diagnostic_maps.py --field Par50 --id 823 --plot_radial_profiles --only_seg --snr_cut 3 --plot_mappings
              run make_diagnostic_maps.py --field Par51 --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
              run make_diagnostic_maps.py --field Par51 --re_extract --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
+             run make_diagnostic_maps.py --field Par28 --id 1457 --snr_cut 3 --plot_starburst
+             run make_diagnostic_maps.py --field Par28 --id 58,1457,1585,1588 --snr_cut 3 --plot_starburst --keep
+             run make_diagnostic_maps.py --field Par28 --id 58,1457,1585,1588 --snr_cut 3 --plot_starburst --vorbin --voronoi_snr 10 --keep
     Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -372,8 +375,8 @@ def get_voronoi_bin_IDs(map, map_err, snr_thresh, plot=False, quiet=True):
     map = np.ma.masked_where(~np.isfinite(map_err), map)
     map_err = np.ma.masked_where(~np.isfinite(map_err), map_err)
 
-    map = np.ma.masked_where(map < 0, map)
-    map_err = np.ma.masked_where(map < 0, map_err)
+    map = np.ma.masked_where(map / map_err < 1, map)
+    map_err = np.ma.masked_where(map / map_err < 1, map_err)
 
     binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords, y_coords, map.flatten(), map_err.flatten(), snr_thresh, plot=plot, quiet=quiet, cvt=False, pixelsize=1)
     binID_map = binIDs.reshape(np.shape(map))
@@ -721,6 +724,47 @@ def plot_Z_R23_map(full_hdu, ax, args, radprof_ax=None):
     return ax, logOH_map, logOH_radfit, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
+def plot_starburst_map(full_hdu, args):
+    '''
+    Plots the Ha map, direct F115W map and their ratio (starbursty-ness map) in a new figure
+    Returns the figure handle and the ratio map just produced
+    '''
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+
+    # ---------getting the Ha map-------------
+    ha_map, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=False)
+
+    # ---------getting the direct image-------------
+    direct_ext = 5
+    direct_map = full_hdu[direct_ext].data
+    # direct_map_err = 1 / full_hdu[direct_ext + 1].data # 1/WHT = flux uncertainty
+    #
+    # if args.snr_cut is not None:
+    #     snr_map = direct_map / direct_map_err
+    #     direct_map = np.ma.masked_where(~np.isfinite(snr_map), direct_map)
+    #     direct_map = np.ma.masked_where(snr_map < args.snr_cut, direct_map)
+
+    if args.vorbin:
+        direct_map = bin_2D(direct_map, args.voronoi_bin_IDs)
+
+    # ---------getting the ratio and seg maps-------------
+    ratio_map = ha_map / direct_map
+    image = cut_by_segment(direct_map, full_hdu, args)
+
+    # --------making arrays for subplots-------------
+    maps = [direct_map, ha_map, ratio_map]
+    labels = ['Continuum', r'H$\alpha$', r'H$\alpha$/Continuum']
+
+    # ---------plotting-------------
+    for index, ax in enumerate(axes):
+        ax, _ = plot_2D_map(np.log10(maps[index]), ax, args, label=labels[index], cmap='viridis')
+        ax.contour(image.mask, levels=0, colors='k', extent=args.extent, linewidths=2)
+
+    fig.subplots_adjust(left=0.05, right=0.97, bottom=0.15, top=0.9, wspace=0.2)
+
+    return fig, ratio_map
+
+# --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
@@ -812,7 +856,6 @@ if __name__ == "__main__":
         if not os.path.exists(od_filename): od_filename = Path(str(od_filename).replace('.1D.', '.spec1D.'))
 
         # ------------read in fits files--------------------------------
-
         if os.path.exists(full_filename):
             full_hdu = fits.open(full_filename)
         else:
@@ -858,66 +901,76 @@ if __name__ == "__main__":
         else:
             args.radius_max = np.nan
 
-        # ---------initialising the figure------------------------------
-        nrow, ncol = 4 if args.plot_radial_profiles else 3, len(all_lines_to_consider)
-        fig = plt.figure(figsize=(13/1., 9/1.) if args.plot_radial_profiles else (13, 6), layout='constrained')
+        # ---------initialising the starburst figure figure------------------------------
+        if args.plot_starburst:
+            fig, ratio_map = plot_starburst_map(full_hdu, args)
 
-        axis_dirimg = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 0), colspan=1)
-        axis_1dspec = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 1), colspan=ncol - 1)
-        ax_em_lines = [plt.subplot2grid(shape=(nrow, ncol), loc=(1, item), colspan=1) for item in np.arange(ncol)]  # H alpha, H beta, OII, OIII-4363, OIII
-        [ax_SFR, ax_EB_V, ax_Te, ax_Z_Te, ax_Z_R23] = [plt.subplot2grid(shape=(nrow, ncol), loc=(2, item), colspan=1) for item in np.arange(ncol)]  # SFR, E(B-V), Te, Z (Te), Z (R23)
-        if args.plot_radial_profiles:
-            [rax_SFR, rax_EB_V, rax_Te, rax_Z_Te, rax_Z_R23] = [plt.subplot2grid(shape=(nrow, ncol), loc=(3, item), colspan=1) for item in np.arange(ncol)]  # SFR, E(B-V), Te, Z (Te), Z (R23)
+            # ---------decorating and saving the figure------------------------------
+            fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+            figname = fig_dir / f'{args.field}_{args.id:05d}_starburst_map.png'
+
+        # ---------initialising the full figure------------------------------
         else:
-            [rax_SFR, rax_EB_V, rax_Te, rax_Z_Te, rax_Z_R23] = np.tile(None, ncol)
-        # ---------direct imaging------------------------------
-        axis_dirimg = plot_direct_image(full_hdu, axis_dirimg, args)
+            nrow, ncol = 4 if args.plot_radial_profiles else 3, len(all_lines_to_consider)
+            fig = plt.figure(figsize=(13/1., 9/1.) if args.plot_radial_profiles else (13, 6), layout='constrained')
 
-        # ---------1D spectra------------------------------
-        axis_1dspec = plot_1d_spectra(od_hdu, axis_1dspec, args)
-
-        # -----------------emission line maps---------------
-        for ind, line in enumerate(all_lines_to_consider):
-            if line in args.available_lines: ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False) #ind != len(all_lines_to_consider) - 1) # line_map in ergs/s/cm^2
-            else: fig.delaxes(ax_em_lines[ind])
-
-        # ---------------dust map---------------
-        if all([line in args.available_lines for line in ['Ha', 'Hb']]):
-            _, args.EB_V = get_EB_V(full_hdu, args, verbose=True)
-            ax_EB_V, EB_V_map, EB_V_radfit, EB_V_int = plot_EB_V_map(full_hdu, ax_EB_V, args, radprof_ax=rax_EB_V)
-        else:
-            fig.delaxes(ax_EB_V)
-            if args.plot_radial_profiles: fig.delaxes(rax_EB_V)
-            EB_V_map, EB_V_radfit, EB_V_int = np.nan, [np.nan, np.nan], np.nan
-
-        # ---------------SFR map------------------
-        if 'Ha' in args.available_lines:
-            ax_SFR, SFR_map, SFR_radfit, SFR_int = plot_SFR_map(full_hdu, ax_SFR, args, radprof_ax=rax_SFR)
-        else:
-            fig.delaxes(ax_SFR)
-            if args.plot_radial_profiles: fig.delaxes(rax_SFR)
-
-        # ---------------electron temperature map---------------
-        if all([line in args.available_lines for line in ['OIII-4363', 'OIII']]):
-            ax_Te, Te_map, Te_radfit, Te_int = plot_Te_map(full_hdu, ax_Te, args, radprof_ax=rax_Te)
-        else:
-            fig.delaxes(ax_Te)
-            if args.plot_radial_profiles: fig.delaxes(rax_Te)
-
-        # ---------------metallicity maps---------------
-        if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
-            if 'OIII-4363' in args.available_lines: ax_Z_Te, logOH_Te_map, logOH_Te_radfit, logOH_Te_int = plot_Z_Te_map(full_hdu, ax_Z_Te, args, radprof_ax=rax_Z_Te)
-            ax_Z_R23, logOH_R23_map, logOH_R23_radfit, logOH_R23_int = plot_Z_R23_map(full_hdu, ax_Z_R23, args, radprof_ax=rax_Z_R23)
-        else:
-            fig.delaxes(ax_Z_Te)
-            fig.delaxes(ax_Z_R23)
+            axis_dirimg = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 0), colspan=1)
+            axis_1dspec = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 1), colspan=ncol - 1)
+            ax_em_lines = [plt.subplot2grid(shape=(nrow, ncol), loc=(1, item), colspan=1) for item in np.arange(ncol)]  # H alpha, H beta, OII, OIII-4363, OIII
+            [ax_SFR, ax_EB_V, ax_Te, ax_Z_Te, ax_Z_R23] = [plt.subplot2grid(shape=(nrow, ncol), loc=(2, item), colspan=1) for item in np.arange(ncol)]  # SFR, E(B-V), Te, Z (Te), Z (R23)
             if args.plot_radial_profiles:
-                fig.delaxes(rax_Z_Te)
-                fig.delaxes(rax_Z_R23)
+                [rax_SFR, rax_EB_V, rax_Te, rax_Z_Te, rax_Z_R23] = [plt.subplot2grid(shape=(nrow, ncol), loc=(3, item), colspan=1) for item in np.arange(ncol)]  # SFR, E(B-V), Te, Z (Te), Z (R23)
+            else:
+                [rax_SFR, rax_EB_V, rax_Te, rax_Z_Te, rax_Z_R23] = np.tile(None, ncol)
+            # ---------direct imaging------------------------------
+            axis_dirimg = plot_direct_image(full_hdu, axis_dirimg, args)
 
-        # ---------decorating and saving the figure------------------------------
-        fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-        figname = fig_dir / f'{args.field}_{args.id:05d}_{description_text}{vorbin_text}.png'
+            # ---------1D spectra------------------------------
+            axis_1dspec = plot_1d_spectra(od_hdu, axis_1dspec, args)
+
+            # -----------------emission line maps---------------
+            for ind, line in enumerate(all_lines_to_consider):
+                if line in args.available_lines: ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False) #ind != len(all_lines_to_consider) - 1) # line_map in ergs/s/cm^2
+                else: fig.delaxes(ax_em_lines[ind])
+
+            # ---------------dust map---------------
+            if all([line in args.available_lines for line in ['Ha', 'Hb']]):
+                _, args.EB_V = get_EB_V(full_hdu, args, verbose=True)
+                ax_EB_V, EB_V_map, EB_V_radfit, EB_V_int = plot_EB_V_map(full_hdu, ax_EB_V, args, radprof_ax=rax_EB_V)
+            else:
+                fig.delaxes(ax_EB_V)
+                if args.plot_radial_profiles: fig.delaxes(rax_EB_V)
+                EB_V_map, EB_V_radfit, EB_V_int = np.nan, [np.nan, np.nan], np.nan
+
+            # ---------------SFR map------------------
+            if 'Ha' in args.available_lines:
+                ax_SFR, SFR_map, SFR_radfit, SFR_int = plot_SFR_map(full_hdu, ax_SFR, args, radprof_ax=rax_SFR)
+            else:
+                fig.delaxes(ax_SFR)
+                if args.plot_radial_profiles: fig.delaxes(rax_SFR)
+
+            # ---------------electron temperature map---------------
+            if all([line in args.available_lines for line in ['OIII-4363', 'OIII']]):
+                ax_Te, Te_map, Te_radfit, Te_int = plot_Te_map(full_hdu, ax_Te, args, radprof_ax=rax_Te)
+            else:
+                fig.delaxes(ax_Te)
+                if args.plot_radial_profiles: fig.delaxes(rax_Te)
+
+            # ---------------metallicity maps---------------
+            if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
+                if 'OIII-4363' in args.available_lines: ax_Z_Te, logOH_Te_map, logOH_Te_radfit, logOH_Te_int = plot_Z_Te_map(full_hdu, ax_Z_Te, args, radprof_ax=rax_Z_Te)
+                ax_Z_R23, logOH_R23_map, logOH_R23_radfit, logOH_R23_int = plot_Z_R23_map(full_hdu, ax_Z_R23, args, radprof_ax=rax_Z_R23)
+            else:
+                fig.delaxes(ax_Z_Te)
+                fig.delaxes(ax_Z_R23)
+                if args.plot_radial_profiles:
+                    fig.delaxes(rax_Z_Te)
+                    fig.delaxes(rax_Z_R23)
+
+            # ---------decorating and saving the figure------------------------------
+            fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+            figname = fig_dir / f'{args.field}_{args.id:05d}_{description_text}{vorbin_text}.png'
+
         # --------for talk plots--------------
         if args.fortalk:
             mplcyberpunk.add_glow_effects()
