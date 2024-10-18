@@ -56,6 +56,7 @@ def plot_direct_image(full_hdu, ax, args, hide_xaxis=False, hide_yaxis=False):
 
         ext = 5 + index * 2
         image = full_hdu[ext].data
+        image = trim_image(image, args)
 
         p = ax.imshow(image, cmap=cmap_arr[index], origin='lower', extent=args.extent, alpha=1)#, vmin=0, vmax=0.03)
 
@@ -257,11 +258,27 @@ def get_distance_map(image_shape, args):
     Get map of distances from the center, in target rest-frame, on a given 2D grid
     Returns 2D distance map
     '''
-    pixscale_kpc = args.pixscale / cosmo.arcsec_per_kpc_proper(args.z).value # kpc
+    pixscale_kpc = args.pix_size_arcsec/ cosmo.arcsec_per_kpc_proper(args.z).value # kpc
     center_pix = image_shape[0] / 2.
     distance_map = np.array([[np.sqrt((i - center_pix)**2 + (j - center_pix)**2) for j in range(image_shape[1])] for i in range(image_shape[0])]) * pixscale_kpc # kpc
 
     return distance_map
+
+# --------------------------------------------------------------------------------------------------------------
+def trim_image(image, args):
+    '''
+    Trim a given 2D image to a given arcsecond dimension
+    Returns 2D map
+    '''
+    image_shape = np.shape(image)
+    center_pix = int(image_shape[0] / 2.)
+    farthest_pix = int(args.arcsec_limit / args.pix_size_arcsec) # both quantities in arcsec
+
+    image = image[center_pix - farthest_pix : center_pix + farthest_pix, center_pix - farthest_pix : center_pix + farthest_pix]
+    # print(f'Trimming image of original shape {image_shape} to {args.arcsec_limit} arcseconds, which is from pixels {center_pix - farthest_pix} to {center_pix + farthest_pix}, so new shape is {np.shape(image)}')
+
+    return image
+
 # --------------------------------------------------------------------------------------------------------------------
 def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_xaxis=False, hide_yaxis=False):
     '''
@@ -271,7 +288,8 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     print(f'Plotting radial profile of {label}..')
 
     distance_map = get_distance_map(np.shape(image), args)
-    distance_map = np.ma.masked_where(image.mask, distance_map)
+    try: distance_map = np.ma.masked_where(image.mask, distance_map)
+    except AttributeError: distance_map = np.ma.masked_where(False, distance_map)
 
     # ----making the dataframe before radial profile plot--------------
     xcol, ycol = 'radius', 'data'
@@ -281,9 +299,7 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
 
     # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
     df_vorbinned = pd.DataFrame()
-    counts = df.groupby([ycol], as_index=False).count()[xcol]
     df_vorbinned[xcol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[xcol]['mean']
-    #df_vorbinned[ycol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[ycol] * counts
     df_vorbinned[ycol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[ycol]
     df = df_vorbinned
 
@@ -312,7 +328,7 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     return ax, linefit
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, radprof_ax=None):
+def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, radprof_ax=None, vorbin_ax=None, snr_ax=None, image_err=None):
     '''
     Plots the emission map for a given line in the given axis
     Returns the axis handle
@@ -320,10 +336,9 @@ def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hi
     if cmap is None: cmap = 'cividis'
     print(f'Plotting 2D map of {label}..')
 
-    p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
+    if takelog: image = np.log10(image)
 
-    ax.set_xlim(-args.arcsec_limit, args.arcsec_limit) # arcsec
-    ax.set_ylim(-args.arcsec_limit, args.arcsec_limit) # arcsec
+    p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
 
     ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[1] * 0.88, label, c='k', fontsize=args.fontsize, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
     ax.scatter(0, 0, marker='x', s=10, c='grey')
@@ -362,6 +377,16 @@ def plot_2D_map(image, ax, args, label=None, cmap=None, vmin=None, vmax=None, hi
     else:
         radprof_fit = [np.nan, np.nan] # dummy values for when the fit was not performed
 
+    if args.vorbin and args.plot_vorbin and vorbin_ax is not None:
+        vorbin_IDs = args.voronoi_bin_IDs
+        vorbin_IDs = np.ma.masked_where(image.mask, vorbin_IDs)
+        _, _ = plot_2D_map(vorbin_IDs, vorbin_ax, args, takelog=False, label=label + ' vorbin', cmap='rainbow')
+
+    if args.plot_snr and image_err is not None and snr_ax is not None:
+        if takelog: image = 10 ** image # undoing the log step that was done initially
+        snr_map = image / image_err
+        _, _ = plot_2D_map(snr_map, snr_ax, args, takelog=False, label=label + ' SNR', cmap='rainbow')
+
     return ax, radprof_fit
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -374,7 +399,8 @@ def bin_2D(map, bin_IDs):
     for id in np.unique(bin_IDs):
         binned_map[bin_IDs == id] = map[bin_IDs == id].mean()
 
-    binned_map = np.ma.masked_where(map.mask, binned_map) # propagating the masks from the original 2D image
+    try: binned_map = np.ma.masked_where(map.mask, binned_map) # propagating the masks from the original 2D image
+    except AttributeError: binned_map = np.ma.masked_where(False, binned_map)
 
     return binned_map
 
@@ -385,6 +411,7 @@ def get_voronoi_bin_IDs(map, map_err, snr_thresh, plot=False, quiet=True):
     Returns the 2D map (of same shape as input map) with just the IDs
     '''
     x_size, y_size = np.shape(map)
+
     x_coords = np.repeat(np.arange(x_size), y_size)
     y_coords = np.tile(np.arange(y_size), x_size)
 
@@ -406,12 +433,13 @@ def cut_by_segment(map, full_hdu, args):
     Returns the masked map
     '''
     segmentation_map = full_hdu['SEG'].data
+    segmentation_map = trim_image(segmentation_map, args)
     cut_map = np.ma.masked_where(segmentation_map != args.id, map)
 
     return cut_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_emission_line_map(line, full_hdu, args, dered=True):
+def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     '''
     Retrieve the emission map for a given line from the HDU
     Returns the 2D line image
@@ -419,9 +447,12 @@ def get_emission_line_map(line, full_hdu, args, dered=True):
 
     line_index = np.where(args.available_lines == line)[0][0]
     ext = 5 + 2 * args.ndfilt + 4 * line_index
-    line_map = full_hdu[ext].data * 1e-17 # this gives 200 x 200 array; in units of ergs/s/cm^2
+    line_map = full_hdu[ext].data * 1e-17 # in units of ergs/s/cm^2
     line_wave = full_hdu[ext].header['RESTWAVE'] # in Angstrom
-    line_map_err = 1e-17 / full_hdu[ext + 3].data  # this gives 200 x 200 array; 1/LINEWHT = flux uncertainty; in units of ergs/s/cm^2
+    line_map_err = 1e-17 / (full_hdu[ext + 3].data ** 0.5)  # 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
+
+    line_map = trim_image(line_map, args)
+    line_map_err = trim_image(line_map_err, args)
 
     if args.only_seg:
         line_map = cut_by_segment(line_map, full_hdu, args)
@@ -431,7 +462,7 @@ def get_emission_line_map(line, full_hdu, args, dered=True):
         line_map = np.ma.masked_where(~np.isfinite(snr_map), line_map)
         line_map = np.ma.masked_where(snr_map < args.snr_cut, line_map)
 
-    if args.vorbin:
+    if args.vorbin and not for_vorbin:
         if args.voronoi_line is None: # No reference emission line specified, so Voronoi IDs need to be computed now
             bin_IDs = get_voronoi_bin_IDs(line_map, line_map_err, args.voronoi_snr)
         else: # Reference emission line specified for Voronoi binning, so bin IDs have been pre-computed
@@ -450,7 +481,7 @@ def get_emission_line_map(line, full_hdu, args, dered=True):
         line_map = get_dereddened_flux(line_map, line_wave, args.EB_V)
         line_int = get_dereddened_flux(line_int, line_wave, args.EB_V)
 
-    return line_map, line_wave, line_int, line_ew
+    return line_map, line_map_err, line_wave, line_int, line_ew
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False):
@@ -459,8 +490,8 @@ def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, 
     Returns the axes handle
     '''
 
-    line_map, line_wave, line_int, line_ew = get_emission_line_map(line, full_hdu, args, dered=False)
-    ax, _ = plot_2D_map(np.log10(line_map), ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+    line_map, line_map_err, line_wave, line_int, line_ew = get_emission_line_map(line, full_hdu, args, dered=False)
+    ax, _ = plot_2D_map(line_map, ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
     ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[0] * 0.88, f'EW = {line_ew:.1e}' if line_ew < 1e-3 or line_ew > 1e3 else f'EW = {line_ew:.1f}', c='k', fontsize=args.fontsize, ha='left', va='bottom', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
 
     return ax
@@ -557,8 +588,8 @@ def get_EB_V(full_hdu, args, verbose=False):
     Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
     '''
 
-    Ha_map, Ha_wave, Ha_int, _ = get_emission_line_map('Ha', full_hdu, args, dered=False) # do not need to deredden the lines when we are fetching the flux in order to compute reddening
-    Hb_map, Hb_wave, Hb_int, _ = get_emission_line_map('Hb', full_hdu, args, dered=False)
+    Ha_map, Ha_map_err, Ha_wave, Ha_int, _ = get_emission_line_map('Ha', full_hdu, args, dered=False) # do not need to deredden the lines when we are fetching the flux in order to compute reddening
+    Hb_map, Hb_map_err, Hb_wave, Hb_int, _ = get_emission_line_map('Hb', full_hdu, args, dered=False)
 
     EB_V_map = compute_EB_V(Ha_map, Hb_map)
     EB_V_int = compute_EB_V(Ha_int, Hb_int, verbose=verbose)
@@ -574,7 +605,7 @@ def plot_EB_V_map(full_hdu, ax, args, radprof_ax=None):
     lim, label = [0, 1], 'E(B-V)'
 
     EB_V_map, EB_V_int = get_EB_V(full_hdu, args)
-    ax, EB_V_radfit = plot_2D_map(EB_V_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, EB_V_int), cmap='YlOrBr', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, EB_V_radfit = plot_2D_map(EB_V_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, EB_V_int), cmap='YlOrBr', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, EB_V_map, EB_V_radfit, EB_V_int
 
@@ -594,7 +625,7 @@ def get_SFR(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated SFR from a given HDU
     '''
-    Ha_map, Ha_wave, Ha_int, _ = get_emission_line_map('Ha', full_hdu, args)
+    Ha_map, Ha_map_err, Ha_wave, Ha_int, _ = get_emission_line_map('Ha', full_hdu, args)
 
     SFR_map = compute_SFR(Ha_map, args.distance)
     SFR_int = compute_SFR(Ha_int, args.distance)
@@ -609,7 +640,7 @@ def plot_SFR_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [-4, -2], 'SFR'
     SFR_map, SFR_int = get_SFR(full_hdu, args)
-    ax, SFR_radfit = plot_2D_map(np.log10(SFR_map), ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, SFR_int), cmap='Blues', radprof_ax=radprof_ax, vmin=lim[0], vmax=lim[1])
+    ax, SFR_radfit = plot_2D_map(SFR_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, SFR_int), cmap='Blues', radprof_ax=radprof_ax, vmin=lim[0], vmax=lim[1])
 
     return ax, SFR_map, SFR_radfit, SFR_int
 
@@ -630,8 +661,8 @@ def get_Te(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated Te from a given HDU
     '''
-    OIII4363_map, OIII4363_wave, OIII4363_int, _ = get_emission_line_map('OIII-4363', full_hdu, args)
-    OIII5007_map, OIII5007_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    OIII4363_map, OIII4363_map_err, OIII4363_wave, OIII4363_int, _ = get_emission_line_map('OIII-4363', full_hdu, args)
+    OIII5007_map, OIII5007_map_err, OIII5007_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
 
     Te_map = compute_Te(OIII4363_map, OIII5007_map)
     Te_int = compute_Te(OIII4363_int, OIII5007_int)
@@ -646,7 +677,7 @@ def plot_Te_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [1, 7], r'T$_e$'
     Te_map, Te_int = get_Te(full_hdu, args)
-    ax, Te_radfit = plot_2D_map(np.log10(Te_map), ax, args, label=r'%s$_{\rm int}$ = %.1e' % (label, Te_int), cmap='OrRd_r', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, Te_radfit = plot_2D_map(Te_map, ax, args, label=r'%s$_{\rm int}$ = %.1e' % (label, Te_int), cmap='OrRd_r', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, Te_map, Te_radfit, Te_int
 
@@ -675,9 +706,9 @@ def get_Z_Te(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated Te metallicity from a given HDU
     '''
-    OII3727_map, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
-    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
-    Hbeta_map, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
+    OII3727_map, OII3727_map_err, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
+    OIII5007_map, OIII5007_map_err, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    Hbeta_map, Hbeta_map_err, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
 
     Te_map, Te_int = get_Te(full_hdu, args)
 
@@ -694,7 +725,7 @@ def plot_Z_Te_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [6, 9], 'Z (Te)'
     logOH_map, logOH_int = get_Z_Te(full_hdu, args)
-    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, logOH_map, logOH_radfit, logOH_int
 
@@ -718,9 +749,9 @@ def get_Z_R23(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated R23 metallicity from a given HDU
     '''
-    OII3727_map, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
-    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
-    Hbeta_map, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
+    OII3727_map, OII3727_map_err, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
+    OIII5007_map, OIII5007_map_err, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    Hbeta_map, Hbeta_map_err, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
 
     logOH_map = compute_Z_R23(OII3727_map, OIII5007_map, Hbeta_map)
     logOH_int = compute_Z_R23(OII3727_int, OIII5007_int, Hbeta_int)
@@ -735,7 +766,7 @@ def plot_Z_R23_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [6, 9], 'Z (R23)'
     logOH_map, logOH_int = get_Z_R23(full_hdu, args)
-    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, logOH_map, logOH_radfit, logOH_int
 
@@ -745,26 +776,45 @@ def plot_starburst_map(full_hdu, args):
     Plots the Ha map, direct F115W map and their ratio (starbursty-ness map) in a new figure
     Returns the figure handle and the ratio map just produced
     '''
+    nrows = 1
+    if args.plot_vorbin: nrows += 1
+    if args.plot_snr: nrows += 1
+    if args.plot_radial_profiles: nrows += 1
+
+    fig_size_dict = {1: [14, 4, 0.05, 0.97, 0.15, 0.9, 0.2, 0.], 2: [14, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.2], 3: [9, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.3], 4: [9, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.3]} # figsize_w, figsize_h, l, r, b, t, ws, hs
+
+    fig, axes = plt.subplots(nrows, 3, figsize=(fig_size_dict[nrows][0], fig_size_dict[nrows][1]))
+    if nrows > 1:
+        extra_axes = axes[1:,:]
+        axes = axes[0,:]
+    if args.plot_vorbin:
+        vorbin_axes = extra_axes[0,:].flatten()
+        extra_axes = extra_axes[1:,:]
+    if args.plot_snr:
+        snr_axes = extra_axes[0,:].flatten()
+        extra_axes = extra_axes[1:,:]
     if args.plot_radial_profiles:
-        fig, axes = plt.subplots(2, 3, figsize=(14, 7))
-        radprof_axes = axes[1,:]
-        axes = axes[0, :]
-        fig.subplots_adjust(left=0.02, right=0.98, bottom=0.07, top=0.95, wspace=0.05, hspace=0.2)
-    else:
-        fig, axes = plt.subplots(1, 3, figsize=(14, 4))
-        radprof_axes = np.tile(None, 3)
-        fig.subplots_adjust(left=0.05, right=0.97, bottom=0.15, top=0.9, wspace=0.2)
+        radprof_axes = extra_axes[0:, :].flatten()
+        extra_axes = extra_axes[1:, :]
+    fig.subplots_adjust(left=fig_size_dict[nrows][2], right=fig_size_dict[nrows][3], bottom=fig_size_dict[nrows][4], top=fig_size_dict[nrows][5], wspace=fig_size_dict[nrows][6], hspace=fig_size_dict[nrows][7])
 
     # ---------getting the Ha map-------------
-    ha_map, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=False)
+    ha_map, ha_map_err, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=False)
 
     # ---------getting the direct image-------------
     direct_ext = 5
     direct_map = full_hdu[direct_ext].data
+    direct_map_err = 1. / (full_hdu[direct_ext + 1].data ** 0.5)
+
+    direct_map = trim_image(direct_map, args)
     direct_map = np.ma.masked_where(~np.isfinite(direct_map), direct_map)
+
+    direct_map_err = trim_image(direct_map_err, args)
+    direct_map_err = np.ma.masked_where(~np.isfinite(direct_map), direct_map_err)
 
     if args.vorbin:
         direct_map = bin_2D(direct_map, args.voronoi_bin_IDs)
+        direct_map_err = bin_2D(direct_map_err, args.voronoi_bin_IDs)
 
     # ---------getting the ratio and seg maps-------------
     ratio_map = ha_map / direct_map
@@ -772,13 +822,16 @@ def plot_starburst_map(full_hdu, args):
 
     # --------making arrays for subplots-------------
     maps = [direct_map, ha_map, ratio_map]
-    labels = ['Continuum', r'H$\alpha$', r'H$\alpha$/Continuum']
+    maps_err = [direct_map_err, ha_map_err, ha_map_err / direct_map]
+    labels = ['Direct', r'H$\alpha$', r'H$\alpha$/Direct']
     lims = [[-8, -1], [-21, -16], [-18, -12]]
 
     # ---------plotting-------------
     for index, ax in enumerate(axes):
-        ax, _ = plot_2D_map(np.log10(maps[index]), ax, args, label=labels[index], cmap='viridis', vmin=lims[index][0], vmax=lims[index][1], radprof_ax=radprof_axes[index])
+        ax, _ = plot_2D_map(maps[index], ax, args, label=labels[index], cmap='viridis', vmin=lims[index][0], vmax=lims[index][1], radprof_ax=radprof_axes[index], vorbin_ax=vorbin_axes[index] if args.plot_vorbin else None, snr_ax=snr_axes[index] if args.plot_snr else None, image_err=maps_err[index] if args.plot_snr else None)
         ax.contour(image.mask, levels=0, colors='k', extent=args.extent, linewidths=2)
+        if args.plot_vorbin: vorbin_axes[index].contour(image.mask, levels=0, colors='k', extent=args.extent, linewidths=2)
+        if args.plot_snr: radprof_axes[index].contour(image.mask, levels=0, colors='k', extent=args.extent, linewidths=2)
 
     return fig, ratio_map
 
@@ -898,17 +951,13 @@ if __name__ == "__main__":
         except: args.mag = np.nan
 
         line_wcs = pywcs.WCS(full_hdu['DSCI'].header)
-        pix_size = utils.get_wcs_pscale(line_wcs)
-        imsize_arcsec = full_hdu['DSCI'].data.shape[0] * pix_size
-        dp = 0 # -0.5 * pix_size  # FITS reference is center of a pixel, array is edge
-        args.extent = (-imsize_arcsec / 2. - dp, imsize_arcsec / 2. - dp, -imsize_arcsec / 2. - dp, imsize_arcsec / 2. - dp)
+        args.pix_size_arcsec = utils.get_wcs_pscale(line_wcs)
+        imsize_arcsec = full_hdu['DSCI'].data.shape[0] * args.pix_size_arcsec
+        args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
         args.EB_V = 0. # until gets over-written, if both H alpha and H beta lines are present
 
         if args.vorbin and args.voronoi_line is not None:
-            line_index = np.where(args.available_lines == args.voronoi_line)[0][0]
-            ext = 5 + 2 * args.ndfilt + 4 * line_index
-            line_map = full_hdu[ext].data * 1e-17  # this gives 200 x 200 array; in units of ergs/s/cm^2
-            line_map_err = 1e-17 / full_hdu[ext + 3].data   # this gives 200 x 200 array; in units of ergs/s/cm^2
+            line_map, line_map_err, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True)
             args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, line_map_err, args.voronoi_snr)#, plot=True, quiet=False)
 
         if args.plot_radial_profiles:

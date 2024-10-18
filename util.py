@@ -95,6 +95,8 @@ def parse_args():
     parser.add_argument('--hide', dest='hide', action='store_true', default=False, help='Hide (do not display) the plots just made? Default is no.')
     parser.add_argument('--trim_filter_by_wavelength_factor', metavar='trim_filter_by_wavelength_factor', type=float, action='store', default=0.05, help='Impose a trimming factor on wavelength for each filter, to be applied on both blue and red ends of a filter; default is 0.05 (i.e. 5%)')
     parser.add_argument('--plot_starburst', dest='plot_starburst', action='store_true', default=False, help='Plot the starbursty-ness map instead of the full diagnostic figure? Default is no.')
+    parser.add_argument('--plot_vorbin', dest='plot_vorbin', action='store_true', default=False, help='Plot the voronoi bins? Default is no.')
+    parser.add_argument('--plot_snr', dest='plot_snr', action='store_true', default=False, help='Plot the SNR map for a given 2D plot? Default is no.')
 
 
     # ------- args added for get_field_stats.py ------------------------------
