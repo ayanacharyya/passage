@@ -974,7 +974,7 @@ if __name__ == "__main__":
 
             # ---------decorating and saving the figure------------------------------
             fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-            figname = fig_dir / f'{args.field}_{args.id:05d}_starburst_map.png'
+            figname = fig_dir / f'{args.field}_{args.id:05d}_starburst_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}.png'
 
         # ---------initialising the full figure------------------------------
         else:
