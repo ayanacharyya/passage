@@ -824,7 +824,7 @@ def plot_starburst_map(full_hdu, args):
     maps = [direct_map, ha_map, ratio_map]
     maps_err = [direct_map_err, ha_map_err, ha_map_err / direct_map]
     labels = ['Direct', r'H$\alpha$', r'H$\alpha$/Direct']
-    lims = [[-8, -1], [-21, -16], [-18, -12]]
+    lims = [[-4, -1], [-21, -18], [-18, -15]]
 
     # ---------plotting-------------
     for index, ax in enumerate(axes):
