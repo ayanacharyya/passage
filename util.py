@@ -132,7 +132,7 @@ def parse_args():
     if args.system == 'hd' and not os.path.exists('/Volumes/Elements/'): args.system = 'local'
     if args.line_list == 'all': args.line_list = ['Lya', 'OII', 'Hb', 'OIII-4363', 'OIII', 'Ha', 'NII','Ha+NII', 'SII', 'SIII', 'PaD','PaG','PaB','HeI-1083','PaA']
 
-    root_dir = '/Users/acharyya/Work/astro/passage' if args.system == 'local' else '/Volumes/Elements/acharyya_backup/Work/astro/passage' if 'hd' in args.system else '/Users/acharyya/Library/CloudStorage/GoogleDrive-ayan.acharyya@inaf.it/My Drive/passage' if 'gdrive' in args.system else ''
+    root_dir = '/Users/acharyya/Work/astro/passage' if 'local' in args.system else '/Volumes/Elements/acharyya_backup/Work/astro/passage' if 'hd' in args.system else '/Users/acharyya/Library/CloudStorage/GoogleDrive-ayan.acharyya@inaf.it/My Drive/passage' if 'gdrive' in args.system else ''
     args.root_dir = Path(root_dir)
 
     if args.input_dir is None:
