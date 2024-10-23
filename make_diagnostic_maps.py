@@ -1,6 +1,6 @@
 '''
     Filename: make_diagnostic_maps.py
-    Notes: Plots integrated 1D spectra and 2D emission line maps (from existing .full.fits file), for a given object/s in a given field
+    Notes: Plots integrated 1D spectra and 2D emission line maps (from existing .full.fits file), for a given object/s in a given field, while accounting for ALL uncertainties via error propagation
     Author : Ayan
     Created: 17-07-24
     Example: run make_diagnostic_maps.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par50 --id 3667
@@ -9,9 +9,10 @@
              run make_diagnostic_maps.py --field Par50 --id 823 --plot_radial_profiles --only_seg --snr_cut 3 --plot_mappings
              run make_diagnostic_maps.py --field Par51 --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
              run make_diagnostic_maps.py --field Par51 --re_extract --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
-             run make_diagnostic_maps.py --field Par28 --id 1457 --snr_cut 3 --plot_starburst
-             run make_diagnostic_maps.py --field Par28 --id 58,1457,1585,1588 --snr_cut 3 --plot_starburst --keep
-             run make_diagnostic_maps.py --field Par28 --id 58,1457,1585,1588 --snr_cut 3 --plot_starburst --vorbin --voronoi_snr 10 --plot_radial_profile
+             run make_diagnostic_maps.py --field Par28 --id 58,1457,1585,1588 --plot_radial_profiles --only_seg --plot_mappings
+             run make_diagnostic_maps.py --field Par28 --id 58,1457,1585,1588 --plot_radial_profiles --only_seg --plot_mappings --vorbin --voronoi_snr 5
+             run make_diagnostic_maps.py --field Par28 --id 58,1457,1585,1588 --plot_starburst --vorbin --voronoi_snr 5 --plot_radial_profile --only_seg
+             run make_diagnostic_maps.py --field Par28 --id 58,1457,1588 --plot_metallicity --vorbin --voronoi_snr 5 --plot_radial_profile --only_seg
     Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -73,8 +74,7 @@ def plot_direct_image(full_hdu, ax, args, hide_xaxis=False, hide_yaxis=False):
     #cbar = plt.colorbar(p)
 
     if args.only_seg:
-        image = cut_by_segment(image, full_hdu, args)
-        ax.contour(image.mask, levels=0, colors='k', extent=args.extent, linewidths=0.5)
+        ax.contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=0.5)
 
     if hide_xaxis:
         ax.set_xticklabels([])
@@ -333,6 +333,10 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
     Plots the emission map for a given line in the given axis
     Returns the axis handle
     '''
+    if image.dtype == 'O': # if it is an uncertainty variable
+        if np.ma.isMaskedArray(image): image = np.ma.masked_where(image.mask, unp.nominal_values(image.data))
+        else: image = unp.nominal_values(image.data)
+
     if cmap is None: cmap = 'cividis'
     print(f'Plotting 2D map of {label}..')
 
@@ -390,7 +394,7 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
     return ax, radprof_fit
 
 # --------------------------------------------------------------------------------------------------------------------
-def bin_2D(map, bin_IDs):
+def bin_2D(map, bin_IDs, map_err=None):
     '''
     Bin a given 2D map by given bin_IDs
     Returns the binned 2D map (of same shape as input map)
@@ -402,15 +406,27 @@ def bin_2D(map, bin_IDs):
     try: binned_map = np.ma.masked_where(map.mask, binned_map) # propagating the masks from the original 2D image
     except AttributeError: binned_map = np.ma.masked_where(False, binned_map)
 
-    return binned_map
+    if map_err is not None:
+        binned_map_err = np.zeros(np.shape(map_err))
+        for id in np.unique(bin_IDs):
+            candidates = map_err[bin_IDs == id]
+            binned_map_err[bin_IDs == id] = np.sqrt(np.sum(candidates ** 2)) / len(candidates) # this is the apropriate error propagation for mean() operation (which the flux is undergoing above)
+
+        try: binned_map_err = np.ma.masked_where(map.mask, binned_map_err) # propagating the masks from the original 2D image
+        except AttributeError: binned_map_err = np.ma.masked_where(False, binned_map_err)
+
+    if map_err is None: return binned_map
+    else: return binned_map, binned_map_err
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_voronoi_bin_IDs(map, map_err, snr_thresh, plot=False, quiet=True):
+def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True):
     '''
     Compute the Voronoi bin IDs a given 2D map and corresponding uncertainty and SNR threshold
     Returns the 2D map (of same shape as input map) with just the IDs
     '''
     x_size, y_size = np.shape(map)
+    map_err = unp.std_devs(map)
+    map = unp.nominal_values(map)
 
     x_coords = np.repeat(np.arange(x_size), y_size)
     y_coords = np.tile(np.arange(y_size), x_size)
@@ -427,14 +443,12 @@ def get_voronoi_bin_IDs(map, map_err, snr_thresh, plot=False, quiet=True):
     return binID_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def cut_by_segment(map, full_hdu, args):
+def cut_by_segment(map, args):
     '''
     Mask a given 2D map according to the segmentation map from the HDU
     Returns the masked map
     '''
-    segmentation_map = full_hdu['SEG'].data
-    segmentation_map = trim_image(segmentation_map, args)
-    cut_map = np.ma.masked_where(segmentation_map != args.id, map)
+    cut_map = np.ma.masked_where(args.segmentation_map != args.id, map)
 
     return cut_map
 
@@ -455,7 +469,8 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     line_map_err = trim_image(line_map_err, args)
 
     if args.only_seg:
-        line_map = cut_by_segment(line_map, full_hdu, args)
+        line_map = cut_by_segment(line_map, args)
+        line_map_err = cut_by_segment(line_map_err, args)
 
     if args.snr_cut is not None:
         snr_map = line_map / line_map_err
@@ -467,21 +482,27 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
             bin_IDs = get_voronoi_bin_IDs(line_map, line_map_err, args.voronoi_snr)
         else: # Reference emission line specified for Voronoi binning, so bin IDs have been pre-computed
             bin_IDs = args.voronoi_bin_IDs
-        line_map = bin_2D(line_map, bin_IDs)
+        line_map, line_map_err = bin_2D(line_map, bin_IDs, map_err=line_map_err)
+
+    line_map = unp.uarray(line_map, line_map_err)
 
     # -----------getting the integrated flux value-----------------
     line_int = full_hdu[0].header[f'FLUX{line_index + 1:03d}'] # ergs/s/cm^2
+    line_int_err = full_hdu[0].header[f'ERR{line_index + 1:03d}'] # ergs/s/cm^2
+    line_int = ufloat(line_int, line_int_err)
 
     # -----------getting the integrated EW value-----------------
     line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
     line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}']
+    line_ew_err = full_hdu[2].header[f'EWHW_{line_index_in_cov:03d}']
+    line_ew = ufloat(line_ew, line_ew_err)
 
     # -----------getting the dereddened flux value-----------------
     if dered:
         line_map = get_dereddened_flux(line_map, line_wave, args.EB_V)
         line_int = get_dereddened_flux(line_int, line_wave, args.EB_V)
 
-    return line_map, line_map_err, line_wave, line_int, line_ew
+    return line_map, line_wave, line_int, line_ew
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False):
@@ -490,8 +511,8 @@ def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, 
     Returns the axes handle
     '''
 
-    line_map, line_map_err, line_wave, line_int, line_ew = get_emission_line_map(line, full_hdu, args, dered=False)
-    ax, _ = plot_2D_map(line_map, ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+    line_map, line_wave, line_int, line_ew = get_emission_line_map(line, full_hdu, args, dered=False)
+    ax, _ = plot_2D_map(line_map, ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int.n), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
     ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[0] * 0.88, f'EW = {line_ew:.1e}' if line_ew < 1e-3 or line_ew > 1e3 else f'EW = {line_ew:.1f}', c='k', fontsize=args.fontsize, ha='left', va='bottom', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
 
     return ax
@@ -565,19 +586,41 @@ def compute_EB_V(Ha_flux, Hb_flux,verbose=False):
     Calculates and returns the color excess given observed H alpha and H beta fluxes
     Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
     '''
+    # -----handling masks separately because uncertainty package cannot handle masks---------
+    if np.ma.isMaskedArray(Ha_flux):
+        net_mask = Ha_flux.mask | Hb_flux.mask
+        Ha_flux = Ha_flux.data
+        Hb_flux = Hb_flux.data
+    else:
+        net_mask = False
+
     theoretical_ratio = 2.86
 
-    obs_ratio = Ha_flux / Hb_flux
-    EB_V = 1.97 * np.log10(obs_ratio / theoretical_ratio)
+    if hasattr(Hb_flux, "__len__"): # if it is an array
+        # --------computing the ratio and appropriate errors------------
+        new_mask = Hb_flux == 0
+        Hb_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        obs_ratio = Ha_flux / Hb_flux
+        obs_ratio = np.ma.masked_where(new_mask, obs_ratio)
 
-    if type(EB_V) == np.float64:
-        if obs_ratio < theoretical_ratio:
-            EB_V = 0.
-            if verbose: print(f'Based on integrated fluxes Ha = {Ha_flux:.2e}, Hb = {Hb_flux:.2e}, the observed ratio is LOWER than theoretical ratio, so E(B-V) would be unphysical, so just assuming {EB_V}')
-        else:
-            if verbose: print(f'Based on integrated fluxes Ha = {Ha_flux:.2e}, Hb = {Hb_flux:.2e}, determine E(B-V) = {EB_V:.2f}')
-    else:
-        EB_V[~np.isfinite(EB_V)] = 0.
+        # --------computing the log of the ratio and appropriate errors------------
+        new_mask = obs_ratio <= 0
+        obs_ratio[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        EB_V = 1.97 * unp.log10(obs_ratio.data / theoretical_ratio)
+        EB_V[obs_ratio.data < theoretical_ratio] = 0
+        EB_V = np.ma.masked_where(new_mask | obs_ratio.mask | net_mask, EB_V)
+
+    else: # if it is scalar
+        try:
+            obs_ratio = Ha_flux / Hb_flux
+            if obs_ratio < theoretical_ratio:
+                EB_V = ufloat(0, 0)
+                if verbose: print(f'Based on integrated fluxes Ha = {Ha_flux:.2e}, Hb = {Hb_flux:.2e}, the observed ratio is LOWER than theoretical ratio, so E(B-V) would be unphysical, so just assuming {EB_V}')
+            else:
+                EB_V = 1.97 * unp.log10(obs_ratio / theoretical_ratio)
+                if verbose: print(f'Based on integrated fluxes Ha = {Ha_flux:.2e}, Hb = {Hb_flux:.2e}, determined E(B-V) =', EB_V)
+        except:
+            EB_V = ufloat(np.nan, np.nan)
 
     return EB_V
 
@@ -588,8 +631,8 @@ def get_EB_V(full_hdu, args, verbose=False):
     Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
     '''
 
-    Ha_map, Ha_map_err, Ha_wave, Ha_int, _ = get_emission_line_map('Ha', full_hdu, args, dered=False) # do not need to deredden the lines when we are fetching the flux in order to compute reddening
-    Hb_map, Hb_map_err, Hb_wave, Hb_int, _ = get_emission_line_map('Hb', full_hdu, args, dered=False)
+    Ha_map, Ha_wave, Ha_int, _ = get_emission_line_map('Ha', full_hdu, args, dered=False) # do not need to deredden the lines when we are fetching the flux in order to compute reddening
+    Hb_map, Hb_wave, Hb_int, _ = get_emission_line_map('Hb', full_hdu, args, dered=False)
 
     EB_V_map = compute_EB_V(Ha_map, Hb_map)
     EB_V_int = compute_EB_V(Ha_int, Hb_int, verbose=verbose)
@@ -605,7 +648,7 @@ def plot_EB_V_map(full_hdu, ax, args, radprof_ax=None):
     lim, label = [0, 1], 'E(B-V)'
 
     EB_V_map, EB_V_int = get_EB_V(full_hdu, args)
-    ax, EB_V_radfit = plot_2D_map(EB_V_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, EB_V_int), cmap='YlOrBr', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, EB_V_radfit = plot_2D_map(EB_V_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, EB_V_int.n), cmap='YlOrBr', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, EB_V_map, EB_V_radfit, EB_V_int
 
@@ -615,8 +658,18 @@ def compute_SFR(Ha_flux, distance):
     Calculates and returns the SFR given observed H alpha fluxes
     Conversion factor is from Kennicutt 1998 (Eq 2 of https://ned.ipac.caltech.edu/level5/Sept01/Rosa/Rosa3.html)
     '''
+    # -----handling masks separately because uncertainty package cannot handle masks---------
+    if np.ma.isMaskedArray(Ha_flux):
+        net_mask = Ha_flux.mask
+        Ha_flux = Ha_flux.data
+    else:
+        net_mask = False
+
     Ha_flux = Ha_flux * 4 * np.pi * (distance.to('cm').value) ** 2 # converting to ergs/s
     sfr = Ha_flux * 7.9e-42 # line_map in args/s; SFR in Msun/yr
+
+    if hasattr(Ha_flux, "__len__"): # if it is an array
+        sfr = np.ma.masked_where(net_mask, sfr)
 
     return sfr
 
@@ -625,7 +678,7 @@ def get_SFR(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated SFR from a given HDU
     '''
-    Ha_map, Ha_map_err, Ha_wave, Ha_int, _ = get_emission_line_map('Ha', full_hdu, args)
+    Ha_map, Ha_wave, Ha_int, _ = get_emission_line_map('Ha', full_hdu, args)
 
     SFR_map = compute_SFR(Ha_map, args.distance)
     SFR_int = compute_SFR(Ha_int, args.distance)
@@ -640,7 +693,7 @@ def plot_SFR_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [-4, -2], 'SFR'
     SFR_map, SFR_int = get_SFR(full_hdu, args)
-    ax, SFR_radfit = plot_2D_map(SFR_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, SFR_int), cmap='Blues', radprof_ax=radprof_ax, vmin=lim[0], vmax=lim[1])
+    ax, SFR_radfit = plot_2D_map(SFR_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, SFR_int.n), cmap='Blues', radprof_ax=radprof_ax, vmin=lim[0], vmax=lim[1])
 
     return ax, SFR_map, SFR_radfit, SFR_int
 
@@ -650,9 +703,41 @@ def compute_Te(OIII4363_flux, OIII5007_flux):
     Calculates and returns the Te given observed line fluxes
     Conversion factor is from Nicholls+2017
     '''
-    ratio = OIII4363_flux / OIII5007_flux
-    logTe = np.poly1d([0., 9.18962, 3.30355])(np.log10(ratio)) / np.poly1d([-0.00935, -0.15034, 2.09136, 1.000])(np.log10(ratio))
-    Te = 10 ** logTe
+    # -----handling masks separately because uncertainty package cannot handle masks---------
+    if np.ma.isMaskedArray(OIII4363_flux):
+        net_mask = OIII4363_flux.mask | OIII5007_flux.mask
+        OIII4363_flux = OIII4363_flux.data
+        OIII5007_flux = OIII5007_flux.data
+    else:
+        net_mask = False
+
+    if hasattr(OIII5007_flux, "__len__"): # if it is an array
+        # --------computing the ratio and appropriate errors------------
+        new_mask = OIII5007_flux == 0
+        OIII5007_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        ratio = OIII4363_flux / OIII5007_flux
+        ratio = np.ma.masked_where(new_mask, ratio)
+
+        # --------computing the log of the ratio and appropriate errors------------
+        new_mask = ratio <= 0
+        ratio[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        log_ratio = unp.log10(ratio.data)
+        logTe = np.poly1d([0., 9.18962, 3.30355])(log_ratio) / np.poly1d([-0.00935, -0.15034, 2.09136, 1.000])(log_ratio)
+
+        new_mask2 = logTe > 10.
+        new_mask3 = logTe < -8.
+        logTe[new_mask2 | new_mask3] = 0 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        Te = 10 ** logTe
+        Te = np.ma.masked_where(new_mask | new_mask2 | new_mask3 | ratio.mask | net_mask, Te)
+
+    else: # if it is scalar
+        try:
+            ratio = OIII4363_flux / OIII5007_flux  # in case 'OIII5007_flux' happens to be 0
+            log_ratio = unp.log10(ratio.data)
+            logTe = np.poly1d([0., 9.18962, 3.30355])(log_ratio) / np.poly1d([-0.00935, -0.15034, 2.09136, 1.000])(log_ratio)
+            Te = 10 ** logTe
+        except:
+            Te = ufloat(np.nan, np.nan)
 
     return Te
 
@@ -661,8 +746,8 @@ def get_Te(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated Te from a given HDU
     '''
-    OIII4363_map, OIII4363_map_err, OIII4363_wave, OIII4363_int, _ = get_emission_line_map('OIII-4363', full_hdu, args)
-    OIII5007_map, OIII5007_map_err, OIII5007_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    OIII4363_map, OIII4363_wave, OIII4363_int, _ = get_emission_line_map('OIII-4363', full_hdu, args)
+    OIII5007_map, OIII5007_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
 
     Te_map = compute_Te(OIII4363_map, OIII5007_map)
     Te_int = compute_Te(OIII4363_int, OIII5007_int)
@@ -677,7 +762,7 @@ def plot_Te_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [1, 7], r'T$_e$'
     Te_map, Te_int = get_Te(full_hdu, args)
-    ax, Te_radfit = plot_2D_map(Te_map, ax, args, label=r'%s$_{\rm int}$ = %.1e' % (label, Te_int), cmap='OrRd_r', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, Te_radfit = plot_2D_map(Te_map, ax, args, label=r'%s$_{\rm int}$ = %.1e' % (label, Te_int.n), cmap='OrRd_r', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, Te_map, Te_radfit, Te_int
 
@@ -687,17 +772,62 @@ def compute_Z_Te(OII3727_flux, OIII5007_flux, Hbeta_flux, Te, ne=1e3):
     Calculates and returns the Te metallicity given observed line fluxes
     Conversion factor is from Nicholls+2017
     '''
+    # -----handling masks separately because uncertainty package cannot handle masks---------
+    if np.ma.isMaskedArray(OII3727_flux):
+        net_mask = OII3727_flux.mask | OIII5007_flux.mask | Hbeta_flux.mask | Te.mask
+        OII3727_flux = OII3727_flux.data
+        OIII5007_flux = OIII5007_flux.data
+        Hbeta_flux = Hbeta_flux.data
+        Te = Te.data
+    else:
+        net_mask = False
+
+    # -----------------------------------------------------------
     def poly(R, t, x, a, b, c, d, e):
-        return np.log10(R) + a + b / t - c * np.log10(t) - d * t + np.log10(1 + e * x)  # eqn 3 I06 pattern
+        return unp.log10(R) + a + b / t - c * unp.log10(t) - d * t + unp.log10(1 + e * x)  # eqn 3 I06 pattern
 
     t = Te * 1e-4
-    x = 1e-4 * ne * np.sqrt(t)
+    x = 1e-4 * ne * unp.sqrt(t)
 
-    ratio1 = OII3727_flux / Hbeta_flux
-    ratio2 = OIII5007_flux / Hbeta_flux
-    log_O2H2 = poly(ratio1, t, x, 5.961, 1.676, 0.4, 0.034, 1.35) - 12  # coefficients from eqn 3 I06
-    log_O3H2 = poly(ratio2, t, x, 6.200, 1.251, -0.55, -0.014, 0.0) - 12  # coefficients from eqn 5 I06
-    log_OH = np.log10(10 ** log_O2H2 + 10 ** log_O3H2) + 12
+    if hasattr(Hbeta_flux, "__len__"): # if it is an array
+        # --------computing the ratio and appropriate errors------------
+        new_mask = Hbeta_flux == 0
+        Hbeta_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        ratio1 = OII3727_flux / Hbeta_flux
+        ratio2 = OIII5007_flux / Hbeta_flux
+        ratio1 = np.ma.masked_where(new_mask, ratio1)
+        ratio2 = np.ma.masked_where(new_mask, ratio2)
+
+        # --------computing the log of the ratio and polynomial and appropriate errors------------
+        new_mask1 = ratio1 <= 0
+        ratio1[new_mask1] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        log_O2H2 = poly(ratio1, t, x, 5.961, 1.676, 0.4, 0.034, 1.35) - 12  # coefficients from eqn 3 I06
+        new_mask3 = log_O2H2 > 2.
+        log_O2H2[new_mask3] = 0 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        log_O2H2 = np.ma.masked_where(new_mask1 | new_mask3 | ratio1.mask, log_O2H2)
+
+        new_mask2 = ratio2 <= 0
+        ratio2[new_mask2] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        log_O3H2 = poly(ratio2, t, x, 6.200, 1.251, -0.55, -0.014, 0.0) - 12  # coefficients from eqn 5 I06
+        new_mask4 = log_O3H2 > 2.
+        log_O3H2[new_mask4] = 0 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        log_O3H2 = np.ma.masked_where(new_mask2 | new_mask4 | ratio2.mask, log_O3H2)
+
+        # --------computing the combined metallicity and masks, etc.------------
+        log_OH = unp.log10(10 ** log_O2H2.data + 10 ** log_O3H2.data) + 12
+        log_OH = np.ma.masked_where(log_O3H2.mask | log_O2H2.mask | net_mask, log_OH)
+
+    else: # if it is scalar
+        try:
+            ratio1 = OII3727_flux / Hbeta_flux # in case 'Hbeta_flux' happens to be 0
+            ratio2 = OIII5007_flux / Hbeta_flux
+
+            log_O2H2 = poly(ratio1, t, x, 5.961, 1.676, 0.4, 0.034, 1.35) - 12  # coefficients from eqn 3 I06 # in case 'ratio1' happens to be < 0
+            log_O3H2 = poly(ratio2, t, x, 6.200, 1.251, -0.55, -0.014, 0.0) - 12  # coefficients from eqn 5 I06 # in case 'ratio1' happens to be < 0
+
+            log_OH = unp.log10(10 ** log_O2H2 + 10 ** log_O3H2) + 12
+        except:
+            log_OH = ufloat(np.nan, np.nan)
 
     return log_OH
 
@@ -706,9 +836,9 @@ def get_Z_Te(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated Te metallicity from a given HDU
     '''
-    OII3727_map, OII3727_map_err, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
-    OIII5007_map, OIII5007_map_err, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
-    Hbeta_map, Hbeta_map_err, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
+    OII3727_map, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
+    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    Hbeta_map, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
 
     Te_map, Te_int = get_Te(full_hdu, args)
 
@@ -725,7 +855,7 @@ def plot_Z_Te_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [6, 9], 'Z (Te)'
     logOH_map, logOH_int = get_Z_Te(full_hdu, args)
-    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, logOH_map, logOH_radfit, logOH_int
 
@@ -735,12 +865,45 @@ def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux):
     Calculates and returns the R23 metallicity given observed line fluxes
     Conversion factor is from Kewley+2002
     '''
-    def poly(R23, k):
-        return  (-k[1] + np.sqrt(k[1]**2 - 4*k[2]*(k[0] - R23)))/(2*k[2])
+    # -----handling masks separately because uncertainty package cannot handle masks---------
+    if np.ma.isMaskedArray(OII3727_flux):
+        net_mask = OII3727_flux.mask | OIII5007_flux.mask | Hbeta_flux.mask
+        OII3727_flux = OII3727_flux.data
+        OIII5007_flux = OIII5007_flux.data
+        Hbeta_flux = Hbeta_flux.data
+    else:
+        net_mask = False
 
-    ratio = (OII3727_flux + OIII5007_flux) / Hbeta_flux
-    R23 = np.log10(ratio)
-    log_OH = poly(R23, [-44.7026, 10.8052, -0.640113]) #k0-2 parameters for q=8e7 from Table 3 of KD02 last row for q=8e7
+    k = [-44.7026, 10.8052, -0.640113]  # k0-2 parameters for q=8e7 from Table 3 of KD02 last row for q=8e7
+
+    if hasattr(Hbeta_flux, "__len__"): # if it is an array
+        # --------computing the ratio and appropriate errors------------
+        new_mask = Hbeta_flux == 0
+        Hbeta_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        ratio = (OII3727_flux + OIII5007_flux) / Hbeta_flux
+        ratio = np.ma.masked_where(new_mask, ratio)
+
+        # --------computing the log of the ratio and appropriate errors------------
+        new_mask = ratio <= 0
+        ratio[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        R23 = unp.log10(ratio.data)
+        R23 = np.ma.masked_where(new_mask | ratio.mask, R23)
+
+        # --------computing the polynomial and appropriate errors------------
+        p = k[1] ** 2 - 4 * k[2] * (k[0] - R23)
+        mask = p < 0
+        p[mask] = 0 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        log_OH = (-k[1] + unp.sqrt(p.data))/(2 * k[2])
+        log_OH = np.ma.masked_where(mask | R23.mask | net_mask, log_OH)
+
+    else: # if it is scalar
+        try:
+            ratio =(OII3727_flux + OIII5007_flux) / Hbeta_flux # in case 'Hbeta_flux' happens to be 0
+            R23 = unp.log10(ratio)
+            p = k[1] ** 2 - 4 * k[2] * (k[0] - R23)
+            log_OH = (-k[1] + unp.sqrt(p)) / (2 * k[2])
+        except:
+            log_OH = ufloat(np.nan, np.nan)
 
     return log_OH
 
@@ -749,9 +912,9 @@ def get_Z_R23(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated R23 metallicity from a given HDU
     '''
-    OII3727_map, OII3727_map_err, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
-    OIII5007_map, OIII5007_map_err, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
-    Hbeta_map, Hbeta_map_err, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
+    OII3727_map, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
+    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    Hbeta_map, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
 
     logOH_map = compute_Z_R23(OII3727_map, OIII5007_map, Hbeta_map)
     logOH_int = compute_Z_R23(OII3727_int, OIII5007_int, Hbeta_int)
@@ -766,7 +929,7 @@ def plot_Z_R23_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [6, 9], 'Z (R23)'
     logOH_map, logOH_int = get_Z_R23(full_hdu, args)
-    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, logOH_map, logOH_radfit, logOH_int
 
@@ -799,7 +962,7 @@ def plot_starburst_map(full_hdu, args):
     fig.subplots_adjust(left=fig_size_dict[nrows][2], right=fig_size_dict[nrows][3], bottom=fig_size_dict[nrows][4], top=fig_size_dict[nrows][5], wspace=fig_size_dict[nrows][6], hspace=fig_size_dict[nrows][7])
 
     # ---------getting the Ha map-------------
-    ha_map, ha_map_err, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=False)
+    ha_map, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=True)
 
     # ---------getting the direct image-------------
     direct_ext = 5
@@ -812,28 +975,75 @@ def plot_starburst_map(full_hdu, args):
     direct_map_err = trim_image(direct_map_err, args)
     direct_map_err = np.ma.masked_where(~np.isfinite(direct_map), direct_map_err)
 
+    if args.only_seg:
+        direct_map = cut_by_segment(direct_map, args)
+
     if args.vorbin:
         direct_map = bin_2D(direct_map, args.voronoi_bin_IDs)
         direct_map_err = bin_2D(direct_map_err, args.voronoi_bin_IDs)
 
+    direct_map = unp.uarray(direct_map, direct_map_err)
+
     # ---------getting the ratio and seg maps-------------
-    ratio_map = ha_map / direct_map
-    image = cut_by_segment(direct_map, full_hdu, args)
+    new_mask = unp.nominal_values(direct_map.data) == 0
+    direct_map[new_mask] = 1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+    direct_map = np.ma.masked_where(new_mask, direct_map)
+
+    ratio_map = ha_map.data / direct_map.data
+    ratio_map = np.ma.masked_where(ha_map.mask | direct_map.mask | new_mask, ratio_map)
 
     # --------making arrays for subplots-------------
     maps = [direct_map, ha_map, ratio_map]
-    maps_err = [direct_map_err, ha_map_err, ha_map_err / direct_map]
     labels = ['Direct', r'H$\alpha$', r'H$\alpha$/Direct']
     lims = [[-4, -1], [-21, -18], [-18, -15]]
 
     # ---------plotting-------------
     for index, ax in enumerate(axes):
-        ax, _ = plot_2D_map(maps[index], ax, args, label=labels[index], cmap='viridis', vmin=lims[index][0], vmax=lims[index][1], radprof_ax=radprof_axes[index], vorbin_ax=vorbin_axes[index] if args.plot_vorbin else None, snr_ax=snr_axes[index] if args.plot_snr else None, image_err=maps_err[index] if args.plot_snr else None)
-        ax.contour(image.mask, levels=0, colors='k', extent=args.extent, linewidths=2)
-        if args.plot_vorbin: vorbin_axes[index].contour(image.mask, levels=0, colors='k', extent=args.extent, linewidths=2)
-        if args.plot_snr: radprof_axes[index].contour(image.mask, levels=0, colors='k', extent=args.extent, linewidths=2)
+        map_err = np.ma.masked_where(maps[index].mask, unp.std_devs(maps[index].data))
+        ax, _ = plot_2D_map(maps[index], ax, args, label=labels[index], cmap='viridis', vmin=lims[index][0], vmax=lims[index][1], radprof_ax=radprof_axes[index], vorbin_ax=vorbin_axes[index] if args.plot_vorbin else None, snr_ax=snr_axes[index] if args.plot_snr else None, image_err=map_err if args.plot_snr else None)
+        ax.contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=2)
+        if args.plot_vorbin: vorbin_axes[index].contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=2)
+        if args.plot_snr: radprof_axes[index].contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=2)
 
     return fig, ratio_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_metallicity_map(full_hdu, args):
+    '''
+    Plots the metallicity map, and optionally radial profile, in a new figure
+    Returns the figure handle and the metallicity map just produced
+    '''
+    ncols = 2
+    if args.plot_radial_profiles: ncols += 1
+
+    fig_size_dict = {2: [10, 4, 0.05, 0.97, 0.15, 0.9, 0.2, 0.], 3: [14, 4, 0.05, 0.97, 0.15, 0.9, 0.2, 0.]} # figsize_w, figsize_h, l, r, b, t, ws, hs
+
+    fig, axes = plt.subplots(1, ncols, figsize=(fig_size_dict[ncols][0], fig_size_dict[ncols][1]))
+    if ncols > 2:
+        radprof_ax = axes[2]
+        axes = axes[:2]
+    else:
+        radprof_ax = None
+    fig.subplots_adjust(left=fig_size_dict[ncols][2], right=fig_size_dict[ncols][3], bottom=fig_size_dict[ncols][4], top=fig_size_dict[ncols][5], wspace=fig_size_dict[ncols][6], hspace=fig_size_dict[ncols][7])
+
+    if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
+        # --------deriving the metallicity map-------------
+        logOH_map, logOH_int = get_Z_R23(full_hdu, args)
+
+        # ---------plotting-------------
+        lim, label = [6.5, 8.5], 'log(O/H) (R23)'
+        axes[0], logOH_radfit = plot_2D_map(logOH_map, axes[0], args, takelog=False, label=r'%s$_{\rm int}$ = %.1f $\pm$ %.1f' % (label, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+        axes[0].contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=2)
+
+        logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
+        axes[1], _ = plot_2D_map(logOH_map_err, axes[1], args, takelog=False, label=r'%s uncertainty' % (label), cmap='cividis')
+        axes[1].contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=2)
+
+    else:
+        print(f'Not all lines out of OIII, OII and Hb are available, so cannot compute R23 metallicity')
+        logOH_map = None
+
+    return fig, logOH_map
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -956,10 +1166,16 @@ if __name__ == "__main__":
         args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
         args.EB_V = 0. # until gets over-written, if both H alpha and H beta lines are present
 
-        if args.vorbin and args.voronoi_line is not None:
-            line_map, line_map_err, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True)
-            args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, line_map_err, args.voronoi_snr)#, plot=True, quiet=False)
+        # ---------------segmentation map---------------
+        segmentation_map = full_hdu['SEG'].data
+        args.segmentation_map = trim_image(segmentation_map, args)
 
+        # ---------------voronoi binning stuff---------------
+        if args.vorbin and args.voronoi_line is not None:
+            line_map, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True)
+            args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr)#, plot=True, quiet=False)
+
+        # ---------------radial profile stuff---------------
         if args.plot_radial_profiles:
             seg_map = full_hdu['SEG'].data
             distance_map = get_distance_map(np.shape(seg_map), args)
@@ -968,13 +1184,25 @@ if __name__ == "__main__":
         else:
             args.radius_max = np.nan
 
-        # ---------initialising the starburst figure figure------------------------------
+        # ---------------dust value---------------
+        if all([line in args.available_lines for line in ['Ha', 'Hb']]):
+            _, args.EB_V = get_EB_V(full_hdu, args, verbose=True)
+
+        # ---------initialising the starburst figure------------------------------
         if args.plot_starburst:
             fig, ratio_map = plot_starburst_map(full_hdu, args)
 
             # ---------decorating and saving the figure------------------------------
             fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
             figname = fig_dir / f'{args.field}_{args.id:05d}_starburst_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}.png'
+
+        # ---------initialising the metallicity figure------------------------------
+        elif args.plot_metallicity:
+            fig, logOH_map = plot_metallicity_map(full_hdu, args)
+
+            # ---------decorating and saving the figure------------------------------
+            fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+            figname = fig_dir / f'{args.field}_{args.id:05d}_metallicity_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}.png'
 
         # ---------initialising the full figure------------------------------
         else:
@@ -1002,7 +1230,6 @@ if __name__ == "__main__":
 
             # ---------------dust map---------------
             if all([line in args.available_lines for line in ['Ha', 'Hb']]):
-                _, args.EB_V = get_EB_V(full_hdu, args, verbose=True)
                 ax_EB_V, EB_V_map, EB_V_radfit, EB_V_int = plot_EB_V_map(full_hdu, ax_EB_V, args, radprof_ax=rax_EB_V)
             else:
                 fig.delaxes(ax_EB_V)

@@ -74,6 +74,9 @@ import datashader as dsh
 from datashader.mpl_ext import dsshow
 from datashader import transfer_functions as dstf
 
+from uncertainties import unumpy as unp
+from uncertainties import ufloat
+
 import warnings
 warnings.filterwarnings("ignore")
 

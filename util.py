@@ -97,6 +97,7 @@ def parse_args():
     parser.add_argument('--plot_starburst', dest='plot_starburst', action='store_true', default=False, help='Plot the starbursty-ness map instead of the full diagnostic figure? Default is no.')
     parser.add_argument('--plot_vorbin', dest='plot_vorbin', action='store_true', default=False, help='Plot the voronoi bins? Default is no.')
     parser.add_argument('--plot_snr', dest='plot_snr', action='store_true', default=False, help='Plot the SNR map for a given 2D plot? Default is no.')
+    parser.add_argument('--plot_metallicity', dest='plot_metallicity', action='store_true', default=False, help='Plot the metallicity map instead of the full diagnostic figure? Default is no.')
 
 
     # ------- args added for get_field_stats.py ------------------------------
