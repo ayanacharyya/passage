@@ -4,7 +4,7 @@
     Author : Ayan
     Created: 10-09-24
     Example: run make_passage_plots.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol lp_mass_best --ycol lp_SFR_best --colorcol OIII_EW
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol lp_mass --ycol lp_SFR --colorcol OIII_EW
 '''
 
 from header import *
@@ -62,8 +62,8 @@ def plot_MZR_literature(ax):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-label_dict = {'lp_mass_best': r'log M$_*$/M$_{\odot}$', 'lp_SFR_best': r'log SFR (M$_{\odot}$/yr)', 'ez_z_phot': 'Redshift', 'redshift': 'Redshift'}
-bounds_dict = {'lp_mass_best': (6, 12), 'lp_SFR_best': (-3, 3), 'ez_z_phot': (0, 3)}
+label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$', 'lp_SFR': r'log SFR (M$_{\odot}$/yr)', 'ez_z_phot': 'Redshift', 'redshift': 'Redshift'}
+bounds_dict = {'lp_mass': (6, 12), 'lp_SFR': (-3, 3), 'ez_z_phot': (0, 3), 'redshift': (0, 3)}
 colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma')
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -92,12 +92,12 @@ if __name__ == "__main__":
     cbar.set_label(label_dict[args.colorcol] if args.colorcol in label_dict else args.colorcol)
 
     # ---------SFMS from literature-------
-    if args.xcol == 'lp_mass_best' and args.ycol == 'lp_SFR_best':
+    if args.xcol == 'lp_mass' and args.ycol == 'lp_SFR':
         ax = plot_SFMS_Popesso22(ax, 1.8, color='cornflowerblue')
         ax = plot_SFMS_Popesso22(ax, 1.2, color='darkblue')
 
     # ---------MZR from literature-------
-    if args.xcol == 'lp_mass_best' and 'logOH' in args.ycol:
+    if args.xcol == 'lp_mass' and 'logOH' in args.ycol:
         ax = plot_MZR_literature(ax)
 
     # ---------annotate axes and save figure-------

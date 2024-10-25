@@ -13,6 +13,7 @@
              run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_radial_profiles --only_seg --plot_mappings --vorbin --voronoi_snr 5
              run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_starburst --vorbin --voronoi_snr 5 --plot_radial_profile --only_seg
              run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1588,2195,2343 --plot_metallicity --vorbin --voronoi_snr 5 --plot_radial_profile --only_seg
+             run make_diagnostic_maps.py --field Par28 --id 2343 --test_cutout
     Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -946,6 +947,74 @@ def plot_Z_R23_map(full_hdu, ax, args, radprof_ax=None):
     return ax, logOH_map, logOH_radfit, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
+def get_direct_image(full_hdu, args, filter='F115W', ext=5):
+    '''
+    Retrieve the direct image for a given filter from the HDU
+    Returns the 2D image along with uncertainty
+    '''
+    direct_map = full_hdu[ext].data
+    direct_map_err = 1. / (full_hdu[ext + 1].data ** 0.5)
+
+    direct_map = trim_image(direct_map, args)
+    direct_map = np.ma.masked_where(~np.isfinite(direct_map), direct_map)
+
+    direct_map_err = trim_image(direct_map_err, args)
+    direct_map_err = np.ma.masked_where(~np.isfinite(direct_map), direct_map_err)
+
+    if args.only_seg:
+        direct_map = cut_by_segment(direct_map, args)
+
+    if args.vorbin:
+        direct_map = bin_2D(direct_map, args.voronoi_bin_IDs)
+        direct_map_err = bin_2D(direct_map_err, args.voronoi_bin_IDs)
+
+    direct_map = unp.uarray(direct_map, direct_map_err)
+
+    return direct_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_test_cutouts(full_hdu, args):
+    '''
+    Test code to compare direct images from full_hdu vs cut out from full field drizzled image, will remove
+    '''
+    # ---------getting the direct image from full_hdu-------------
+    direct_map = full_hdu[5].data
+    direct_map = trim_image(direct_map, args)
+    print(f'\nFrom full hdu, image shape is {np.shape(direct_map)}')
+
+    # ----------test plots-------------------
+    fig, axes = plt.subplots(1, 1 + len(args.filters), figsize=(8 + 2 * len(args.filters), 4))
+    fig.subplots_adjust(left=0.06, right=0.97, bottom=0.12, top=0.9, wspace=0.2, hspace=0)
+    limits = [-6, -1.4]
+    cmap = 'viridis'
+
+    axes[0], _ = plot_2D_map(direct_map, axes[0], args, label='From *full.fits', vmin=limits[0], vmax=limits[1], cmap=cmap)
+
+    # ---------dteremining extents for cut out-------------
+    size = args.arcsec_limit * 2 * u.arcsec
+    pos = np.array([full_hdu[0].header['RA'], full_hdu[0].header['DEC']])
+    pos = SkyCoord(*(pos * u.deg), frame='fk5')
+
+    # ---------getting the direct image from cut out-------------
+    for index, filter in enumerate(args.filters):
+        drizzled_image_filename = glob.glob(str(args.input_dir / args.field / f'Products/{args.field}*{filter.lower()}-clear_drz_sci.fits'))[0]
+        data = fits.open(drizzled_image_filename)
+
+        image = data[0].data
+        header = data[0].header
+        wcs = pywcs.WCS(header)
+
+        cutout = Cutout2D(image, pos, size, wcs=wcs)
+        cutout_data = cutout.data * header['PHOTFNU'] * 1e6
+        print(f'\nFrom cutout, for filter {filter}, image shape is {np.shape(cutout_data)}\n')
+
+        axes[index + 1], _ = plot_2D_map(cutout_data, axes[index + 1], args, label=f'From *{filter.lower()}*drz_sci.fits', vmin=limits[0], vmax=limits[1], cmap=cmap, hide_yaxis=True)
+
+    plt.show(block=False)
+
+    return fig
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_starburst_map(full_hdu, args):
     '''
     Plots the Ha map, direct F115W map and their ratio (starbursty-ness map) in a new figure
@@ -977,24 +1046,7 @@ def plot_starburst_map(full_hdu, args):
     ha_map, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=True)
 
     # ---------getting the direct image-------------
-    direct_ext = 5
-    direct_map = full_hdu[direct_ext].data
-    direct_map_err = 1. / (full_hdu[direct_ext + 1].data ** 0.5)
-
-    direct_map = trim_image(direct_map, args)
-    direct_map = np.ma.masked_where(~np.isfinite(direct_map), direct_map)
-
-    direct_map_err = trim_image(direct_map_err, args)
-    direct_map_err = np.ma.masked_where(~np.isfinite(direct_map), direct_map_err)
-
-    if args.only_seg:
-        direct_map = cut_by_segment(direct_map, args)
-
-    if args.vorbin:
-        direct_map = bin_2D(direct_map, args.voronoi_bin_IDs)
-        direct_map_err = bin_2D(direct_map_err, args.voronoi_bin_IDs)
-
-    direct_map = unp.uarray(direct_map, direct_map_err)
+    direct_map = get_direct_image(full_hdu, args, filter='F115W', ext=5)
 
     # ---------getting the ratio and seg maps-------------
     new_mask = unp.nominal_values(direct_map.data) == 0
@@ -1201,7 +1253,15 @@ if __name__ == "__main__":
             _, args.EB_V = get_EB_V(full_hdu, args, verbose=True)
 
         # ---------initialising the starburst figure------------------------------
-        if args.plot_starburst:
+        if args.test_cutout:
+            fig = plot_test_cutouts(full_hdu, args)
+
+            # ---------decorating and saving the figure------------------------------
+            fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+            figname = fig_dir / f'{args.field}_{args.id:05d}_cutout_tests.png'
+
+        # ---------initialising the starburst figure------------------------------
+        elif args.plot_starburst:
             fig, ratio_map = plot_starburst_map(full_hdu, args)
 
             # ---------decorating and saving the figure------------------------------

@@ -56,6 +56,7 @@ import mplcyberpunk
 from astropy.table import Table, join
 from astropy import units as u
 from astropy.coordinates import SkyCoord, angular_separation
+from astropy.nddata.utils import Cutout2D
 from astropy import wcs as pywcs
 from astropy.io import fits
 from astropy.cosmology import Planck18 as cosmo
