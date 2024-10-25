@@ -87,7 +87,7 @@ if __name__ == "__main__":
             dummy_dataset = regions.make_example_dataset(data='simulated') # creating dummy data to generate dummy wcs, needed for sky_region.contains()
             dummy_wcs = dummy_dataset.wcs
 
-            sky_regions = sky_regions = Regions.read(output_dir / 'PASSAGE_fields.reg', format='ds9') # if this file does not exist, first run this script with "--survey passage" option, before attemtping --split_regions_by_fields
+            sky_regions = Regions.read(output_dir / 'PASSAGE_fields.reg', format='ds9') # if this file does not exist, first run this script with "--survey passage" option, before attemtping --split_regions_by_fields
             df = read_COSMOS2020_catalog(args=args)
 
             sky_regions = np.array(sky_regions)[passage_fields_in_cosmos] # this is to reduce run time, based on pre-calculated index array above; for a fresh run, comment out this line

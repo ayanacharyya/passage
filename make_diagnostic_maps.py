@@ -9,10 +9,10 @@
              run make_diagnostic_maps.py --field Par50 --id 823 --plot_radial_profiles --only_seg --snr_cut 3 --plot_mappings
              run make_diagnostic_maps.py --field Par51 --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
              run make_diagnostic_maps.py --field Par51 --re_extract --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
-             run make_diagnostic_maps.py --field Par28 --id 58,1457,1585,1588 --plot_radial_profiles --only_seg --plot_mappings
-             run make_diagnostic_maps.py --field Par28 --id 58,1457,1585,1588 --plot_radial_profiles --only_seg --plot_mappings --vorbin --voronoi_snr 5
-             run make_diagnostic_maps.py --field Par28 --id 58,1457,1585,1588 --plot_starburst --vorbin --voronoi_snr 5 --plot_radial_profile --only_seg
-             run make_diagnostic_maps.py --field Par28 --id 58,1457,1588 --plot_metallicity --vorbin --voronoi_snr 5 --plot_radial_profile --only_seg
+             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_radial_profiles --only_seg --plot_mappings
+             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_radial_profiles --only_seg --plot_mappings --vorbin --voronoi_snr 5
+             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_starburst --vorbin --voronoi_snr 5 --plot_radial_profile --only_seg
+             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1588,2195,2343 --plot_metallicity --vorbin --voronoi_snr 5 --plot_radial_profile --only_seg
     Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -286,6 +286,7 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     Returns the axis handle
     '''
     print(f'Plotting radial profile of {label}..')
+    color = 'darkorange'
 
     distance_map = get_distance_map(np.shape(image), args)
     try: distance_map = np.ma.masked_where(image.mask, distance_map)
@@ -304,13 +305,24 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     df = df_vorbinned
 
     # -------proceeding with plotting--------
-    ax.scatter(df[xcol], df[ycol], c='grey', s=1, alpha=0.2)
+    ax.scatter(df[xcol], df[ycol], c='grey', s=20 if args.vorbin else 1, alpha=1 if args.vorbin else 0.2)
 
     ax.set_xlim(0, args.radius_max) # kpc
     ax.set_ylim(ymin, ymax)
     ax.set_box_aspect(1)
 
-    ax, linefit = plot_binned_profile(df, ax, xcol=xcol, ycol=ycol)
+    if args.vorbin:
+        print(f'Not radially binning {label} profile since already voronoi binned')
+        # ----------to fit and plot the binned profile--------------
+        try:
+            linefit, linecov = np.polyfit(df[xcol], df[ycol], 1, cov=True)
+            y_fitted = np.poly1d(linefit)(df[xcol])
+            ax.plot(df[xcol], y_fitted, color=color, lw=1, ls='dashed')
+        except Exception:
+            print(f'Could not fit radial profile in this case..')
+            linefit, _ = [np.nan, np.nan], None
+    else:
+        ax, linefit = plot_binned_profile(df, ax, xcol=xcol, ycol=ycol)
 
     if hide_xaxis:
         ax.set_xticklabels([])
@@ -493,8 +505,8 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
 
     # -----------getting the integrated EW value-----------------
     line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
-    line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}']
-    line_ew_err = full_hdu[2].header[f'EWHW_{line_index_in_cov:03d}']
+    line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}'] / (1 + args.z) # converting to rest-frame EW
+    line_ew_err = full_hdu[2].header[f'EWHW_{line_index_in_cov:03d}'] / (1 + args.z) # converting to rest-frame EW uncertainty
     line_ew = ufloat(line_ew, line_ew_err)
 
     # -----------getting the dereddened flux value-----------------
@@ -513,7 +525,7 @@ def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, 
 
     line_map, line_wave, line_int, line_ew = get_emission_line_map(line, full_hdu, args, dered=False)
     ax, _ = plot_2D_map(line_map, ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int.n), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
-    ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[0] * 0.88, f'EW = {line_ew:.1e}' if line_ew < 1e-3 or line_ew > 1e3 else f'EW = {line_ew:.1f}', c='k', fontsize=args.fontsize, ha='left', va='bottom', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+    ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[0] * 0.88, f'EW_r = {line_ew:.1e}' if line_ew < 1e-3 or line_ew > 1e3 else f'EW = {line_ew:.1f}', c='k', fontsize=args.fontsize, ha='left', va='bottom', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
 
     return ax
 

@@ -82,8 +82,8 @@ def plot_venn(df, args):
         condition3 = df[f'{line}_SNR'] > args.SNR_thresh
         set_arr, label_arr = make_set(df, condition1 & condition2 & condition3, f'{line} SNR > {args.SNR_thresh}', set_arr, label_arr)
 
-        condition4 = df[f'{line}_EW'] > args.EW_thresh
-        set_arr, label_arr = make_set(df, condition1 & condition2 & condition3 & condition4, f'{line} EW > {args.EW_thresh}; SNR > {args.SNR_thresh}', set_arr, label_arr)
+        condition4 = df[f'{line}_EW'] / (1 + df['redshift']) > args.EW_thresh # converting to rest-frame EW
+        set_arr, label_arr = make_set(df, condition1 & condition2 & condition3 & condition4, f'{line} EW_r > {args.EW_thresh}; SNR > {args.SNR_thresh}', set_arr, label_arr)
 
     # ---------add magnitude set------------
     if args.mag_lim is None: mag_lim = 26
@@ -116,15 +116,15 @@ def plot_venn(df, args):
         set_arr, label_arr = make_set(df, condition, 'RQ = okay', set_arr, label_arr)
 
     # ---------add sets from cosmos dataset------------
-    if 'lp_mass_best' in df:
+    if 'lp_mass' in df:
         print('\n')
-        condition = np.isfinite(df['lp_mass_best'])
+        condition = np.isfinite(df['lp_mass'])
         set_arr, label_arr = make_set(df, condition, 'mass available', set_arr, label_arr)
 
-        condition = df['lp_SFR_best'] > args.log_SFR_thresh
+        condition = df['lp_SFR'] > args.log_SFR_thresh
         set_arr, label_arr = make_set(df, condition, f'log sfr > {args.log_SFR_thresh}', set_arr, label_arr)
 
-        condition = df['lp_sSFR_best'] > args.log_sSFR_thresh
+        condition = df['lp_sSFR'] > args.log_sSFR_thresh
         set_arr, label_arr = make_set(df, condition, f'log sSFR > {args.log_sSFR_thresh}', set_arr, label_arr)
 
     # ----------plot the venn diagrams----------
@@ -422,8 +422,20 @@ if __name__ == "__main__":
             df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='cosmos_id', keep='first').reset_index(drop=True) # to avoid multiple PASSAGE objects being linked to the same COSMOS object
             df_crossmatch = pd.merge(df_crossmatch[['passage_id', 'cosmos_id']], df_cosmos, left_on='cosmos_id', right_on='id', how = 'inner').drop(['id', 'ra', 'dec'], axis=1)
 
-            print(f'\nFound a total of {len(df_crossmatch)} matching objects')
-            df = pd.merge(df, df_crossmatch, left_on='par_obj', right_on='passage_id', how='outer').drop('passage_id', axis = 1)
+            df_crossmatch_subset = df_crossmatch[['passage_id', 'cosmos_id', 'ez_z_phot', 'lp_MK']]
+            lp_quants = ['lp_SFR', 'lp_mass', 'lp_sSFR']
+            ez_quants = ['ez_mass', 'ez_sfr', 'ez_ssfr']
+
+            for quant in lp_quants:
+                df_crossmatch_subset[quant] = df_crossmatch[quant + '_med']
+                df_crossmatch_subset[quant + '_u'] = (df_crossmatch[quant + '_med_max68'] - df_crossmatch[quant + '_med_min68'])/2
+
+            for quant in ez_quants:
+                df_crossmatch_subset[quant] = df_crossmatch[quant + '_p500']
+                df_crossmatch_subset[quant + '_u'] = (df_crossmatch[quant + '_p840'] - df_crossmatch[quant + '_p160']) / 2
+
+            print(f'\nFound a total of {len(df_crossmatch_subset)} matching objects')
+            df = pd.merge(df, df_crossmatch_subset, left_on='par_obj', right_on='passage_id', how='outer').drop('passage_id', axis = 1)
 
         # ------------doing the venn diagrams--------------------
         df_int = plot_venn(df, args)

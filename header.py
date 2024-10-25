@@ -53,7 +53,7 @@ from matplotlib import colors as mplcolors
 from matplotlib import colormaps as mplcolormaps
 import mplcyberpunk
 
-from astropy.table import Table
+from astropy.table import Table, join
 from astropy import units as u
 from astropy.coordinates import SkyCoord, angular_separation
 from astropy import wcs as pywcs

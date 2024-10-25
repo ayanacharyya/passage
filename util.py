@@ -101,7 +101,7 @@ def parse_args():
 
 
     # ------- args added for get_field_stats.py ------------------------------
-    parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300, help='EW threshold to consider good detection for emission line maps; default is 300')
+    parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=100, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
     parser.add_argument('--SNR_thresh', metavar='SNR_thresh', type=float, action='store', default=10, help='SNR threshold to consider good detection for emission line maps; default is 10')
     parser.add_argument('--log_SFR_thresh', metavar='log_SFR_thresh', type=float, action='store', default=0, help='SFR threshold (in log) to consider highly star-forming; default is 0')
     parser.add_argument('--log_sSFR_thresh', metavar='log_sSFR_thresh', type=float, action='store', default=-9, help='specific SFR threshold (in log) to consider highly star-forming; default is 0')
@@ -407,7 +407,12 @@ def make_COSMOS_subset_table(filename):
     suffix = '_subsetcolumns'
     filename = str(filename)
     if suffix in filename: filename = filename[:filename.find(suffix)] + '.fits'
-    cols_to_extract = ['ID', 'ALPHA_J2000', 'DELTA_J2000', 'ID_COSMOS2015', 'ez_z_phot', 'lp_MK', 'lp_SFR_best', 'lp_sSFR_best', 'lp_mass_best']
+    lp_cols_suffix = ['med', 'med_min68', 'med_max68', 'best']
+    lp_cols = np.ravel([f'lp_{item}_{suffix}' for item in ['mass', 'SFR', 'sSFR'] for suffix in lp_cols_suffix])
+    ez_cols_suffix = ['', '_p160', '_p500', '_p840']
+    ez_cols = np.ravel([f'ez_{item}{suffix}' for item in ['mass', 'sfr', 'ssfr'] for suffix in ez_cols_suffix])
+
+    cols_to_extract = np.hstack((['ID', 'ALPHA_J2000', 'DELTA_J2000', 'ID_COSMOS2015', 'ez_z_phot', 'lp_MK'], lp_cols, ez_cols)).tolist()
 
     print(f'Trying to read in  {filename}; can take a while..')
     data = fits.open(filename)
@@ -415,8 +420,49 @@ def make_COSMOS_subset_table(filename):
     table_sub = table[cols_to_extract]
 
     outfilename = str(filename).split('.fits')[0] + suffix + '.fits'
-    table_sub.write(outfilename)
+    table_sub.write(outfilename, overwrite=True)
     print(f'Saved subset table as {outfilename}')
+
+# -------------------------------------------------------------------------------------------------------
+def split_COSMOS_subset_table_by_par(args):
+    '''
+    Reads in the subset of columns of COSMOS2020 catalog and splits it into smaller tables with only objects that are overlapping with invdividual PASSAGE fields
+    '''
+    # -------reading in the COSMOS2020 (sub)catalog------
+    filename = Path(args.input_dir) / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3_subsetcolumns.fits'
+    data = fits.open(filename)
+    table_cosmos = Table(data[1].data)
+    cosmos_coords = SkyCoord(table_cosmos['ALPHA_J2000'], table_cosmos['DELTA_J2000'], unit='deg')
+
+    for index, field_id in enumerate(passage_fields_in_cosmos):
+        print(f'Starting {index+1} of {len(passage_fields_in_cosmos)} fields..')
+        # -------determining path to photometric catalog------
+        thisfield = f'Par{field_id:03d}'
+        product_dir = args.input_dir / thisfield / 'Products'
+        catalog_file = product_dir / f'{thisfield}_photcat.fits'
+
+        if os.path.exists(catalog_file):
+            # -------reading in photometric catalog------
+            catalog = GTable.read(catalog_file)
+            df = catalog['id', 'ra', 'dec'].to_pandas()
+
+            # -------cross-matching RA/DEC of both catalogs------
+            passage_coords = SkyCoord(df['ra'], df['dec'], unit='deg')
+            nearest_id_in_cosmos, sep_from_nearest_id_in_cosmos, _ = passage_coords.match_to_catalog_sky(cosmos_coords)
+
+            df_crossmatch = pd.DataFrame({'passage_id': df['id'].values, 'ID': table_cosmos['ID'][nearest_id_in_cosmos].value.astype(np.int32), 'sep': sep_from_nearest_id_in_cosmos.arcsec})
+            df_crossmatch['passage_id'] = thisfield + '-' + df_crossmatch['passage_id'].astype(str)  # making a unique combination of field and object id
+            df_crossmatch = df_crossmatch[df_crossmatch['sep'] < 1.]  # separation within 1 arcsecond
+            df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='ID', keep='first').reset_index(drop=True)  # to avoid multiple PASSAGE objects being linked to the same COSMOS object
+            table_crossmatch = Table.from_pandas(df_crossmatch)
+
+            table_cosmos_thisfield = join(table_cosmos, table_crossmatch, keys='ID')
+
+            outfilename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
+            table_cosmos_thisfield.write(outfilename)
+            print(f'Saved subset table as {outfilename}')
+        else:
+            print(f'{catalog_file} does not exist, so skipping {thisfield}.')
 
 # -------------------------------------------------------------------------------------------------------
 def get_passage_filter_dict(args=None, filename=None):
