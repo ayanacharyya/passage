@@ -13,6 +13,7 @@
              run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_radial_profiles --only_seg --plot_mappings --vorbin --voronoi_snr 5
              run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_starburst --vorbin --voronoi_snr 5 --plot_radial_profile --only_seg
              run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1588,2195,2343 --plot_metallicity --vorbin --voronoi_snr 5 --plot_radial_profile --only_seg
+             run make_diagnostic_maps.py --field Par28 --id 2343 --plot_direct_filters --only_seg --vorbin --voronoi_snr 5
              run make_diagnostic_maps.py --field Par28 --id 2343 --test_cutout
     Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
@@ -515,6 +516,8 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
         line_map = get_dereddened_flux(line_map, line_wave, args.EB_V)
         line_int = get_dereddened_flux(line_int, line_wave, args.EB_V)
 
+    if not np.ma.isMaskedArray(line_map): line_map = np.ma.masked_where(False, line_map)
+
     return line_map, line_wave, line_int, line_ew
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -947,68 +950,113 @@ def plot_Z_R23_map(full_hdu, ax, args, radprof_ax=None):
     return ax, logOH_map, logOH_radfit, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_direct_image(full_hdu, args, filter='F115W', ext=5):
+def plot_this(data, ax):
+    '''
+    Tiny plotting routine for testing purposes
+    Returns axis handle
+    '''
+    ax.imshow(np.log10(data))
+    ax.set_title(np.shape(data))
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_cutout(filename, pos, size, target_header, args, plot_test_axes=None):
+    '''
+    Return a cutout from a given the filename of a fits image, around a given position within a given extent
+    Optionally trims the cutout as per the segmentation map, and/or Voronoi binned
+    Returns the 2D cutout as a 2D array
+    '''
+    data = fits.open(filename)
+
+    image = data[0].data
+    source_header = data[0].header
+    wcs = pywcs.WCS(source_header)
+
+    cutout = Cutout2D(image, pos, size, wcs=wcs)
+    cutout_data = cutout.data * source_header['PHOTFNU'] * 1e6
+    cutout_header = cutout.wcs.to_header()
+    source_header.update(cutout_header)  # important step to update the header of the full mosaic to that of just the cut out
+
+    cutout_data_hdu = fits.ImageHDU(cutout_data, header=source_header)
+    cutout_data_rebinned, _ = reproject_interp(cutout_data_hdu, target_header)  # 125 x 125 pixels
+    cutout_data_rebinned_trimmed = trim_image(cutout_data_rebinned, args)  # 50 x 50 pixels
+
+    # --------test plots-------------------
+    if plot_test_axes is not None:
+        plot_test_axes[2] = plot_this(image, plot_test_axes[2])
+        plot_test_axes[3] = plot_this(cutout_data, plot_test_axes[3])
+        plot_test_axes[4] = plot_this(cutout_data_rebinned, plot_test_axes[4])
+        plot_test_axes[5] = plot_this(cutout_data_rebinned_trimmed, plot_test_axes[5])
+        plt.show(block=False)
+
+    if args.only_seg:
+        cutout_data_rebinned_trimmed = cut_by_segment(cutout_data_rebinned_trimmed, args)
+
+    if args.vorbin:
+        cutout_data_rebinned_trimmed = bin_2D(cutout_data_rebinned_trimmed, args.voronoi_bin_IDs)
+
+    return cutout_data_rebinned_trimmed
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_direct_image_per_filter(full_hdu, filter, target_header, args, plot_test_axes=None):
     '''
     Retrieve the direct image for a given filter from the HDU
     Returns the 2D image along with uncertainty
     '''
-    direct_map = full_hdu[ext].data
-    direct_map_err = 1. / (full_hdu[ext + 1].data ** 0.5)
+    # ---------detremining extents for cut out-------------
+    size = args.arcsec_limit * 3 * u.arcsec # 3 arcsec so that it leads to shape 125 x 125 pixels
+    pos = np.array([full_hdu[0].header['RA'], full_hdu[0].header['DEC']])
+    pos = SkyCoord(*(pos * u.deg), frame='fk5')
 
-    direct_map = trim_image(direct_map, args)
-    direct_map = np.ma.masked_where(~np.isfinite(direct_map), direct_map)
+    # ---------making cut outs-------------
+    drizzled_image_filename = glob.glob(str(args.input_dir / args.field / f'Products/{args.field}*{filter.lower()}-clear_drz_sci.fits'))[0]
+    direct_map = get_cutout(drizzled_image_filename, pos, size, target_header, args, plot_test_axes=plot_test_axes)
+    direct_map_wht = get_cutout(drizzled_image_filename.replace('sci', 'wht'), pos, size, target_header, args)
 
-    direct_map_err = trim_image(direct_map_err, args)
-    direct_map_err = np.ma.masked_where(~np.isfinite(direct_map), direct_map_err)
-
-    if args.only_seg:
-        direct_map = cut_by_segment(direct_map, args)
-
-    if args.vorbin:
-        direct_map = bin_2D(direct_map, args.voronoi_bin_IDs)
-        direct_map_err = bin_2D(direct_map_err, args.voronoi_bin_IDs)
-
+    # ---------computing uncertainty-------------
+    direct_map_err = 1 / np.sqrt(direct_map_wht)
     direct_map = unp.uarray(direct_map, direct_map_err)
 
     return direct_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_test_cutouts(full_hdu, args):
+def plot_direct_images_all_filters(full_hdu, args):
     '''
-    Test code to compare direct images from full_hdu vs cut out from full field drizzled image, will remove
+    Plots direct images from full_hdu vs corresponding cut outs from full field drizzled images
     '''
-    # ---------getting the direct image from full_hdu-------------
-    direct_map = full_hdu[5].data
-    direct_map = trim_image(direct_map, args)
-    print(f'\nFrom full hdu, image shape is {np.shape(direct_map)}')
+    filters_arr = args.filters
 
-    # ----------test plots-------------------
-    fig, axes = plt.subplots(1, 1 + len(args.filters), figsize=(8 + 2 * len(args.filters), 4))
-    fig.subplots_adjust(left=0.06, right=0.97, bottom=0.12, top=0.9, wspace=0.2, hspace=0)
-    limits = [-6, -1.4]
-    cmap = 'viridis'
+    # -------getting the full.fits image------------
+    ext = 5
+    direct_map = full_hdu[ext].data
+    direct_map_trimmed = trim_image(direct_map, args)
+    target_header = full_hdu[ext].header
 
-    axes[0], _ = plot_2D_map(direct_map, axes[0], args, label='From *full.fits', vmin=limits[0], vmax=limits[1], cmap=cmap)
+    if args.only_seg:
+        direct_map_trimmed = cut_by_segment(direct_map_trimmed, args)
 
-    # ---------dteremining extents for cut out-------------
-    size = args.arcsec_limit * 2 * u.arcsec
-    pos = np.array([full_hdu[0].header['RA'], full_hdu[0].header['DEC']])
-    pos = SkyCoord(*(pos * u.deg), frame='fk5')
+    if args.vorbin:
+        direct_map_trimmed = bin_2D(direct_map_trimmed, args.voronoi_bin_IDs)
+
+    # ------------test plots---------------
+    if args.test_cutout:
+        fig, plot_test_axes = plt.subplots(1, 6, figsize=(14,3))
+        plot_test_axes[0] = plot_this(direct_map, plot_test_axes[0])
+        plot_test_axes[1] = plot_this(direct_map_trimmed, plot_test_axes[1])
+
+    # ----------main plots-------------------
+    if args.plot_direct_filters:
+        fig, axes = plt.subplots(1, 1 + len(filters_arr), figsize=(8 + 2 * len(filters_arr), 4))
+        fig.subplots_adjust(left=0.06, right=0.97, bottom=0.12, top=0.9, wspace=0.2, hspace=0)
+        limits = [-5, -2]
+        cmap = 'viridis'
+
+        axes[0], _ = plot_2D_map(direct_map_trimmed, axes[0], args, label='From *full.fits', vmin=limits[0], vmax=limits[1], cmap=cmap)
 
     # ---------getting the direct image from cut out-------------
-    for index, filter in enumerate(args.filters):
-        drizzled_image_filename = glob.glob(str(args.input_dir / args.field / f'Products/{args.field}*{filter.lower()}-clear_drz_sci.fits'))[0]
-        data = fits.open(drizzled_image_filename)
-
-        image = data[0].data
-        header = data[0].header
-        wcs = pywcs.WCS(header)
-
-        cutout = Cutout2D(image, pos, size, wcs=wcs)
-        cutout_data = cutout.data * header['PHOTFNU'] * 1e6
-        print(f'\nFrom cutout, for filter {filter}, image shape is {np.shape(cutout_data)}\n')
-
-        axes[index + 1], _ = plot_2D_map(cutout_data, axes[index + 1], args, label=f'From *{filter.lower()}*drz_sci.fits', vmin=limits[0], vmax=limits[1], cmap=cmap, hide_yaxis=True)
+    for index, filter in enumerate(filters_arr):
+        filter_map = get_direct_image_per_filter(full_hdu, 'F115W', target_header, args, plot_test_axes=plot_test_axes if args.test_cutout and index == 0 else None)
+        if args.plot_direct_filters: axes[index + 1], _ = plot_2D_map(filter_map, axes[index + 1], args, label=f'From *{filter.lower()}*drz_sci.fits', vmin=limits[0], vmax=limits[1], cmap=cmap, hide_yaxis=True)
 
     plt.show(block=False)
 
@@ -1046,7 +1094,10 @@ def plot_starburst_map(full_hdu, args):
     ha_map, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=True)
 
     # ---------getting the direct image-------------
-    direct_map = get_direct_image(full_hdu, args, filter='F115W', ext=5)
+    ext = 5
+    filter = 'F115W'
+    target_header = full_hdu[ext].header
+    direct_map = get_direct_image_per_filter(full_hdu, filter, target_header, args)
 
     # ---------getting the ratio and seg maps-------------
     new_mask = unp.nominal_values(direct_map.data) == 0
@@ -1058,8 +1109,8 @@ def plot_starburst_map(full_hdu, args):
 
     # --------making arrays for subplots-------------
     maps = [direct_map, ha_map, ratio_map]
-    labels = ['Direct', r'H$\alpha$', r'H$\alpha$/Direct']
-    lims = [[-4, -1], [-21, -18], [-18, -15]]
+    labels = [filter, r'H$\alpha$', r'H$\alpha$/' + filter]
+    lims = [[-4.5, -2], [-20, -18], [-17, -14]]
 
     # ---------plotting-------------
     for index, ax in enumerate(axes):
@@ -1249,16 +1300,17 @@ if __name__ == "__main__":
             args.radius_max = np.nan
 
         # ---------------dust value---------------
-        if all([line in args.available_lines for line in ['Ha', 'Hb']]):
+        if all([line in args.available_lines for line in ['Ha', 'Hb']]) and not args.test_cutout:
             _, args.EB_V = get_EB_V(full_hdu, args, verbose=True)
 
         # ---------initialising the starburst figure------------------------------
-        if args.test_cutout:
-            fig = plot_test_cutouts(full_hdu, args)
+        if args.test_cutout or args.plot_direct_filters:
+            fig = plot_direct_images_all_filters(full_hdu, args)
 
             # ---------decorating and saving the figure------------------------------
             fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-            figname = fig_dir / f'{args.field}_{args.id:05d}_cutout_tests.png'
+            main_text = 'direct_filter_images' if args.plot_direct_filters else 'cutout_tests'
+            figname = fig_dir / f'{args.field}_{args.id:05d}_{main_text}{only_seg_text}{vorbin_text}.png'
 
         # ---------initialising the starburst figure------------------------------
         elif args.plot_starburst:
@@ -1357,7 +1409,7 @@ if __name__ == "__main__":
             except (ValueError, IOError) as e: print(f'Skipping snapshot due to ' + str(e))
 
         # ----------appending and writing to catalog file-----------------
-        if args.write_file:
+        if args.write_file and not (args.test_cutout or args.plot_starburst or args.plot_metallicity):
 
             # -------collating all the integrated line fluxes from the HDU header----------
             line_properties = []
