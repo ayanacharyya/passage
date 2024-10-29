@@ -24,6 +24,7 @@ import json
 import shutil
 import drizzlepac
 import subprocess
+import itertools
 
 from datetime import datetime, timedelta
 from collections import defaultdict

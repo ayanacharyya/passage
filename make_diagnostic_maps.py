@@ -10,10 +10,10 @@
              run make_diagnostic_maps.py --field Par51 --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
              run make_diagnostic_maps.py --field Par51 --re_extract --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file
              run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_radial_profiles --only_seg --plot_mappings
-             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_radial_profiles --only_seg --plot_mappings --vorbin --voronoi_snr 5
-             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_starburst --vorbin --voronoi_snr 5 --plot_radial_profile --only_seg
-             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1588,2195,2343 --plot_metallicity --vorbin --voronoi_snr 5 --plot_radial_profile --only_seg
-             run make_diagnostic_maps.py --field Par28 --id 2343 --plot_direct_filters --only_seg --vorbin --voronoi_snr 5
+             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_radial_profiles --only_seg --plot_mappings --vorbin --voronoi_snr 3
+             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_starburst --vorbin --voronoi_snr 3 --plot_radial_profile --only_seg
+             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1588,2195,2343 --plot_metallicity --vorbin --voronoi_snr 3 --plot_radial_profile --only_seg
+             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_direct_filters --only_seg --vorbin --voronoi_snr 3
              run make_diagnostic_maps.py --field Par28 --id 2343 --test_cutout
     Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
@@ -282,7 +282,7 @@ def trim_image(image, args):
     return image
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_xaxis=False, hide_yaxis=False):
+def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_xaxis=False, hide_yaxis=False, image_err=None):
     '''
     Plots the average radial profile for a given 2D map in the given axis
     Returns the axis handle
@@ -297,6 +297,7 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     # ----making the dataframe before radial profile plot--------------
     xcol, ycol = 'radius', 'data'
     df = pd.DataFrame({xcol: np.ma.compressed(distance_map), ycol: np.ma.compressed(image)})
+    if image_err is not None: df[ycol + '_err'] = np.ma.compressed(image_err)
     df = df[df[xcol] <= args.radius_max]
     df = df.sort_values(by=xcol)
 
@@ -304,10 +305,12 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     df_vorbinned = pd.DataFrame()
     df_vorbinned[xcol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[xcol]['mean']
     df_vorbinned[ycol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[ycol]
+    if image_err is not None: df_vorbinned[ycol+ '_err'] = df.groupby([ycol], as_index=False).agg([(np.mean)])[ycol+ '_err']
     df = df_vorbinned
 
     # -------proceeding with plotting--------
     ax.scatter(df[xcol], df[ycol], c='grey', s=20 if args.vorbin else 1, alpha=1 if args.vorbin else 0.2)
+    if image_err is not None: ax.errorbar(df[xcol], df[ycol], yerr=df[ycol + '_err'], c='grey', fmt='none', lw=2 if args.vorbin else 0.5, alpha=0.2 if args.vorbin else 0.1)
 
     ax.set_xlim(0, args.radius_max) # kpc
     ax.set_ylim(ymin, ymax)
@@ -317,7 +320,7 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
         print(f'Not radially binning {label} profile since already voronoi binned')
         # ----------to fit and plot the binned profile--------------
         try:
-            linefit, linecov = np.polyfit(df[xcol], df[ycol], 1, cov=True)
+            linefit, linecov = np.polyfit(df[xcol], df[ycol], 1, cov=True, w=1. / (df[ycol + '_err']) ** 2 if image_err is not None else None)
             y_fitted = np.poly1d(linefit)(df[xcol])
             ax.plot(df[xcol], y_fitted, color=color, lw=1, ls='dashed')
         except Exception:
@@ -348,13 +351,24 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
     Returns the axis handle
     '''
     if image.dtype == 'O': # if it is an uncertainty variable
-        if np.ma.isMaskedArray(image): image = np.ma.masked_where(image.mask, unp.nominal_values(image.data))
-        else: image = unp.nominal_values(image.data)
+        try:
+            image_err = unp.std_devs(image)
+            image = unp.nominal_values(image)
+        except:
+            image_err = np.ma.masked_where(image.mask, unp.std_devs(image.data))
+            image = np.ma.masked_where(image.mask, unp.nominal_values(image.data))
 
+    if not np.ma.isMaskedArray(image): image = np.ma.masked_where(False, image)
     if cmap is None: cmap = 'cividis'
     print(f'Plotting 2D map of {label}..')
 
-    if takelog: image = np.log10(image)
+    if takelog:
+        new_mask = image <= 0
+        image[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        image_log = unp.log10(unp.uarray(image, image_err))
+        image_log = np.ma.masked_where(new_mask | image.mask, image_log)
+        image = unp.nominal_values(image_log)
+        image_err = unp.std_devs(image_log)
 
     p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
 
@@ -391,9 +405,11 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
         radius_pix = args.radius_max * cosmo.arcsec_per_kpc_proper(args.z).value # arcsec
         circle = plt.Circle((0, 0), radius_pix, color='k', fill=False, lw=0.5)
         ax.add_patch(circle)
-        radprof_ax, radprof_fit = plot_radial_profile(image, radprof_ax, args, label=label.split(r'$_{\rm int}')[0], ymin=vmin, ymax=vmax)
+        radprof_ax, radprof_fit = plot_radial_profile(image, radprof_ax, args, label=label.split(r'$_{\rm int}')[0], ymin=vmin, ymax=vmax, image_err=image_err)
     else:
         radprof_fit = [np.nan, np.nan] # dummy values for when the fit was not performed
+
+    ax.contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=2)
 
     if args.vorbin and args.plot_vorbin and vorbin_ax is not None:
         vorbin_IDs = args.voronoi_bin_IDs
@@ -955,6 +971,7 @@ def plot_this(data, ax):
     Tiny plotting routine for testing purposes
     Returns axis handle
     '''
+    if data.dtype == 'object': data = unp.nominal_values(data)
     ax.imshow(np.log10(data))
     ax.set_title(np.shape(data))
     return ax
@@ -1031,12 +1048,18 @@ def plot_direct_images_all_filters(full_hdu, args):
     direct_map = full_hdu[ext].data
     direct_map_trimmed = trim_image(direct_map, args)
     target_header = full_hdu[ext].header
+    direct_map_err = 1. / np.sqrt(full_hdu[ext + 1].data)
+    direct_map_err_trimmed = trim_image(direct_map_err, args)
 
     if args.only_seg:
         direct_map_trimmed = cut_by_segment(direct_map_trimmed, args)
+        direct_map_err_trimmed = cut_by_segment(direct_map_err_trimmed, args)
 
     if args.vorbin:
-        direct_map_trimmed = bin_2D(direct_map_trimmed, args.voronoi_bin_IDs)
+        direct_map_trimmed, direct_map_err_trimmed = bin_2D(direct_map_trimmed, args.voronoi_bin_IDs, map_err=direct_map_err_trimmed)
+
+    direct_map_trimmed = unp.uarray(direct_map_trimmed, direct_map_err_trimmed)
+    if not np.ma.isMaskedArray(direct_map_trimmed): direct_map_trimmed = np.ma.masked_where(False, direct_map_trimmed)
 
     # ------------test plots---------------
     if args.test_cutout:
@@ -1046,17 +1069,44 @@ def plot_direct_images_all_filters(full_hdu, args):
 
     # ----------main plots-------------------
     if args.plot_direct_filters:
-        fig, axes = plt.subplots(1, 1 + len(filters_arr), figsize=(8 + 2 * len(filters_arr), 4))
-        fig.subplots_adjust(left=0.06, right=0.97, bottom=0.12, top=0.9, wspace=0.2, hspace=0)
+        fig, axes = plt.subplots(2, 1 + len(filters_arr), figsize=(8 + 2 * len(filters_arr), 6))
+        fig.subplots_adjust(left=0.06, right=0.97, bottom=0.12, top=0.9, wspace=0.2, hspace=0.1)
         limits = [-5, -2]
         cmap = 'viridis'
 
-        axes[0], _ = plot_2D_map(direct_map_trimmed, axes[0], args, label='From *full.fits', vmin=limits[0], vmax=limits[1], cmap=cmap)
+        axes[0][0], _ = plot_2D_map(direct_map_trimmed, axes[0][0], args, label='From *full.fits', vmin=limits[0], vmax=limits[1], cmap=cmap)
 
     # ---------getting the direct image from cut out-------------
+    filter_map_dict = {}
     for index, filter in enumerate(filters_arr):
-        filter_map = get_direct_image_per_filter(full_hdu, 'F115W', target_header, args, plot_test_axes=plot_test_axes if args.test_cutout and index == 0 else None)
-        if args.plot_direct_filters: axes[index + 1], _ = plot_2D_map(filter_map, axes[index + 1], args, label=f'From *{filter.lower()}*drz_sci.fits', vmin=limits[0], vmax=limits[1], cmap=cmap, hide_yaxis=True)
+        filter_map = get_direct_image_per_filter(full_hdu, filter, target_header, args, plot_test_axes=plot_test_axes if args.test_cutout and index == 0 else None)
+        filter_map_dict.update({filter: filter_map})
+        if args.plot_direct_filters:
+            axes[0][index + 1], _ = plot_2D_map(filter_map, axes[0][index + 1], args, label=f'{filter}', vmin=limits[0], vmax=limits[1], cmap=cmap, hide_yaxis=True, hide_xaxis=True)
+
+    # ---------plotting ratios of direct_images----------------------
+    if args.plot_direct_filters:
+        ratio_list = list(itertools.combinations(filters_arr, 2))
+        for index in range(len(filters_arr)):
+            num = ratio_list[index][0]
+            den = ratio_list[index][1]
+            num_map = filter_map_dict[num]
+            den_map = filter_map_dict[den]
+
+            try:
+                new_mask = unp.nominal_values(den_map.data) == 0
+                den_map[new_mask] = -1  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+                ratio_map = num_map.data / den_map.data
+                ratio_map = np.ma.masked_where(num_map.mask | den_map.mask | new_mask, ratio_map)
+            except:
+                new_mask = unp.nominal_values(den_map) == 0
+                den_map[new_mask] = -1  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+                ratio_map = num_map / den_map
+                ratio_map = np.ma.masked_where(new_mask, ratio_map)
+
+            if args.only_seg: ratio_map = cut_by_segment(ratio_map, args)
+            axes[1][index + 1], _ = plot_2D_map(ratio_map, axes[1][index + 1], args, label=f'{num}/{den}', cmap=cmap, hide_yaxis=True, vmin=-1, vmax=1)
+        axes[1][0].set_visible(False)
 
     plt.show(block=False)
 
@@ -1116,9 +1166,6 @@ def plot_starburst_map(full_hdu, args):
     for index, ax in enumerate(axes):
         map_err = np.ma.masked_where(maps[index].mask, unp.std_devs(maps[index].data))
         ax, _ = plot_2D_map(maps[index], ax, args, label=labels[index], cmap='viridis', vmin=lims[index][0], vmax=lims[index][1], radprof_ax=radprof_axes[index], vorbin_ax=vorbin_axes[index] if args.plot_vorbin else None, snr_ax=snr_axes[index] if args.plot_snr else None, image_err=map_err if args.plot_snr else None)
-        ax.contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=2)
-        if args.plot_vorbin: vorbin_axes[index].contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=2)
-        if args.plot_snr: radprof_axes[index].contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=2)
 
     return fig, ratio_map
 
@@ -1148,11 +1195,9 @@ def plot_metallicity_map(full_hdu, args):
         # ---------plotting-------------
         lim, label = [6.5, 8.5], 'log(O/H) (R23)'
         axes[0], logOH_radfit = plot_2D_map(logOH_map, axes[0], args, takelog=False, label=r'%s$_{\rm int}$ = %.1f $\pm$ %.1f' % (label, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
-        axes[0].contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=2)
 
         logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
         axes[1], _ = plot_2D_map(logOH_map_err, axes[1], args, takelog=False, label=r'%s uncertainty' % (label), cmap='cividis')
-        axes[1].contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=2)
 
     else:
         print(f'Not all lines out of OIII, OII and Hb are available, so cannot compute R23 metallicity')
