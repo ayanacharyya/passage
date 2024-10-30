@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
     # --------for talk plots--------------
     if args.fortalk:
-        mplcyberpunk.add_glow_effects()
+        #mplcyberpunk.add_glow_effects()
         #try: mplcyberpunk.make_lines_glow()
         #except: pass
         try: mplcyberpunk.make_scatter_glow()

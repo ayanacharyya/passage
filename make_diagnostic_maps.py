@@ -1617,7 +1617,7 @@ if __name__ == "__main__":
         cbar = plt.colorbar(scatter_plot_handle)
         cbar.set_label('Distance (kpc)')
 
-        ax.set_xlim(-2, 1)
+        ax.set_xlim(-2, 0.3)
         ax.set_ylim(-1, 2)
         ax.set_xlabel(f'log (SII 6717/Halpha)')
         ax.set_ylabel(f'log (OIII 5007/Hbeta)')
