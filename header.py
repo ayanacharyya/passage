@@ -53,6 +53,7 @@ from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 import matplotlib.image as mpimg
 from matplotlib import colors as mplcolors
 from matplotlib import colormaps as mplcolormaps
+from matplotlib import cm as mpl_cm
 import mplcyberpunk
 
 from astropy.table import Table, join

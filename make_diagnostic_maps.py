@@ -12,8 +12,10 @@
              run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_radial_profiles --only_seg --plot_mappings
              run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_radial_profiles --only_seg --plot_mappings --vorbin --voronoi_snr 3
              run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_starburst --vorbin --voronoi_snr 3 --plot_radial_profile --only_seg
+             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_slope_vs_mass --vorbin --voronoi_snr 3 --only_seg
              run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1588,2195,2343 --plot_metallicity --vorbin --voronoi_snr 3 --plot_radial_profile --only_seg
-             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_direct_filters --only_seg --vorbin --voronoi_snr 3
+             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_direct_filters --plot_radial_profiles --only_seg --vorbin --voronoi_snr 3
+             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_BPT --only_seg --vorbin --voronoi_snr 3
              run make_diagnostic_maps.py --field Par28 --id 2343 --test_cutout
     Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
@@ -22,6 +24,7 @@ from header import *
 from util import *
 from matplotlib import cm as mpl_cm
 import imageio
+from get_field_stats import get_crossmatch_with_cosmos
 
 start_time = datetime.now()
 
@@ -244,9 +247,10 @@ def plot_binned_profile(df, ax, color='darkorange', yerr=None, xcol='radius', yc
         linefit, linecov = np.polyfit(x_bin_centers, y_binned, 1, cov=True, w=1. / (y_u_binned) ** 2)
         y_fitted = np.poly1d(linefit)(x_bin_centers) # in logspace
         ax.plot(x_bin_centers, y_fitted, color=color, lw=1, ls='dashed')
+        linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
     except Exception:
         print(f'Could not fit radial profile in this case..')
-        linefit, linecov = [np.nan, np.nan], None
+        linefit = np.array([ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)])
 
     # ----------to plot mean binned y vs x profile--------------
     ax.errorbar(x_bin_centers, y_binned, c=color, yerr=y_u_binned, lw=1, ls='none', zorder=1)
@@ -323,9 +327,10 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
             linefit, linecov = np.polyfit(df[xcol], df[ycol], 1, cov=True, w=1. / (df[ycol + '_err']) ** 2 if image_err is not None else None)
             y_fitted = np.poly1d(linefit)(df[xcol])
             ax.plot(df[xcol], y_fitted, color=color, lw=1, ls='dashed')
+            linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
         except Exception:
             print(f'Could not fit radial profile in this case..')
-            linefit, _ = [np.nan, np.nan], None
+            linefit = np.array([ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)])
     else:
         ax, linefit = plot_binned_profile(df, ax, xcol=xcol, ycol=ycol)
 
@@ -409,7 +414,7 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
     else:
         radprof_fit = [np.nan, np.nan] # dummy values for when the fit was not performed
 
-    ax.contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=2)
+    ax.contour(args.segmentation_map != args.id, levels=0, colors='w' if args.fortalk else 'k', extent=args.extent, linewidths=2)
 
     if args.vorbin and args.plot_vorbin and vorbin_ax is not None:
         vorbin_IDs = args.voronoi_bin_IDs
@@ -1069,12 +1074,33 @@ def plot_direct_images_all_filters(full_hdu, args):
 
     # ----------main plots-------------------
     if args.plot_direct_filters:
-        fig, axes = plt.subplots(2, 1 + len(filters_arr), figsize=(8 + 2 * len(filters_arr), 6))
-        fig.subplots_adjust(left=0.06, right=0.97, bottom=0.12, top=0.9, wspace=0.2, hspace=0.1)
+        nrows = 2
+        if args.plot_radial_profiles: nrows += 2
+
+        fig_size_dict = {2: [14, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.2], \
+                         4: [9, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.3]}  # figsize_w, figsize_h, l, r, b, t, ws, hs
+
+        fig, axes = plt.subplots(nrows, 1 + len(filters_arr), figsize=(fig_size_dict[nrows][0], fig_size_dict[nrows][1]))
+
+        if nrows == 2:
+            axes_direct = axes[0, :]
+            axes_ratio = axes[1, :]
+            radprof_axes_direct = np.tile(None, np.shape(axes_direct))
+            radprof_axes_ratio = np.tile(None, np.shape(axes_ratio))
+        else:
+            axes_direct = axes[0, :]
+            radprof_axes_direct = axes[1, :]
+            axes_ratio = axes[2, :]
+            radprof_axes_ratio = axes[3, :]
+
+        fig.subplots_adjust(left=fig_size_dict[nrows][2], right=fig_size_dict[nrows][3], bottom=fig_size_dict[nrows][4], top=fig_size_dict[nrows][5], wspace=fig_size_dict[nrows][6], hspace=fig_size_dict[nrows][7])
+
+        #fig, axes = plt.subplots(2, 1 + len(filters_arr), figsize=(8 + 2 * len(filters_arr), 6))
+        #fig.subplots_adjust(left=0.06, right=0.97, bottom=0.12, top=0.9, wspace=0.2, hspace=0.1)
         limits = [-5, -2]
         cmap = 'viridis'
 
-        axes[0][0], _ = plot_2D_map(direct_map_trimmed, axes[0][0], args, label='From *full.fits', vmin=limits[0], vmax=limits[1], cmap=cmap)
+        axes_direct[0], _ = plot_2D_map(direct_map_trimmed, axes_direct[0], args, label='From *full.fits', vmin=limits[0], vmax=limits[1], cmap=cmap, radprof_ax=radprof_axes_direct[0])
 
     # ---------getting the direct image from cut out-------------
     filter_map_dict = {}
@@ -1082,7 +1108,7 @@ def plot_direct_images_all_filters(full_hdu, args):
         filter_map = get_direct_image_per_filter(full_hdu, filter, target_header, args, plot_test_axes=plot_test_axes if args.test_cutout and index == 0 else None)
         filter_map_dict.update({filter: filter_map})
         if args.plot_direct_filters:
-            axes[0][index + 1], _ = plot_2D_map(filter_map, axes[0][index + 1], args, label=f'{filter}', vmin=limits[0], vmax=limits[1], cmap=cmap, hide_yaxis=True, hide_xaxis=True)
+            axes_direct[index + 1], _ = plot_2D_map(filter_map, axes_direct[index + 1], args, label=f'{filter}', vmin=limits[0], vmax=limits[1], cmap=cmap, hide_yaxis=True, hide_xaxis=True, radprof_ax=radprof_axes_direct[index + 1])
 
     # ---------plotting ratios of direct_images----------------------
     if args.plot_direct_filters:
@@ -1105,8 +1131,9 @@ def plot_direct_images_all_filters(full_hdu, args):
                 ratio_map = np.ma.masked_where(new_mask, ratio_map)
 
             if args.only_seg: ratio_map = cut_by_segment(ratio_map, args)
-            axes[1][index + 1], _ = plot_2D_map(ratio_map, axes[1][index + 1], args, label=f'{num}/{den}', cmap=cmap, hide_yaxis=True, vmin=-1, vmax=1)
-        axes[1][0].set_visible(False)
+            axes_ratio[index + 1], _ = plot_2D_map(ratio_map, axes_ratio[index + 1], args, label=f'{num}/{den}', cmap=cmap, hide_yaxis=True, vmin=-1, vmax=1, radprof_ax=radprof_axes_ratio[index + 1])
+        axes_ratio[0].set_visible(False)
+        if args.plot_radial_profiles: radprof_axes_ratio[0].set_visible(False)
 
     plt.show(block=False)
 
@@ -1123,7 +1150,10 @@ def plot_starburst_map(full_hdu, args):
     if args.plot_snr: nrows += 1
     if args.plot_radial_profiles: nrows += 1
 
-    fig_size_dict = {1: [14, 4, 0.05, 0.97, 0.15, 0.9, 0.2, 0.], 2: [14, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.2], 3: [9, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.3], 4: [9, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.3]} # figsize_w, figsize_h, l, r, b, t, ws, hs
+    fig_size_dict = {1: [14, 4, 0.05, 0.97, 0.15, 0.9, 0.2, 0.], \
+                     2: [14, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.2], \
+                     3: [9, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.3], \
+                     4: [9, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.3]}  # figsize_w, figsize_h, l, r, b, t, ws, hs
 
     fig, axes = plt.subplots(nrows, 3, figsize=(fig_size_dict[nrows][0], fig_size_dict[nrows][1]))
     if nrows > 1:
@@ -1163,11 +1193,13 @@ def plot_starburst_map(full_hdu, args):
     lims = [[-4.5, -2], [-20, -18], [-17, -14]]
 
     # ---------plotting-------------
+    starburst_radfit = []
     for index, ax in enumerate(axes):
         map_err = np.ma.masked_where(maps[index].mask, unp.std_devs(maps[index].data))
-        ax, _ = plot_2D_map(maps[index], ax, args, label=labels[index], cmap='viridis', vmin=lims[index][0], vmax=lims[index][1], radprof_ax=radprof_axes[index], vorbin_ax=vorbin_axes[index] if args.plot_vorbin else None, snr_ax=snr_axes[index] if args.plot_snr else None, image_err=map_err if args.plot_snr else None)
+        ax, radprof_fit = plot_2D_map(maps[index], ax, args, label=labels[index], cmap='viridis', vmin=lims[index][0], vmax=lims[index][1], radprof_ax=radprof_axes[index], vorbin_ax=vorbin_axes[index] if args.plot_vorbin else None, snr_ax=snr_axes[index] if args.plot_snr else None, image_err=map_err if args.plot_snr else None)
+        starburst_radfit.append(radprof_fit)
 
-    return fig, ratio_map
+    return fig, ratio_map, starburst_radfit
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_metallicity_map(full_hdu, args):
@@ -1206,9 +1238,68 @@ def plot_metallicity_map(full_hdu, args):
     return fig, logOH_map
 
 # --------------------------------------------------------------------------------------------------------------------
+def plot_BPT(full_hdu, ax, args, cmap='viridis'):
+    '''
+    Plots spatially resolved BPT diagram based on fluxes from grizli, on an existing axis
+    Then overplots theoretical lines
+    Returns axis handle and the handle of the spatially reslved scatter plot
+    '''
+    print(f'Plotting BPT diagram..')
+
+    # -----------getting the fluxes------------------
+    OIII_map, OIII_wave, OIII_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    Hbeta_map, Hbeta_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
+    SII_map, SII_wave, SII_int, _ = get_emission_line_map('SII', full_hdu, args)
+    Halpha_map, Halpha_wave, Halpha_int, _ = get_emission_line_map('Ha', full_hdu, args)
+
+    try:
+        # -----------integrated-----------------------
+        color = mpl_cm.get_cmap(cmap)(0.5)
+        print(f'Deb1258: cmap={cmap}, color={color}') ##
+
+        y_ratio = unp.log10(OIII_int / Hbeta_int)
+        x_ratio = unp.log10(SII_int / Halpha_int)
+
+        p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
+        ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c=color, fmt='none', lw=2)
+
+        # -----------spatially_resolved-----------------------
+        distance_map = get_distance_map(np.shape(OIII_map), args)
+        distance_map = np.ma.masked_where(False, distance_map)
+
+        y_ratio_mask = (OIII_map.data < 0) | (Hbeta_map.data <= 0) | (~np.isfinite(unp.nominal_values(OIII_map.data))) | (~np.isfinite(unp.nominal_values(Hbeta_map.data)))
+        OIII_map[y_ratio_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        Hbeta_map[y_ratio_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        y_ratio = unp.log10(OIII_map.data / Hbeta_map.data)
+        y_ratio = np.ma.masked_where(y_ratio_mask | OIII_map.mask | Hbeta_map.mask, y_ratio)
+
+        x_ratio_mask = (SII_map.data < 0) | (Halpha_map.data <= 0)| (~np.isfinite(unp.nominal_values(SII_map.data))) | (~np.isfinite(unp.nominal_values(Halpha_map.data)))
+        SII_map[x_ratio_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        Halpha_map[x_ratio_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        x_ratio = unp.log10(SII_map.data / Halpha_map.data)
+        x_ratio = np.ma.masked_where(x_ratio_mask | SII_map.mask | Halpha_map.mask, x_ratio)
+
+        net_mask = y_ratio.mask | x_ratio.mask
+        x_ratio = np.ma.compressed(np.ma.masked_where(net_mask, x_ratio))
+        y_ratio = np.ma.compressed(np.ma.masked_where(net_mask, y_ratio))
+        distance_map = np.ma.compressed(np.ma.masked_where(net_mask, distance_map))
+
+        scatter_plot_handle = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=distance_map, marker='o', s=50, lw=0, cmap=cmap, alpha=0.8)
+        ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c='gray', fmt='none', lw=0.5, alpha=0.1)
+
+    except ValueError:
+        print(f'Galaxy {args.id} in {args.field} has a negative integrated flux in one of the following lines, hence skipping this.')
+        print(f'OIII = {OIII_int}\nHb = {Hbeta_int}\nSII = {SII_int}\nHa = {Halpha_int}\n')
+        scatter_plot_handle = None
+        pass
+
+    return ax, scatter_plot_handle
+
+# --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
+    if args.plot_slope_vs_mass: args.plot_starburst, args.plot_radial_profiles = True, True
 
     # ---------determining filename suffixes-------------------------------
     product_dir = args.input_dir / args.field / 'Products'
@@ -1271,6 +1362,15 @@ if __name__ == "__main__":
                 f'write it in. Either delete/double check the existing file, OR use --clobber to overwrite the '
                 f'existing file. Aborting.')
                 sys.exit()
+
+    # ---------plotting fit vs stellar mass-----------------------------
+    if args.plot_slope_vs_mass:
+        df_starburst_slope = pd.DataFrame(columns=['field', 'objid', 'ra', 'dec', 'redshift', 'F115W_slope', 'Ha_slope', 'Ha/F115W_slope'])
+
+    # ---------plotting spatially resolved BPT-----------------------------
+    if args.plot_BPT:
+        fig, ax = plt.subplots(1, figsize=(8, 6))
+        cmap_arr = ['YlGnBu', 'Reds', 'Greens', 'Purples', 'Greys', 'Oranges', 'Blues']
 
     # ------------looping over the provided object IDs-----------------------
     for index, args.id in enumerate(args.id_arr):
@@ -1357,13 +1457,23 @@ if __name__ == "__main__":
             main_text = 'direct_filter_images' if args.plot_direct_filters else 'cutout_tests'
             figname = fig_dir / f'{args.field}_{args.id:05d}_{main_text}{only_seg_text}{vorbin_text}.png'
 
+        # ---------plotting spatially resolved BPT-----------------------------
+        elif args.plot_BPT:
+            ax, scatter_plot_handle = plot_BPT(full_hdu, ax, args, cmap=cmap_arr[index])
+
         # ---------initialising the starburst figure------------------------------
         elif args.plot_starburst:
-            fig, ratio_map = plot_starburst_map(full_hdu, args)
+            fig, ratio_map, starburst_radfit = plot_starburst_map(full_hdu, args)
 
             # ---------decorating and saving the figure------------------------------
             fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
             figname = fig_dir / f'{args.field}_{args.id:05d}_starburst_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}.png'
+
+            # ---------plotting fit vs stellar mass-----------------------------
+            if args.plot_slope_vs_mass:
+                this_row = np.hstack(([args.field, args.id, full_hdu[0].header['RA'], full_hdu[0].header['DEC'], args.z], np.array(starburst_radfit)[:, 0]))
+                this_df = pd.DataFrame(dict(map(lambda i, j: (i, [j]), df_starburst_slope.columns, this_row)))
+                df_starburst_slope = pd.concat([df_starburst_slope, this_df])
 
         # ---------initialising the metallicity figure------------------------------
         elif args.plot_metallicity:
@@ -1435,17 +1545,18 @@ if __name__ == "__main__":
             figname = fig_dir / f'{args.field}_{args.id:05d}_{description_text}{vorbin_text}.png'
 
         # --------for talk plots--------------
-        if args.fortalk:
-            mplcyberpunk.add_glow_effects()
-            try: mplcyberpunk.make_lines_glow()
-            except: pass
-            try: mplcyberpunk.make_scatter_glow()
-            except: pass
+        if not args.plot_BPT:
+            if args.fortalk:
+                mplcyberpunk.add_glow_effects()
+                try: mplcyberpunk.make_lines_glow()
+                except: pass
+                try: mplcyberpunk.make_scatter_glow()
+                except: pass
 
-        fig.savefig(figname, transparent=args.fortalk)
-        print(f'Saved figure at {figname}')
-        if args.hide: plt.close('all')
-        else: plt.show(block=False)
+            fig.savefig(figname, transparent=args.fortalk)
+            print(f'Saved figure at {figname}')
+            if args.hide: plt.close('all')
+            else: plt.show(block=False)
 
         # ------------------making animation--------------------------
         if args.make_anim:
@@ -1481,7 +1592,7 @@ if __name__ == "__main__":
                 else:
                     measured_quants += [np.nan]
                 if quantity + '_radfit' in locals():
-                    measured_quants += [locals()[quantity + '_radfit'][0], locals()[quantity + '_radfit'][1]]
+                    measured_quants += [locals()[quantity + '_radfit'][0].n, locals()[quantity + '_radfit'][1].n]
                 else:
                     measured_quants += [np.nan, np.nan]
 
@@ -1499,5 +1610,62 @@ if __name__ == "__main__":
                 print(f'Appended to catalog file {outfilename}')
 
         print(f'Completed id {args.id} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(args.id_arr) - index - 1} to go!')
+
+    # ---------plotting spatially resolved BPT-----------------------------
+    if args.plot_BPT:
+        # ---------annotate axes-------
+        cbar = plt.colorbar(scatter_plot_handle)
+        cbar.set_label('Distance (kpc)')
+
+        ax.set_xlim(-2, 1)
+        ax.set_ylim(-1, 2)
+        ax.set_xlabel(f'log (SII 6717/Halpha)')
+        ax.set_ylabel(f'log (OIII 5007/Hbeta)')
+
+        # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
+        x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
+        y = 1.3 + 0.72 / (x - 0.32)  # Eq 6 of K01
+        ax.plot(x, y, c='w' if args.fortalk else 'k', ls='dashed', lw=2, label='Kewley+2001')
+        plt.legend()
+        fig.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
+
+        # -----------save figure----------------
+        figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_BPT{only_seg_text}{vorbin_text}.png'
+        fig.savefig(figname, transparent=args.fortalk)
+        print(f'Saved figure at {figname}')
+        plt.show(block=False)
+
+    # -----------plotting F115W/Ha slope vs stellar mass--------------
+    if args.plot_slope_vs_mass:
+        print(f'Now plotting fit slopess vs stellar mass..')
+        df_starburst_slope = get_crossmatch_with_cosmos(df_starburst_slope, args)
+        df_starburst_slope['redshift'] = df_starburst_slope['redshift'].astype(np.float32)
+
+        # -----------plotting stuff with the resultant intersecting dataframe--------
+        fig, ax = plt.subplots(1, figsize=(8, 6))
+        fig.subplots_adjust(left=0.1, right=0.85, bottom=0.1, top=0.95)
+        figname = fig_dir / f'{args.field}_lp_mass_vs_ha-f115w_slope{snr_text}{only_seg_text}{vorbin_text}.png'
+
+        # ---------SFMS from df-------
+        p = ax.scatter(df_starburst_slope['lp_mass'].values, unp.nominal_values(df_starburst_slope['Ha/F115W_slope'].values), c=df_starburst_slope['redshift'].values, marker='s', s=100, lw=1, edgecolor='k')
+        ax.errorbar(df_starburst_slope['lp_mass'].values, unp.nominal_values(df_starburst_slope['Ha/F115W_slope'].values), yerr=unp.std_devs(df_starburst_slope['Ha/F115W_slope'].values), c='gray', fmt='none', lw=1)
+        cbar = plt.colorbar(p)
+        cbar.set_label('Redshift')
+
+        # ---------annotate axes and save figure-------
+        ax.set_xlabel(r'log M$_*$/M$_{\odot}$')
+        ax.set_ylabel(r'H$_\alpha$/F115W slope')
+
+        # --------for talk plots--------------
+        if args.fortalk:
+            mplcyberpunk.add_glow_effects()
+            try: mplcyberpunk.make_lines_glow()
+            except: pass
+            try: mplcyberpunk.make_scatter_glow()
+            except: pass
+
+        fig.savefig(figname, transparent=args.fortalk)
+        print(f'\nSaved figure as {figname}')
+        plt.show(block=False)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
