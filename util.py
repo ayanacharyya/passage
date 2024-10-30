@@ -123,6 +123,7 @@ def parse_args():
 
     # ------- args added for make_passage_plots.py ------------------------------
     parser.add_argument('--plot_BPT', dest='plot_BPT', action='store_true', default=False, help='Plot BPT? Default is no.')
+    parser.add_argument('--plot_separately', dest='plot_separately', action='store_true', default=False, help='Plot BPTs separetly for each object? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()

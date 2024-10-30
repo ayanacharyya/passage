@@ -15,7 +15,7 @@
              run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_slope_vs_mass --vorbin --voronoi_snr 3 --only_seg
              run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1588,2195,2343 --plot_metallicity --vorbin --voronoi_snr 3 --plot_radial_profile --only_seg
              run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_direct_filters --plot_radial_profiles --only_seg --vorbin --voronoi_snr 3
-             run make_diagnostic_maps.py --field Par28 --id 58,646,1457,1585,1588,2195,2343 --plot_BPT --only_seg --vorbin --voronoi_snr 3
+             run make_diagnostic_maps.py --field Par28 --id 646,1457,1585,1588,2195,2343 --plot_BPT --only_seg --vorbin --voronoi_snr 3 --plot_separately
              run make_diagnostic_maps.py --field Par28 --id 2343 --test_cutout
     Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
@@ -1245,6 +1245,8 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis'):
     Returns axis handle and the handle of the spatially reslved scatter plot
     '''
     print(f'Plotting BPT diagram..')
+    if args.plot_separately:
+        fig_indiv, ax_indiv = plt.subplots(1, figsize=(8, 6))
 
     # -----------getting the fluxes------------------
     OIII_map, OIII_wave, OIII_int, _ = get_emission_line_map('OIII', full_hdu, args)
@@ -1263,9 +1265,14 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis'):
         p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
         ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c=color, fmt='none', lw=2)
 
+        if args.plot_separately:
+            p = ax_indiv.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
+            ax_indiv.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c=color, fmt='none', lw=2)
+
         # -----------spatially_resolved-----------------------
         distance_map = get_distance_map(np.shape(OIII_map), args)
         distance_map = np.ma.masked_where(False, distance_map)
+        if args.vorbin: distance_map = bin_2D(distance_map, args.voronoi_bin_IDs)
 
         y_ratio_mask = (OIII_map.data < 0) | (Hbeta_map.data <= 0) | (~np.isfinite(unp.nominal_values(OIII_map.data))) | (~np.isfinite(unp.nominal_values(Hbeta_map.data)))
         OIII_map[y_ratio_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
@@ -1284,14 +1291,46 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis'):
         y_ratio = np.ma.compressed(np.ma.masked_where(net_mask, y_ratio))
         distance_map = np.ma.compressed(np.ma.masked_where(net_mask, distance_map))
 
-        scatter_plot_handle = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=distance_map, marker='o', s=50, lw=0, cmap=cmap, alpha=0.8)
-        ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c='gray', fmt='none', lw=0.5, alpha=0.1)
+        df = pd.DataFrame({'log_sii/ha': unp.nominal_values(x_ratio).flatten(), 'log_sii/ha_err': unp.std_devs(x_ratio).flatten(), 'log_oiii/hb': unp.nominal_values(y_ratio).flatten(), 'log_oiii/hb_err':  unp.std_devs(y_ratio).flatten(), 'distance': distance_map.flatten()})
+        df = df.sort_values(by='distance')
+        df = df.drop_duplicates().reset_index(drop=True)
+
+        scatter_plot_handle = ax.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df['distance'], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0, vmax=6)
+        ax.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
+
+        if args.plot_separately:
+            scatter_plot_handle_indiv = ax_indiv.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df['distance'], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8)
+            ax_indiv.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
 
     except ValueError:
         print(f'Galaxy {args.id} in {args.field} has a negative integrated flux in one of the following lines, hence skipping this.')
         print(f'OIII = {OIII_int}\nHb = {Hbeta_int}\nSII = {SII_int}\nHa = {Halpha_int}\n')
         scatter_plot_handle = None
         pass
+
+    if args.plot_separately:
+        # ---------annotate axes-------
+        cbar = plt.colorbar(scatter_plot_handle_indiv)
+        cbar.set_label('Distance (kpc)')
+
+        ax_indiv.set_xlim(-2, 0.3)
+        ax_indiv.set_ylim(-1, 2)
+        ax_indiv.set_xlabel(f'log (SII 6717/Halpha)')
+        ax_indiv.set_ylabel(f'log (OIII 5007/Hbeta)')
+
+        # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
+        x = np.linspace(ax_indiv.get_xlim()[0], ax_indiv.get_xlim()[1], 100)
+        y = 1.3 + 0.72 / (x - 0.32)  # Eq 6 of K01
+        ax_indiv.plot(x, y, c='w' if args.fortalk else 'k', ls='dashed', lw=2, label='Kewley+2001')
+        plt.legend()
+        fig_indiv.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
+        fig_indiv.text(0.15, 0.9, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+
+        # -----------save figure----------------
+        figname = fig_dir / f'{args.field}_{args.id:05d}_BPT{snr_text}{only_seg_text}{vorbin_text}.png'
+        fig_indiv.savefig(figname, transparent=args.fortalk)
+        print(f'Saved figure at {figname}')
+        plt.show(block=False)
 
     return ax, scatter_plot_handle
 
@@ -1370,7 +1409,7 @@ if __name__ == "__main__":
     # ---------plotting spatially resolved BPT-----------------------------
     if args.plot_BPT:
         fig, ax = plt.subplots(1, figsize=(8, 6))
-        cmap_arr = ['YlGnBu', 'Reds', 'Greens', 'Purples', 'Greys', 'Oranges', 'Blues']
+        cmap_arr = ['Reds_r', 'Greens_r', 'Purples_r', 'Greys_r', 'Oranges_r', 'Blues_r', 'YlGnBu_r']
 
     # ------------looping over the provided object IDs-----------------------
     for index, args.id in enumerate(args.id_arr):
@@ -1612,7 +1651,7 @@ if __name__ == "__main__":
         print(f'Completed id {args.id} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(args.id_arr) - index - 1} to go!')
 
     # ---------plotting spatially resolved BPT-----------------------------
-    if args.plot_BPT:
+    if args.plot_BPT and not (args.plot_separately and len(args.id_arr) == 1):
         # ---------annotate axes-------
         cbar = plt.colorbar(scatter_plot_handle)
         cbar.set_label('Distance (kpc)')
@@ -1628,9 +1667,10 @@ if __name__ == "__main__":
         ax.plot(x, y, c='w' if args.fortalk else 'k', ls='dashed', lw=2, label='Kewley+2001')
         plt.legend()
         fig.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
+        fig.text(0.15, 0.9, f'{args.field}: IDs {",".join(np.array(args.id_arr).astype(str))}', fontsize=args.fontsize, c='k', ha='left', va='top')
 
         # -----------save figure----------------
-        figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_BPT{only_seg_text}{vorbin_text}.png'
+        figname = fig_dir / f'{args.field}_{",".join(np.array(args.id_arr).astype(str))}_BPT{snr_text}{only_seg_text}{vorbin_text}.png'
         fig.savefig(figname, transparent=args.fortalk)
         print(f'Saved figure at {figname}')
         plt.show(block=False)
