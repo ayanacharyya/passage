@@ -1031,7 +1031,7 @@ def get_direct_image_per_filter(full_hdu, filter, target_header, args, plot_test
     pos = SkyCoord(*(pos * u.deg), frame='fk5')
 
     # ---------making cut outs-------------
-    drizzled_image_filename = glob.glob(str(args.input_dir / args.field / f'Products/{args.field}*{filter.lower()}-clear_drz_sci.fits'))[0]
+    drizzled_image_filename = glob.glob(str(args.input_dir / args.field / f'Products/{args.field}*{filter.lower()}_drz_sci.fits'))[0]
     direct_map = get_cutout(drizzled_image_filename, pos, size, target_header, args, plot_test_axes=plot_test_axes)
     direct_map_wht = get_cutout(drizzled_image_filename.replace('sci', 'wht'), pos, size, target_header, args)
 
