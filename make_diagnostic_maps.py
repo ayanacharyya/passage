@@ -1387,7 +1387,7 @@ if __name__ == "__main__":
     if args.write_file:
         basic_cols = ['field', 'objid', 'ra', 'dec', 'redshift']
         flag_cols = ['radfit_extent_kpc', 'snr_cut', 'flag_only_seg', 'flag_vorbin', 'vor_snr', 'vor_line']
-        cols_in_df = np.hstack([basic_cols, flag_cols, np.hstack([[item + '_int', item + '_EW'] for item in all_lines_to_consider]), np.hstack([[item + '_int', item + '_cen', item + '_slope'] for item in measured_quantities_to_plot])])
+        cols_in_df = np.hstack([basic_cols, flag_cols, np.hstack([[item + '_int', item + '_int_u', item + '_EW', item + '_EW_u'] for item in all_lines_to_consider]), np.hstack([[item + '_int', item + '_cen', item + '_slope'] for item in measured_quantities_to_plot])])
         df = pd.DataFrame(columns=cols_in_df)
 
         # -------checking if about to write the same columns-----------
@@ -1612,16 +1612,18 @@ if __name__ == "__main__":
                 try:
                     line_index = np.where(args.available_lines == line)[0][0]
                     flux = full_hdu[0].header[f'FLUX{line_index + 1:03d}']
-                    line_properties += [flux]
+                    flux_err = full_hdu[0].header[f'ERR{line_index + 1:03d}']
+                    line_properties += [flux, flux_err]
                 except IndexError:
-                    line_properties += [np.nan]
+                    line_properties += [np.nan, np.nan]
                 try:
                     line_index = np.where(args.available_lines == line)[0][0]
                     line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
                     ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}']
-                    line_properties += [ew]
+                    ew_err = (full_hdu[2].header[f'EW84_{line_index_in_cov:03d}'] - full_hdu[2].header[f'EW16_{line_index_in_cov:03d}']) / 2
+                    line_properties += [ew, ew_err]
                 except IndexError:
-                    line_properties += [np.nan]
+                    line_properties += [np.nan, np.nan]
 
             # -------collating all the measured quantities----------
             measured_quants = []

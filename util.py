@@ -114,6 +114,8 @@ def parse_args():
     parser.add_argument('--plot_EW_hist', dest='plot_EW_hist', action='store_true', default=False, help='Plot EW histograms for each line? Default is no.')
     parser.add_argument('--clobber_venn_df', dest='clobber_venn_df', action='store_true', default=False, help='Over-write existing dataframe which is a result of intersection of Venn diagram? Default is no.')
     parser.add_argument('--a_thresh', metavar='a_thresh', type=float, action='store', default=2.4, help='a_image (semi-major axis in pixels) threshold to consider good detection for emission line maps; default is 2.4')
+    parser.add_argument('--plot_pie', dest='plot_pie', action='store_true', default=False, help='Plot pie chart instead of Venn diagram? Default is no.')
+    parser.add_argument('--plot_sunburst', dest='plot_sunburst', action='store_true', default=False, help='Plot sunburst chart instead of Venn diagram? Default is no.')
 
     # ------- args added for make_cosmos_plots.py ------------------------------
     parser.add_argument('--xcol', metavar='xcol', type=str, action='store', default='lp_mass_best', help='Column name in COSMOS2020 catalog to be used as the quantity on x-axis? Default is lp_mass_best')
@@ -124,6 +126,7 @@ def parse_args():
     # ------- args added for make_passage_plots.py ------------------------------
     parser.add_argument('--plot_BPT', dest='plot_BPT', action='store_true', default=False, help='Plot BPT? Default is no.')
     parser.add_argument('--plot_separately', dest='plot_separately', action='store_true', default=False, help='Plot BPTs separetly for each object? Default is no.')
+    parser.add_argument('--plot_flux_vs_mag', dest='plot_flux_vs_mag', action='store_true', default=False, help='Plot line flux vs mag for each object? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()

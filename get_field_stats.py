@@ -10,6 +10,9 @@
              run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_conditions EW,mag,compact
              run get_field_stats.py --mag_lim 24 --EW_thresh 300 --log_SFR_thresh 0 --line_list OIII,Ha --do_all_fields --plot_conditions EW,mag,PA,mass
              run get_field_stats.py --line_list OIII,Ha --do_all_fields --plot_conditions EW,mass,PA,a_image --clobber_venn
+             run get_field_stats.py --line_list Ha --do_all_fields --plot_conditions has,PA --clobber_venn
+             run get_field_stats.py --line_list Ha --do_all_fields --plot_pie
+             run get_field_stats.py --line_list Ha --do_all_fields --plot_sunburst
 '''
 from header import *
 from util import *
@@ -103,6 +106,17 @@ def plot_venn(df, args):
     condition = df['nPA'] == 2
     set_arr, label_arr = make_set(df, condition, '#PA = 2', set_arr, label_arr)
 
+    # ------add number of filter sets-----------
+    if 'filters' in df:
+        filter_arr = ['F200W', 'F150W', 'F115W']
+
+        for index, filter in enumerate(filter_arr):
+            condition = df['n_filters'] == index + 1
+            set_arr, label_arr = make_set(df, condition, f'n_filters = {index + 1}', set_arr, label_arr)
+
+            condition = df['filters'].str.contains(filter)
+            set_arr, label_arr = make_set(df, condition, f'has {filter}', set_arr, label_arr)
+
     # ---------add sets from visual inspection------------
     if 'Notes' in df:
         print('\n')
@@ -144,6 +158,17 @@ def plot_venn(df, args):
     colors = generate_colors(cmap=cmap, n_colors=len(label_arr))
     ax = draw_venn(petal_labels=petal_labels, dataset_labels=dataset_dict.keys(), hint_hidden=False, colors=colors, figsize=(8, 6), fontsize=args.fontsize, legend_loc='lower left', ax=None)
 
+    # ---------printing the conditions for each non-zero petal label----------
+    print('\n')
+    for index in range(len(petal_labels.keys())):
+        if list(petal_labels.values())[index] != '':
+            bool_arr = list(petal_labels.keys())[index]
+            cond_arr = []
+            for index2 in range(len(bool_arr)):
+                if int(bool_arr[index2]) == 1:
+                    cond_arr.append(label_arr[index2])
+            print(f'{int(list(petal_labels.values())[index])} objects in: {" and ".join(cond_arr)}')
+
     # -------calling the wrapper function, with automatic petal labelling (as opposed to manual calling above) but then 0 counts are displayed as such-------
     #ax = venn(dataset_dict, cmap=cmap, fmt='{size}', fontsize=8, legend_loc='upper left', ax=None)
 
@@ -151,7 +176,7 @@ def plot_venn(df, args):
     fig = ax.figure
     fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
     fig.text(0.99, 0.99, f'Total {n_fields} fields: Par{args.field_text}\nTotal {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes)
-    figname = args.output_dir / f'Par{args.field_text}_venn_diagram.png'
+    figname = args.output_dir / f'Par{args.field_text}_venn_diagram_{",".join(args.plot_conditions)}.png'
 
     # --------for talk plots--------------
     if args.fortalk:
@@ -179,6 +204,106 @@ def plot_venn(df, args):
 
     return df_int
 
+# -------------------------------------------------------------------------------------------------------
+def plot_nested_pie(df_subset, args, outer_col='nPA', inner_col='filters'):
+    '''
+    To plot concentric pie chart given a df, for a bunch of criteria
+    Plots and saves the figure
+    '''
+
+    # -----------setting up dataframe--------
+    n_fields = len(pd.unique(df_subset['field']))
+    df_subset['nPA'] = df_subset['nPA'].apply(lambda x: f'{x} PA' if x <= 1 else f'{x} PAs')
+    df = df_subset.pivot_table('par_obj', [outer_col, inner_col], aggfunc='count').reset_index()
+    n_outer = len(pd.unique(df[outer_col]))
+    n_inner = df.groupby(outer_col).size().values
+
+    # ------------determining pie values-----------
+    size = 0.3
+    vals = df['par_obj'].values
+    group_sum = df.groupby(outer_col).sum()['par_obj'].values # Major category values = sum of minor category values
+
+    # -----------determining labels to be displayed------------
+    outer_labels = pd.unique(df[outer_col])
+    inner_labels = np.hstack([df[df[outer_col] == item][inner_col].values for item in pd.unique(df[outer_col])])
+
+    # ----------determining colorbars------------
+    color_stretch_arr = np.linspace(0.5, 0.1, 5)
+    cmap_arr = [plt.cm.spring, plt.cm.summer, plt.cm.autumn, plt.cm.winter, plt.cm.pink]
+    outer_colors = [item(0.6) for item in cmap_arr[:n_outer]]
+    inner_colors = np.vstack([[cmap_arr[item](index) for index in color_stretch_arr[:n_inner[item]]] for item in range(n_outer)])
+
+    # -------------function to format label inside wedges--------------
+    def func(pct, allvals):
+        absolute = int(pct / 100. * np.sum(allvals))
+        return f'{pct :.1f}%\n({absolute:d})'
+
+    # -----------function to plot one ring of the pie chart------------------
+    def plot_pie_ring(ax, vals, radius, colors, labels, size):
+        wedges, texts, counts = ax.pie(vals, radius=radius, colors=colors, labels=labels, autopct=lambda pct: func(pct, vals), wedgeprops=dict(width=size, edgecolor='w'))
+
+        for text, count, wedge in zip(texts, counts, wedges):
+            angle = np.mean([wedge.theta1, wedge.theta2])
+            r = wedge.r - wedge.width / 2  # convert polar to cartesian
+            x = r * np.cos(np.deg2rad(angle))  #
+            y = r * np.sin(np.deg2rad(angle))  #
+            text.set_x(x)
+            text.set_y(y)
+            text.set_rotation(angle - 90)
+
+            r = wedge.r - wedge.width / 2 - 0.07  # convert polar to cartesian
+            x = r * np.cos(np.deg2rad(angle))  #
+            y = r * np.sin(np.deg2rad(angle))  #
+            count.set_x(x)
+            count.set_y(y - 0.05)
+            count.set_rotation(angle - 90)
+
+        return ax
+
+    # -----------plotting------------------
+    fig, ax = plt.subplots(figsize=(8, 6))
+    #ax = plot_pie_ring(ax, group_sum, 1, outer_colors, outer_labels, size)
+    #ax = plot_pie_ring(ax, vals, 1-size, inner_colors, inner_labels, 1-size)
+    ax = plot_pie_ring(ax, group_sum, 1-size, outer_colors, outer_labels, 1-size)
+    ax = plot_pie_ring(ax, vals, 1, inner_colors, inner_labels, size)
+
+    # ----------annotate and save the diagram----------
+    fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
+    fig.text(0.99, 0.99, f'Total {n_fields} fields: Par{args.field_text}\nTotal {len(df_subset)} objects', c='k', ha='right', va='top', transform=ax.transAxes)
+    figname = args.output_dir / f'Par{args.field_text}_pie_diagram.png'
+
+    # --------for talk plots--------------
+    if args.fortalk:
+        mplcyberpunk.add_glow_effects()
+        try: mplcyberpunk.make_lines_glow()
+        except: pass
+        try: mplcyberpunk.make_scatter_glow()
+        except: pass
+
+    fig.savefig(figname, transparent=args.fortalk)
+    print(f'\nSaved figure as {figname}')
+    plt.show(block=False)
+
+    return
+
+# -------------------------------------------------------------------------------------------------------
+def plot_sunburst_pie(df, args, outer_col='nPA', inner_col='filters'):
+    '''
+    To plot concentric pie chart given a df, for a bunch of criteria
+    Plots and saves the figure
+    '''
+    df['count'] = 1
+    df['nPA'] = df['nPA'].apply(lambda x: f'{x} PA' if x <= 1 else f'{x} PAs')
+    fig = px.sunburst(df, path=[inner_col, outer_col], values='count', hover_data=['count'])
+    fig.update_traces(textinfo='label+value+percent entry', texttemplate='<b>%{label}</b><br>(%{value})<br>%{percentEntry:.1%}')
+
+    # ----------annotate and save the diagram----------
+    figname = args.output_dir / f'Par{args.field_text}_sunburst_diagram.pdf'
+    fig.write_image(figname)
+    print(f'\nSaved figure as {figname}')
+    #fig.show()
+
+    return fig
 
 # -------------------------------------------------------------------------------------------------------
 def get_detection_fraction(df, line, args):
@@ -324,7 +449,7 @@ def get_crossmatch_with_cosmos(df, args):
     '''
     df = df.copy()
     fields = pd.unique(df['field'])
-    df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)  # making a unique combination of field and object id
+    if 'par_obj' not in df: df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)  # making a unique combination of field and object id
     df = df.drop_duplicates('par_obj', keep='last')
 
     # -------collating only those COSMOS objects that lie within the FoV of available PASSAGE fields------
@@ -448,17 +573,29 @@ if __name__ == "__main__":
         has_fields.sort(key=natural_keys)
         args.field_text = ','.join(has_fields)
 
+        # ------------adding some common columns before crossmatching--------------------
+        df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)  # making a unique combination of field and object id
+        df = df.drop_duplicates('par_obj', keep='last')
+        df['filters'] = df['field'].map(lambda x: ','.join(available_filters_for_field_dict[x]))
+        df['n_filters'] = df['filters'].map(lambda x: len(x.split(',')))
+
         # ------------merging cosmos datasets for the venn diagrams--------------------
         conditions_from_cosmos = ['mass', 'sfr', 'sSFR']
         if len(set(conditions_from_cosmos).intersection(set(args.plot_conditions))) > 0:
             df = get_crossmatch_with_cosmos(df, args)
 
-        # ------------doing the venn diagrams--------------------
-        df_int = plot_venn(df, args)
+        # ------------doing the pie charts--------------------
+        if args.plot_pie:
+            plot_nested_pie(df, args, outer_col='filters', inner_col='nPA')
+        elif args.plot_sunburst:
+            fig = plot_sunburst_pie(df, args, outer_col='nPA', inner_col='filters')
+        else:
+            # ------------doing the venn diagrams--------------------
+            df_int = plot_venn(df, args)
 
-        # ------------saving the resultant intersecting dataframe--------------------
-        df_int.to_csv(df_outfilename, index=None)
-        print(f'Saved intersecting dataframe as {df_outfilename}')
+            # ------------saving the resultant intersecting dataframe--------------------
+            df_int.to_csv(df_outfilename, index=None)
+            print(f'Saved intersecting dataframe as {df_outfilename}')
 
     else:
         print(f'Reading from existing {df_outfilename}')

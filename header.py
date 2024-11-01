@@ -46,6 +46,7 @@ import requests
 from urllib.parse import quote as urlencode
 from mastquery import utils as mastutils
 from mastquery import query
+import plotly.express as px
 
 import matplotlib
 from matplotlib import pyplot as plt

@@ -6,6 +6,7 @@
     Example: run make_passage_plots.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
              run make_passage_plots.py --plot_conditions EW,mass,PA --xcol lp_mass --ycol lp_SFR --colorcol OIII_EW
              run make_passage_plots.py --plot_conditions EW,mass,PA,a_image --plot_BPT
+             run make_passage_plots.py --plot_flux_vs_mag
 '''
 
 from header import *
@@ -144,6 +145,39 @@ def plot_BPT(objid_arr, ax, args):
     ax.set_ylabel(f'log ({y_num}/{y_den})')
 
     return ax
+# --------------------------------------------------------------------------------------------------------------------
+def plot_flux_vs_mag(ax, args):
+    '''
+    Plots line flux vs magnitude based on integrated fluxes from grizli
+    Returns axis handle
+    '''
+    df_filename = args.output_dir / f'all_fields_diag_results.txt'
+    df = pd.read_table(df_filename)
+
+    xcol, ycol1, ycol2, colorcol = 'mag', 'OIII_int', 'Ha_int', 'redshift'
+    size = 5
+
+    p = ax.scatter(df[xcol], np.log10(df[ycol1]), c=df[colorcol], cmap='Greens', s=size, lw=0, label=ycol1[:-4])
+    #p = ax.scatter(df[xcol], np.log10(df[ycol2]), c=df[colorcol], cmap='Reds', s=size, lw=0, label=ycol2[:-4])
+    plt.legend()
+    cbar = plt.colorbar(p)
+    cbar.set_label(colorcol)
+
+    try:
+        df = df.dropna(subset=[xcol, ycol1, ycol2, colorcol], axis='rows')
+        plt.tricontour(df[xcol], np.log10(df[ycol1]), df[colorcol], 15, lw=2, colors='g')
+        plt.tricontourf(df[xcol], np.log10(df[ycol2]), df[colorcol], 15, lw=2, colors='r')
+    except:
+        pass
+
+    ax.set_xlim(32, 17)
+    ax.set_ylim(-20, -12)
+
+    ax.set_xlabel('Magnitude AUTO (from photcat)')
+    ax.set_ylabel('log (Line flux ergs/s/cm^2)')
+
+    return ax
+
 
 # --------------------------------------------------------------------------------------------------------------------
 label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$', 'lp_SFR': r'log SFR (M$_{\odot}$/yr)', 'ez_z_phot': 'Redshift', 'redshift': 'Redshift'}
@@ -161,40 +195,47 @@ if __name__ == "__main__":
     # args.cmin, args.cmax = bounds_dict[args.colorcol]
     # args.colormap = colormap_dict[args.colorcol]
 
-    # -------reading in dataframe produced by get_field_stats.py----------------
-    df_infilename = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df.txt'
-    df = pd.read_csv(df_infilename)
-
-    # -----------plotting stuff with the resultant intersecting dataframe--------
+   # -----------plotting stuff with the resultant intersecting dataframe--------
     fig, ax = plt.subplots(1, figsize=(8, 6))
-    fig.subplots_adjust(left=0.1, right=0.85, bottom=0.1, top=0.95)
-    if args.plot_BPT:
-        figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_BPT.png'
-        df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)  # making a unique combination of field and object id
-        objid_arr = df['par_obj'].values
-        ax = plot_BPT(objid_arr, ax, args)
+    fig.subplots_adjust(left=0.1, right=0.98 if args.plot_flux_vs_mag else 0.85, bottom=0.1, top=0.95)
+
+    # ---------flux vs mag for full sample------
+    if args.plot_flux_vs_mag:
+        figname = args.output_dir / f'allpar_flux_vs_mag.png'
+        ax = plot_flux_vs_mag(ax, args)
 
     else:
-        figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
+        # -------reading in dataframe produced by get_field_stats.py----------------
+        df_infilename = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df.txt'
+        df = pd.read_csv(df_infilename)
 
-        # ---------SFMS from df-------
-        p = ax.scatter(df[args.xcol], df[args.ycol], c=df[args.colorcol], marker='s', s=100, lw=1, edgecolor='k')
-        cbar = plt.colorbar(p)
-        cbar.set_label(label_dict[args.colorcol] if args.colorcol in label_dict else args.colorcol)
+        if args.plot_BPT:
+            figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_BPT.png'
+            df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)  # making a unique combination of field and object id
+            objid_arr = df['par_obj'].values
+            ax = plot_BPT(objid_arr, ax, args)
 
-        # ---------SFMS from literature-------
-        if args.xcol == 'lp_mass' and args.ycol == 'lp_SFR':
-            ax = plot_SFMS_Popesso22(ax, 1.8, color='cornflowerblue')
-            ax = plot_SFMS_Popesso22(ax, 1.2, color='darkblue')
+        else:
+            figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
 
-        # ---------MZR from literature-------
-        if args.xcol == 'lp_mass' and 'logOH' in args.ycol:
-            ax = plot_MZR_literature(ax)
+            # ---------SFMS from df-------
+            p = ax.scatter(df[args.xcol], df[args.ycol], c=df[args.colorcol], marker='s', s=100, lw=1, edgecolor='k')
+            cbar = plt.colorbar(p)
+            cbar.set_label(label_dict[args.colorcol] if args.colorcol in label_dict else args.colorcol)
 
-        # ---------annotate axes and save figure-------
-        plt.legend()
-        ax.set_xlabel(label_dict[args.xcol] if args.xcol in label_dict else args.xcol)
-        ax.set_ylabel(label_dict[args.ycol] if args.ycol in label_dict else args.ycol)
+            # ---------SFMS from literature-------
+            if args.xcol == 'lp_mass' and args.ycol == 'lp_SFR':
+                ax = plot_SFMS_Popesso22(ax, 1.8, color='cornflowerblue')
+                ax = plot_SFMS_Popesso22(ax, 1.2, color='darkblue')
+
+            # ---------MZR from literature-------
+            if args.xcol == 'lp_mass' and 'logOH' in args.ycol:
+                ax = plot_MZR_literature(ax)
+
+            # ---------annotate axes and save figure-------
+            plt.legend()
+            ax.set_xlabel(label_dict[args.xcol] if args.xcol in label_dict else args.xcol)
+            ax.set_ylabel(label_dict[args.ycol] if args.ycol in label_dict else args.ycol)
 
     # --------for talk plots--------------
     if args.fortalk:
