@@ -156,15 +156,24 @@ def plot_flux_vs_mag(ax, args):
 
     xcol, ycol1, ycol2, colorcol = 'mag', 'OIII_int', 'Ha_int', 'redshift'
     size = 5
+    limit = -10.5
 
-    p = ax.scatter(df[xcol], np.log10(df[ycol1]), c=df[colorcol], cmap='Greens', s=size, lw=0, label=ycol1[:-4])
-    #p = ax.scatter(df[xcol], np.log10(df[ycol2]), c=df[colorcol], cmap='Reds', s=size, lw=0, label=ycol2[:-4])
+    df[ycol1[:-4] + '_limit'] = df[xcol] + 2.5 * np.log10(df[ycol1])
+    df[ycol2[:-4] + '_limit'] = df[xcol] + 2.5 * np.log10(df[ycol2])
+    df = df.dropna(subset=[xcol, ycol1, ycol2, colorcol], axis='rows')
+    #df = df[df['field'] == 'Par061']
+
+    df1 = df[df[ycol1[:-4] + '_limit'] < limit]
+    #p = ax.scatter(df1[xcol], np.log10(df1[ycol1]), c=df1[colorcol], cmap='Greens', s=size, lw=0, label=f'{ycol1[:-4]}, total {len(df1)}')
+
+    df2 = df[df[ycol2[:-4] + '_limit'] < limit]
+    p = ax.scatter(df2[xcol], np.log10(df2[ycol2]), c=df2[colorcol], cmap='Reds', s=size, lw=0, label=f'{ycol2[:-4]}, total {len(df2)}')
+
     plt.legend()
     cbar = plt.colorbar(p)
     cbar.set_label(colorcol)
 
     try:
-        df = df.dropna(subset=[xcol, ycol1, ycol2, colorcol], axis='rows')
         plt.tricontour(df[xcol], np.log10(df[ycol1]), df[colorcol], 15, lw=2, colors='g')
         plt.tricontourf(df[xcol], np.log10(df[ycol2]), df[colorcol], 15, lw=2, colors='r')
     except:

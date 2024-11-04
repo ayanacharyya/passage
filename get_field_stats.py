@@ -576,7 +576,7 @@ if __name__ == "__main__":
         # ------------adding some common columns before crossmatching--------------------
         df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)  # making a unique combination of field and object id
         df = df.drop_duplicates('par_obj', keep='last')
-        df['filters'] = df['field'].map(lambda x: ','.join(available_filters_for_field_dict[x]))
+        df['filters'] = df['field'].map(lambda x: ', '.join(available_filters_for_field_dict[x]))
         df['n_filters'] = df['filters'].map(lambda x: len(x.split(',')))
 
         # ------------merging cosmos datasets for the venn diagrams--------------------
