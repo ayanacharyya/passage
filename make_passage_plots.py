@@ -5,6 +5,8 @@
     Created: 10-09-24
     Example: run make_passage_plots.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
              run make_passage_plots.py --plot_conditions EW,mass,PA --xcol lp_mass --ycol lp_SFR --colorcol OIII_EW
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol lp_mass --ycol logOH_slope --colorcol redshift
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol redshift --ycol logOH_slope --foggie_comp
              run make_passage_plots.py --plot_conditions EW,mass,PA,a_image --plot_BPT
              run make_passage_plots.py --plot_flux_vs_mag
 '''
@@ -189,8 +191,8 @@ def plot_flux_vs_mag(ax, args):
 
 
 # --------------------------------------------------------------------------------------------------------------------
-label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$', 'lp_SFR': r'log SFR (M$_{\odot}$/yr)', 'ez_z_phot': 'Redshift', 'redshift': 'Redshift'}
-bounds_dict = {'lp_mass': (6, 12), 'lp_SFR': (-3, 3), 'ez_z_phot': (0, 3), 'redshift': (0, 3)}
+label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$', 'lp_SFR': r'log SFR (M$_{\odot}$/yr)', 'ez_z_phot': 'Redshift', 'redshift': 'Redshift', 'logOH_slope':r'log $\nabla$Z$_r$ (dex/kpc)'}
+bounds_dict = {'lp_mass': (6, 12), 'lp_SFR': (-3, 3), 'ez_z_phot': (0, 3), 'redshift': (0, 3), 'logOH_slope': (-0.4, 0.1)}
 colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma')
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -205,8 +207,12 @@ if __name__ == "__main__":
     # args.colormap = colormap_dict[args.colorcol]
 
    # -----------plotting stuff with the resultant intersecting dataframe--------
-    fig, ax = plt.subplots(1, figsize=(8, 6))
-    fig.subplots_adjust(left=0.1, right=0.98 if args.plot_flux_vs_mag else 0.85, bottom=0.1, top=0.95)
+    if args.xcol == 'redshift' and args.ycol == 'logOH_slope' and args.foggie_comp:  # special case, to match the FOGGIE plot size
+        fig, ax = plt.subplots(1, figsize=(12, 6))
+        fig.subplots_adjust(top=0.95, bottom=0.12, left=0.12, right=0.97)
+    else:
+        fig, ax = plt.subplots(1, figsize=(8, 6))
+        fig.subplots_adjust(left=0.1, right=0.98 if args.plot_flux_vs_mag else 0.85, bottom=0.1, top=0.95)
 
     # ---------flux vs mag for full sample------
     if args.plot_flux_vs_mag:
@@ -218,6 +224,12 @@ if __name__ == "__main__":
         df_infilename = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df.txt'
         df = pd.read_csv(df_infilename)
 
+        logOHgrad_filename = args.output_dir / f'logOHgrad_df_onlyseg_vorbin_at_Ha_SNR_3.0.txt'
+        if os.path.exists(logOHgrad_filename):
+            print(f'Reading in and merging logOH gradient df: {logOHgrad_filename}')
+            df_logOHgrad = pd.read_csv(logOHgrad_filename)
+            df = pd.merge(df, df_logOHgrad, on=['field', 'objid'], how='outer')
+
         if args.plot_BPT:
             figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_BPT.png'
             df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)  # making a unique combination of field and object id
@@ -228,9 +240,13 @@ if __name__ == "__main__":
             figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
 
             # ---------SFMS from df-------
-            p = ax.scatter(df[args.xcol], df[args.ycol], c=df[args.colorcol], marker='s', s=100, lw=1, edgecolor='k')
-            cbar = plt.colorbar(p)
-            cbar.set_label(label_dict[args.colorcol] if args.colorcol in label_dict else args.colorcol)
+            p = ax.scatter(df[args.xcol], df[args.ycol], c='gold' if args.foggie_comp else df[args.colorcol], marker='*' if args.foggie_comp else 's', s=1000 if args.foggie_comp else 100, lw=1, edgecolor='w' if args.fortalk else 'k')
+            if args.ycol + '_u' in df and not args.foggie_comp: # if uncertainty column exists
+                ax.errorbar(df[args.xcol], df[args.ycol], yerr=df[args.ycol + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+
+            if not args.foggie_comp:
+                cbar = plt.colorbar(p)
+                cbar.set_label(label_dict[args.colorcol] if args.colorcol in label_dict else args.colorcol)
 
             # ---------SFMS from literature-------
             if args.xcol == 'lp_mass' and args.ycol == 'lp_SFR':
@@ -238,13 +254,20 @@ if __name__ == "__main__":
                 ax = plot_SFMS_Popesso22(ax, 1.2, color='darkblue')
 
             # ---------MZR from literature-------
-            if args.xcol == 'lp_mass' and 'logOH' in args.ycol:
+            if args.xcol == 'lp_mass' and 'logOH' in args.ycol and 'slope' not in args.ycol:
                 ax = plot_MZR_literature(ax)
 
             # ---------annotate axes and save figure-------
             plt.legend()
             ax.set_xlabel(label_dict[args.xcol] if args.xcol in label_dict else args.xcol)
             ax.set_ylabel(label_dict[args.ycol] if args.ycol in label_dict else args.ycol)
+
+            if args.xcol == 'redshift': # redshift axis should be reversed in values
+                ax.set_xlim(ax.get_xlim()[1], ax.get_xlim()[0])
+
+            if args.xcol == 'redshift' and args.ycol == 'logOH_slope' and args.foggie_comp: # special case, to match the FOGGIE plot limits
+                ax.set_xlim(4, 0.5)
+                ax.set_ylim(-0.5, 0.4)
 
     # --------for talk plots--------------
     if args.fortalk:
@@ -254,7 +277,7 @@ if __name__ == "__main__":
         try: mplcyberpunk.make_scatter_glow()
         except: pass
 
-    fig.savefig(figname, transparent=args.fortalk)
+    fig.savefig(figname, transparent=True)#args.fortalk)
     print(f'\nSaved figure as {figname}')
     plt.show(block=False)
 

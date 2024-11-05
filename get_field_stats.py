@@ -296,9 +296,11 @@ def plot_sunburst_pie(df, args, outer_col='nPA', inner_col='filters'):
     df['nPA'] = df['nPA'].apply(lambda x: f'{x} PA' if x <= 1 else f'{x} PAs')
     fig = px.sunburst(df, path=[inner_col, outer_col], values='count', hover_data=['count'])
     fig.update_traces(textinfo='label+value+percent entry', texttemplate='<b>%{label}</b><br>(%{value})<br>%{percentEntry:.1%}')
+    if args.fortalk: fig.update_layout({'plot_bgcolor': 'rgba(0, 0, 0, 0)', 'paper_bgcolor': 'rgba(0, 0, 0, 0)'})
+
 
     # ----------annotate and save the diagram----------
-    figname = args.output_dir / f'Par{args.field_text}_sunburst_diagram.pdf'
+    figname = args.output_dir / f'Par{args.field_text}_sunburst_diagram.png'
     fig.write_image(figname)
     print(f'\nSaved figure as {figname}')
     #fig.show()

@@ -127,6 +127,7 @@ def parse_args():
     parser.add_argument('--plot_BPT', dest='plot_BPT', action='store_true', default=False, help='Plot BPT? Default is no.')
     parser.add_argument('--plot_separately', dest='plot_separately', action='store_true', default=False, help='Plot BPTs separetly for each object? Default is no.')
     parser.add_argument('--plot_flux_vs_mag', dest='plot_flux_vs_mag', action='store_true', default=False, help='Plot line flux vs mag for each object? Default is no.')
+    parser.add_argument('--foggie_comp', dest='foggie_comp', action='store_true', default=False, help='Plot Zgrad vs redshift to exact same limits as the FOGGIE plot, for comparison? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()

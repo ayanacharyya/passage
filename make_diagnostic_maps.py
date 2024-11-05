@@ -1233,9 +1233,9 @@ def plot_metallicity_map(full_hdu, args):
 
     else:
         print(f'Not all lines out of OIII, OII and Hb are available, so cannot compute R23 metallicity')
-        logOH_map = None
+        logOH_map. logOH_radfit = None, None
 
-    return fig, logOH_map
+    return fig, logOH_map, logOH_radfit
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_BPT(full_hdu, ax, args, cmap='viridis'):
@@ -1411,6 +1411,10 @@ if __name__ == "__main__":
         fig, ax = plt.subplots(1, figsize=(8, 6))
         cmap_arr = ['Reds_r', 'Greens_r', 'Purples_r', 'Greys_r', 'Oranges_r', 'Blues_r', 'YlGnBu_r']
 
+    # ---------lotting metallicity profiles and gradients----------------------
+    if args.plot_metallicity:
+        df_logOH_radfit = pd.DataFrame(columns=['field', 'objid', 'logOH_slope', 'logOH_slope_u', 'logOH_cen', 'logOH_cen_u'])
+
     # ------------looping over the provided object IDs-----------------------
     for index, args.id in enumerate(args.id_arr):
         start_time2 = datetime.now()
@@ -1516,7 +1520,8 @@ if __name__ == "__main__":
 
         # ---------initialising the metallicity figure------------------------------
         elif args.plot_metallicity:
-            fig, logOH_map = plot_metallicity_map(full_hdu, args)
+            fig, logOH_map, logOH_radfit = plot_metallicity_map(full_hdu, args)
+            df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s]
 
             # ---------decorating and saving the figure------------------------------
             fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
@@ -1651,6 +1656,11 @@ if __name__ == "__main__":
                 print(f'Appended to catalog file {outfilename}')
 
         print(f'Completed id {args.id} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(args.id_arr) - index - 1} to go!')
+
+    # ------------------writing out Z gradient fits, for making MZGR plot later--------------------------
+    outfilename = args.output_dir / f'logOHgrad_df{snr_text}{only_seg_text}{vorbin_text}.txt'
+    df_logOH_radfit.to_csv(outfilename, index=None, mode='a', header=not os.path.exists(outfilename))
+    print(f'Appended metallicity gradient fits to catalog file {outfilename}')
 
     # ---------plotting spatially resolved BPT-----------------------------
     if args.plot_BPT and not (args.plot_separately and len(args.id_arr) == 1):
