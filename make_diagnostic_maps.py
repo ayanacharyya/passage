@@ -521,7 +521,11 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
 
     line_map = unp.uarray(line_map, line_map_err)
 
-    # -----------getting the integrated flux value-----------------
+    # -----------getting the integrated flux value by summing the 2D map-----------------
+    line_sum = np.sum(line_map) # ergs/s/cm^2
+    print(f'Summed up {line} flux for object {args.id} is {line_sum/1e-17: .3f} x 10^-17 ergs/s/cm^2.')
+
+    # -----------getting the integrated flux value from grizli-----------------
     line_int = full_hdu[0].header[f'FLUX{line_index + 1:03d}'] # ergs/s/cm^2
     line_int_err = full_hdu[0].header[f'ERR{line_index + 1:03d}'] # ergs/s/cm^2
     line_int = ufloat(line_int, line_int_err)
@@ -1658,9 +1662,10 @@ if __name__ == "__main__":
         print(f'Completed id {args.id} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(args.id_arr) - index - 1} to go!')
 
     # ------------------writing out Z gradient fits, for making MZGR plot later--------------------------
-    outfilename = args.output_dir / f'logOHgrad_df{snr_text}{only_seg_text}{vorbin_text}.txt'
-    df_logOH_radfit.to_csv(outfilename, index=None, mode='a', header=not os.path.exists(outfilename))
-    print(f'Appended metallicity gradient fits to catalog file {outfilename}')
+    if args.plot_metallicity:
+        outfilename = args.output_dir / f'logOHgrad_df{snr_text}{only_seg_text}{vorbin_text}.txt'
+        df_logOH_radfit.to_csv(outfilename, index=None, mode='a', header=not os.path.exists(outfilename))
+        print(f'Appended metallicity gradient fits to catalog file {outfilename}')
 
     # ---------plotting spatially resolved BPT-----------------------------
     if args.plot_BPT and not (args.plot_separately and len(args.id_arr) == 1):
