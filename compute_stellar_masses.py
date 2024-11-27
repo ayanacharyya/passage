@@ -40,17 +40,17 @@ def get_flux_catalog(df_int, args):
     Function to load or generate the catalog of flux values for galaxies of interest from the COSMOS2020 catalog, and add PASSAGE fluxes too
     Returns the dataframe containing all flux values
     '''
-    fluxfilename = args.output_dir / 'passage_cosmos_fluxes.txt'
+    fluxfilename = args.output_dir / 'passage_cosmos_fluxes.csv'
     if os.path.exists(fluxfilename) and not args.clobber:
         print(f'Reading flux values from existing {fluxfilename}')
-        df_fluxes = pd.read_table(fluxfilename)
+        df_fluxes = pd.read_csv(fluxfilename)
     else:
         print(f'{fluxfilename} does not exist, so preparing the flux list..')
-        filename = args.input_dir / 'COSMOS' / 'cosmos_fluxes_subset.txt'
+        filename = args.input_dir / 'COSMOS' / 'cosmos_fluxes_subset.csv'
 
         if os.path.exists(filename):
             print(f'Reading cosmos2020 flux values from existing {filename}')
-            df_fluxes = pd.read_table(filename, delim_whitespace=True)
+            df_fluxes = pd.read_csv(filename)
         else:
             print(f'{filename} does not exist, so preparing the flux list..')
 
@@ -68,18 +68,13 @@ def get_flux_catalog(df_int, args):
             lp_cols = np.ravel([f'lp_{item}_{suffix}' for item in ['mass', 'SFR', 'sSFR'] for suffix in lp_cols_suffix])
             ez_cols_suffix = ['', '_p160', '_p500', '_p840']
             ez_cols = np.ravel([f'ez_{item}{suffix}' for item in ['mass', 'sfr', 'ssfr'] for suffix in ez_cols_suffix])
-            cols_to_extract = np.hstack((['cosmos_id', 'ra', 'dec', 'ID_COSMOS2015', 'ez_z_phot', 'lp_MK', 'lp_zBEST'], lp_cols, ez_cols)).tolist()
+            flux_and_err_cols = np.ravel([[item, item.replace('FLUX', 'FLUXERR')] for item in fluxcols])
+            cols_to_extract = np.hstack((['cosmos_id', 'ra', 'dec', 'ID_COSMOS2015', 'ez_z_phot', 'lp_MK', 'lp_zBEST'], lp_cols, ez_cols, flux_and_err_cols)).tolist()
             df_fluxes = pd.merge(df_int[['field', 'objid', 'cosmos_id']], df_cosmos_subset[cols_to_extract], on='cosmos_id', how='inner')
-
-            # -------including flux and fluxerr columns from df_cosmos-------
-            for thiscol in fluxcols:
-                if np.isfinite(df_cosmos_subset[thiscol]).any():
-                    df_fluxes[thiscol] = df_cosmos_subset[thiscol].values
-                    errcol = thiscol.replace('FLUX', 'FLUXERR')
-                    df_fluxes[errcol] = df_cosmos_subset[errcol].values
+            df_fluxes = df_fluxes.dropna(axis=1, how='all')
 
             # -------writing cosmos fluxes df into file-------
-            df_fluxes.to_csv(filename, index=None, sep='\t')
+            df_fluxes.to_csv(filename, index=None)
             print(f'Written cosmos2020 flux table as {filename}')
 
         # -------reading in passage photometric catalog-------
@@ -104,7 +99,7 @@ def get_flux_catalog(df_int, args):
         df_fluxes = pd.merge(df_fluxes, df_photcat[cols_to_extract], on='objid', how='inner')
 
         # -------writing master fluxes df into file-------
-        df_fluxes.to_csv(fluxfilename, index=None, sep='\t')
+        df_fluxes.to_csv(fluxfilename, index=None)
         print(f'Written passage+cosmos2020 flux table as {fluxfilename}')
 
     return df_fluxes
