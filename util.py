@@ -384,10 +384,14 @@ def read_COSMOS2020_catalog(args=None, filename=None):
 
     if not os.path.exists(filename) or (args is not None and args.clobber): make_COSMOS_subset_table(filename)
 
+    print(f'Reading in {filename}, might take a while..')
+    start_time2 = datetime.now()
+
     data = fits.open(filename)
     table = Table(data[1].data)
     df  = table.to_pandas()
     df = df.rename(columns={'ID':'id', 'ALPHA_J2000':'ra', 'DELTA_J2000':'dec'})
+    print(f'Completed reading COSMOS2020 catalog in {timedelta(seconds=(datetime.now() - start_time2).seconds)}')
 
     return df
 
@@ -422,7 +426,7 @@ def make_COSMOS_subset_table(filename):
     ez_cols_suffix = ['', '_p160', '_p500', '_p840']
     ez_cols = np.ravel([f'ez_{item}{suffix}' for item in ['mass', 'sfr', 'ssfr'] for suffix in ez_cols_suffix])
 
-    cols_to_extract = np.hstack((['ID', 'ALPHA_J2000', 'DELTA_J2000', 'ID_COSMOS2015', 'ez_z_phot', 'lp_MK'], lp_cols, ez_cols)).tolist()
+    cols_to_extract = np.hstack((['ID', 'ALPHA_J2000', 'DELTA_J2000', 'ID_COSMOS2015', 'ez_z_phot', 'lp_MK', 'lp_zBEST'], lp_cols, ez_cols)).tolist()
 
     print(f'Trying to read in  {filename}; can take a while..')
     data = fits.open(filename)
