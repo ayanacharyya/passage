@@ -71,7 +71,7 @@ def get_flux_catalog(df_int, args):
             ez_cols = np.ravel([f'ez_{item}{suffix}' for item in ['mass', 'sfr', 'ssfr'] for suffix in ez_cols_suffix])
             flux_and_err_cols = np.ravel([[item, item.replace('FLUX', 'FLUXERR')] for item in fluxcols])
             cols_to_extract = np.hstack((['cosmos_id', 'ra', 'dec', 'ID_COSMOS2015', 'ez_z_phot', 'lp_MK', 'lp_zBEST'], lp_cols, ez_cols, flux_and_err_cols)).tolist()
-            df_fluxes = pd.merge(df_int[['field', 'objid', 'cosmos_id']], df_cosmos_subset[cols_to_extract], on='cosmos_id', how='inner')
+            df_fluxes = pd.merge(df_int[['field', 'objid', 'redshift', 'cosmos_id']], df_cosmos_subset[cols_to_extract], on='cosmos_id', how='inner')
             df_fluxes = df_fluxes.dropna(axis=1, how='all')
 
             # -------writing cosmos fluxes df into file-------
