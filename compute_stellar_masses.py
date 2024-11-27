@@ -30,6 +30,7 @@ def get_fluxcols(args):
         all_flux_cols = [item for item in df_cosmos.columns if 'FLUX' in item and item != 'FLUX_RADIUS' and 'FLUXERR' not in item]
         filters = [item[:item.find('FLUX')] for item in all_flux_cols]
         fluxcols = [item + 'FLUX_AUTO' if item + 'FLUX_AUTO' in df_cosmos.columns else item + 'FLUX' for item in filters]
+        fluxcols = list(dict.fromkeys(fluxcols)) # to remove duplicates
         np.save(filepath, fluxcols)
 
     return fluxcols, df_cosmos
