@@ -8,8 +8,76 @@
 '''
 from header import *
 from util import *
+import random
 
 start_time = datetime.now()
+
+# -------------------------------------------------------------------------------------------------------
+def read_filter_transmission(filter_arr, args, verbose=False):
+    '''
+    Function to load transmission curves for filters in COSMOS2020 catalog
+    Returns dataframe
+    '''
+    transmission_file_path = args.input_dir / 'COSMOS' / 'transmission_curves'
+    df_master = pd.DataFrame()
+    filter_arr = [filter[: filter.lower().find('_flux')].replace('SPLASH', 'IRAC') if '_flux' in filter.lower() else filter.replace('SPLASH', 'IRAC') for filter in filter_arr]
+    filter_arr = list(dict.fromkeys(filter_arr)) # to remove duplicate filter entries
+
+    for index, filter in enumerate(filter_arr):
+        if verbose: print(f'Doing filter {filter} which is {index + 1} out of {len(filter_arr)}..')
+        transmission_filename = transmission_file_path / f'{filter}.txt'
+
+        if os.path.exists(transmission_filename):
+            if 'NIRISS' in filter:
+                df = pd.read_table(transmission_filename, comment='#', names=['wave', 'trans', 'dummy'], header=0, usecols=['wave', 'trans'], delim_whitespace=True)
+                df['wave'] = df['wave'] * 1e4 # converting from microns to Angstroms
+                df = df[df['trans'] > 1e-3]
+            else:
+                df = pd.read_table(transmission_filename, comment='#', names=['wave', 'trans'], delim_whitespace=True)
+        elif os.path.exists(str(transmission_filename).replace('SC_IA', 'SC_IB')):
+            df = pd.read_table(str(transmission_filename).replace('SC_IA', 'SC_IB'), comment='#', names=['wave', 'trans'], delim_whitespace=True)
+        else:
+            print(f'Transmission file for {filter} does not exist.')
+            continue
+
+        df['filter'] = filter
+        df_master = pd.concat([df_master, df])
+
+    return df_master
+
+# -------------------------------------------------------------------------------------------------------
+def plot_filter_transmission(df_master, args, x_scale='linear', color_by_wave=True):
+    '''
+    Function to plot transmission curves for filters in COSMOS2020 catalog
+    Saves plot as png figure and
+    Returns figure handle
+    '''
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    jet = plt.get_cmap('rainbow')
+
+    wave_min, wave_max = np.log10(df_master['wave'].min()), np.log10(df_master['wave'].max())
+    cnorm = mplcolors.Normalize(vmin=wave_min, vmax=wave_max)
+    scalarMap = mpl_cm.ScalarMappable(norm=cnorm, cmap=jet)
+    filter_arr = pd.unique(df_master['filter'])
+
+    for filter in filter_arr:
+        df = df_master[df_master['filter'] == filter]
+        if color_by_wave: color = scalarMap.to_rgba(np.log10(df['wave'].mean()))
+        else: color = scalarMap.to_rgba(random.uniform(wave_min, wave_max))
+        ax.plot(df['wave'], df['trans'], color=color, label=filter)
+
+    plt.legend(fontsize = 5)
+    ax.set_xlabel(r'Wavelength ($\AA$)')
+    ax.set_ylabel('Transmission')
+    ax.set_xscale(x_scale)
+
+    figname = args.input_dir / 'COSMOS' / 'transmission_curves' / 'filter_responses.png'
+    fig.savefig(figname, transparent=args.fortalk)
+    print(f'Saved figure as {figname}')
+    plt.show(block=False)
+
+    return fig
 
 # -------------------------------------------------------------------------------------------------------
 def get_fluxcols(args):
@@ -84,13 +152,16 @@ def get_flux_catalog(df_int, args):
         photcat_file = product_dir / f'{args.field}_photcat.fits'
         df_photcat = Table(fits.open(photcat_file)[1].data).to_pandas()
         df_photcat = df_photcat.rename(columns={'id': 'objid'})
+        df_photcat.columns = df_photcat.columns.str.replace('f115w', 'NIRISS_F115W', regex=True)
+        df_photcat.columns = df_photcat.columns.str.replace('f150w', 'NIRISS_F150W', regex=True)
+        df_photcat.columns = df_photcat.columns.str.replace('f200w', 'NIRISS_F200W', regex=True)
 
         # -------determining flux and fluxerr columns from passage-------
-        passage_filters = ['F115W', 'F150W', 'F200W']
+        passage_filters = ['NIRISS_F115W', 'NIRISS_F150W', 'NIRISS_F200W']
         aper_num = 4 # aper_num = 0, 1, 2, 3, 4, 5, 6 correspond to fluxes measured within apertures of sizes [0.36", 0.5", 0.7", 1", 1.2", 1.5", 3.0"]
         cols_to_extract = []
         for thisfilter in passage_filters:
-            fluxcol = f'{thisfilter.lower()}_flux_aper_{aper_num:0d}'
+            fluxcol = f'{thisfilter}_flux_aper_{aper_num:0d}'
             errcol = fluxcol.replace('flux', 'fluxerr')
             cols_to_extract.append([fluxcol, errcol])
         cols_to_extract = np.array(cols_to_extract).flatten()
@@ -114,5 +185,10 @@ if __name__ == "__main__":
     df_int_filename = args.output_dir / f'allpar_venn_EW,mass,PA_df.txt'
     df_int = pd.read_csv(df_int_filename)
     df_fluxes = get_flux_catalog(df_int, args)
+
+    fluxcols = [item for item in df_fluxes.columns if 'flux' in item.lower() and 'fluxerr' not in item.lower()]
+    df_trans = read_filter_transmission(fluxcols, args)
+    filters = pd.unique(df_trans['filter'])
+    fig = plot_filter_transmission(df_trans, args, x_scale='log')
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

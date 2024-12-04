@@ -9,6 +9,7 @@
              run make_passage_plots.py --plot_conditions EW,mass,PA --xcol redshift --ycol logOH_slope --foggie_comp
              run make_passage_plots.py --plot_conditions EW,mass,PA,a_image --plot_BPT
              run make_passage_plots.py --plot_flux_vs_mag
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_SFR_int --ycol lp_SFR --colorcol redshift
 '''
 
 from header import *
@@ -189,10 +190,9 @@ def plot_flux_vs_mag(ax, args):
 
     return ax
 
-
 # --------------------------------------------------------------------------------------------------------------------
 label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$', 'lp_SFR': r'log SFR (M$_{\odot}$/yr)', 'ez_z_phot': 'Redshift', 'redshift': 'Redshift', 'logOH_slope':r'log $\nabla$Z$_r$ (dex/kpc)'}
-bounds_dict = {'lp_mass': (6, 12), 'lp_SFR': (-3, 3), 'ez_z_phot': (0, 3), 'redshift': (0, 3), 'logOH_slope': (-0.4, 0.1)}
+bounds_dict = {'lp_mass': (6, 12), 'lp_SFR': (-3, 1), 'log_SFR_int': (-3, 1), 'ez_z_phot': (0, 3), 'redshift': (1.7, 2.2), 'logOH_slope': (-0.4, 0.1)}
 colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma')
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -201,8 +201,6 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
 
     # ----------to initialise axes limits and colormaps-----------------------
-    # args.xmin, args.xmax = bounds_dict[args.xcol]
-    # args.ymin, args.ymax = bounds_dict[args.ycol]
     # args.cmin, args.cmax = bounds_dict[args.colorcol]
     # args.colormap = colormap_dict[args.colorcol]
 
@@ -238,9 +236,10 @@ if __name__ == "__main__":
 
         else:
             figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
+            df['log_SFR_int'] = np.log10(df['SFR_int'])
 
             # ---------SFMS from df-------
-            p = ax.scatter(df[args.xcol], df[args.ycol], c='gold' if args.foggie_comp else df[args.colorcol], marker='*' if args.foggie_comp else 's', s=1000 if args.foggie_comp else 100, lw=1, edgecolor='w' if args.fortalk else 'k')
+            p = ax.scatter(df[args.xcol], df[args.ycol], c='gold' if args.foggie_comp else df[args.colorcol], marker='*' if args.foggie_comp else 's', s=1000 if args.foggie_comp else 100, lw=1, edgecolor='w' if args.fortalk else 'k', vmin=bounds_dict[args.colorcol][0] if args.colorcol in bounds_dict else None, vmax=bounds_dict[args.colorcol][1] if args.colorcol in bounds_dict else None)
             if args.ycol + '_u' in df and not args.foggie_comp: # if uncertainty column exists
                 ax.errorbar(df[args.xcol], df[args.ycol], yerr=df[args.ycol + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 
@@ -262,6 +261,14 @@ if __name__ == "__main__":
             ax.set_xlabel(label_dict[args.xcol] if args.xcol in label_dict else args.xcol)
             ax.set_ylabel(label_dict[args.ycol] if args.ycol in label_dict else args.ycol)
 
+            if args.xcol in bounds_dict: ax.set_xlim(bounds_dict[args.xcol][0], bounds_dict[args.xcol][1])
+            if args.ycol in bounds_dict: ax.set_ylim(bounds_dict[args.ycol][0], bounds_dict[args.ycol][1])
+
+            # ---------comparing SFRs-------
+            if 'sfr' in args.xcol.lower() and 'ssfr' not in args.xcol.lower() and 'sfr' in args.ycol.lower() and 'ssfr' not in args.ycol.lower():
+                line = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 10)
+                ax.plot(line, line, ls='dashed', c='k', lw=1)
+
             if args.xcol == 'redshift': # redshift axis should be reversed in values
                 ax.set_xlim(ax.get_xlim()[1], ax.get_xlim()[0])
 
@@ -277,7 +284,7 @@ if __name__ == "__main__":
         try: mplcyberpunk.make_scatter_glow()
         except: pass
 
-    fig.savefig(figname, transparent=True)#args.fortalk)
+    fig.savefig(figname, transparent=args.fortalk)
     print(f'\nSaved figure as {figname}')
     plt.show(block=False)
 
