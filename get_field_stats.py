@@ -513,10 +513,11 @@ def get_crossmatch_with_cosmos(df, args):
         filename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
         if os.path.exists(filename):
             print(f'{index+1} of {len(fields)} fields: Reading COSMOS subset table from {filename}')
-            df_cosmos_thisfield = read_COSMOS2020_catalog(filename=filename, args=args)
+            df_cosmos_thisfield = read_COSMOS2020_catalog(filename=filename)
             df_cosmos = pd.concat([df_cosmos, df_cosmos_thisfield])
         else:
             print(f'{index+1} of {len(fields)} fields: Could not find COSMOS subset table for {thisfield}, so skipping.')
+    df_cosmos = df_cosmos.drop('passage_id', axis=1)
 
     # -------cross-matching RA/DEC of both catalogs------
     print(f'\nDoing cross-matching between PASSAGE and COSMOS catalogs..')
@@ -526,8 +527,7 @@ def get_crossmatch_with_cosmos(df, args):
 
     df_crossmatch = pd.DataFrame({'passage_id': df['par_obj'].values, 'cosmos_id': df_cosmos['id'].iloc[nearest_id_in_cosmos].values, 'sep': sep_from_nearest_id_in_cosmos.arcsec})
     df_crossmatch = df_crossmatch[df_crossmatch['sep'] < 1.]  # separation within 1 arcsecond
-    df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='cosmos_id', keep='first').reset_index(
-        drop=True)  # to avoid multiple PASSAGE objects being linked to the same COSMOS object
+    df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='cosmos_id', keep='first').reset_index(drop=True)  # to avoid multiple PASSAGE objects being linked to the same COSMOS object
     df_crossmatch = pd.merge(df_crossmatch[['passage_id', 'cosmos_id']], df_cosmos, left_on='cosmos_id', right_on='id', how='inner').drop(['id', 'ra', 'dec'], axis=1)
 
     try: df_crossmatch_subset = df_crossmatch[['passage_id', 'cosmos_id', 'ez_z_phot', 'lp_MK', 'lp_zBEST']]
