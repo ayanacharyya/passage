@@ -116,6 +116,8 @@ def parse_args():
     parser.add_argument('--a_thresh', metavar='a_thresh', type=float, action='store', default=2.4, help='a_image (semi-major axis in pixels) threshold to consider good detection for emission line maps; default is 2.4')
     parser.add_argument('--plot_pie', dest='plot_pie', action='store_true', default=False, help='Plot pie chart instead of Venn diagram? Default is no.')
     parser.add_argument('--plot_sunburst', dest='plot_sunburst', action='store_true', default=False, help='Plot sunburst chart instead of Venn diagram? Default is no.')
+    parser.add_argument('--plot_columns', dest='plot_columns', action='store_true', default=False, help='Plot (user input) columns vs each other for the entire cross-matched dataset? Default is no.')
+    parser.add_argument('--clobber_cosmos', dest='clobber_cosmos', action='store_true', default=False, help='Over-write existing COSMOS dataframes (subset of columns)? Default is no.')
 
     # ------- args added for make_cosmos_plots.py ------------------------------
     parser.add_argument('--xcol', metavar='xcol', type=str, action='store', default='lp_mass_best', help='Column name in COSMOS2020 catalog to be used as the quantity on x-axis? Default is lp_mass_best')
@@ -382,7 +384,7 @@ def read_COSMOS2020_catalog(args=None, filename=None):
         else: input_dir = args.input_dir
         filename = Path(input_dir) / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3_subsetcolumns.fits'
 
-    if not os.path.exists(filename) or (args is not None and args.clobber): make_COSMOS_subset_table(filename)
+    if not os.path.exists(filename) or (args is not None and args.clobber_cosmos): make_COSMOS_subset_table(filename)
 
     print(f'Reading in {filename}, might take a while..')
     start_time2 = datetime.now()

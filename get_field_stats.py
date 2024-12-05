@@ -13,6 +13,8 @@
              run get_field_stats.py --line_list Ha --do_all_fields --plot_conditions has,PA --clobber_venn
              run get_field_stats.py --line_list Ha --do_all_fields --plot_pie
              run get_field_stats.py --line_list Ha --do_all_fields --plot_sunburst
+             run get_field_stats.py --line_list Ha --do_all_fields --plot_conditions mass --plot_columns --xcol redshift --ycol lp_zBEST --colorcol lp_mass
+             run get_field_stats.py --line_list Ha --do_all_fields --plot_conditions mass --plot_columns --xcol redshift --ycol ez_z_phot --colorcol ez_mass
 '''
 from header import *
 from util import *
@@ -318,6 +320,45 @@ def plot_sunburst_pie(df, args, outer_col='nPA', inner_col='filters'):
     return fig
 
 # -------------------------------------------------------------------------------------------------------
+def plot_columns(df, args):
+    '''
+    To plot any column vs any column colorcoded by any column for a given df
+    Plots and saves the figure
+    Returns figure handle
+    '''
+    if args.fontsize == 10: args.fontsize = 15
+    fig, ax = plt.subplots(figsize=(8, 6))
+    fig.subplots_adjust(left=0.1, right=0.98, bottom=0.1, top=0.95)
+
+    p = ax.scatter(df[args.xcol], df[args.ycol], c=df[args.colorcol], s=5, lw=0, cmap='viridis')
+
+    cbar = plt.colorbar(p)
+    cbar.set_label(label_dict[args.colorcol] if args.colorcol in label_dict else args.colorcol, fontsize=args.fontsize)
+
+    ax.set_xlabel(label_dict[args.xcol] if args.xcol in label_dict else args.xcol, fontsize=args.fontsize)
+    ax.set_ylabel(label_dict[args.ycol] if args.ycol in label_dict else args.ycol, fontsize=args.fontsize)
+
+    if args.xcol in bounds_dict: ax.set_xlim(bounds_dict[args.xcol][0], bounds_dict[args.xcol][1])
+    if args.ycol in bounds_dict: ax.set_ylim(bounds_dict[args.ycol][0], bounds_dict[args.ycol][1])
+
+    ax.set_xticklabels(['%.1f' % item for item in ax.get_xticks()], fontsize=args.fontsize)
+    ax.set_yticklabels(['%.1f' % item for item in ax.get_yticks()], fontsize=args.fontsize)
+
+    # ---------diagonal line---------
+    if 'redshift' in args.xcol.lower() and 'z' in args.ycol.lower():
+        line = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 10)
+        ax.plot(line, line, ls='dashed', c='k', lw=1)
+
+    fig.text(0.99, 0.99, f'Total {len(pd.unique(df["field"]))} fields: Par{args.field_text}\nTotal {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes)
+    figname = args.output_dir / f'all_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
+    fig.savefig(figname, transparent=args.fortalk)
+    print(f'Saved figure as {figname}')
+    plt.show(block=False)
+
+    return fig
+
+
+# -------------------------------------------------------------------------------------------------------
 def get_detection_fraction(df, line, args):
     '''
     To compute fraction of objects in a given field that have a given line detected (beyond a given EW threshold)
@@ -472,7 +513,7 @@ def get_crossmatch_with_cosmos(df, args):
         filename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
         if os.path.exists(filename):
             print(f'{index+1} of {len(fields)} fields: Reading COSMOS subset table from {filename}')
-            df_cosmos_thisfield = read_COSMOS2020_catalog(filename=filename)
+            df_cosmos_thisfield = read_COSMOS2020_catalog(filename=filename, args=args)
             df_cosmos = pd.concat([df_cosmos, df_cosmos_thisfield])
         else:
             print(f'{index+1} of {len(fields)} fields: Could not find COSMOS subset table for {thisfield}, so skipping.')
@@ -489,7 +530,8 @@ def get_crossmatch_with_cosmos(df, args):
         drop=True)  # to avoid multiple PASSAGE objects being linked to the same COSMOS object
     df_crossmatch = pd.merge(df_crossmatch[['passage_id', 'cosmos_id']], df_cosmos, left_on='cosmos_id', right_on='id', how='inner').drop(['id', 'ra', 'dec'], axis=1)
 
-    df_crossmatch_subset = df_crossmatch[['passage_id', 'cosmos_id', 'ez_z_phot', 'lp_MK']]
+    try: df_crossmatch_subset = df_crossmatch[['passage_id', 'cosmos_id', 'ez_z_phot', 'lp_MK', 'lp_zBEST']]
+    except: df_crossmatch_subset = df_crossmatch[['passage_id', 'cosmos_id', 'ez_z_phot', 'lp_MK']]
     lp_quants = ['lp_SFR', 'lp_mass', 'lp_sSFR']
     ez_quants = ['ez_mass', 'ez_sfr', 'ez_ssfr']
 
@@ -505,6 +547,12 @@ def get_crossmatch_with_cosmos(df, args):
     df = pd.merge(df, df_crossmatch_subset, left_on='par_obj', right_on='passage_id', how='outer').drop('passage_id', axis=1)
 
     return df
+
+# --------------------------------------------------------------------------------------------------------------------
+label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$', 'ez_mass': r'log M$_*$/M$_{\odot}$', 'lp_SFR': r'log SFR (M$_{\odot}$/yr)', 'ez_z_phot': 'Photo-z COSMOS2020 (EAZY)', 'lp_zBEST': 'Photo-z COSMOS2020 (Le Phare)', 'redshift': 'Spec-z (Grizli)', 'logOH_slope':r'log $\nabla$Z$_r$ (dex/kpc)'}
+bounds_dict = {'lp_mass': (6, 12), 'ez_mass': (6, 12), 'lp_SFR': (-3, 1), 'log_SFR_int': (-3, 1), 'ez_z_phot': (0, 6), 'lp_zBEST': (0, 6), 'redshift': (0, 6), 'logOH_slope': (-0.4, 0.1)}
+colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma')
+
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -595,9 +643,13 @@ if __name__ == "__main__":
         conditions_from_cosmos = ['mass', 'sfr', 'sSFR']
         if len(set(conditions_from_cosmos).intersection(set(args.plot_conditions))) > 0:
             df = get_crossmatch_with_cosmos(df, args)
+            df = df[df['ez_mass'] < 20] # masses cannot be over 10^20 Msun
 
+        # ------------doing the photo-z vs spec-z comparison--------------------
+        if args.plot_columns:
+            fig = plot_columns(df, args)
         # ------------doing the pie charts--------------------
-        if args.plot_pie:
+        elif args.plot_pie:
             plot_nested_pie(df, args, outer_col='filters', inner_col='nPA')
         elif args.plot_sunburst:
             fig = plot_sunburst_pie(df, args, outer_col='nPA', inner_col='filters')
