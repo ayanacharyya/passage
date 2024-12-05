@@ -46,7 +46,7 @@ def read_filter_transmission(filter_arr, args, verbose=False):
     return df_master
 
 # -------------------------------------------------------------------------------------------------------
-def plot_filter_transmission(df_master, args, x_scale='linear', color_by_wave=True):
+def plot_filter_transmission(df_master, args, x_scale='linear', color_by_wave=True, plot_fwhm=True):
     '''
     Function to plot transmission curves for filters in COSMOS2020 catalog
     Saves plot as png figure and
@@ -67,10 +67,22 @@ def plot_filter_transmission(df_master, args, x_scale='linear', color_by_wave=Tr
         else: color = scalarMap.to_rgba(random.uniform(wave_min, wave_max))
         ax.plot(df['wave'], df['trans'], color=color, label=filter)
 
-    plt.legend(fontsize = 5)
-    ax.set_xlabel(r'Wavelength ($\AA$)')
-    ax.set_ylabel('Transmission')
+        if plot_fwhm:
+            trans_max = df['trans'].max()
+            wave_llim = df['wave'].iloc[np.where(df['trans'] >= 0.5 * trans_max)[0][0]]
+            wave_ulim = df['wave'].iloc[np.where(df['trans'] >= 0.5 * trans_max)[0][-1]]
+            ax.plot([wave_llim, wave_ulim], [0.5 * trans_max, 0.5 * trans_max], c=color, lw=1, ls='dashed')
+
+    plt.legend(fontsize = args.fontsize/3)
+    ax.set_xlabel(r'Wavelength ($\AA$)', fontsize=args.fontsize)
+    ax.set_ylabel('Transmission', fontsize=args.fontsize)
     ax.set_xscale(x_scale)
+
+    ax.set_xlim(1e3, 1.2e5)
+    ax.set_ylim(-0.05, 1.05)
+
+    ax.set_xticklabels(['%.0e' % item for item in ax.get_xticks()], fontsize=args.fontsize)
+    ax.set_yticklabels(['%.1f' % item for item in ax.get_yticks()], fontsize=args.fontsize)
 
     figname = args.input_dir / 'COSMOS' / 'transmission_curves' / 'filter_responses.png'
     fig.savefig(figname, transparent=args.fortalk)
@@ -78,6 +90,69 @@ def plot_filter_transmission(df_master, args, x_scale='linear', color_by_wave=Tr
     plt.show(block=False)
 
     return fig
+
+# -------------------------------------------------------------------------------------------------------
+def plot_SED(df_fluxes, df_trans, args, x_scale='linear'):
+    '''
+    Function to plot SED baed on input dataframe of fluxes and a separate input dataframe with list of filter transmission curves
+    Saves plot as png figure and
+    Returns figure handle
+    '''
+    fluxcols = [item for item in df_fluxes.columns if 'flux' in item.lower() and 'fluxerr' not in item.lower()]
+    filters, waves_cen, waves_width = [], [], []
+
+    for fluxcol in fluxcols:
+        filter = fluxcol[: fluxcol.lower().find('_flux')].replace('SPLASH', 'IRAC') if '_flux' in fluxcol.lower() else fluxcol.replace('SPLASH', 'IRAC')
+        thisdf = df_trans[df_trans['filter'] == filter]
+        thisdf = thisdf.sort_values(by='wave')
+
+        trans_max = thisdf['trans'].max()
+        wave_llim = thisdf['wave'].iloc[np.where(thisdf['trans'] >= 0.5 * trans_max)[0][0]]
+        wave_ulim = thisdf['wave'].iloc[np.where(thisdf['trans'] >= 0.5 * trans_max)[0][-1]]
+        wave_width = wave_ulim - wave_llim
+        wave_cen = np.mean([wave_llim, wave_ulim])
+
+        filters.append(filter)
+        waves_cen.append(wave_cen)
+        waves_width.append(wave_width)
+
+    waves_cen = np.array(waves_cen)
+    waves_width = np.array(waves_width)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    color_arr = ['rebeccapurple', 'chocolate', 'darkgreen', 'darkblue', 'crimson', 'darkkhaki', 'salmon', 'cornflowerblue']
+
+    for index, row in df_fluxes.iterrows():
+        fluxes = np.array([row[thiscol] for thiscol in fluxcols]) # micro Jansky units
+        fluxes_err = np.array([row[thiscol.replace('flux', 'fluxerr').replace('FLUX', 'FLUXERR')] for thiscol in fluxcols])
+
+        sorted_indices = np.argsort(waves_cen)
+        fluxes_sorted = fluxes[sorted_indices]
+        fluxes_err_sorted = fluxes_err[sorted_indices]
+        waves_width_sorted = waves_width[sorted_indices]
+        waves_cen_sorted = waves_cen[sorted_indices]
+
+        ax.plot(waves_cen_sorted, fluxes_sorted, 'o', markersize=5, color=color_arr[index], label=f'ID #{row["objid"]}')
+        ax.errorbar(waves_cen_sorted, fluxes_sorted, xerr=waves_width_sorted, yerr=fluxes_err_sorted, c=color_arr[index], fmt='none', lw=1, alpha=0.4)
+
+    plt.legend(fontsize = args.fontsize/2.)
+    ax.set_xlabel(r'Wavelength ($\AA$)', fontsize=args.fontsize)
+    ax.set_ylabel(r'Flux ($\mu$Jy)', fontsize=args.fontsize)
+    ax.set_xscale(x_scale)
+
+    ax.set_xlim(1e3, 1.2e5)
+    ax.set_ylim(-0.5, 0.8)
+
+    ax.set_xticklabels(['%.0e' % item for item in ax.get_xticks()], fontsize=args.fontsize)
+    ax.set_yticklabels(['%.1f' % item for item in ax.get_yticks()], fontsize=args.fontsize)
+
+    figname = args.output_dir / f'{args.intersection_conditions}_SED.png'
+    fig.savefig(figname, transparent=args.fortalk)
+    print(f'Saved figure as {figname}')
+    plt.show(block=False)
+
+    return fig
+
 
 # -------------------------------------------------------------------------------------------------------
 def get_fluxcols(args):
@@ -180,9 +255,11 @@ def get_flux_catalog(df_int, args):
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
+    args.intersection_conditions = 'allpar_venn_EW,mass,PA'
+    if args.fontsize == 10: args.fontsize = 15
 
     args.cosmos2020_filename = args.input_dir / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3.fits'
-    df_int_filename = args.output_dir / f'allpar_venn_EW,mass,PA_df.txt'
+    df_int_filename = args.output_dir / f'{args.intersection_conditions}_df.txt'
     df_int = pd.read_csv(df_int_filename)
     df_fluxes = get_flux_catalog(df_int, args)
 
@@ -190,5 +267,7 @@ if __name__ == "__main__":
     df_trans = read_filter_transmission(fluxcols, args)
     filters = pd.unique(df_trans['filter'])
     fig = plot_filter_transmission(df_trans, args, x_scale='log')
+
+    fig2 = plot_SED(df_fluxes, df_trans, args, x_scale='log')
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
