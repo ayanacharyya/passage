@@ -4,6 +4,7 @@
     Author : Ayan
     Created: 19-08-24
     Example: run compute_stellar_masses.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
+             run compute_stellar_masses.py --only_seg --arcsec_limit 1
              run compute_stellar_masses.py
 '''
 from header import *
@@ -94,7 +95,7 @@ def plot_filter_transmission(df_master, args, x_scale='linear', color_by_wave=Tr
 # -------------------------------------------------------------------------------------------------------
 def plot_SED(df_fluxes, df_trans, args, x_scale='linear'):
     '''
-    Function to plot SED baed on input dataframe of fluxes and a separate input dataframe with list of filter transmission curves
+    Function to plot SED based on input dataframe of fluxes and a separate input dataframe with list of filter transmission curves
     Saves plot as png figure and
     Returns figure handle
     '''
@@ -153,6 +154,122 @@ def plot_SED(df_fluxes, df_trans, args, x_scale='linear'):
 
     return fig
 
+# -------------------------------------------------------------------------------------------------------
+def plot_cutouts(df_fluxes, args):
+    '''
+    Function to plot 2D image cutouts based on input dataframe of ra, dec and existing mosaic images
+    Saves plot as png figure and
+    Returns figure handle
+    '''
+    max_filters_per_page = 6
+    cmap = 'viridis'
+    image_dir = args.input_dir / 'COSMOS' / 'imaging'
+
+    if args.fontsize == 10: args.fontsize = 15
+    cutout_size = 2 * args.arcsec_limit # in arcsec
+    fits_images = glob.glob(str(image_dir / '*.fits'))
+    n_filters = len(fits_images)
+    n_obj = len(df_fluxes)
+    n_figs = int(np.ceil(n_filters / max_filters_per_page))
+
+    figname = args.output_dir / f'{args.intersection_conditions}_all_cutouts.pdf'
+    pdf = PdfPages(figname)
+
+    # ----------getting the seg map----------------
+    if args.only_seg:
+        field = np.unique(df_fluxes['field'])[0]
+        segmentation_file = args.input_dir /f'{field}' / 'Products' / f'{field}_comb_seg.fits'
+        seg_data = fits.open(segmentation_file)
+        seg_image = seg_data[0].data
+        seg_header = seg_data[0].header
+        wcs_seg_header = pywcs.WCS(seg_header)
+
+    # -------setting up for plotting the cutouts-------------------
+    print(f'\nTotal {n_obj} x {n_filters} = {n_obj * n_filters} cutouts to plot, of size {cutout_size}" each; hence splitting in to {n_figs} figures..')
+    fig_arr = []
+    for fig_index in range(n_figs):
+        print(f'\nMaking figure {fig_index + 1} of {n_figs}..')
+        these_fits_images = fits_images[fig_index * max_filters_per_page : min((fig_index + 1) * max_filters_per_page, n_filters)] # slicing the fits image array
+
+        fig, axes = plt.subplots(nrows=n_obj, ncols=min(n_filters, max_filters_per_page), figsize=(10, 8))
+        fig.subplots_adjust(left=0.05, right=0.98, bottom=0.07, top=0.97, hspace=0.05, wspace=0.05)
+
+        # ------looping over filters-------------
+        for col_index, thisfile in enumerate(these_fits_images):
+            print(f'Reading in file {os.path.split(thisfile)[-1]} which is {fig_index * max_filters_per_page + col_index + 1} of {n_filters}..')
+            try:
+                data = fits.open(thisfile)
+                image = data[0].data
+                header = data[0].header
+            except Exception as e:
+                print(f'Skipping {os.path.split(thisfile)[-1]} due to {e}')
+
+                # --------making sure the tick labels still get marked properly--------
+                for row_index, row in df_fluxes.iterrows():
+                    ax = axes[row_index][col_index]
+                    if row_index == 0: ax.text(0.98, 0.98, filter, c='k', ha='right', va='top', fontsize=args.fontsize / 2,transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+                    if col_index == 0:
+                        ax.set_ylabel('Dec (")', fontsize=args.fontsize / 2)
+                        ax.tick_params(axis='y', which='major', labelsize=args.fontsize / 2)
+                        ax.text(0.05, 0.05,  f'{row["redshift"]:.2f}', c='k', ha='left', va='bottom', fontsize=args.fontsize / 2, transform = ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+                    else:
+                        ax.set_yticklabels([])
+
+                    if row_index == n_obj - 1:
+                        ax.set_xlabel('RA (")', fontsize=args.fontsize / 2)
+                        ax.tick_params(axis='x', which='major', labelsize=args.fontsize / 2)
+                    else:
+                        ax.set_xticklabels([])
+
+                continue
+
+            wcs_header = pywcs.WCS(header)
+            filter = header['FILTER'] if 'FILTER' in header else ''
+
+            # ------looping over objects-------------
+            for row_index, row in df_fluxes.iterrows():
+                coord = SkyCoord(row['ra'],row['dec'], unit = 'deg')
+                cutout = Cutout2D(image, coord, cutout_size * u.arcsec, wcs = wcs_header)
+                cutout_header = cutout.wcs.to_header()
+
+                # ------for proper rebinning and applying segmentation map on cutout-------------
+                if args.only_seg:
+                    source_header = seg_header.copy()
+                    seg_cutout = Cutout2D(seg_image, coord, cutout_size * u.arcsec, wcs = wcs_seg_header)
+                    seg_cutout_header = seg_cutout.wcs.to_header()
+                    source_header.update(seg_cutout_header)  # important step to update the header of the full mosaic to that of just the cut out
+
+                    seg_cutout_data_hdu = fits.ImageHDU(seg_cutout.data, header=source_header)
+                    seg_cutout_data_rebinned, _ = reproject_interp(seg_cutout_data_hdu, cutout_header)
+
+                # ------now plotting the cutout-------------
+                ax = axes[row_index][col_index]
+                ax.imshow(np.log10(cutout.data), origin='lower', extent=args.extent, cmap=cmap)
+                if args.only_seg: ax.contour(seg_cutout_data_rebinned != row['objid'], levels=0, colors='k', extent=args.extent, linewidths=0.5)
+
+                # ------annotations and tick labels-------------
+                if row_index == 0: ax.text(0.98, 0.98, filter, c='k', ha='right', va='top', fontsize=args.fontsize/2, transform = ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+                if col_index == 0:
+                    ax.set_ylabel('Dec (")', fontsize=args.fontsize/2)
+                    ax.tick_params(axis='y', which='major', labelsize=args.fontsize/2)
+                    ax.text(0.05, 0.05, f'{row["redshift"]:.2f}', c='k', ha='left', va='bottom', fontsize=args.fontsize/2, transform = ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+                else:
+                    ax.set_yticklabels([])
+
+                if row_index == n_obj - 1:
+                    ax.set_xlabel('RA (")', fontsize=args.fontsize/2)
+                    ax.tick_params(axis='x', which='major', labelsize=args.fontsize/2)
+                else:
+                    ax.set_xticklabels([])
+
+        pdf.savefig(fig)
+        fig_arr.append(fig)
+
+    pdf.close()
+    print(f'Saved {n_figs} figures in {figname}')
+    plt.show(block=False)
+
+    return fig_arr
 
 # -------------------------------------------------------------------------------------------------------
 def get_fluxcols(args):
@@ -257,6 +374,7 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
     args.intersection_conditions = 'allpar_venn_EW,mass,PA'
     if args.fontsize == 10: args.fontsize = 15
+    args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
 
     args.cosmos2020_filename = args.input_dir / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3.fits'
     df_int_filename = args.output_dir / f'{args.intersection_conditions}_df.txt'
@@ -266,8 +384,10 @@ if __name__ == "__main__":
     fluxcols = [item for item in df_fluxes.columns if 'flux' in item.lower() and 'fluxerr' not in item.lower()]
     df_trans = read_filter_transmission(fluxcols, args)
     filters = pd.unique(df_trans['filter'])
-    fig = plot_filter_transmission(df_trans, args, x_scale='log')
 
-    fig2 = plot_SED(df_fluxes, df_trans, args, x_scale='log')
+    # ----------plotting-----------------
+    #fig = plot_filter_transmission(df_trans, args, x_scale='log')
+    #fig2 = plot_SED(df_fluxes, df_trans, args, x_scale='log')
+    fig3 = plot_cutouts(df_fluxes, args)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

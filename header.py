@@ -55,6 +55,7 @@ import matplotlib.image as mpimg
 from matplotlib import colors as mplcolors
 from matplotlib import colormaps as mplcolormaps
 from matplotlib import cm as mpl_cm
+from matplotlib.backends.backend_pdf import PdfPages
 import mplcyberpunk
 
 from astropy.table import Table, join
