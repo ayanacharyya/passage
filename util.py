@@ -131,6 +131,12 @@ def parse_args():
     parser.add_argument('--plot_flux_vs_mag', dest='plot_flux_vs_mag', action='store_true', default=False, help='Plot line flux vs mag for each object? Default is no.')
     parser.add_argument('--foggie_comp', dest='foggie_comp', action='store_true', default=False, help='Plot Zgrad vs redshift to exact same limits as the FOGGIE plot, for comparison? Default is no.')
 
+    # ------- args added for compute_stellar_mass.py ------------------------------
+    parser.add_argument('--plot_transmission', dest='plot_transmission', action='store_true', default=False, help='Plot transmission curves for all filters? Default is no.')
+    parser.add_argument('--plot_SED', dest='plot_SED', action='store_true', default=False, help='Plot SED for all filters? Default is no.')
+    parser.add_argument('--plot_cutouts', dest='plot_cutouts', action='store_true', default=False, help='Plot 2D image cutouts? Default is no.')
+    parser.add_argument('--plot_all', dest='plot_all', action='store_true', default=False, help='Plot cutouts for ALL filters? Default is no.')
+
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]

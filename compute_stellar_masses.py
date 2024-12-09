@@ -4,8 +4,9 @@
     Author : Ayan
     Created: 19-08-24
     Example: run compute_stellar_masses.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
-             run compute_stellar_masses.py --only_seg --arcsec_limit 1
-             run compute_stellar_masses.py
+             run compute_stellar_masses.py --plot_transmission --plot_SED
+             run compute_stellar_masses.py --plot_cutouts --plot_all --arcsec_limit 1 --only_seg
+             run compute_stellar_masses.py --plot_cutouts
 '''
 from header import *
 from util import *
@@ -155,24 +156,61 @@ def plot_SED(df_fluxes, df_trans, args, x_scale='linear'):
     return fig
 
 # -------------------------------------------------------------------------------------------------------
+def annotate_axis(ax, col_index, row_index, row, filter, n_obj, args):
+    '''
+    To annotate one individual axis properly
+    Returns axis handle
+    '''
+    if row_index == 0: ax.text(0.9, 0.9, filter, c='k', ha='right', va='top', fontsize=args.fontsize / 2 if len(filter) < 10 else args.fontsize / 5, transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+    if col_index == 0:
+        ax.set_ylabel('Dec (")', fontsize=args.fontsize / 2)
+        ax.tick_params(axis='y', which='major', labelsize=args.fontsize / 2)
+        ax.text(0.1, 0.1, f'{row["redshift"]:.2f}', c='k', ha='left', va='bottom', fontsize=args.fontsize / 2, transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+    else:
+        ax.set_yticklabels([])
+
+    if row_index == n_obj - 1:
+        ax.set_xlabel('RA (")', fontsize=args.fontsize / 2)
+        ax.tick_params(axis='x', which='major', labelsize=args.fontsize / 2)
+    else:
+        ax.set_xticklabels([])
+
+    return ax
+
+# -------------------------------------------------------------------------------------------------------
+def fix_axes(col_index, axes, df_fluxes, filter, n_obj, args):
+    '''
+    To mark the tick labels etc properly, even if data is not being plotted
+    '''
+    for row_index, row in df_fluxes.iterrows():
+        ax = axes[row_index][col_index]
+        ax.imshow(np.ones((25, 25)), origin='lower', extent=args.extent, cmap='Greys')
+        ax.scatter(0, 0, marker='x', c='k', s=50)
+        ax = annotate_axis(ax, col_index, row_index, row, filter, n_obj, args)
+
+# -------------------------------------------------------------------------------------------------------
 def plot_cutouts(df_fluxes, args):
     '''
     Function to plot 2D image cutouts based on input dataframe of ra, dec and existing mosaic images
     Saves plot as png figure and
     Returns figure handle
     '''
-    max_filters_per_page = 6
+    max_filters_per_page = 10
     cmap = 'viridis'
     image_dir = args.input_dir / 'COSMOS' / 'imaging'
+    files_to_not_plot = ['xmm', 'vla', '-int'] # removing x-ray and VLA filters because of their strange header, and galex because of their extremely poor spatial res
 
     if args.fontsize == 10: args.fontsize = 15
     cutout_size = 2 * args.arcsec_limit # in arcsec
     fits_images = glob.glob(str(image_dir / '*.fits'))
+    if not args.plot_all: fits_images = [os.path.split(item)[-1] for item in fits_images if not np.array([item2 in item.lower() for item2 in files_to_not_plot]).any()]
+    else: fits_images = [os.path.split(item)[-1] for item in fits_images]
+    fits_images.sort()
     n_filters = len(fits_images)
     n_obj = len(df_fluxes)
     n_figs = int(np.ceil(n_filters / max_filters_per_page))
 
-    figname = args.output_dir / f'{args.intersection_conditions}_all_cutouts.pdf'
+    figname = args.output_dir / f'{args.intersection_conditions}_all_{cutout_size:.1f}"_cutouts.pdf'
     pdf = PdfPages(figname)
 
     # ----------getting the seg map----------------
@@ -191,40 +229,33 @@ def plot_cutouts(df_fluxes, args):
         print(f'\nMaking figure {fig_index + 1} of {n_figs}..')
         these_fits_images = fits_images[fig_index * max_filters_per_page : min((fig_index + 1) * max_filters_per_page, n_filters)] # slicing the fits image array
 
-        fig, axes = plt.subplots(nrows=n_obj, ncols=min(n_filters, max_filters_per_page), figsize=(10, 8))
+        fig, axes = plt.subplots(nrows=n_obj, ncols=min(n_filters, max_filters_per_page), figsize=(12, 7))
         fig.subplots_adjust(left=0.05, right=0.98, bottom=0.07, top=0.97, hspace=0.05, wspace=0.05)
 
         # ------looping over filters-------------
         for col_index, thisfile in enumerate(these_fits_images):
-            print(f'Reading in file {os.path.split(thisfile)[-1]} which is {fig_index * max_filters_per_page + col_index + 1} of {n_filters}..')
-            try:
-                data = fits.open(thisfile)
-                image = data[0].data
-                header = data[0].header
-            except Exception as e:
-                print(f'Skipping {os.path.split(thisfile)[-1]} due to {e}')
+            thisfilename = os.path.splitext(thisfile)[0]
+            print(f'Reading in file {thisfilename} which is {fig_index * max_filters_per_page + col_index + 1} of {n_filters}..')
+            thisfilename = thisfilename.replace('COSMOS', '').replace('original', '').replace('psf', '').replace('v1', '').replace('v2', '').replace('v3', '').replace('v5', '').replace('_go2_sci_10', '').replace('img', '').replace('mosaic_Shrink10', '').replace(df_fluxes['field'].values[0], '').replace('drz_sci', '').replace('.', '').replace('_', '').replace('-', '')
 
-                # --------making sure the tick labels still get marked properly--------
-                for row_index, row in df_fluxes.iterrows():
-                    ax = axes[row_index][col_index]
-                    if row_index == 0: ax.text(0.98, 0.98, filter, c='k', ha='right', va='top', fontsize=args.fontsize / 2,transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
-                    if col_index == 0:
-                        ax.set_ylabel('Dec (")', fontsize=args.fontsize / 2)
-                        ax.tick_params(axis='y', which='major', labelsize=args.fontsize / 2)
-                        ax.text(0.05, 0.05,  f'{row["redshift"]:.2f}', c='k', ha='left', va='bottom', fontsize=args.fontsize / 2, transform = ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
-                    else:
-                        ax.set_yticklabels([])
+            data = fits.open(image_dir / thisfile)
+            image = data[0].data
+            header = data[0].header
 
-                    if row_index == n_obj - 1:
-                        ax.set_xlabel('RA (")', fontsize=args.fontsize / 2)
-                        ax.tick_params(axis='x', which='major', labelsize=args.fontsize / 2)
-                    else:
-                        ax.set_xticklabels([])
-
+            if 'CTYPE3' in header: # for radio images
+                print(f'Skipping {thisfilename} due to radio data header format..')
+                fix_axes(col_index, axes, df_fluxes, thisfilename, n_obj, args)
                 continue
 
+                image = image[0][0]
+                header['NAXIS'] = 2
+                for i in [3, 4]:
+                    for kw in ['CTYPE', 'CRVAL', 'CRPIX', 'CDELT', 'NAXIS', 'CUNIT', 'PC1_', 'PC2_']:
+                        header.remove(f'{kw}{i}', ignore_missing = True)
+
             wcs_header = pywcs.WCS(header)
-            filter = header['FILTER'] if 'FILTER' in header else ''
+            filter = header['FILTER'] if 'FILTER' in header else thisfilename
+            if filter == 'CLEAR': filter = thisfilename
 
             # ------looping over objects-------------
             for row_index, row in df_fluxes.iterrows():
@@ -244,23 +275,18 @@ def plot_cutouts(df_fluxes, args):
 
                 # ------now plotting the cutout-------------
                 ax = axes[row_index][col_index]
-                ax.imshow(np.log10(cutout.data), origin='lower', extent=args.extent, cmap=cmap)
+                ax.imshow(np.log10(cutout.data), origin='lower', extent=args.extent, cmap=cmap)#, vmin=-8, vmax=1)
+                #print(f'Deb280: min = {np.nanmin(np.log10(cutout.data))}, max={np.nanmax(np.log10(cutout.data))}') ##
+                ax.scatter(0, 0, marker='x', c='r', s=30)
+                ax = annotate_axis(ax, col_index, row_index, row, filter, n_obj, args)
                 if args.only_seg: ax.contour(seg_cutout_data_rebinned != row['objid'], levels=0, colors='k', extent=args.extent, linewidths=0.5)
 
-                # ------annotations and tick labels-------------
-                if row_index == 0: ax.text(0.98, 0.98, filter, c='k', ha='right', va='top', fontsize=args.fontsize/2, transform = ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
-                if col_index == 0:
-                    ax.set_ylabel('Dec (")', fontsize=args.fontsize/2)
-                    ax.tick_params(axis='y', which='major', labelsize=args.fontsize/2)
-                    ax.text(0.05, 0.05, f'{row["redshift"]:.2f}', c='k', ha='left', va='bottom', fontsize=args.fontsize/2, transform = ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
-                else:
-                    ax.set_yticklabels([])
-
-                if row_index == n_obj - 1:
-                    ax.set_xlabel('RA (")', fontsize=args.fontsize/2)
-                    ax.tick_params(axis='x', which='major', labelsize=args.fontsize/2)
-                else:
-                    ax.set_xticklabels([])
+        # --------hiding excess axes frames--------------
+        spare_columns = max_filters_per_page - len(these_fits_images)
+        for col_index in range(spare_columns):
+            for row_index in range(len(df_fluxes)):
+                ax = axes[row_index][col_index + len(these_fits_images)]
+                ax.set_visible(False)
 
         pdf.savefig(fig)
         fig_arr.append(fig)
@@ -386,8 +412,8 @@ if __name__ == "__main__":
     filters = pd.unique(df_trans['filter'])
 
     # ----------plotting-----------------
-    #fig = plot_filter_transmission(df_trans, args, x_scale='log')
-    #fig2 = plot_SED(df_fluxes, df_trans, args, x_scale='log')
-    fig3 = plot_cutouts(df_fluxes, args)
+    if args.plot_transmission: fig = plot_filter_transmission(df_trans, args, x_scale='log')
+    if args.plot_SED: fig2 = plot_SED(df_fluxes, df_trans, args, x_scale='log')
+    if args.plot_cutouts: fig3 = plot_cutouts(df_fluxes, args)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
