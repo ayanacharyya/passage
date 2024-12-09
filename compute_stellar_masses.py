@@ -189,6 +189,23 @@ def fix_axes(col_index, axes, df_fluxes, filter, n_obj, args):
         ax = annotate_axis(ax, col_index, row_index, row, filter, n_obj, args)
 
 # -------------------------------------------------------------------------------------------------------
+def extract_header(source_data, source_header):
+    '''
+    Extracts a smaller, more digestible (for cutout2D) header from radio image header
+    Returns extracted header
+    Adapted from Alessandro Ignesti's code
+    '''
+    hdu = fits.PrimaryHDU(source_data)
+    for kw in 'CTYPE', 'CRVAL', 'CRPIX', 'CDELT', 'CUNIT':
+        for n in [1, 2]:
+            if f'{kw}{n}'in source_header: hdu.header.append((f'{kw}{n}', source_header[f'{kw}{n}']))
+
+    for kw in ['BMAJ', 'BMIN', 'BPA']:
+        if kw in source_header: hdu.header.append((kw, source_header[kw]))
+
+    return hdu.header
+
+# -------------------------------------------------------------------------------------------------------
 def plot_cutouts(df_fluxes, args):
     '''
     Function to plot 2D image cutouts based on input dataframe of ra, dec and existing mosaic images
@@ -198,7 +215,7 @@ def plot_cutouts(df_fluxes, args):
     max_filters_per_page = 10
     cmap = 'viridis'
     image_dir = args.input_dir / 'COSMOS' / 'imaging'
-    files_to_not_plot = ['xmm', 'vla', '-int'] # removing x-ray and VLA filters because of their strange header, and galex because of their extremely poor spatial res
+    files_to_not_plot = ['xmm', '-int'] # removing x-ray and galex because of their extremely poor spatial res
 
     if args.fontsize == 10: args.fontsize = 15
     cutout_size = 2 * args.arcsec_limit # in arcsec
@@ -210,7 +227,8 @@ def plot_cutouts(df_fluxes, args):
     n_obj = len(df_fluxes)
     n_figs = int(np.ceil(n_filters / max_filters_per_page))
 
-    figname = args.output_dir / f'{args.intersection_conditions}_all_{cutout_size:.1f}"_cutouts.pdf'
+    all_text = 'all' if args.plot_all else 'subset'
+    figname = args.output_dir / f'{args.intersection_conditions}_{all_text}_{cutout_size:.1f}"_cutouts.pdf'
     pdf = PdfPages(figname)
 
     # ----------getting the seg map----------------
@@ -236,26 +254,20 @@ def plot_cutouts(df_fluxes, args):
         for col_index, thisfile in enumerate(these_fits_images):
             thisfilename = os.path.splitext(thisfile)[0]
             print(f'Reading in file {thisfilename} which is {fig_index * max_filters_per_page + col_index + 1} of {n_filters}..')
-            thisfilename = thisfilename.replace('COSMOS', '').replace('original', '').replace('psf', '').replace('v1', '').replace('v2', '').replace('v3', '').replace('v5', '').replace('_go2_sci_10', '').replace('img', '').replace('mosaic_Shrink10', '').replace(df_fluxes['field'].values[0], '').replace('drz_sci', '').replace('.', '').replace('_', '').replace('-', '')
+            thisfilename = thisfilename.replace('COSMOS', '').replace('original', '').replace('psf', '').replace('v1', '').replace('v2', '').replace('v3', '').replace('v5', '').replace('_go2_sci_10', '').replace('img', '').replace('mosaic_Shrink10', '').replace('vla', '').replace('lg_sin_10', '').replace('msmf', '').replace(df_fluxes['field'].values[0], '').replace('drz_sci', '').replace('.', '').replace('_', '').replace('-', '')
 
             data = fits.open(image_dir / thisfile)
             image = data[0].data
             header = data[0].header
 
             if 'CTYPE3' in header: # for radio images
-                print(f'Skipping {thisfilename} due to radio data header format..')
-                fix_axes(col_index, axes, df_fluxes, thisfilename, n_obj, args)
-                continue
-
-                image = image[0][0]
-                header['NAXIS'] = 2
-                for i in [3, 4]:
-                    for kw in ['CTYPE', 'CRVAL', 'CRPIX', 'CDELT', 'NAXIS', 'CUNIT', 'PC1_', 'PC2_']:
-                        header.remove(f'{kw}{i}', ignore_missing = True)
+                print(f'Modifying header because {thisfilename} is in radio data format..')
+                if len(np.shape(image)) > 2: image = image[0][0]
+                header = extract_header(image, header)
 
             wcs_header = pywcs.WCS(header)
             filter = header['FILTER'] if 'FILTER' in header else thisfilename
-            if filter == 'CLEAR': filter = thisfilename
+            if filter == 'CLEAR' or  'Thin' in filter: filter = thisfilename
 
             # ------looping over objects-------------
             for row_index, row in df_fluxes.iterrows():
