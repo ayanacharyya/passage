@@ -53,6 +53,7 @@ def parse_args():
     # ------- args added for plot_footprints.py ------------------------------
     parser.add_argument('--bg', metavar='bg', type=str, action='store', default='COSMOS', help='Which survey to be used to plot background? Default is COSMOS')
     parser.add_argument('--bg_file', metavar='bg_file', type=str, action='store', default=None, help='Which file to be used for plotting the background image?')
+    parser.add_argument('--bg_image_dir', metavar='bg_image_dir', type=str, action='store', default=None, help='Which folder to be used for looking for the background image?')
     parser.add_argument('--plot_zcosmos', dest='plot_zcosmos', action='store_true', default=False, help='Overplot the (thousands of) zCOSMOS targets? Default is no.')
     parser.add_argument('--plot_cosmos2020', dest='plot_cosmos2020', action='store_true', default=False, help='Overplot the (millions of) COSMOS2020 targets? Default is no.')
 
@@ -135,6 +136,7 @@ def parse_args():
     parser.add_argument('--plot_transmission', dest='plot_transmission', action='store_true', default=False, help='Plot transmission curves for all filters? Default is no.')
     parser.add_argument('--plot_SED', dest='plot_SED', action='store_true', default=False, help='Plot SED for all filters? Default is no.')
     parser.add_argument('--plot_cutouts', dest='plot_cutouts', action='store_true', default=False, help='Plot 2D image cutouts? Default is no.')
+    parser.add_argument('--plot_cutout_errors', dest='plot_cutout_errors', action='store_true', default=False, help='Plot 2D uncertainty maps of cutouts? Default is no.')
     parser.add_argument('--plot_all', dest='plot_all', action='store_true', default=False, help='Plot cutouts for ALL filters? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
@@ -531,6 +533,76 @@ def setup_plots_for_talks():
     plt.rcParams['savefig.facecolor'] = new_background_color
     plt.rcParams['grid.alpha'] = 0.5
     plt.rcParams['grid.linewidth'] = 0.3
+
+# ------------------------------------------------------------------------------------------------------
+def get_files_in_url(url, ext='fits'):
+    '''
+    Function to get list of fits files in a given URL
+    Returns list of urls of the files
+    From https://stackoverflow.com/questions/11023530/python-to-list-http-files-and-directories
+    '''
+    page = requests.get(url).text
+    soup = BeautifulSoup(page, 'html.parser')
+    url_list = [url + '/' + node.get('href') for node in soup.find_all('a') if node.get('href').endswith(ext)]
+
+    return url_list
+
+# ------------------------------------------------------------------------------------------------------
+def download_files_from_url(url, outdir, ext='fits', match_strings=['']):
+    '''
+    Function to download all fits files that contain <amch_string> in the filename from a given URL
+    Saves the downloaded files in outdir
+    '''
+    start_time = datetime.now()
+    outdir = Path(outdir)
+    url_list = get_files_in_url(url, ext=ext)
+    len_orig = len(url_list)
+    for match_string in match_strings: url_list = [item for item in url_list if match_string in item]
+    print(f'Found {len(url_list)} matching files out of {len_orig} at URL {url}')
+
+    for index, this_url in enumerate(url_list):
+        target_file = os.path.split(this_url)[-1]
+        if os.path.isfile(outdir / target_file):
+            print(f'Skipping file {target_file} ({index + 1} of {len(url_list)}) because it already exists at target location')
+        else:
+            start_time2 = datetime.now()
+            print(f'Downloading file {target_file} which is {index + 1} of {len(url_list)}..')
+            urlretrieve(this_url, outdir / target_file)
+            print(f'Completed this download in {timedelta(seconds=(datetime.now() - start_time2).seconds)}')
+
+    print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
+
+# ------------------------------------------------------------------------------------------------------
+def get_sky_region_from_fits_header(header, CDELT1='CD1_1', CDELT2='CD2_2', ORIENT='ORIENTAT'):
+    '''
+    Function to make an astro RectanguleSkyRegion from a given fits header
+    Returns SkyRegion
+    '''
+    center_ra = header['CRVAL1'] + (header['NAXIS1']/2 - header['CRPIX1']) * header[CDELT1]
+    center_dec = header['CRVAL2'] + (header['NAXIS2']/2 - header['CRPIX2']) * header[CDELT2]
+    width = np.abs(header[CDELT1]) * header['NAXIS1']
+    height = np.abs(header[CDELT2]) * header['NAXIS2']
+    angle = header[ORIENT] if ORIENT in header else 0.
+
+    sky_center = SkyCoord(center_ra, center_dec, unit='deg')
+    sky_region = RectangleSkyRegion(center=sky_center, width=width * u.deg, height=height * u.deg, angle=angle * u.deg)
+
+    return sky_region
+
+# ------------------------------------------------------------------------------------------------------
+def is_point_in_region(sky_coord, data, CDELT1='CD1_1', CDELT2='CD2_2', ORIENT='ORIENTAT'):
+    '''
+    Function to check if an input sky coordinate lies within the footprint of a given fits file
+    Returns True/False
+    '''
+    if type(data) == str: # in case the input is the filename
+        data = fits.open(data)
+    header = data[0].header
+    sky_region = get_sky_region_from_fits_header(header, CDELT1=CDELT1, CDELT2=CDELT2, ORIENT=ORIENT)
+
+    contains = sky_region.contains(sky_coord, pywcs.WCS(header))
+
+    return contains
 
 # -----------------------------------------------------------------
 def rebin(array, dimensions=None, scale=None):

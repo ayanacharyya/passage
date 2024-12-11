@@ -38,12 +38,15 @@ from reproject import reproject_interp, reproject_adaptive
 
 import regions
 from regions import Regions
+from regions import RectangleSkyRegion, RectanglePixelRegion
 
 import vorbin
 from vorbin.voronoi_2d_binning import voronoi_2d_binning
 
 import requests
+from bs4 import BeautifulSoup
 from urllib.parse import quote as urlencode
+from urllib.request import urlretrieve
 from mastquery import utils as mastutils
 from mastquery import query
 import plotly.express as px

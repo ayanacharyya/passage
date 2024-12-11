@@ -6,6 +6,7 @@
     Last modified: 18-06-24
     Example: run plot_footprints.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field COSMOS
              run plot_footprints.py --bg COSMOS --plot_zcosmos
+             run plot_footprints.py --bg_image_dir /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/COSMOS/imaging_orig/ --bg_file ACS_814_030mas_077_sci.fits
              run plot_footprints.py --fortalk
 '''
 
@@ -109,15 +110,17 @@ def plot_background(filename, args):
 
     ax.imshow(data, origin='lower', cmap=cmap, vmin=-4, vmax=-3) # full, relevant range of data, for COSMOS field, is roughly (-6,-1)
 
-    ra_offset = header['CRVAL1'] - header['CRPIX1'] * header['CDELT1']
-    ra_per_pix = header['CDELT1']
-    dec_offset = header['CRVAL2'] - header['CRPIX2'] * header['CDELT2']
-    dec_per_pix = header['CDELT2']
+    CDELT1 = 'CDELT1' if 'CDELT1' in header else 'CD1_1'
+    CDELT2 = 'CDELT2' if 'CDELT2' in header else 'CD2_2'
+    ra_offset = header['CRVAL1'] - header['CRPIX1'] * header[CDELT1]
+    ra_per_pix = header[CDELT1]
+    dec_offset = header['CRVAL2'] - header['CRPIX2'] * header[CDELT2]
+    dec_per_pix = header[CDELT2]
 
     ax.xaxis.set_major_locator(plt.MaxNLocator(5))
     ax.yaxis.set_major_locator(plt.MaxNLocator(5))
-    ax.set_xticklabels(['%.1F' % (item * ra_per_pix + ra_offset) for item in ax.get_xticks()], fontsize=args.fontsize)
-    ax.set_yticklabels(['%.1F' % (item * dec_per_pix + dec_offset) for item in ax.get_yticks()], fontsize=args.fontsize)
+    ax.set_xticklabels(['%.3F' % (item * ra_per_pix + ra_offset) for item in ax.get_xticks()], fontsize=args.fontsize)
+    ax.set_yticklabels(['%.3F' % (item * dec_per_pix + dec_offset) for item in ax.get_yticks()], fontsize=args.fontsize)
 
     ax.set_xlabel('RA (deg)', fontsize=args.fontsize)
     ax.set_ylabel('Dec (deg)', fontsize=args.fontsize)
@@ -130,14 +133,16 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
 
     # --------directory structures and file names-------------
-    bg_image_dir = args.input_dir / 'footprints/survey_images'
     reg_files_dir = args.input_dir / 'footprints/region_files'
 
+    if args.bg_image_dir is None: args.bg_image_dir = args.input_dir / 'footprints/survey_images'
+    else: args.bg_image_dir = Path(args.bg_image_dir)
+
     if args.bg_file is None:
-        if args.bg == 'COSMOS': bg_filename = bg_image_dir / 'COSMOS-HST-ACS_mosaic_Shrink100.fits' # if field is COSMOS, by default use this background image
-        else: bg_filename = list(bg_image_dir.glob('*%s*.fits' %args.bg))[0] # for other fields, look for available background image files
+        if args.bg == 'COSMOS': bg_filename = args.bg_image_dir / 'COSMOS-HST-ACS_mosaic_Shrink100.fits' # if field is COSMOS, by default use this background image
+        else: bg_filename = list(args.bg_image_dir.glob('*%s*.fits' %args.bg))[0] # for other fields, look for available background image files
     else:
-        bg_filename = bg_image_dir / args.bg_file
+        bg_filename = args.bg_image_dir / args.bg_file
 
     reg_filenames = list(reg_files_dir.glob('*%s*.reg' %args.bg))
     reg_filenames += list(reg_files_dir.glob('*PASSAGE*.reg'))

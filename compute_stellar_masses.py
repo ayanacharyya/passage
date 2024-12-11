@@ -6,6 +6,7 @@
     Example: run compute_stellar_masses.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
              run compute_stellar_masses.py --plot_transmission --plot_SED
              run compute_stellar_masses.py --plot_cutouts --plot_all --arcsec_limit 1 --only_seg
+             run compute_stellar_masses.py --plot_cutouts --plot_cutout_errors
              run compute_stellar_masses.py --plot_cutouts
 '''
 from header import *
@@ -178,17 +179,6 @@ def annotate_axis(ax, col_index, row_index, row, filter, n_obj, args):
     return ax
 
 # -------------------------------------------------------------------------------------------------------
-def fix_axes(col_index, axes, df_fluxes, filter, n_obj, args):
-    '''
-    To mark the tick labels etc properly, even if data is not being plotted
-    '''
-    for row_index, row in df_fluxes.iterrows():
-        ax = axes[row_index][col_index]
-        ax.imshow(np.ones((25, 25)), origin='lower', extent=args.extent, cmap='Greys')
-        ax.scatter(0, 0, marker='x', c='k', s=50)
-        ax = annotate_axis(ax, col_index, row_index, row, filter, n_obj, args)
-
-# -------------------------------------------------------------------------------------------------------
 def extract_header(source_data, source_header):
     '''
     Extracts a smaller, more digestible (for cutout2D) header from radio image header
@@ -206,28 +196,94 @@ def extract_header(source_data, source_header):
     return hdu.header
 
 # -------------------------------------------------------------------------------------------------------
+def get_error_map(filepath, shape, isweight=False):
+    '''
+    Function to read in the errormap for a given filename, if file exists, and returns dummy array if file des not exist
+    If the provided file is a weightmap instead of erromap, then calculates errormap from the weightmap
+    Returns uncertainty map as 2D image
+    '''
+    if os.path.isfile(filepath):
+        data = fits.open(filepath)
+        error_map = data[0].data
+        if isweight: error_map = error_map ** (-0.5)
+    else:
+        print(f'Could not find error file {os.path.split(filepath)[-1]}')
+        error_map = np.ones(shape)
+
+    return error_map
+
+# -------------------------------------------------------------------------------------------------------
+def get_flux_error(filepath, shape):
+    '''
+    Function to determine the filename of the weightmap for a given fluxmap, and then compute the uncertainty
+    Returns uncertainty map as 2D image
+    '''
+    filedir, filename = os.path.split(filepath)
+    filedir = Path(filedir)
+
+    if '-nd-' in filename or '-fd-' in filename:
+        error_filename = filename.replace('int', 'skybg')
+        error_map = get_error_map(filedir / error_filename, shape)
+    elif '27T16_34_32' in filename:
+        id = int(filename.split('.')[-2])
+        weight_filename = filename.replace(f'{id}', f'{id+1}')
+        error_map = get_error_map(filedir / weight_filename, shape, isweight=True)
+    elif 'homogenized' in filename or 'vla' in filename.lower():
+        error_filename = filename.replace('.fits', '.rms.fits')
+        error_map = get_error_map(filedir / error_filename, shape)
+    elif 'irac' in filename:
+        error_filename = filename.replace('sci', 'unc')
+        error_map = get_error_map(filedir / error_filename, shape)
+    elif 'drz' in filename:
+        error_filename = filename.replace('sci', 'wht')
+        error_map = get_error_map(filedir / error_filename, shape, isweight=True)
+    elif 'subaru' in filename or 'cfht' in filename:
+        error_filename = filename.replace('sci', 'rms')
+        error_map = get_error_map(filedir / error_filename, shape)
+    elif 'xmm' in filename:
+        error_filename = filename.replace('img', 'bg')
+        error_map = get_error_map(filedir / error_filename, shape)
+    else:
+        print(f'No error file specified')
+        error_map = np.ones(shape)
+
+    return  error_map
+
+# -------------------------------------------------------------------------------------------------------
 def plot_cutouts(df_fluxes, args):
     '''
     Function to plot 2D image cutouts based on input dataframe of ra, dec and existing mosaic images
     Saves plot as png figure and
     Returns figure handle
     '''
-    max_filters_per_page = 10
+    max_columns_per_page = 10
     cmap = 'viridis'
     image_dir = args.input_dir / 'COSMOS' / 'imaging'
-    files_to_not_plot = ['xmm', '-int'] # removing x-ray and galex because of their extremely poor spatial res
+    unc_files = ['rms', 'unc', 'skybg', 'wht', '522', '524', '526', '533', '536'] # removing any files that are actually uncertainty/weight maps
+    files_to_not_plot = unc_files + ['xmm', '-int'] # removing x-ray and galex because of their extremely poor spatial res
 
     if args.fontsize == 10: args.fontsize = 15
     cutout_size = 2 * args.arcsec_limit # in arcsec
+
     fits_images = glob.glob(str(image_dir / '*.fits'))
-    if not args.plot_all: fits_images = [os.path.split(item)[-1] for item in fits_images if not np.array([item2 in item.lower() for item2 in files_to_not_plot]).any()]
-    else: fits_images = [os.path.split(item)[-1] for item in fits_images]
+    if not args.plot_all: fits_images = [os.path.split(item)[-1] for item in fits_images if not np.array([item2.lower() in item.lower() for item2 in files_to_not_plot]).any()]
+    else: fits_images = [os.path.split(item)[-1] for item in fits_images if not np.array([item2.lower() in item.lower() for item2 in unc_files]).any()]
+
     fits_images.sort()
     n_filters = len(fits_images)
+
+    if args.plot_cutout_errors:
+        max_filters_per_page = int(max_columns_per_page / 2)
+        n_columns = n_filters * 2
+    else:
+        max_filters_per_page = max_columns_per_page
+        n_columns = n_filters
+
     n_obj = len(df_fluxes)
-    n_figs = int(np.ceil(n_filters / max_filters_per_page))
+    n_figs = int(np.ceil(n_columns / max_columns_per_page))
 
     all_text = 'all' if args.plot_all else 'subset'
+    if args.plot_cutout_errors: all_text += '_wunc'
     figname = args.output_dir / f'{args.intersection_conditions}_{all_text}_{cutout_size:.1f}"_cutouts.pdf'
     pdf = PdfPages(figname)
 
@@ -241,28 +297,31 @@ def plot_cutouts(df_fluxes, args):
         wcs_seg_header = pywcs.WCS(seg_header)
 
     # -------setting up for plotting the cutouts-------------------
-    print(f'\nTotal {n_obj} x {n_filters} = {n_obj * n_filters} cutouts to plot, of size {cutout_size}" each; hence splitting in to {n_figs} figures..')
+    print(f'\nTotal {n_obj} x {n_filters} x {2 if args.plot_cutout_errors else 1} = {n_obj * n_columns} cutouts to plot, of size {cutout_size}" each; hence splitting in to {n_figs} figures..')
     fig_arr = []
     for fig_index in range(n_figs):
         print(f'\nMaking figure {fig_index + 1} of {n_figs}..')
         these_fits_images = fits_images[fig_index * max_filters_per_page : min((fig_index + 1) * max_filters_per_page, n_filters)] # slicing the fits image array
 
-        fig, axes = plt.subplots(nrows=n_obj, ncols=min(n_filters, max_filters_per_page), figsize=(12, 7))
+        fig, axes = plt.subplots(nrows=n_obj, ncols=min(n_columns, max_columns_per_page), figsize=(12, 7))
         fig.subplots_adjust(left=0.05, right=0.98, bottom=0.07, top=0.97, hspace=0.05, wspace=0.05)
 
         # ------looping over filters-------------
-        for col_index, thisfile in enumerate(these_fits_images):
+        for filter_index, thisfile in enumerate(these_fits_images):
+            col_index = filter_index * 2 if args.plot_cutout_errors else filter_index
             thisfilename = os.path.splitext(thisfile)[0]
-            print(f'Reading in file {thisfilename} which is {fig_index * max_filters_per_page + col_index + 1} of {n_filters}..')
-            thisfilename = thisfilename.replace('COSMOS', '').replace('original', '').replace('psf', '').replace('v1', '').replace('v2', '').replace('v3', '').replace('v5', '').replace('_go2_sci_10', '').replace('img', '').replace('mosaic_Shrink10', '').replace('vla', '').replace('lg_sin_10', '').replace('msmf', '').replace(df_fluxes['field'].values[0], '').replace('drz_sci', '').replace('.', '').replace('_', '').replace('-', '')
+            print(f'Reading in file {thisfilename} which is {fig_index * max_filters_per_page + filter_index + 1} of {n_filters}..')
+            thisfilename = thisfilename.replace('COSMOS', '').replace('_030mas_077_sci', '').replace('original', '').replace('psf', '').replace('v1', '').replace('v2', '').replace('v3', '').replace('v5', '').replace('_go2_sci_10', '').replace('img', '').replace('mosaic_Shrink10', '').replace('vla', '').replace('lg_sin_10', '').replace('msmf', '').replace(df_fluxes['field'].values[0], '').replace('drz_sci', '').replace('.', '').replace('_', '').replace('-', '')
 
             data = fits.open(image_dir / thisfile)
             image = data[0].data
             header = data[0].header
+            if args.plot_cutout_errors: image_error = get_flux_error(image_dir / thisfile, np.shape(image))
 
             if 'CTYPE3' in header: # for radio images
                 print(f'Modifying header because {thisfilename} is in radio data format..')
                 if len(np.shape(image)) > 2: image = image[0][0]
+                if args.plot_cutout_errors and len(np.shape(image_error)) > 2: image_error = image_error[0][0]
                 header = extract_header(image, header)
 
             wcs_header = pywcs.WCS(header)
@@ -273,6 +332,7 @@ def plot_cutouts(df_fluxes, args):
             for row_index, row in df_fluxes.iterrows():
                 coord = SkyCoord(row['ra'],row['dec'], unit = 'deg')
                 cutout = Cutout2D(image, coord, cutout_size * u.arcsec, wcs = wcs_header)
+                if args.plot_cutout_errors: cutout_error = Cutout2D(image_error, coord, cutout_size * u.arcsec, wcs = wcs_header)
                 cutout_header = cutout.wcs.to_header()
 
                 # ------for proper rebinning and applying segmentation map on cutout-------------
@@ -285,19 +345,28 @@ def plot_cutouts(df_fluxes, args):
                     seg_cutout_data_hdu = fits.ImageHDU(seg_cutout.data, header=source_header)
                     seg_cutout_data_rebinned, _ = reproject_interp(seg_cutout_data_hdu, cutout_header)
 
-                # ------now plotting the cutout-------------
-                ax = axes[row_index][col_index]
+                # ------now plotting the cutout flux-------------
+                ax = np.atleast_1d(axes[row_index])[col_index]
                 ax.imshow(np.log10(cutout.data), origin='lower', extent=args.extent, cmap=cmap)#, vmin=-8, vmax=1)
                 #print(f'Deb280: min = {np.nanmin(np.log10(cutout.data))}, max={np.nanmax(np.log10(cutout.data))}') ##
                 ax.scatter(0, 0, marker='x', c='r', s=30)
                 ax = annotate_axis(ax, col_index, row_index, row, filter, n_obj, args)
                 if args.only_seg: ax.contour(seg_cutout_data_rebinned != row['objid'], levels=0, colors='k', extent=args.extent, linewidths=0.5)
 
+                # ------now plotting the cutout error-------------
+                if args.plot_cutout_errors:
+                    ax = np.atleast_1d(axes[row_index])[col_index + 1]
+                    ax.imshow(np.log10(cutout_error.data), origin='lower', extent=args.extent,cmap=cmap)
+                    ax.scatter(0, 0, marker='x', c='r', s=30)
+                    ax = annotate_axis(ax, col_index + 1, row_index, row, filter + '_U', n_obj, args)
+                    if args.only_seg: ax.contour(seg_cutout_data_rebinned != row['objid'], levels=0, colors='k', extent=args.extent, linewidths=0.5)
+
         # --------hiding excess axes frames--------------
-        spare_columns = max_filters_per_page - len(these_fits_images)
+        cols_used_up = len(these_fits_images) * 2 if args.plot_cutout_errors else len(these_fits_images)
+        spare_columns = min(n_columns, max_columns_per_page) - cols_used_up
         for col_index in range(spare_columns):
             for row_index in range(len(df_fluxes)):
-                ax = axes[row_index][col_index + len(these_fits_images)]
+                ax = axes[row_index][col_index + cols_used_up]
                 ax.set_visible(False)
 
         pdf.savefig(fig)
