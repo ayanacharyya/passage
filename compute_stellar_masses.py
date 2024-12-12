@@ -347,8 +347,7 @@ def plot_cutouts(df_fluxes, args):
 
                 # ------now plotting the cutout flux-------------
                 ax = np.atleast_1d(axes[row_index])[col_index]
-                ax.imshow(np.log10(cutout.data), origin='lower', extent=args.extent, cmap=cmap)#, vmin=-8, vmax=1)
-                #print(f'Deb280: min = {np.nanmin(np.log10(cutout.data))}, max={np.nanmax(np.log10(cutout.data))}') ##
+                p = ax.imshow(np.log10(cutout.data), origin='lower', extent=args.extent, cmap=cmap)
                 ax.scatter(0, 0, marker='x', c='r', s=30)
                 ax = annotate_axis(ax, col_index, row_index, row, filter, n_obj, args)
                 if args.only_seg: ax.contour(seg_cutout_data_rebinned != row['objid'], levels=0, colors='k', extent=args.extent, linewidths=0.5)
@@ -356,8 +355,10 @@ def plot_cutouts(df_fluxes, args):
                 # ------now plotting the cutout error-------------
                 if args.plot_cutout_errors:
                     ax = np.atleast_1d(axes[row_index])[col_index + 1]
-                    ax.imshow(np.log10(cutout_error.data), origin='lower', extent=args.extent,cmap=cmap)
-                    ax.scatter(0, 0, marker='x', c='r', s=30)
+                    dummy_error = np.mean(cutout_error.data) == 1 # if error map was filled with only 1s
+                    if not dummy_error:
+                        ax.imshow(np.log10(cutout_error.data), origin='lower', extent=args.extent,cmap=cmap)
+                        ax.scatter(0, 0, marker='x', c='r', s=30)
                     ax = annotate_axis(ax, col_index + 1, row_index, row, filter + '_U', n_obj, args)
                     if args.only_seg: ax.contour(seg_cutout_data_rebinned != row['objid'], levels=0, colors='k', extent=args.extent, linewidths=0.5)
 
