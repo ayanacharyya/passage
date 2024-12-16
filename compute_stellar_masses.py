@@ -16,19 +16,19 @@ import random
 start_time = datetime.now()
 
 # -------------------------------------------------------------------------------------------------------
-def read_filter_transmission(filter_arr, args, verbose=False):
+def read_filter_transmission(filter_dir, filter_arr, args, verbose=False):
     '''
     Function to load transmission curves for filters in COSMOS2020 catalog
     Returns dataframe
     '''
-    transmission_file_path = args.input_dir / 'COSMOS' / 'transmission_curves'
+    print(f'Attempting to read all {len(filter_arr)} filter transmission files from {filter_dir}..')
     df_master = pd.DataFrame()
-    filter_arr = [filter[: filter.lower().find('_flux')].replace('SPLASH', 'IRAC') if '_flux' in filter.lower() else filter.replace('SPLASH', 'IRAC') for filter in filter_arr]
+    filter_arr = [filter[: filter.lower().find('_sci')].replace('SPLASH', 'IRAC') if '_sci' in filter.lower() else filter.replace('SPLASH', 'IRAC') for filter in filter_arr]
     filter_arr = list(dict.fromkeys(filter_arr)) # to remove duplicate filter entries
 
     for index, filter in enumerate(filter_arr):
         if verbose: print(f'Doing filter {filter} which is {index + 1} out of {len(filter_arr)}..')
-        transmission_filename = transmission_file_path / f'{filter}.txt'
+        transmission_filename = filter_dir / f'{filter}.txt'
 
         if os.path.exists(transmission_filename):
             if 'NIRISS' in filter:
@@ -105,7 +105,7 @@ def plot_SED(df_fluxes, df_trans, args, x_scale='linear'):
     filters, waves_cen, waves_width = [], [], []
 
     for fluxcol in fluxcols:
-        filter = fluxcol[: fluxcol.lower().find('_flux')].replace('SPLASH', 'IRAC') if '_flux' in fluxcol.lower() else fluxcol.replace('SPLASH', 'IRAC')
+        filter = fluxcol[: fluxcol.lower().find('_sci')].replace('SPLASH', 'IRAC') if '_sci' in fluxcol.lower() else fluxcol.replace('SPLASH', 'IRAC')
         thisdf = df_trans[df_trans['filter'] == filter]
         thisdf = thisdf.sort_values(by='wave')
 
@@ -404,17 +404,16 @@ def get_fluxcols(args):
     return fluxcols, df_cosmos
 
 # -------------------------------------------------------------------------------------------------------
-def get_flux_catalog(df_int, args):
+def get_flux_catalog(photcat_filename, df_int, args):
     '''
     Function to load or generate the catalog of flux values for galaxies of interest from the COSMOS2020 catalog, and add PASSAGE fluxes too
     Returns the dataframe containing all flux values
     '''
-    fluxfilename = args.output_dir / 'passage_cosmos_fluxes.csv'
-    if os.path.exists(fluxfilename) and not args.clobber:
-        print(f'Reading flux values from existing {fluxfilename}')
-        df_fluxes = pd.read_csv(fluxfilename)
+    if os.path.exists(photcat_filename) and not args.clobber:
+        print(f'Reading flux values from existing {photcat_filename}')
+        df_fluxes = pd.read_csv(photcat_filename)
     else:
-        print(f'{fluxfilename} does not exist, so preparing the flux list..')
+        print(f'{photcat_filename} does not exist, so preparing the flux list..')
         filename = args.input_dir / 'COSMOS' / 'cosmos_fluxes_subset.csv'
 
         if os.path.exists(filename):
@@ -470,11 +469,154 @@ def get_flux_catalog(df_int, args):
         # -------merging photcat with fluxes dataframe-------
         df_fluxes = pd.merge(df_fluxes, df_photcat[cols_to_extract], on='objid', how='inner')
 
+        # -------modiyfying all flux columns to have uniform nomenclature-------
+        fluxcols = [item for item in df_fluxes.columns if 'flux' in item.lower() and 'fluxerr' not in item.lower()]
+        for fluxcol in fluxcols:
+            filter = fluxcol[:fluxcol.lower().find('_flux')]
+            errcol = fluxcol.replace('FLUX', 'FLUXERR').replace('flux', 'fluxerr')
+            new_flux_col = filter + '_sci'
+            new_err_col = filter + '_err'
+            df_fluxes = df_fluxes.rename(columns={fluxcol: new_flux_col.replace('SC_IA', 'SC_IB'), errcol: new_err_col.replace('SC_IA', 'SC_IB')})
+
         # -------writing master fluxes df into file-------
-        df_fluxes.to_csv(fluxfilename, index=None)
-        print(f'Written passage+cosmos2020 flux table as {fluxfilename}')
+        df_fluxes.to_csv(photcat_filename, index=None)
+        print(f'Written passage+cosmos2020 flux table as {photcat_filename}')
+
 
     return df_fluxes
+
+# -------------------------------------------------------------------------------------------------------
+def load_photom_bagpipes(str_id, phot_cat, id_colname = 'bin_id', zeropoint = 28.9, cat_hdu_index = 0, extra_frac_err = 0.1):
+    '''
+    Code written by P J Watson
+    Load photometry from a catalogue to bagpipes-formatted data.
+
+    The output fluxes and uncertainties are scaled to microJanskys.
+
+    Parameters
+    ----------
+    str_id : str
+        The ID of the object in the photometric catalogue to fit.
+    phot_cat : os.PathLike
+        The location of the photometric catalogue.
+    id_colname : str, optional
+        The name of the column containing ``str_id``, by default
+        ``"bin_id"``.
+    zeropoint : float, optional
+        The AB magnitude zeropoint, by default ``28.9``.
+    cat_hdu_index : int | str, optional
+        The index or name of the HDU containing the photometric catalogue,
+        by default ``0``.
+    extra_frac_err : float, optional
+        An additional fractional error to be added to the photometric
+        uncertainties. By default ``extra_frac_err=0.1``, i.e. 10% of the
+        measured flux will be added in quadrature to the estimated
+        uncertainty.
+
+    Returns
+    -------
+    ArrayLike
+        An Nx2 array containing the fluxes and their associated
+        uncertainties in all photometric bands.
+    '''
+
+    if not isinstance(phot_cat, Table):
+        try: phot_cat = Table.read(phot_cat, hdu=cat_hdu_index)
+        except TypeError: phot_cat = Table.read(phot_cat)
+    phot_cat[id_colname] = phot_cat[id_colname].astype(str)
+
+    row_idx = (phot_cat[id_colname] == str_id).nonzero()[0][0]
+    fluxes = []
+    errs = []
+
+    for c in phot_cat.colnames:
+        if '_sci' in c.lower(): fluxes.append(phot_cat[c][row_idx])
+        elif '_var' in c.lower(): errs.append(np.sqrt(phot_cat[c][row_idx]))
+        elif '_err' in c.lower(): errs.append(phot_cat[c][row_idx])
+
+    #if zeropoint == 28.9: flux_scale = 1e-2
+    #else: flux_scale = 10 ** ((8.9 - zeropoint) / 2.5 + 6)
+    flux_scale = 1
+
+    flux = np.asarray(fluxes) * flux_scale
+    flux_err = np.asarray(errs) * flux_scale
+    flux_err = np.sqrt(flux_err**2 + (0.1 * flux) ** 2)
+    flux = flux.copy()
+    flux_err = flux_err.copy()
+    bad_values = (~np.isfinite(flux) | (flux <= 0) | ~np.isfinite(flux_err) | (flux_err <= 0))
+    flux[bad_values] = 0.0
+    flux_err[bad_values] = 1e30
+    return np.c_[flux, flux_err]
+
+# -------------------------------------------------------------------------------------------------------
+def generate_fit_params(obj_z, z_range = 0.01, num_age_bins = 5, min_age_bin = 30):
+    '''
+    Code written by P J Watson
+    Generate a default set of fit parameters for ``bagpipes``.
+
+    Parameters
+    ----------
+    obj_z : float | ArrayLike
+        The redshift of the object to fit. If ``ArrayLike``, this
+        indicates the maximum range of redshifts to fit to.
+    z_range : float, optional
+        The maximum redshift range to search over, by default 0.01. To fit
+        to a single redshift, pass a single value for ``obj_z``, and set
+        ``z_range=0.0``. If ``obj_z`` is ``ArrayLike``, this parameter is
+        ignored.
+    num_age_bins : int, optional
+        The number of age bins to fit, each of which will have a constant
+        star formation rate following Leja+19. By default ``5`` bins are
+        generated.
+    min_age_bin : float, optional
+        The minimum age of any bin in Myr, by default 30.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the necessary fit parameters for
+        ``bagpipes``.
+    '''
+    fit_params = {}
+    if (z_range == 0.0) or (type(obj_z) is ArrayLike): fit_params['redshift'] = obj_z
+    else: fit_params['redshift'] = (obj_z - z_range / 2, obj_z + z_range / 2)
+
+    # Set up necessary variables for cosmological calculations.
+    cosmo = FlatLambdaCDM(H0=70.0, Om0=0.3)
+    age_at_z = cosmo.age(np.nanmax(fit_params['redshift'])).value
+
+    age_bins = np.geomspace(min_age_bin, age_at_z * 1e3, num=num_age_bins)
+    age_bins = np.insert(age_bins, 0, 0.0)
+
+    continuity = {
+        'massformed': (3.0, 11.0),
+        'metallicity': (0.0, 3.0),
+        'metallicity_prior_mu': 1.0,
+        'metallicity_prior_sigma': 0.5,
+        'bin_edges': age_bins.tolist(),
+    }
+
+    for i in range(1, len(continuity['bin_edges']) - 1):
+        continuity['dsfr' + str(i)] = (-10.0, 10.0)
+        continuity['dsfr' + str(i) + '_prior'] = 'student_t'
+        continuity['dsfr' + str(i) + '_prior_scale'] = (
+            0.5  # Defaults to 0.3 (Leja19), we aim for a broader sample
+        )
+        continuity['dsfr' + str(i) + '_prior_df'] = (
+            2  # Defaults to this value as in Leja19, but can be set
+        )
+
+    fit_params['continuity'] = continuity
+
+    fit_params['dust'] = {
+        'type': 'Cardelli',
+        'Av': (0.0, 2.0),
+        'eta': 2.0,
+    }
+    fit_params['nebular'] = {'logU': (-3.5, -2.0)}
+    fit_params['t_bc'] = 0.02
+
+    return fit_params
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -484,18 +626,65 @@ if __name__ == "__main__":
     if args.fontsize == 10: args.fontsize = 15
     args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
 
+    # --------------declaring all paths-----------------
     args.cosmos2020_filename = args.input_dir / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3.fits'
+    photcat_filename = args.output_dir / 'passage_cosmos_fluxes.csv'
+    filter_dir = args.input_dir / 'COSMOS' / 'transmission_curves'
+    pipes_dir = args.output_dir / 'pipes'
+    pipes_dir.mkdir(exist_ok=True, parents=True)
+
+    # -----------reading in flux and transmission files------------------
     df_int_filename = args.output_dir / f'{args.intersection_conditions}_df.txt'
     df_int = pd.read_csv(df_int_filename)
-    df_fluxes = get_flux_catalog(df_int, args)
 
-    fluxcols = [item for item in df_fluxes.columns if 'flux' in item.lower() and 'fluxerr' not in item.lower()]
-    df_trans = read_filter_transmission(fluxcols, args)
-    filters = pd.unique(df_trans['filter'])
+    df_fluxes = get_flux_catalog(photcat_filename, df_int, args)
+    fluxcols = [item for item in df_fluxes.columns if '_sci' in item]
 
-    # ----------plotting-----------------
+    df_trans = read_filter_transmission(filter_dir, fluxcols, args)
+
+    # ----------plotting (for tests)-----------------
     if args.plot_transmission: fig = plot_filter_transmission(df_trans, args, x_scale='log')
     if args.plot_SED: fig2 = plot_SED(df_fluxes, df_trans, args, x_scale='log')
     if args.plot_cutouts: fig3 = plot_cutouts(df_fluxes, args)
+
+    # ---------discarding some unusable flux columns-----------------------
+    snr_thresh = 10
+    flux_thresh = 0.05 # in uJy
+
+    for fluxcol in fluxcols:
+        snr = df_fluxes[fluxcol] / df_fluxes[fluxcol.replace('_sci', '_err')]
+        if np.array(snr < snr_thresh).all() or np.array(df_fluxes[fluxcol] < flux_thresh).all():
+            print(f'Dropping {fluxcol}..')
+            df_fluxes.drop(fluxcol, axis=1, inplace=True)
+            df_fluxes.drop(fluxcol.replace('_sci', '_err'), axis=1, inplace=True)
+
+    photcat_filename = Path(str(photcat_filename).replace('.csv', '_for_bagpipe.csv'))
+    df_fluxes.to_csv(photcat_filename, index=None)
+    print(f'Written {photcat_filename} with only the reliable flux columns.')
+
+    filter_list = [str(filter_dir) + '/' + item[:item.lower().find('_sci')] + '.txt' for item in df_fluxes.columns if '_sci' in item]
+    print(f'Resultant photcat has {len(filter_list)} filters')
+
+    # ----------SED fitting: the following part of the code is heavily borrowed from P J Watson-----------------
+    if args.fit_sed:
+        os.chdir(args.output_dir)
+        load_fn = partial(load_photom_bagpipes, phot_cat=photcat_filename, id_colname='objid', zeropoint=28.9)
+
+        # ---------Loop over the objects-------------
+        for index, obj in df_fluxes.iterrows():
+            print(f'\nLooping over object {index + 1} of {len(df_fluxes)}..')
+            fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.2, num_age_bins=5, min_age_bin=30) # Generate the fit parameters
+
+            galaxy = bagpipes.galaxy(ID=obj['objid'], load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
+
+            fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run='first_try') # Fit this galaxy
+            fit.fit(verbose=True, sampler='nautilus', pool=4)
+
+            # ---------Make some plots---------
+            fig = fit.plot_spectrum_posterior(save=True, show=True)
+            fig = fit.plot_sfh_posterior(save=True, show=True)
+            fig = fit.plot_corner(save=True, show=True)
+
+        os.chdir(args.code_dir)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

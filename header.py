@@ -92,6 +92,11 @@ warnings.filterwarnings("ignore")
 import pprint
 pp = pprint.PrettyPrinter(indent=4)
 
+from os import PathLike
+from numpy.typing import ArrayLike
+from functools import partial
+import bagpipes
+
 #from pywwt.qt import WWTQtClient
 
 HOME = Path.home()
