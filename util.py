@@ -138,6 +138,7 @@ def parse_args():
     parser.add_argument('--plot_cutouts', dest='plot_cutouts', action='store_true', default=False, help='Plot 2D image cutouts? Default is no.')
     parser.add_argument('--plot_cutout_errors', dest='plot_cutout_errors', action='store_true', default=False, help='Plot 2D uncertainty maps of cutouts? Default is no.')
     parser.add_argument('--plot_all', dest='plot_all', action='store_true', default=False, help='Plot cutouts for ALL filters? Default is no.')
+    parser.add_argument('--fit_sed', dest='fit_sed', action='store_true', default=False, help='Fit SEDs? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
