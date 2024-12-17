@@ -35,6 +35,7 @@ from importlib import reload
 from PIL import Image
 from venn import venn, pseudovenn, generate_petal_labels, draw_venn, generate_colors
 from reproject import reproject_interp, reproject_adaptive
+from scipy.stats import mode as sci_mode
 
 import regions
 from regions import Regions

@@ -10,6 +10,14 @@
              run make_passage_plots.py --plot_conditions EW,mass,PA,a_image --plot_BPT
              run make_passage_plots.py --plot_flux_vs_mag
              run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_SFR_int --ycol lp_SFR --colorcol redshift
+
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol lp_mass --colorcol redshift
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol ez_mass --colorcol redshift
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol z_bgp --ycol lp_zBEST --colorcol redshift
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol z_bgp --ycol ez_z_phot --colorcol redshift
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_sfr_bgp --ycol lp_SFR --colorcol redshift
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_sfr_bgp --ycol ez_sfr --colorcol redshift
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol log_sfr_bgp --colorcol OIII_EW
 '''
 
 from header import *
@@ -191,8 +199,14 @@ def plot_flux_vs_mag(ax, args):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$', 'lp_SFR': r'log SFR (M$_{\odot}$/yr)', 'ez_z_phot': 'Redshift', 'redshift': 'Redshift', 'logOH_slope':r'log $\nabla$Z$_r$ (dex/kpc)'}
-bounds_dict = {'lp_mass': (6, 12), 'lp_SFR': (-3, 1), 'log_SFR_int': (-3, 1), 'ez_z_phot': (0, 3), 'redshift': (1.7, 2.2), 'logOH_slope': (-0.4, 0.1)}
+label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$ (LePhare)', 'ez_mass': r'log M$_*$/M$_{\odot}$ (EAZY)', 'log_mass_bgp': r'log M$_*$/M$_{\odot}$ (Bagpipes)', \
+              'lp_SFR': r'log SFR (M$_{\odot}$/yr) (LePhare)', 'ez_sfr': r'log SFR (M$_{\odot}$/yr) (EAZY)', 'log_sfr_bgp': r'log SFR (M$_{\odot}$/yr) (Bagpipes)', 'log_SFR_int': r'log SFR (M$_{\odot}$/yr) (Grizli)', \
+              'lp_zBEST': 'Redshift (LePhare)', 'ez_z_phot': 'Redshift (EAZY)', 'z_bgp': 'Redshift (Bagpipes)', 'redshift': 'Redshift (Grizli)', \
+              'logOH_slope':r'log $\nabla$Z$_r$ (dex/kpc)'}
+bounds_dict = {'lp_mass': (6, 12), 'ez_mass': (6, 12), 'log_mass_bgp': (6, 12), \
+               'lp_SFR': (-3, 1), 'ez_sfr': (-3, 1), 'log_sfr_bgp': (-3, 1), 'log_SFR_int': (-3, 1), \
+               'ez_z_phot': (0, 3), 'lp_zBEST': (0, 3), 'z_bgp': (0, 3), 'redshift': (1.7, 2.2), \
+               'logOH_slope': (-0.4, 0.1)}
 colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma')
 
 # --------------------------------------------------------------------------------------------------------------------

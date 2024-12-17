@@ -648,31 +648,38 @@ if __name__ == "__main__":
     if args.plot_cutouts: fig3 = plot_cutouts(df_fluxes, args)
 
     # ---------discarding some unusable flux columns-----------------------
-    snr_thresh = 10
-    flux_thresh = 0.05 # in uJy
+    photcat_filename_sed = Path(str(photcat_filename).replace('.csv', '_for_bagpipe.csv'))
+    if not os.path.isfile(photcat_filename) or args.clobber:
+        snr_thresh = 10
+        flux_thresh = 0.05 # in uJy
 
-    for fluxcol in fluxcols:
-        snr = df_fluxes[fluxcol] / df_fluxes[fluxcol.replace('_sci', '_err')]
-        if np.array(snr < snr_thresh).all() or np.array(df_fluxes[fluxcol] < flux_thresh).all():
-            print(f'Dropping {fluxcol}..')
-            df_fluxes.drop(fluxcol, axis=1, inplace=True)
-            df_fluxes.drop(fluxcol.replace('_sci', '_err'), axis=1, inplace=True)
+        for fluxcol in fluxcols:
+            snr = df_fluxes[fluxcol] / df_fluxes[fluxcol.replace('_sci', '_err')]
+            if np.array(snr < snr_thresh).all() or np.array(df_fluxes[fluxcol] < flux_thresh).all():
+                print(f'Dropping {fluxcol}..')
+                df_fluxes.drop(fluxcol, axis=1, inplace=True)
+                df_fluxes.drop(fluxcol.replace('_sci', '_err'), axis=1, inplace=True)
 
-    photcat_filename = Path(str(photcat_filename).replace('.csv', '_for_bagpipe.csv'))
-    df_fluxes.to_csv(photcat_filename, index=None)
-    print(f'Written {photcat_filename} with only the reliable flux columns.')
+        df_fluxes.to_csv(photcat_filename_sed, index=None)
+        print(f'Written {photcat_filename_sed} with only the reliable flux columns.')
 
-    filter_list = [str(filter_dir) + '/' + item[:item.lower().find('_sci')] + '.txt' for item in df_fluxes.columns if '_sci' in item]
+    df_sed = pd.read_csv(photcat_filename_sed)
+    filter_list = [str(filter_dir) + '/' + item[:item.lower().find('_sci')] + '.txt' for item in df_sed.columns if '_sci' in item]
     print(f'Resultant photcat has {len(filter_list)} filters')
 
     # ----------SED fitting: the following part of the code is heavily borrowed from P J Watson-----------------
     if args.fit_sed:
         os.chdir(args.output_dir)
-        load_fn = partial(load_photom_bagpipes, phot_cat=photcat_filename, id_colname='objid', zeropoint=28.9)
+        load_fn = partial(load_photom_bagpipes, phot_cat=photcat_filename_sed, id_colname='objid', zeropoint=28.9)
+
+        # --------create columns to store stellar masses---------------
+        new_columns_dict = {'log_mass_bgp':('stellar_mass', False), 'z_bgp': ('redshift', False), 'log_sfr_bgp':('sfr', True)} # dict of new_label:(quantity_in_bagpipe, needs_to_be_log)
+        new_columns = np.hstack([[item, item + '_u'] for item in list(new_columns_dict.keys())])
+        for thiscol in new_columns: df_int[thiscol] = np.zeros(len(df_int))
 
         # ---------Loop over the objects-------------
-        for index, obj in df_fluxes.iterrows():
-            print(f'\nLooping over object {index + 1} of {len(df_fluxes)}..')
+        for index, obj in df_sed.iterrows():
+            print(f'\nLooping over object {index + 1} of {len(df_sed)}..')
             fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.2, num_age_bins=5, min_age_bin=30) # Generate the fit parameters
 
             galaxy = bagpipes.galaxy(ID=obj['objid'], load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
@@ -685,6 +692,20 @@ if __name__ == "__main__":
             fig = fit.plot_sfh_posterior(save=True, show=True)
             fig = fit.plot_corner(save=True, show=True)
 
+            # --------Save the stellar masses---------------
+            for thisquant in list(new_columns_dict.keys()):
+                peak_value = sci_mode(fit.posterior.samples[new_columns_dict[thisquant][0]]).mode
+                low_value, up_value = np.percentile(fit.posterior.samples[new_columns_dict[thisquant][0]], (16, 84))
+                err_value = (up_value - low_value) / 2
+                quant = ufloat(peak_value, err_value)
+                if new_columns_dict[thisquant][1]: quant = unp.log10(quant)
+                df_int.loc[index, thisquant] = unp.nominal_values(quant)
+                df_int.loc[index, thisquant + '_u'] = unp.std_devs(quant)
+
         os.chdir(args.code_dir)
+
+        # ------writing modified df with stellar masses etc-------------------
+        df_int.to_csv(df_int_filename, index=None)
+        print(f'Added SED results to df and saved in {df_int_filename}.')
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

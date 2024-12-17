@@ -10,6 +10,7 @@
              run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_conditions EW,mag,compact
              run get_field_stats.py --mag_lim 24 --EW_thresh 300 --log_SFR_thresh 0 --line_list OIII,Ha --do_all_fields --plot_conditions EW,mag,PA,mass
              run get_field_stats.py --line_list OIII,Ha --do_all_fields --plot_conditions EW,mass,PA,a_image --clobber_venn
+             run get_field_stats.py --line_list OIII,Ha --do_all_fields --plot_conditions EW,mass,PA --clobber_venn
              run get_field_stats.py --line_list Ha --do_all_fields --plot_conditions has,PA --clobber_venn
              run get_field_stats.py --line_list Ha --do_all_fields --plot_pie
              run get_field_stats.py --line_list Ha --do_all_fields --plot_sunburst
@@ -94,7 +95,7 @@ def plot_venn(df, args):
             print(f'Could not apply the {line} SNR condition')
             pass
         try:
-            condition4 = df[f'{line}_EW'] / (1 + df['redshift']) > args.EW_thresh # converting to rest-frame EW
+            condition4 = df[f'{line}_EW'] > args.EW_thresh
             set_arr, label_arr = make_set(df, condition1 & condition2 & condition3 & condition4, f'{line} EW_r > {args.EW_thresh}; SNR > {args.SNR_thresh}', set_arr, label_arr)
         except:
             print(f'Could not apply the {line} EW condition')
@@ -638,6 +639,8 @@ if __name__ == "__main__":
         df = df.drop_duplicates('par_obj', keep='last')
         df['filters'] = df['field'].map(lambda x: ', '.join(available_filters_for_field_dict[x]))
         df['n_filters'] = df['filters'].map(lambda x: len(x.split(',')))
+        EW_cols = [item for item in df.columns if 'EW' in item]
+        for thiscol in EW_cols: df[thiscol] = df[thiscol] / (1 + df['redshift']) # converting ALL EWs to rest-frame
 
         # ------------merging cosmos datasets for the venn diagrams--------------------
         conditions_from_cosmos = ['mass', 'sfr', 'sSFR']
