@@ -135,7 +135,8 @@ def parse_args():
     # ------- args added for compute_stellar_mass.py ------------------------------
     parser.add_argument('--plot_transmission', dest='plot_transmission', action='store_true', default=False, help='Plot transmission curves for all filters? Default is no.')
     parser.add_argument('--plot_SED', dest='plot_SED', action='store_true', default=False, help='Plot SED for all filters? Default is no.')
-    parser.add_argument('--plot_cutouts', dest='plot_cutouts', action='store_true', default=False, help='Plot 2D image cutouts? Default is no.')
+    parser.add_argument('--plot_niriss_direct', dest='plot_niriss_direct', action='store_true', default=False, help='Plot 2D NIRISS direct images? Default is no.')
+    parser.add_argument('--plot_filter_cutouts', dest='plot_filter_cutouts', action='store_true', default=False, help='Plot 2D image cutouts? Default is no.')
     parser.add_argument('--plot_cutout_errors', dest='plot_cutout_errors', action='store_true', default=False, help='Plot 2D uncertainty maps of cutouts? Default is no.')
     parser.add_argument('--plot_all', dest='plot_all', action='store_true', default=False, help='Plot cutouts for ALL filters? Default is no.')
     parser.add_argument('--fit_sed', dest='fit_sed', action='store_true', default=False, help='Fit SEDs? Default is no.')

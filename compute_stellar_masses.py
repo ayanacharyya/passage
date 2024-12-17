@@ -5,9 +5,10 @@
     Created: 19-08-24
     Example: run compute_stellar_masses.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
              run compute_stellar_masses.py --plot_transmission --plot_SED
-             run compute_stellar_masses.py --plot_cutouts --plot_all --arcsec_limit 1 --only_seg
-             run compute_stellar_masses.py --plot_cutouts --plot_cutout_errors
-             run compute_stellar_masses.py --plot_cutouts
+             run compute_stellar_masses.py --plot_filter_cutouts --plot_all --arcsec_limit 1 --only_seg
+             run compute_stellar_masses.py --plot_filter_cutouts --plot_cutout_errors
+             run compute_stellar_masses.py --plot_filter_cutouts
+             run compute_stellar_masses.py --plot_niriss_direct --filters F115W,F150W,F200W
 '''
 from header import *
 from util import *
@@ -166,7 +167,8 @@ def annotate_axis(ax, col_index, row_index, row, filter, n_obj, args):
     if col_index == 0:
         ax.set_ylabel('Dec (")', fontsize=args.fontsize / 2)
         ax.tick_params(axis='y', which='major', labelsize=args.fontsize / 2)
-        ax.text(0.1, 0.1, f'{row["redshift"]:.2f}', c='k', ha='left', va='bottom', fontsize=args.fontsize / 2, transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+        if args.plot_filter_cutouts: ax.text(0.1, 0.1, f'{row["redshift"]:.2f}', c='k', ha='left', va='bottom', fontsize=args.fontsize / 2, transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+        else: ax.text(0.1, 0.1, f'{row["objid"]}', c='k', ha='left', va='bottom', fontsize=args.fontsize / 2, transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
     else:
         ax.set_yticklabels([])
 
@@ -250,7 +252,112 @@ def get_flux_error(filepath, shape):
     return  error_map
 
 # -------------------------------------------------------------------------------------------------------
-def plot_cutouts(df_fluxes, args):
+def plot_niriss_direct(df_fluxes, args):
+    '''
+    Function to plot direct PASSAGE images based on input dataframe of ra, dec
+    Saves plot as png figure and
+    Returns figure handle
+    '''
+    max_columns_per_page = 10
+    max_rows_per_page = 7
+    max_cutouts_per_page = max_columns_per_page * max_rows_per_page
+    n_obj = len(df_fluxes)
+    n_figs = int(np.ceil(n_obj / max_cutouts_per_page))
+    cmap = 'viridis'
+    image_dir = args.input_dir / args.field / 'Products'
+
+    if args.fontsize == 10: args.fontsize = 15
+    cutout_size = 2 * args.arcsec_limit # in arcsec
+
+    for filter in args.filters:
+        print(f'\nDoing filter {filter} of {len(args.filters)} filters..')
+
+        field = pd.unique(df_fluxes['field'])[0]
+        fits_image = args.input_dir / f'{field}' / 'Products' / f'{field}_228_{filter}-clear_drz_sci.fits'
+        data = fits.open(fits_image)
+        image = data[0].data
+        header = data[0].header
+        wcs_header = pywcs.WCS(header)
+
+        figname = args.output_dir / f'{args.intersection_conditions}_niriss_direct_{filter}_{cutout_size:.1f}"_cutouts.pdf'
+        pdf = PdfPages(figname)
+
+        # ----------getting the seg map----------------
+        if args.only_seg:
+            segmentation_file = args.input_dir /f'{field}' / 'Products' / f'{field}_comb_seg.fits'
+            seg_data = fits.open(segmentation_file)
+            seg_image = seg_data[0].data
+            seg_header = seg_data[0].header
+            wcs_seg_header = pywcs.WCS(seg_header)
+
+        # -------setting up for plotting the cutouts-------------------
+        print(f'\nTotal {n_obj} cutouts to plot, of size {cutout_size}" each; hence splitting in to {n_figs} figures..')
+        fig_arr = []
+        for fig_index in range(n_figs):
+            print(f'\nMaking figure {fig_index + 1} of {n_figs}..')
+            this_fig_df = df_fluxes[fig_index * max_cutouts_per_page : min((fig_index + 1) * max_cutouts_per_page, n_obj)].reset_index(drop=False) # slicing the df_fluxes dataframe
+
+            fig, axes = plt.subplots(nrows=max_rows_per_page, ncols=max_columns_per_page, figsize=(12, 7))
+            fig.subplots_adjust(left=0.05, right=0.98, bottom=0.07, top=0.97, hspace=0.05, wspace=0.05)
+
+            # ------looping over filters-------------
+            for index, row in this_fig_df.iterrows():
+                print(f'Doing object {fig_index * max_cutouts_per_page + index + 1} of {n_obj}..')
+                col_index = index % max_columns_per_page
+                row_index = int(index / max_columns_per_page)
+
+                # ------looping over objects-------------
+                coord = SkyCoord(row['ra'],row['dec'], unit = 'deg')
+                cutout = Cutout2D(image, coord, cutout_size * u.arcsec, wcs = wcs_header)
+                cutout_header = cutout.wcs.to_header()
+
+                # ------for proper rebinning and applying segmentation map on cutout-------------
+                if args.only_seg:
+                    source_header = seg_header.copy()
+                    seg_cutout = Cutout2D(seg_image, coord, cutout_size * u.arcsec, wcs = wcs_seg_header)
+                    seg_cutout_header = seg_cutout.wcs.to_header()
+                    source_header.update(seg_cutout_header)  # important step to update the header of the full mosaic to that of just the cut out
+
+                    seg_cutout_data_hdu = fits.ImageHDU(seg_cutout.data, header=source_header)
+                    seg_cutout_data_rebinned, _ = reproject_interp(seg_cutout_data_hdu, cutout_header)
+
+                # ------now plotting the cutout flux-------------
+                ax = axes[row_index][col_index]
+                p = ax.imshow(np.log10(cutout.data), origin='lower', extent=args.extent, cmap=cmap)
+                ax.scatter(0, 0, marker='x', c='r', s=30)
+                ax.text(0.9, 0.9, filter, c='k', ha='right', va='top', fontsize=args.fontsize / 2, transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+                ax.text(0.1, 0.1, f'{row["objid"]}', c='k', ha='left', va='bottom', fontsize=args.fontsize / 2, transform=ax.transAxes, bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+                if col_index == 0:
+                    ax.set_ylabel('Dec (")', fontsize=args.fontsize / 2)
+                    ax.tick_params(axis='y', which='major', labelsize=args.fontsize / 2)
+                else:
+                    ax.set_yticklabels([])
+
+                if row_index == int(len(this_fig_df) / max_columns_per_page):
+                    ax.set_xlabel('RA (")', fontsize=args.fontsize / 2)
+                    ax.tick_params(axis='x', which='major', labelsize=args.fontsize / 2)
+                else:
+                    ax.set_xticklabels([])
+                if args.only_seg: ax.contour(seg_cutout_data_rebinned != row['objid'], levels=0, colors='k', extent=args.extent, linewidths=0.5)
+
+            # --------hiding excess axes frames--------------
+            for index in range(len(this_fig_df), max_cutouts_per_page):
+                col_index = index % max_columns_per_page
+                row_index = int(index / max_columns_per_page)
+                ax = axes[row_index][col_index]
+                ax.set_visible(False)
+
+            pdf.savefig(fig)
+            fig_arr.append(fig)
+
+        pdf.close()
+        print(f'Saved {n_figs} figures in {figname}')
+        plt.show(block=False)
+
+    return fig_arr
+
+# -------------------------------------------------------------------------------------------------------
+def plot_filter_cutouts(df_fluxes, args):
     '''
     Function to plot 2D image cutouts based on input dataframe of ra, dec and existing mosaic images
     Saves plot as png figure and
@@ -414,7 +521,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
         df_fluxes = pd.read_csv(photcat_filename)
     else:
         print(f'{photcat_filename} does not exist, so preparing the flux list..')
-        filename = args.input_dir / 'COSMOS' / 'cosmos_fluxes_subset.csv'
+        filename = args.input_dir / 'COSMOS' / f'{args.intersection_conditions}_cosmos_fluxes_subset.csv'
 
         if os.path.exists(filename):
             print(f'Reading cosmos2020 flux values from existing {filename}')
@@ -445,29 +552,36 @@ def get_flux_catalog(photcat_filename, df_int, args):
             df_fluxes.to_csv(filename, index=None)
             print(f'Written cosmos2020 flux table as {filename}')
 
-        # -------reading in passage photometric catalog-------
-        args.field = df_int['field'].values[0]
-        product_dir = args.input_dir / args.field / 'Products'
-        photcat_file = product_dir / f'{args.field}_photcat.fits'
-        df_photcat = Table(fits.open(photcat_file)[1].data).to_pandas()
-        df_photcat = df_photcat.rename(columns={'id': 'objid'})
-        df_photcat.columns = df_photcat.columns.str.replace('f115w', 'NIRISS_F115W', regex=True)
-        df_photcat.columns = df_photcat.columns.str.replace('f150w', 'NIRISS_F150W', regex=True)
-        df_photcat.columns = df_photcat.columns.str.replace('f200w', 'NIRISS_F200W', regex=True)
-
         # -------determining flux and fluxerr columns from passage-------
         passage_filters = ['NIRISS_F115W', 'NIRISS_F150W', 'NIRISS_F200W']
-        aper_num = 4 # aper_num = 0, 1, 2, 3, 4, 5, 6 correspond to fluxes measured within apertures of sizes [0.36", 0.5", 0.7", 1", 1.2", 1.5", 3.0"]
+        aper_num = 4  # aper_num = 0, 1, 2, 3, 4, 5, 6 correspond to fluxes measured within apertures of sizes [0.36", 0.5", 0.7", 1", 1.2", 1.5", 3.0"]
         cols_to_extract = []
         for thisfilter in passage_filters:
             fluxcol = f'{thisfilter}_flux_aper_{aper_num:0d}'
             errcol = fluxcol.replace('flux', 'fluxerr')
             cols_to_extract.append([fluxcol, errcol])
         cols_to_extract = np.array(cols_to_extract).flatten()
-        cols_to_extract = np.hstack((['objid'], cols_to_extract)).tolist()
 
-        # -------merging photcat with fluxes dataframe-------
-        df_fluxes = pd.merge(df_fluxes, df_photcat[cols_to_extract], on='objid', how='inner')
+        for thiscol in cols_to_extract: df_fluxes[thiscol] = np.zeros(len(df_fluxes))
+
+        # -------reading in passage photometric catalog-------
+        for index, row in df_fluxes.iterrows():
+            print(f'Getting NIRISS fluxes for object {index+1} out of {len(df_fluxes)}..')
+            field = row['field']
+            product_dir = args.input_dir / field / 'Products'
+            photcat_file = product_dir / f'{field}_photcat.fits'
+            df_photcat = Table(fits.open(photcat_file)[1].data).to_pandas()
+            df_photcat.columns = df_photcat.columns.str.replace('f115w', 'NIRISS_F115W', regex=True)
+            df_photcat.columns = df_photcat.columns.str.replace('f150w', 'NIRISS_F150W', regex=True)
+            df_photcat.columns = df_photcat.columns.str.replace('f200w', 'NIRISS_F200W', regex=True)
+
+            index_in_photcat = df_photcat[df_photcat['id'] == row['objid']].index[0]
+            for thiscol in cols_to_extract:
+                try: df_fluxes.loc[index, thiscol] = df_photcat[thiscol][index_in_photcat]
+                except KeyError: df_fluxes.loc[index, thiscol] = np.nan
+
+        # -------dropping rows with no NIRISS fluxes-------
+        df_fluxes = df_fluxes.dropna(axis=0, subset=cols_to_extract).reset_index(drop=True) # drop all objects (rows) that have any NaNs in them
 
         # -------modiyfying all flux columns to have uniform nomenclature-------
         fluxcols = [item for item in df_fluxes.columns if 'flux' in item.lower() and 'fluxerr' not in item.lower()]
@@ -623,12 +737,13 @@ if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
     args.intersection_conditions = 'allpar_venn_EW,mass,PA'
+    #args.intersection_conditions = 'allpar_venn_SNR,mass,F115W,F150W,F200W'
     if args.fontsize == 10: args.fontsize = 15
     args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
 
     # --------------declaring all paths-----------------
     args.cosmos2020_filename = args.input_dir / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3.fits'
-    photcat_filename = args.output_dir / 'passage_cosmos_fluxes.csv'
+    photcat_filename = args.output_dir / f'{args.intersection_conditions}_passage_cosmos_fluxes.csv'
     filter_dir = args.input_dir / 'COSMOS' / 'transmission_curves'
     pipes_dir = args.output_dir / 'pipes'
     pipes_dir.mkdir(exist_ok=True, parents=True)
@@ -645,11 +760,12 @@ if __name__ == "__main__":
     # ----------plotting (for tests)-----------------
     if args.plot_transmission: fig = plot_filter_transmission(df_trans, args, x_scale='log')
     if args.plot_SED: fig2 = plot_SED(df_fluxes, df_trans, args, x_scale='log')
-    if args.plot_cutouts: fig3 = plot_cutouts(df_fluxes, args)
+    if args.plot_filter_cutouts: fig3 = plot_filter_cutouts(df_fluxes, args)
+    if args.plot_niriss_direct: fig3 = plot_niriss_direct(df_fluxes, args)
 
     # ---------discarding some unusable flux columns-----------------------
     photcat_filename_sed = Path(str(photcat_filename).replace('.csv', '_for_bagpipe.csv'))
-    if not os.path.isfile(photcat_filename) or args.clobber:
+    if not os.path.isfile(photcat_filename_sed) or args.clobber:
         snr_thresh = 10
         flux_thresh = 0.05 # in uJy
 
@@ -680,11 +796,11 @@ if __name__ == "__main__":
         # ---------Loop over the objects-------------
         for index, obj in df_sed.iterrows():
             print(f'\nLooping over object {index + 1} of {len(df_sed)}..')
-            fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.2, num_age_bins=5, min_age_bin=30) # Generate the fit parameters
+            fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.02, num_age_bins=5, min_age_bin=30) # Generate the fit parameters
 
             galaxy = bagpipes.galaxy(ID=obj['objid'], load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
 
-            fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run='first_try') # Fit this galaxy
+            fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run='narrow_z') # Fit this galaxy
             fit.fit(verbose=True, sampler='nautilus', pool=4)
 
             # ---------Make some plots---------

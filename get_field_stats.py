@@ -82,24 +82,27 @@ def plot_venn(df, args):
         condition1 = df.apply(lambda x: is_line_within_filter(line, x['redshift'], field=x['field'], trim_factor=args.trim_filter_by_wavelength_factor), axis=1)
         set_arr, label_arr = make_set(df, condition1, f'{line} available', set_arr, label_arr)
 
-        try:
-            condition2 = (np.isfinite(df[f'{line}_EW'])) & (df[f'{line}_EW'] > 0)
-            set_arr, label_arr = make_set(df, condition1 & condition2, f'{line} present', set_arr, label_arr)
-        except:
-            print(f'Could not apply the {line} present condition')
-            pass
-        try:
-            condition3 = df[f'{line}_SNR'] > args.SNR_thresh
-            set_arr, label_arr = make_set(df, condition1 & condition2 & condition3, f'{line} SNR > {args.SNR_thresh}', set_arr, label_arr)
-        except:
-            print(f'Could not apply the {line} SNR condition')
-            pass
-        try:
-            condition4 = df[f'{line}_EW'] > args.EW_thresh
-            set_arr, label_arr = make_set(df, condition1 & condition2 & condition3 & condition4, f'{line} EW_r > {args.EW_thresh}; SNR > {args.SNR_thresh}', set_arr, label_arr)
-        except:
-            print(f'Could not apply the {line} EW condition')
-            pass
+        if 'present' in args.plot_conditions or 'SNR' in args.plot_conditions or 'EW' in args.plot_conditions:
+            try:
+                condition2 = (np.isfinite(df[f'{line}_EW'])) & (df[f'{line}_EW'] > 0)
+                set_arr, label_arr = make_set(df, condition1 & condition2, f'{line} present', set_arr, label_arr)
+            except:
+                print(f'Could not apply the {line} present condition')
+                pass
+        if 'SNR' in args.plot_conditions or 'EW' in args.plot_conditions:
+            try:
+                condition3 = df[f'{line}_SNR'] > args.SNR_thresh
+                set_arr, label_arr = make_set(df, condition1 & condition2 & condition3, f'{line} SNR > {args.SNR_thresh}', set_arr, label_arr)
+            except:
+                print(f'Could not apply the {line} SNR condition')
+                pass
+        if 'EW' in args.plot_conditions:
+            try:
+                condition4 = df[f'{line}_EW'] > args.EW_thresh
+                set_arr, label_arr = make_set(df, condition1 & condition2 & condition3 & condition4, f'{line} EW_r > {args.EW_thresh}; SNR > {args.SNR_thresh}', set_arr, label_arr)
+            except:
+                print(f'Could not apply the {line} EW condition')
+                pass
 
     # ---------add magnitude set------------
     if args.mag_lim is None: mag_lim = 26
