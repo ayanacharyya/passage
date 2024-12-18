@@ -27,17 +27,6 @@ from make_diagnostic_maps import compute_EB_V, get_dereddened_flux
 start_time = datetime.now()
 
 # --------------------------------------------------------------------------------------------------------------------
-def convert_redshift_to_time(redshift):
-    '''
-    Computes time (age of the Universe) for a given redshift, and returns the time (in Gyr)
-    Currently not complete
-    '''
-    if redshift == 1.8: time = 10 # Gyr
-    elif redshift == 1.2: time = 11 # Gyr
-
-    return time
-
-# --------------------------------------------------------------------------------------------------------------------
 def plot_SFMS_Popesso22(ax, redshift, color='cornflowerblue'):
     '''
     Computes an empirical SFMS based on Popesso+22 (https://arxiv.org/abs/2203.10487) Eq 10, for given redshift
@@ -47,8 +36,8 @@ def plot_SFMS_Popesso22(ax, redshift, color='cornflowerblue'):
     a0, a1, b0, b1, b2 = 0.2, -0.034, -26.134, 4.722, -0.1925  # Table 2, Eq 10
 
     log_mass = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 20)
-    time = convert_redshift_to_time(redshift) # Gyr
-    log_SFR = (a1 * time + b1) * log_mass + b2 * (log_mass) ** 2 + b0 + a0 * time
+    age_at_z = cosmo.age(redshift).value # Gyr
+    log_SFR = (a1 * age_at_z + b1) * log_mass + b2 * (log_mass) ** 2 + b0 + a0 * age_at_z
 
     ax.plot(log_mass, log_SFR, c=color, lw=2, label=f'Popesso+22: z~{redshift}')
 
@@ -203,9 +192,9 @@ label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$ (LePhare)', 'ez_mass': r'log M$
               'lp_SFR': r'log SFR (M$_{\odot}$/yr) (LePhare)', 'ez_sfr': r'log SFR (M$_{\odot}$/yr) (EAZY)', 'log_sfr_bgp': r'log SFR (M$_{\odot}$/yr) (Bagpipes)', 'log_SFR_int': r'log SFR (M$_{\odot}$/yr) (Grizli)', \
               'lp_zBEST': 'Redshift (LePhare)', 'ez_z_phot': 'Redshift (EAZY)', 'z_bgp': 'Redshift (Bagpipes)', 'redshift': 'Redshift (Grizli)', \
               'logOH_slope':r'log $\nabla$Z$_r$ (dex/kpc)'}
-bounds_dict = {'lp_mass': (6, 9), 'ez_mass': (6, 9), 'log_mass_bgp': (6, 9), \
-               'lp_SFR': (-3, 1), 'ez_sfr': (-3, 1), 'log_sfr_bgp': (-3, 1), 'log_SFR_int': (-3, 1), \
-               'ez_z_phot': (0, 3), 'lp_zBEST': (0, 3), 'z_bgp': (0, 3), 'redshift': (1.7, 2.2), \
+bounds_dict = {'lp_mass': (6, 9), 'ez_mass': (6, 9), 'log_mass_bgp': (6.5, 10.5), \
+               'lp_SFR': (-3, 1), 'ez_sfr': (-3, 1), 'log_sfr_bgp': (-3, 1), 'log_SFR_int': (-3, 1.5), \
+               'ez_z_phot': (0, 3), 'lp_zBEST': (0, 3), 'z_bgp': (0, 3), 'redshift': (0.5, 2), \
                'logOH_slope': (-0.4, 0.1)}
 colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma')
 
@@ -253,7 +242,7 @@ if __name__ == "__main__":
             df['log_SFR_int'] = np.log10(df['SFR_int'])
 
             # ---------SFMS from df-------
-            p = ax.scatter(df[args.xcol], df[args.ycol], c='gold' if args.foggie_comp else df[args.colorcol], marker='*' if args.foggie_comp else 's', s=1000 if args.foggie_comp else 100, lw=1, edgecolor='w' if args.fortalk else 'k', vmin=bounds_dict[args.colorcol][0] if args.colorcol in bounds_dict else None, vmax=bounds_dict[args.colorcol][1] if args.colorcol in bounds_dict else None)
+            p = ax.scatter(df[args.xcol], df[args.ycol], c='gold' if args.foggie_comp else df[args.colorcol], marker='*' if args.foggie_comp else 'o', s=1000 if args.foggie_comp else 100, lw=1, edgecolor='w' if args.fortalk else 'k', vmin=bounds_dict[args.colorcol][0] if args.colorcol in bounds_dict else None, vmax=bounds_dict[args.colorcol][1] if args.colorcol in bounds_dict else None)
             if args.ycol + '_u' in df and not args.foggie_comp: # if uncertainty column exists
                 ax.errorbar(df[args.xcol], df[args.ycol], yerr=df[args.ycol + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 

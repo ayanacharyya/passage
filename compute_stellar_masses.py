@@ -9,7 +9,7 @@
              run compute_stellar_masses.py --plot_conditions EW,mass,PA --plot_filter_cutouts --plot_cutout_errors
              run compute_stellar_masses.py --plot_conditions EW,mass,PA --plot_filter_cutouts
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --plot_niriss_direct --filters F115W,F150W,F200W
-             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --plot_sed
+             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed
 '''
 from header import *
 from util import *
@@ -738,7 +738,8 @@ def generate_fit_params(obj_z, z_range = 0.01, num_age_bins = 5, min_age_bin = 3
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
-    if args.plot_conditions == 'detection': args.plot_conditions = 'allpar_venn_EW,mass,PA'
+    if args.plot_conditions == ['detected']: args.plot_conditions = ['EW', 'mass', 'PA']
+    args.plot_conditions = f'allpar_venn_{",".join(args.plot_conditions)}'
     if args.fontsize == 10: args.fontsize = 15
     args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
 
@@ -810,14 +811,15 @@ if __name__ == "__main__":
             fig = fit.plot_corner(save=True, show=True)
 
             # --------Save the stellar masses---------------
+            index_in_df_int = df_int[df_int['objid'] == obj['objid']].index[0]
             for thisquant in list(new_columns_dict.keys()):
                 peak_value = sci_mode(fit.posterior.samples[new_columns_dict[thisquant][0]]).mode
                 low_value, up_value = np.percentile(fit.posterior.samples[new_columns_dict[thisquant][0]], (16, 84))
                 err_value = (up_value - low_value) / 2
                 quant = ufloat(peak_value, err_value)
                 if new_columns_dict[thisquant][1]: quant = unp.log10(quant)
-                df_int.loc[index, thisquant] = unp.nominal_values(quant)
-                df_int.loc[index, thisquant + '_u'] = unp.std_devs(quant)
+                df_int.loc[index_in_df_int, thisquant] = unp.nominal_values(quant)
+                df_int.loc[index_in_df_int, thisquant + '_u'] = unp.std_devs(quant)
 
         os.chdir(args.code_dir)
 
