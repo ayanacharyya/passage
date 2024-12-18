@@ -11,13 +11,14 @@
              run make_passage_plots.py --plot_flux_vs_mag
              run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_SFR_int --ycol lp_SFR --colorcol redshift
 
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol lp_mass --colorcol redshift
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol ez_mass --colorcol redshift
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol z_bgp --ycol lp_zBEST --colorcol redshift
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_sfr_bgp --ycol log_SFR_int --colorcol redshift
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol log_SFR_int --colorcol OIII_EW
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol lp_mass --colorcol redshift --run narrow_z
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol ez_mass --colorcol redshift --run narrow_z
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol z_bgp --ycol lp_zBEST --colorcol redshift --run narrow_z
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_sfr_bgp --ycol log_SFR_int --colorcol redshift --run narrow_z
+             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol log_SFR_int --colorcol OIII_EW --run narrow_z
 
-             run make_passage_plots.py --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol OIII_EW
+             run make_passage_plots.py --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol OIII_EW --run narrow_z
+             run make_passage_plots.py --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol Ha_EW --run narrow_z_narrow_mass
 '''
 
 from header import *
@@ -193,7 +194,7 @@ label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$ (LePhare)', 'ez_mass': r'log M$
               'lp_zBEST': 'Redshift (LePhare)', 'ez_z_phot': 'Redshift (EAZY)', 'z_bgp': 'Redshift (Bagpipes)', 'redshift': 'Redshift (Grizli)', \
               'logOH_slope':r'log $\nabla$Z$_r$ (dex/kpc)'}
 bounds_dict = {'lp_mass': (6, 9), 'ez_mass': (6, 9), 'log_mass_bgp': (6.5, 10.5), \
-               'lp_SFR': (-3, 1), 'ez_sfr': (-3, 1), 'log_sfr_bgp': (-3, 1), 'log_SFR_int': (-3, 1.5), \
+               'lp_SFR': (-3, 1), 'ez_sfr': (-3, 1), 'log_sfr_bgp': (-3, 2), 'log_SFR_int': (-3, 2), \
                'ez_z_phot': (0, 3), 'lp_zBEST': (0, 3), 'z_bgp': (0, 3), 'redshift': (0.5, 2), \
                'logOH_slope': (-0.4, 0.1)}
 colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma')
@@ -223,7 +224,9 @@ if __name__ == "__main__":
     else:
         # -------reading in dataframe produced by get_field_stats.py----------------
         df_infilename = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df.txt'
+        if 'bgp' in args.xcol or 'bgp' in args.ycol or 'bgp' in args.colorcol: df_infilename = Path(str(df_infilename).replace('.txt', f'_withSED_{args.run}.csv'))
         df = pd.read_csv(df_infilename)
+        print(f'Reading in main df from {df_infilename}')
 
         logOHgrad_filename = args.output_dir / f'logOHgrad_df_onlyseg_vorbin_at_Ha_SNR_3.0.txt'
         if os.path.exists(logOHgrad_filename):
@@ -242,9 +245,11 @@ if __name__ == "__main__":
             df['log_SFR_int'] = np.log10(df['SFR_int'])
 
             # ---------SFMS from df-------
-            p = ax.scatter(df[args.xcol], df[args.ycol], c='gold' if args.foggie_comp else df[args.colorcol], marker='*' if args.foggie_comp else 'o', s=1000 if args.foggie_comp else 100, lw=1, edgecolor='w' if args.fortalk else 'k', vmin=bounds_dict[args.colorcol][0] if args.colorcol in bounds_dict else None, vmax=bounds_dict[args.colorcol][1] if args.colorcol in bounds_dict else None)
+            p = ax.scatter(df[args.xcol], df[args.ycol], c='gold' if args.foggie_comp else df[args.colorcol], plotnonfinite=True, marker='*' if args.foggie_comp else 'o', s=1000 if args.foggie_comp else 100, lw=1, edgecolor='w' if args.fortalk else 'k', vmin=bounds_dict[args.colorcol][0] if args.colorcol in bounds_dict else None, vmax=bounds_dict[args.colorcol][1] if args.colorcol in bounds_dict else None)
             if args.ycol + '_u' in df and not args.foggie_comp: # if uncertainty column exists
                 ax.errorbar(df[args.xcol], df[args.ycol], yerr=df[args.ycol + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+            if args.xcol + '_u' in df and not args.foggie_comp: # if uncertainty column exists
+                ax.errorbar(df[args.xcol], df[args.ycol], xerr=df[args.xcol + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 
             if not args.foggie_comp:
                 cbar = plt.colorbar(p)
@@ -253,7 +258,8 @@ if __name__ == "__main__":
             # ---------SFMS from literature-------
             if 'mass' in args.xcol and 'sfr' in args.ycol.lower():
                 ax = plot_SFMS_Popesso22(ax, 1.8, color='cornflowerblue')
-                ax = plot_SFMS_Popesso22(ax, 1.2, color='darkblue')
+                ax = plot_SFMS_Popesso22(ax, 1.2, color='blue')
+                ax = plot_SFMS_Popesso22(ax, 0.5, color='darkblue')
 
             # ---------MZR from literature-------
             if args.xcol == 'lp_mass' and 'logOH' in args.ycol and 'slope' not in args.ycol:

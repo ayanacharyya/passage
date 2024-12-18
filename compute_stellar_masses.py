@@ -8,8 +8,10 @@
              run compute_stellar_masses.py --plot_conditions EW,mass,PA --plot_filter_cutouts --plot_all --arcsec_limit 1 --only_seg
              run compute_stellar_masses.py --plot_conditions EW,mass,PA --plot_filter_cutouts --plot_cutout_errors
              run compute_stellar_masses.py --plot_conditions EW,mass,PA --plot_filter_cutouts
+             run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --run narrow_z
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --plot_niriss_direct --filters F115W,F150W,F200W
-             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed
+             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z
+             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z_narrow_mass
 '''
 from header import *
 from util import *
@@ -259,7 +261,6 @@ def plot_niriss_direct(df_fluxes, args):
     Saves plot as png figure and
     Returns figure handle
     '''
-    df_fluxes = df_fluxes.sort_values(by='objid')
     max_columns_per_page = 10
     max_rows_per_page = 7
     max_cutouts_per_page = max_columns_per_page * max_rows_per_page
@@ -705,7 +706,7 @@ def generate_fit_params(obj_z, z_range = 0.01, num_age_bins = 5, min_age_bin = 3
     age_bins = np.insert(age_bins, 0, 0.0)
 
     continuity = {
-        'massformed': (3.0, 11.0),
+        'massformed': (6.0, 11.0),
         'metallicity': (0.0, 3.0),
         'metallicity_prior_mu': 1.0,
         'metallicity_prior_sigma': 0.5,
@@ -755,6 +756,7 @@ if __name__ == "__main__":
     df_int = pd.read_csv(df_int_filename)
 
     df_fluxes = get_flux_catalog(photcat_filename, df_int, args)
+    df_fluxes = df_fluxes.sort_values(by='objid')
     fluxcols = [item for item in df_fluxes.columns if '_sci' in item]
 
     df_trans = read_filter_transmission(filter_dir, fluxcols, args)
@@ -773,15 +775,21 @@ if __name__ == "__main__":
 
         for fluxcol in fluxcols:
             snr = df_fluxes[fluxcol] / df_fluxes[fluxcol.replace('_sci', '_err')]
-            if np.array(snr < snr_thresh).all() or np.array(df_fluxes[fluxcol] < flux_thresh).all():
+            flux = df_fluxes[fluxcol]
+            snr = snr[np.isfinite(snr)]
+            flux = flux[np.isfinite(flux)]
+            if np.array(snr < snr_thresh).all() or np.array(flux < flux_thresh).all():
                 print(f'Dropping {fluxcol}..')
                 df_fluxes.drop(fluxcol, axis=1, inplace=True)
                 df_fluxes.drop(fluxcol.replace('_sci', '_err'), axis=1, inplace=True)
 
         df_fluxes.to_csv(photcat_filename_sed, index=None)
         print(f'Written {photcat_filename_sed} with only the reliable flux columns.')
+    else:
+        print(f'Reading from existing {photcat_filename_sed}')
 
     df_sed = pd.read_csv(photcat_filename_sed)
+    df_sed = df_sed.sort_values(by='objid')
     filter_list = [str(filter_dir) + '/' + item[:item.lower().find('_sci')] + '.txt' for item in df_sed.columns if '_sci' in item]
     print(f'Resultant photcat has {len(filter_list)} filters')
 
@@ -798,11 +806,11 @@ if __name__ == "__main__":
         # ---------Loop over the objects-------------
         for index, obj in df_sed.iterrows():
             print(f'\nLooping over object {index + 1} of {len(df_sed)}..')
-            fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.02, num_age_bins=5, min_age_bin=30) # Generate the fit parameters
+            fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.01, num_age_bins=5, min_age_bin=30) # Generate the fit parameters
 
             galaxy = bagpipes.galaxy(ID=obj['objid'], load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
 
-            fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run='narrow_z') # Fit this galaxy
+            fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run=args.run) # Fit this galaxy
             fit.fit(verbose=True, sampler='nautilus', pool=4)
 
             # ---------Make some plots---------
@@ -824,7 +832,8 @@ if __name__ == "__main__":
         os.chdir(args.code_dir)
 
         # ------writing modified df with stellar masses etc-------------------
-        df_int.to_csv(df_int_filename, index=None)
-        print(f'Added SED results to df and saved in {df_int_filename}.')
+        df_int_filename_sed = Path(str(df_int_filename).replace('.txt', f'_withSED_{args.run}.csv'))
+        df_int.to_csv(df_int_filename_sed, index=None)
+        print(f'Added SED results to df and saved in {df_int_filename_sed}.')
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
