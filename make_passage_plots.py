@@ -16,6 +16,8 @@
              run make_passage_plots.py --plot_conditions EW,mass,PA --xcol z_bgp --ycol lp_zBEST --colorcol redshift
              run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_sfr_bgp --ycol log_SFR_int --colorcol redshift
              run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol log_SFR_int --colorcol OIII_EW
+
+             run make_passage_plots.py --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol OIII_EW
 '''
 
 from header import *

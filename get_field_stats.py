@@ -12,6 +12,7 @@
              run get_field_stats.py --line_list OIII,Ha --do_all_fields --plot_conditions EW,mass,PA,a_image --clobber_venn
              run get_field_stats.py --line_list OIII,Ha --do_all_fields --plot_conditions EW,mass,PA --clobber_venn
              run get_field_stats.py --line_list Ha --do_all_fields --plot_conditions has,PA --clobber_venn
+             run get_field_stats.py --line_list Ha --do_all_fields --plot_conditions SNR,mass,F115W,F150W,F200W --SNR_thresh 10 --clobber_venn
              run get_field_stats.py --line_list Ha --do_all_fields --plot_pie
              run get_field_stats.py --line_list Ha --do_all_fields --plot_sunburst
              run get_field_stats.py --line_list Ha --do_all_fields --plot_conditions mass --plot_columns --xcol redshift --ycol lp_zBEST --colorcol lp_mass

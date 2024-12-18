@@ -3,12 +3,13 @@
     Notes: Computes stellar masses for a given list of PASSAGE galaxies that also have fluxes from COSMOS2020
     Author : Ayan
     Created: 19-08-24
-    Example: run compute_stellar_masses.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
-             run compute_stellar_masses.py --plot_transmission --plot_SED
-             run compute_stellar_masses.py --plot_filter_cutouts --plot_all --arcsec_limit 1 --only_seg
-             run compute_stellar_masses.py --plot_filter_cutouts --plot_cutout_errors
-             run compute_stellar_masses.py --plot_filter_cutouts
-             run compute_stellar_masses.py --plot_niriss_direct --filters F115W,F150W,F200W
+    Example: run compute_stellar_masses.py  --plot_conditions EW,mass,PA --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
+             run compute_stellar_masses.py  --plot_conditions EW,mass,PA --plot_transmission --plot_SED
+             run compute_stellar_masses.py --plot_conditions EW,mass,PA --plot_filter_cutouts --plot_all --arcsec_limit 1 --only_seg
+             run compute_stellar_masses.py --plot_conditions EW,mass,PA --plot_filter_cutouts --plot_cutout_errors
+             run compute_stellar_masses.py --plot_conditions EW,mass,PA --plot_filter_cutouts
+             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --plot_niriss_direct --filters F115W,F150W,F200W
+             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --plot_sed
 '''
 from header import *
 from util import *
@@ -150,7 +151,7 @@ def plot_SED(df_fluxes, df_trans, args, x_scale='linear'):
     ax.set_xticklabels(['%.0e' % item for item in ax.get_xticks()], fontsize=args.fontsize)
     ax.set_yticklabels(['%.1f' % item for item in ax.get_yticks()], fontsize=args.fontsize)
 
-    figname = args.output_dir / f'{args.intersection_conditions}_SED.png'
+    figname = args.output_dir / f'{args.plot_conditions}_SED.png'
     fig.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
@@ -258,6 +259,7 @@ def plot_niriss_direct(df_fluxes, args):
     Saves plot as png figure and
     Returns figure handle
     '''
+    df_fluxes = df_fluxes.sort_values(by='objid')
     max_columns_per_page = 10
     max_rows_per_page = 7
     max_cutouts_per_page = max_columns_per_page * max_rows_per_page
@@ -279,7 +281,7 @@ def plot_niriss_direct(df_fluxes, args):
         header = data[0].header
         wcs_header = pywcs.WCS(header)
 
-        figname = args.output_dir / f'{args.intersection_conditions}_niriss_direct_{filter}_{cutout_size:.1f}"_cutouts.pdf'
+        figname = args.output_dir / f'{args.plot_conditions}_niriss_direct_{filter}_{cutout_size:.1f}"_cutouts.pdf'
         pdf = PdfPages(figname)
 
         # ----------getting the seg map----------------
@@ -391,7 +393,7 @@ def plot_filter_cutouts(df_fluxes, args):
 
     all_text = 'all' if args.plot_all else 'subset'
     if args.plot_cutout_errors: all_text += '_wunc'
-    figname = args.output_dir / f'{args.intersection_conditions}_{all_text}_{cutout_size:.1f}"_cutouts.pdf'
+    figname = args.output_dir / f'{args.plot_conditions}_{all_text}_{cutout_size:.1f}"_cutouts.pdf'
     pdf = PdfPages(figname)
 
     # ----------getting the seg map----------------
@@ -521,7 +523,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
         df_fluxes = pd.read_csv(photcat_filename)
     else:
         print(f'{photcat_filename} does not exist, so preparing the flux list..')
-        filename = args.input_dir / 'COSMOS' / f'{args.intersection_conditions}_cosmos_fluxes_subset.csv'
+        filename = args.input_dir / 'COSMOS' / f'{args.plot_conditions}_cosmos_fluxes_subset.csv'
 
         if os.path.exists(filename):
             print(f'Reading cosmos2020 flux values from existing {filename}')
@@ -736,20 +738,19 @@ def generate_fit_params(obj_z, z_range = 0.01, num_age_bins = 5, min_age_bin = 3
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
-    args.intersection_conditions = 'allpar_venn_EW,mass,PA'
-    #args.intersection_conditions = 'allpar_venn_SNR,mass,F115W,F150W,F200W'
+    if args.plot_conditions == 'detection': args.plot_conditions = 'allpar_venn_EW,mass,PA'
     if args.fontsize == 10: args.fontsize = 15
     args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
 
     # --------------declaring all paths-----------------
     args.cosmos2020_filename = args.input_dir / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3.fits'
-    photcat_filename = args.output_dir / f'{args.intersection_conditions}_passage_cosmos_fluxes.csv'
+    photcat_filename = args.output_dir / f'{args.plot_conditions}_passage_cosmos_fluxes.csv'
     filter_dir = args.input_dir / 'COSMOS' / 'transmission_curves'
     pipes_dir = args.output_dir / 'pipes'
     pipes_dir.mkdir(exist_ok=True, parents=True)
 
     # -----------reading in flux and transmission files------------------
-    df_int_filename = args.output_dir / f'{args.intersection_conditions}_df.txt'
+    df_int_filename = args.output_dir / f'{args.plot_conditions}_df.txt'
     df_int = pd.read_csv(df_int_filename)
 
     df_fluxes = get_flux_catalog(photcat_filename, df_int, args)
