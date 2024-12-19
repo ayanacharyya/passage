@@ -749,7 +749,10 @@ if __name__ == "__main__":
     photcat_filename = args.output_dir / f'{args.plot_conditions}_passage_cosmos_fluxes.csv'
     filter_dir = args.input_dir / 'COSMOS' / 'transmission_curves'
     pipes_dir = args.output_dir / 'pipes'
-    pipes_dir.mkdir(exist_ok=True, parents=True)
+    pipes_sub_dirs = ['posterior', 'cats', 'plots']
+    for item in pipes_sub_dirs:
+        this_dir = pipes_dir / item / args.run
+        this_dir.mkdir(exist_ok=True, parents=True)
 
     # -----------reading in flux and transmission files------------------
     df_int_filename = args.output_dir / f'{args.plot_conditions}_df.txt'
@@ -811,7 +814,7 @@ if __name__ == "__main__":
             galaxy = bagpipes.galaxy(ID=obj['objid'], load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
 
             fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run=args.run) # Fit this galaxy
-            fit.fit(verbose=True, sampler='nautilus', pool=4)
+            fit.fit(verbose=True, sampler='nautilus', pool=args.ncpus)
 
             # ---------Make some plots---------
             fig = fit.plot_spectrum_posterior(save=True, show=True)

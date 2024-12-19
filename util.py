@@ -141,6 +141,7 @@ def parse_args():
     parser.add_argument('--plot_all', dest='plot_all', action='store_true', default=False, help='Plot cutouts for ALL filters? Default is no.')
     parser.add_argument('--fit_sed', dest='fit_sed', action='store_true', default=False, help='Fit SEDs? Default is no.')
     parser.add_argument('--run', metavar='run', type=str, action='store', default='first_try', help='Which run label should be assigned to the SED fit (this decides subfolders where results are stored)? Default is "first_try"')
+    parser.add_argument('--ncpus', metavar='ncpus', type=int, action='store', default=4, help='No. of processors to use for BAGPIPES. Default is all (4)')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
@@ -486,7 +487,7 @@ def split_COSMOS_subset_table_by_par(args):
             table_cosmos_thisfield = join(table_cosmos, table_crossmatch, keys='ID')
 
             outfilename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
-            table_cosmos_thisfield.write(outfilename)
+            table_cosmos_thisfield.write(outfilename, overwrite=True)
             print(f'Saved subset table as {outfilename}')
         else:
             print(f'{catalog_file} does not exist, so skipping {thisfield}.')

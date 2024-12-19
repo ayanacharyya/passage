@@ -522,7 +522,7 @@ def get_crossmatch_with_cosmos(df, args):
             df_cosmos = pd.concat([df_cosmos, df_cosmos_thisfield])
         else:
             print(f'{index+1} of {len(fields)} fields: Could not find COSMOS subset table for {thisfield}, so skipping.')
-    df_cosmos = df_cosmos.drop('passage_id', axis=1)
+    if 'passage_id' in df_cosmos: df_cosmos = df_cosmos.drop('passage_id', axis=1)
 
     # -------cross-matching RA/DEC of both catalogs------
     print(f'\nDoing cross-matching between PASSAGE and COSMOS catalogs..')
