@@ -12,6 +12,7 @@
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --plot_niriss_direct --filters F115W,F150W,F200W
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z_narrow_mass
+             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --clobber_sed_photcat --use_only_bands acs,niriss --run only_st_bands --ncpus 3
 '''
 from header import *
 from util import *
@@ -772,19 +773,32 @@ if __name__ == "__main__":
 
     # ---------discarding some unusable flux columns-----------------------
     photcat_filename_sed = Path(str(photcat_filename).replace('.csv', '_for_bagpipe.csv'))
-    if not os.path.isfile(photcat_filename_sed) or args.clobber:
-        snr_thresh = 10
-        flux_thresh = 0.05 # in uJy
+    if not os.path.isfile(photcat_filename_sed) or args.clobber_sed_photcat:
 
-        for fluxcol in fluxcols:
-            snr = df_fluxes[fluxcol] / df_fluxes[fluxcol.replace('_sci', '_err')]
-            flux = df_fluxes[fluxcol]
-            snr = snr[np.isfinite(snr)]
-            flux = flux[np.isfinite(flux)]
-            if np.array(snr < snr_thresh).all() or np.array(flux < flux_thresh).all():
-                print(f'Dropping {fluxcol}..')
-                df_fluxes.drop(fluxcol, axis=1, inplace=True)
-                df_fluxes.drop(fluxcol.replace('_sci', '_err'), axis=1, inplace=True)
+        # ---using only specific bands-------------
+        if args.use_only_bands is not None:
+            print(f'\nSelecting only bands with {args.use_only_bands} in the filter name..')
+            use_bands = args.use_only_bands.split(',')
+            useless_fluxcols = [col for col in fluxcols if np.array([band.lower() not in col.lower() for band in use_bands]).all()]
+            print(f'Therefore, dropping {useless_fluxcols} bands..\n..and keeping {list(set(fluxcols) - set(useless_fluxcols))} bands\n')
+            useless_errcols = [item.replace('_sci', '_err') for item in useless_fluxcols]
+            df_fluxes.drop(useless_fluxcols, axis=1, inplace=True)
+            df_fluxes.drop(useless_errcols, axis=1, inplace=True)
+
+        # --------discarding bands based on flux and snr threshold--------
+        else:
+            snr_thresh = 10
+            flux_thresh = 0.05 # in uJy
+
+            for fluxcol in fluxcols:
+                snr = df_fluxes[fluxcol] / df_fluxes[fluxcol.replace('_sci', '_err')]
+                flux = df_fluxes[fluxcol]
+                snr = snr[np.isfinite(snr)]
+                flux = flux[np.isfinite(flux)]
+                if np.array(snr < snr_thresh).all() or np.array(flux < flux_thresh).all():
+                    print(f'Dropping {fluxcol}..')
+                    df_fluxes.drop(fluxcol, axis=1, inplace=True)
+                    df_fluxes.drop(fluxcol.replace('_sci', '_err'), axis=1, inplace=True)
 
         df_fluxes.to_csv(photcat_filename_sed, index=None)
         print(f'Written {photcat_filename_sed} with only the reliable flux columns.')
