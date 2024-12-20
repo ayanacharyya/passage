@@ -185,7 +185,7 @@ if __name__ == "__main__":
             # ------------run combine_diagnostics_and_extractions.py------------------
             diagnostic_img_files = glob.glob(str(output_dir / f'{description_text1}') + f'/{args.field}_*_{description_text1}.png')
             extraction_img_files = glob.glob(str(output_dir / f'{description_text2}') + f'/{args.field}_*_{description_text2}.png')
-            if len(extraction_img_files) == len(diagnostic_img_files):
+            if len(extraction_img_files) == len(diagnostic_img_files) and len(diagnostic_img_files) > 0:
                 print(f'All combined extraction images already present, so proceeding to the next step.')
             elif not (os.path.exists(products_path / 'plots') or os.path.exists(extraction_path)):
                 print(f'Supposed to run combine_diagnostics_and_extractions.py but neither {extraction_path} nor {str(products_path / "plots")} exists, therefore cannot run. Moving to the next field.')
