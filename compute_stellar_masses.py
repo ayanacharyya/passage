@@ -18,8 +18,8 @@
              run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --run narrow_z_narrow_mass --plot_restframe
              run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --use_only_bands acs,niriss --run only_st_bands --plot_restframe
 
-             run compute_stellar_masses.py --SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z_narrow_mass --plot_restframe
-             run compute_stellar_masses.py --SNR,mass,F115W,F150W,F200W --fit_sed --use_only_bands acs,niriss --run only_st_bands --plot_restframe
+             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z_narrow_mass --plot_restframe
+             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --use_only_bands acs,niriss --run only_st_bands --plot_restframe
 '''
 from header import *
 from util import *
@@ -793,15 +793,33 @@ if __name__ == "__main__":
             df_fluxes.drop(useless_errcols, axis=1, inplace=True)
 
         # --------discarding bands based on flux and snr threshold--------
-        else:
+        elif args.run == 'increased_flux_err':
             snr_thresh = 10
-            flux_thresh = 0.05 # in uJy
+            inflate_err_by_frac = 0.3
+            print(f'\nInflating all flux errors by {inflate_err_by_frac * 100}% and then dropping flux cols that are below snr={snr_thresh} for ALL objects')
 
             for fluxcol in fluxcols:
-                snr = df_fluxes[fluxcol] / df_fluxes[fluxcol.replace('_sci', '_err')]
                 flux = df_fluxes[fluxcol]
+                flux_err = df_fluxes[fluxcol.replace('_sci', '_err')]
+                flux_err = flux_err * (1 + inflate_err_by_frac) # artificially inflating errors by 30%
+                snr = flux / flux_err
                 snr = snr[np.isfinite(snr)]
-                flux = flux[np.isfinite(flux)]
+                if np.array(snr < snr_thresh).all():
+                    print(f'Dropping {fluxcol}..')
+                    df_fluxes.drop(fluxcol, axis=1, inplace=True)
+                    df_fluxes.drop(fluxcol.replace('_sci', '_err'), axis=1, inplace=True)
+
+        # --------discarding bands based on flux and snr threshold--------
+        elif np.array([item in args.run for item in ['narrow_z', 'only_good', 'drop_bad']]).any() :
+            snr_thresh = 10
+            flux_thresh = 0.05 # in uJy
+            print(f'\nDropping flux cols that are below flux={flux_thresh} and snr={snr_thresh} for ALL objects')
+
+            for fluxcol in fluxcols:
+                flux = df_fluxes[fluxcol]
+                flux_err = df_fluxes[fluxcol.replace('_sci', '_err')]
+                snr = flux / flux_err
+                snr = snr[np.isfinite(snr)]
                 if np.array(snr < snr_thresh).all() or np.array(flux < flux_thresh).all():
                     print(f'Dropping {fluxcol}..')
                     df_fluxes.drop(fluxcol, axis=1, inplace=True)
