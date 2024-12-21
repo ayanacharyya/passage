@@ -13,6 +13,13 @@
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z_narrow_mass
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --clobber_sed_photcat --use_only_bands acs,niriss --run only_st_bands --ncpus 3
+             run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --run narrow_z_narrow_mass --ncpus 1 --plot_restframe --log_x --test_sed
+
+             run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --run narrow_z_narrow_mass --plot_restframe
+             run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --use_only_bands acs,niriss --run only_st_bands --plot_restframe
+
+             run compute_stellar_masses.py --SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z_narrow_mass --plot_restframe
+             run compute_stellar_masses.py --SNR,mass,F115W,F150W,F200W --fit_sed --use_only_bands acs,niriss --run only_st_bands --plot_restframe
 '''
 from header import *
 from util import *
@@ -772,7 +779,7 @@ if __name__ == "__main__":
     if args.plot_niriss_direct: fig3 = plot_niriss_direct(df_fluxes, args)
 
     # ---------discarding some unusable flux columns-----------------------
-    photcat_filename_sed = Path(str(photcat_filename).replace('.csv', '_for_bagpipe.csv'))
+    photcat_filename_sed = Path(str(photcat_filename).replace('.csv', f'_for_bagpipe_{args.run}.csv'))
     if not os.path.isfile(photcat_filename_sed) or args.clobber_sed_photcat:
 
         # ---using only specific bands-------------
@@ -821,6 +828,10 @@ if __name__ == "__main__":
         for thiscol in new_columns: df_int[thiscol] = np.zeros(len(df_int))
 
         # ---------Loop over the objects-------------
+        if args.test_sed:
+            df_sed = df_sed[:1]
+            print(f'Only runing on {len(df_sed)} object as a test; for doing SED all objects, remove --test_sed and re-run')
+
         for index, obj in df_sed.iterrows():
             print(f'\nLooping over object {index + 1} of {len(df_sed)}..')
             fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.01, num_age_bins=5, min_age_bin=30) # Generate the fit parameters
@@ -830,8 +841,18 @@ if __name__ == "__main__":
             fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run=args.run) # Fit this galaxy
             fit.fit(verbose=True, sampler='nautilus', pool=args.ncpus)
 
+            # --------converting everything to restframe----------------
+            if args.plot_restframe:
+                fit.posterior.get_advanced_quantities()
+                redshift = np.median(fit.posterior.samples['redshift'])
+                fit.galaxy.photometry[:, 0] = fit.galaxy.photometry[:, 0] / (1 + redshift)
+                if fit.galaxy.spectrum_exists: fit.galaxy.spectrum[:, 0] = fit.galaxy.spectrum[:, 0] / (1 + redshift)
+                fit.galaxy.filter_set.eff_wavs = fit.galaxy.filter_set.eff_wavs / (1 + redshift)
+                fit.posterior.model_galaxy.wavelengths = fit.posterior.model_galaxy.wavelengths / (1 + redshift)
+
             # ---------Make some plots---------
-            fig = fit.plot_spectrum_posterior(save=True, show=True)
+            fig = fit.plot_spectrum_posterior(save=True, show=True, log_x=True)
+            fig = fit.plot_spectrum_posterior(save=True, show=True, log_x=False)
             fig = fit.plot_sfh_posterior(save=True, show=True)
             fig = fit.plot_corner(save=True, show=True)
 

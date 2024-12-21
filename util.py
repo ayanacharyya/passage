@@ -144,6 +144,9 @@ def parse_args():
     parser.add_argument('--ncpus', metavar='ncpus', type=int, action='store', default=4, help='No. of processors to use for BAGPIPES. Default is all (4)')
     parser.add_argument('--clobber_sed_photcat', dest='clobber_sed_photcat', action='store_true', default=False, help='Over-write existing phot cat to be used for SED fitting with bagpipes? Default is no.')
     parser.add_argument('--use_only_bands', metavar='use_only_bands', type=str, action='store', default=None, help='Which bands to be used for SED fitting with bagpipes? Default is None, i.e., use all bands')
+    parser.add_argument('--plot_restframe', dest='plot_restframe', action='store_true', default=False, help='Plot fitted SED in restframe? Default is no.')
+    parser.add_argument('--log_x', dest='log_x', action='store_true', default=False, help='Plot x-axis of SED in log scale? Default is no.')
+    parser.add_argument('--test_sed', dest='test_sed', action='store_true', default=False, help='Fit and plot just one objects SED as a test? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
