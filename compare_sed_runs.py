@@ -15,7 +15,7 @@ start_time = datetime.now()
 
 # -------------------------------------global dictionaries-------------------------------------------------------------------------------
 bounds_dict.update({'log_mass_bgp': (6.5, 10.5)})
-run_labels_dict = {'narrow_z_narrow_mass': 'All good filters', 'only_st_bands': 'Only ACS+NIRISS'}
+run_labels_dict = {'narrow_z_narrow_mass': 'All good filters', 'only_st_bands': 'Only ACS+NIRISS', 'increased_flux_err':' 30% more flux err'}
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":

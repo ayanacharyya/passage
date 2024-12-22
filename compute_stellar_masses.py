@@ -802,6 +802,7 @@ if __name__ == "__main__":
                 flux = df_fluxes[fluxcol]
                 flux_err = df_fluxes[fluxcol.replace('_sci', '_err')]
                 flux_err = flux_err * (1 + inflate_err_by_frac) # artificially inflating errors by 30%
+                df_fluxes[fluxcol.replace('_sci', '_err')] = flux_err
                 snr = flux / flux_err
                 snr = snr[np.isfinite(snr)]
                 if np.array(snr < snr_thresh).all():
