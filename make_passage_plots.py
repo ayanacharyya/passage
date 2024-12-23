@@ -20,6 +20,9 @@
              run make_passage_plots.py --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol OIII_EW --run narrow_z
              run make_passage_plots.py --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol Ha_EW --run narrow_z_narrow_mass
              run make_passage_plots.py --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol Ha_EW --run only_st_bands
+
+             run make_passage_plots.py --plot_conditions SNR,mass,F115W,F150W,F200W --plot_BPT --colorcol distance_from_K01 --run narrow_z_narrow_mass
+             run make_passage_plots.py --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol distance_from_K01 --run narrow_z_narrow_mass
 '''
 
 from header import *
@@ -83,15 +86,94 @@ def get_integrated_line_flux(line, full_hdu, args, dered=True):
     return line_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_BPT(objid_arr, ax, args):
+def distance(x, y, x0, y0):
+    """
+    Return distance between point
+    P[x0,y0] and a curve (x,y)
+    """
+    d_x = x - x0
+    d_y = y - y0
+    dis = np.sqrt(d_x ** 2 + d_y ** 2)
+    return dis
+
+# --------------------------------------------------------------------------------------------------------------------
+def min_distance(x, y, P, precision=5):
+    """
+    Compute minimum/a distance/s between
+    a point P[x0,y0] and a curve (x,y)
+    rounded at `precision`.
+
+    ARGS:
+        x, y      (array)
+        P         (tuple)
+        precision (int)
+
+    Returns min indexes and distances array.
+    """
+    # compute distance
+    d = distance(x, y, P[0], P[1])
+    d = np.round(d, precision)
+    # find the minima
+    glob_min_idxs = np.argwhere(d == np.min(d)).ravel()
+    return glob_min_idxs, d
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_distance_from_Kewley2001(xdata, ydata, args, x_num='SII'):
+    '''
+    Computes distance of each object in the given xdata and ydata (line ratios) arrays, from the Kewley+2011 AGN-SF line
+    Returns the distance as an array
+    '''
+    print(f'Computing distance form Kewley+2001 line on the BPT diagram..')
+    x = np.linspace(-2, 0, 100)
+
+    if x_num == 'NII':
+        y = 1.19 + 0.61 / (x - 0.47) # Eq 5 of K01
+    elif x_num == 'SII':
+        y = 1.3 + 0.72 / (x - 0.32) # Eq 6 of K01
+
+    min_dist_arr = []
+    for P in zip(xdata, ydata):
+        min_idxs, distances = min_distance(x, y, P)
+        if len(min_idxs) > 0: min_dist = distances[min_idxs[0]]
+        else: min_dist = np.nan
+        min_dist_arr.append(min_dist)
+
+    return np.array(min_dist_arr)
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_BPT(df, ax, args):
     '''
     Plots BPT diagram based on integrated fluxes from grizli
     Then overplots theoretical lines
     Returns axis handle
     '''
     print(f'Plotting integrated BPT diagram..')
+    objid_arr = (df['field'].astype(str) + '-' + df['objid'].astype(str)).values  # making a unique combination of field and object id
+    df['distance_from_K01'] = np.ones(len(df)) * np.nan
+
+    x_lim, y_lim = [-2, 0], [-0.5, 1.5]
     y_num, y_den = 'OIII', 'Hb'
     x_num, x_den = 'SII', 'Ha'
+    skip_count = 0
+
+    if ('distance' in args.colorcol and 'K01' in args.colorcol) or args.colorcol == 'distance_from_K01':
+        cmap = 'BrBG'
+        cmin, cmax = -0.8, 0.8
+    else:
+        cmap = 'rainbow'
+        cmin, cmax = 0, 6
+    scalarMap = mpl_cm.ScalarMappable(norm=mplcolors.Normalize(vmin=cmin, vmax=cmax), cmap=plt.get_cmap(cmap))
+
+    # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
+    x = np.linspace(x_lim[0], x_lim[1], 100)
+    if y_num == 'OIII' and y_den == 'Hb' and x_num == 'NII' and x_den == 'Ha':
+        def func(x): return 1.19 + 0.61 / (x - 0.47) # Eq 5 of K01
+    elif y_num == 'OIII' and y_den == 'Hb' and x_num == 'SII' and x_den == 'Ha':
+        def func(x): return 1.3 + 0.72 / (x - 0.32) # Eq 6 of K01
+    y = func(x)
+
+    ax.plot(x, y, c='khaki' if args.fortalk else 'brown', ls='dashed', lw=2, label='Kewley+2001')
+    plt.legend()
 
     # --------looping through the objects-----------------
     for index, objid in enumerate(objid_arr):
@@ -100,6 +182,8 @@ def plot_BPT(objid_arr, ax, args):
         args.id = int(objid.split('-')[1])
 
         full_fits_file = args.output_dir / args.field / f'{args.id:05d}' / f'{args.field}_{args.id:05d}.full.fits'
+        if not os.path.exists(full_fits_file): # if the fits files are actually maps.fits
+            full_fits_file = args.input_dir / f'{args.field}/Products/maps/{args.field}_{args.id:05d}.maps.fits'
         full_hdu = fits.open(full_fits_file)
 
         args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
@@ -112,41 +196,62 @@ def plot_BPT(objid_arr, ax, args):
         except:
             args.EB_V = ufloat(np.nan, np.nan)
 
-        y_num_flux = get_integrated_line_flux(y_num, full_hdu, args)
-        y_den_flux = get_integrated_line_flux(y_den, full_hdu, args)
-        x_num_flux = get_integrated_line_flux(x_num, full_hdu, args)
-        x_den_flux = get_integrated_line_flux(x_den, full_hdu, args)
-        z = full_hdu[0].header['REDSHIFT']
+        try:
+            y_num_flux = get_integrated_line_flux(y_num, full_hdu, args)
+            y_den_flux = get_integrated_line_flux(y_den, full_hdu, args)
+            x_num_flux = get_integrated_line_flux(x_num, full_hdu, args)
+            x_den_flux = get_integrated_line_flux(x_den, full_hdu, args)
+            z = full_hdu[0].header['REDSHIFT']
+        except IndexError as e:
+            skip_count += 1
+            print(f'Skipping {index + 1}: ID {objid} due to {e}')
+            continue
 
         try:
             y_ratio = unp.log10(y_num_flux / y_den_flux)
             x_ratio = unp.log10(x_num_flux / x_den_flux)
 
-            p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=z, marker='o', s=100, lw=1, edgecolor='k', cmap='rainbow')
+            # -------to plot minimum distances to the K01 line-----------
+            min_idxs, distances = min_distance(x, y, (unp.nominal_values(x_ratio), unp.nominal_values(y_ratio)))
+            if len(min_idxs) > 0:
+                sign = 1 if unp.nominal_values(y_ratio) > func(unp.nominal_values(x_ratio)) else -1
+                min_dist = sign * distances[min_idxs[0]]
+                df.at[index, 'distance_from_K01'] = min_dist
+
+            if ('distance' in args.colorcol and 'K01' in args.colorcol) or args.colorcol == 'distance_from_K01':
+                if len(min_idxs) > 0:
+                    color = scalarMap.to_rgba(min_dist)
+                    #ax.plot([unp.nominal_values(x_ratio), x[min_idxs[0]]], [unp.nominal_values(y_ratio), y[min_idxs[0]]], lw=1, linestyle='dotted', c=color)
+                else:
+                    color = np.nan
+            else:
+                color = scalarMap.to_rgba(z)
+
+            p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=100, lw=1, edgecolor='k')
             ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c='gray', fmt='none', lw=1)
+
         except ValueError:
+            skip_count += 1
             print(f'Galaxy {args.id} in {args.field} has a negative flux in one of the following, hence skipping this.')
             print(f'{y_num} = {y_num_flux}\n{y_den} = {y_den_flux}\n{x_num} = {x_num_flux}\n{x_den} = {x_den_flux}\n')
             pass
 
-    # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
-    x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
-    if y_num == 'OIII' and y_den == 'Hb' and x_num == 'NII' and x_den == 'Ha':
-        y = 1.19 + 0.61 / (x - 0.47) # Eq 5 of K01
-    elif y_num == 'OIII' and y_den == 'Hb' and x_num == 'SII' and x_den == 'Ha':
-        y = 1.3 + 0.72 / (x - 0.32) # Eq 6 of K01
-
-    ax.plot(x, y, c='khaki', ls='solid', lw=0.5, label='Kewley+2001')
-    plt.legend()
-
     # ---------annotate axes and save figure-------
-    cbar = plt.colorbar(p)
-    cbar.set_label('Redshift')
+    if args.fontsize == 10: args.fontsize = 15
+    cax, kw = matplotlib.colorbar.make_axes_gridspec(ax, orientation='vertical', pad=0.01, fraction=0.1, shrink=1, aspect=35)
+    cbar = plt.colorbar(scalarMap, cax=cax,  orientation='vertical')
+    cbar.set_label('Redshift' if args.colorcol == 'ez_z_phot' else label_dict[args.colorcol] if args.colorcol in label_dict else args.colorcol, fontsize=args.fontsize)
 
-    ax.set_xlabel(f'log ({x_num}/{x_den})')
-    ax.set_ylabel(f'log ({y_num}/{y_den})')
+    ax.set_xlim(x_lim)
+    ax.set_ylim(y_lim)
 
-    return ax
+    ax.set_xlabel(f'log ({x_num}/{x_den})', fontsize=args.fontsize)
+    ax.set_ylabel(f'log ({y_num}/{y_den})', fontsize=args.fontsize)
+
+    print(f'Eventually managed to plot {len(objid_arr) - skip_count} out of {len(objid_arr)} galaxies.')
+
+    return ax, df
+
 # --------------------------------------------------------------------------------------------------------------------
 def plot_flux_vs_mag(ax, args):
     '''
@@ -198,7 +303,7 @@ bounds_dict = {'lp_mass': (6, 9), 'ez_mass': (6, 9), 'log_mass_bgp': (6.5, 10.5)
                'lp_SFR': (-3, 1), 'ez_sfr': (-3, 1), 'log_sfr_bgp': (-3, 2), 'log_SFR_int': (-3, 2), \
                'ez_z_phot': (0, 3), 'lp_zBEST': (0, 3), 'z_bgp': (0, 3), 'redshift': (0.5, 2), \
                'logOH_slope': (-0.4, 0.1)}
-colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma')
+colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma', distance_from_K01='BrBG')
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -223,30 +328,35 @@ if __name__ == "__main__":
         ax = plot_flux_vs_mag(ax, args)
 
     else:
-        # -------reading in dataframe produced by get_field_stats.py----------------
-        df_infilename = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df.txt'
-        if 'bgp' in args.xcol or 'bgp' in args.ycol or 'bgp' in args.colorcol: df_infilename = Path(str(df_infilename).replace('.txt', f'_withSED_{args.run}.csv'))
+        # -------reading in dataframe produced by get_field_stats.py or by compute_stellar_masses.py----------------
+        df_infilename = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df_withSED_{args.run}.csv'
         df = pd.read_csv(df_infilename)
         print(f'Reading in main df from {df_infilename}')
 
+        # -------combing with metallicity dataframe if it exists----------------
         logOHgrad_filename = args.output_dir / f'logOHgrad_df_onlyseg_vorbin_at_Ha_SNR_3.0.txt'
         if os.path.exists(logOHgrad_filename):
             print(f'Reading in and merging logOH gradient df: {logOHgrad_filename}')
             df_logOHgrad = pd.read_csv(logOHgrad_filename)
             df = pd.merge(df, df_logOHgrad, on=['field', 'objid'], how='outer')
 
+        # -------making the dsired plots----------------
         if args.plot_BPT:
-            figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_BPT.png'
-            df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)  # making a unique combination of field and object id
-            objid_arr = df['par_obj'].values
-            ax = plot_BPT(objid_arr, ax, args)
+            colorby_text = f'_colorby_z' if args.colorcol == 'ez_z_phot' else f'_colorby_{args.colorcol}'
+            figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_BPT{colorby_text}.png'
+            ax, df = plot_BPT(df, ax, args)
+
+            # ------writing out distance from K01 AGN-SF line--------------------------
+            if ('distance' in args.colorcol and 'K01' in args.colorcol) or args.colorcol == 'distance_from_K01':
+                df.to_csv(df_infilename, index=None)
+                print(f'\nAdded distance_from_K01 column to df and saved in {df_infilename}.')
 
         else:
             figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
             df['log_SFR_int'] = np.log10(df['SFR_int'])
 
             # ---------SFMS from df-------
-            p = ax.scatter(df[args.xcol], df[args.ycol], c='gold' if args.foggie_comp else df[args.colorcol], plotnonfinite=True, marker='*' if args.foggie_comp else 'o', s=1000 if args.foggie_comp else 100, lw=1, edgecolor='w' if args.fortalk else 'k', vmin=bounds_dict[args.colorcol][0] if args.colorcol in bounds_dict else None, vmax=bounds_dict[args.colorcol][1] if args.colorcol in bounds_dict else None)
+            p = ax.scatter(df[args.xcol], df[args.ycol], c='gold' if args.foggie_comp else df[args.colorcol], plotnonfinite=True, marker='*' if args.foggie_comp else 'o', s=1000 if args.foggie_comp else 100, lw=1, edgecolor='w' if args.fortalk else 'k', vmin=bounds_dict[args.colorcol][0] if args.colorcol in bounds_dict else None, vmax=bounds_dict[args.colorcol][1] if args.colorcol in bounds_dict else None, cmap=colormap_dict[args.colorcol])
             if args.ycol + '_u' in df and not args.foggie_comp: # if uncertainty column exists
                 ax.errorbar(df[args.xcol], df[args.ycol], yerr=df[args.ycol + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
             if args.xcol + '_u' in df and not args.foggie_comp: # if uncertainty column exists

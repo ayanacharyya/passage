@@ -1494,7 +1494,8 @@ if __name__ == "__main__":
 
         # ---------------dust value---------------
         if all([line in args.available_lines for line in ['Ha', 'Hb']]) and not args.test_cutout:
-            _, args.EB_V = get_EB_V(full_hdu, args, verbose=True)
+            try: _, args.EB_V = get_EB_V(full_hdu, args, verbose=True)
+            except: args.EB_V = 0.
 
         # ---------initialising the starburst figure------------------------------
         if args.test_cutout or args.plot_direct_filters:
@@ -1558,7 +1559,10 @@ if __name__ == "__main__":
 
             # ---------------dust map---------------
             if all([line in args.available_lines for line in ['Ha', 'Hb']]):
-                ax_EB_V, EB_V_map, EB_V_radfit, EB_V_int = plot_EB_V_map(full_hdu, ax_EB_V, args, radprof_ax=rax_EB_V)
+                try: ax_EB_V, EB_V_map, EB_V_radfit, EB_V_int = plot_EB_V_map(full_hdu, ax_EB_V, args, radprof_ax=rax_EB_V)
+                except:
+                    EB_V_map, EB_V_radfit, EB_V_int = np.nan, [np.nan, np.nan], np.nan
+                    pass
             else:
                 fig.delaxes(ax_EB_V)
                 if args.plot_radial_profiles: fig.delaxes(rax_EB_V)
@@ -1573,15 +1577,19 @@ if __name__ == "__main__":
 
             # ---------------electron temperature map---------------
             if all([line in args.available_lines for line in ['OIII-4363', 'OIII']]):
-                ax_Te, Te_map, Te_radfit, Te_int = plot_Te_map(full_hdu, ax_Te, args, radprof_ax=rax_Te)
+                try: ax_Te, Te_map, Te_radfit, Te_int = plot_Te_map(full_hdu, ax_Te, args, radprof_ax=rax_Te)
+                except: pass
             else:
                 fig.delaxes(ax_Te)
                 if args.plot_radial_profiles: fig.delaxes(rax_Te)
 
             # ---------------metallicity maps---------------
             if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
-                if 'OIII-4363' in args.available_lines: ax_Z_Te, logOH_Te_map, logOH_Te_radfit, logOH_Te_int = plot_Z_Te_map(full_hdu, ax_Z_Te, args, radprof_ax=rax_Z_Te)
-                ax_Z_R23, logOH_R23_map, logOH_R23_radfit, logOH_R23_int = plot_Z_R23_map(full_hdu, ax_Z_R23, args, radprof_ax=rax_Z_R23)
+                if 'OIII-4363' in args.available_lines:
+                    try: ax_Z_Te, logOH_Te_map, logOH_Te_radfit, logOH_Te_int = plot_Z_Te_map(full_hdu, ax_Z_Te, args, radprof_ax=rax_Z_Te)
+                    except: pass
+                try: ax_Z_R23, logOH_R23_map, logOH_R23_radfit, logOH_R23_int = plot_Z_R23_map(full_hdu, ax_Z_R23, args, radprof_ax=rax_Z_R23)
+                except: pass
             else:
                 fig.delaxes(ax_Z_Te)
                 fig.delaxes(ax_Z_R23)
@@ -1643,7 +1651,8 @@ if __name__ == "__main__":
                 else:
                     measured_quants += [np.nan]
                 if quantity + '_radfit' in locals():
-                    measured_quants += [locals()[quantity + '_radfit'][0].n, locals()[quantity + '_radfit'][1].n]
+                    try: measured_quants += [locals()[quantity + '_radfit'][0].n, locals()[quantity + '_radfit'][1].n]
+                    except AttributeError: measured_quants += [np.nan, np.nan]
                 else:
                     measured_quants += [np.nan, np.nan]
 

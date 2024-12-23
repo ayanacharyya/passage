@@ -176,7 +176,7 @@ if __name__ == "__main__":
             if os.path.exists(diag_results_file) and not args.clobber:
                 print(f'Diagnostic results file already present, so proceeding to making combined diagnostics and extraction images.')
             elif not (os.path.exists(products_path / 'maps') and os.path.exists(products_path / 'spec1D')):
-                print(f'Supposed to run make_diagnostic_maps.py but either {str(products_path / "maps")} OR spec_1D/ does not exist, therefore cannot run. Moving to the next field.')
+                print(f'Supposed to run make_diagnostic_maps.py but either {str(products_path / "maps")} OR spec1D/ does not exist, therefore cannot run. Moving to the next field.')
                 continue
             else:
                 print(f'Running make_diagnostic_maps.py..')
