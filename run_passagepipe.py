@@ -10,6 +10,7 @@
              run run_passagepipe.py --field Par27 --zmin 0.1 --zmax 8 --filters F115W,F150W,F200W
              run run_passagepipe.py --field Par40 --zmin 0.1 --zmax 8 --filters F115W,F150W,F200W
              run run_passagepipe.py --field Par61 --zmin 0.1 --zmax 8 --filters F115W,F150W --remake_figures
+             run run_passagepipe.py --field Par29 --zmin 0.1 --zmax 8 --filters F115W,F150W
 '''
 
 from header import *

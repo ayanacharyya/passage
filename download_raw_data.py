@@ -5,7 +5,7 @@
     Author : Ayan
     Created: 10-07-24
     Example: run download_raw_data.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par008
-             run download_raw_data.py --Par008
+             run download_raw_data.py --field Par008
 '''
 
 from header import *
@@ -36,7 +36,7 @@ def download_from_mast(args, prop_id='1571'):
     query.DEFAULT_QUERY['obs_collection'] = ['JWST']
 
     queryList = query.run_query(box=None, proposal_id=[prop_id], base_query=query.DEFAULT_QUERY)
-    queryList['obs_id_num'] = pd.Series(queryList['obs_id']).map(lambda x: int(x.split('_')[0][7:-3]))
+    queryList['obs_id_num'] = pd.Series(queryList['obs_id']).map(lambda x: int(x.split('_')[1][1:]) if 'niriss' in x else int(x.split('_')[0][7:-3]))
 
     # --------trim MAST query---------------
     cond = np.in1d(queryList['obs_id_num'], obs_ids)
