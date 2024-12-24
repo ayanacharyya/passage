@@ -20,6 +20,8 @@
 
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z_narrow_mass --plot_restframe
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --use_only_bands acs,niriss --run only_st_bands --plot_restframe
+
+             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run including_nircam --plot_restframe
 '''
 from header import *
 from util import *
@@ -540,13 +542,13 @@ def get_flux_catalog(photcat_filename, df_int, args):
         else:
             print(f'{filename} does not exist, so preparing the flux list..')
 
-            # -------reading in flux columns names and df_cosmos-------
-            fluxcols, df_cosmos = get_fluxcols(args)
-            if df_cosmos is None: df_cosmos = read_COSMOS2020_catalog(args=args, filename=args.cosmos2020_filename)
+            # -------reading in flux columns names and df_cosmos2020-------
+            fluxcols, df_cosmos2020 = get_fluxcols(args)
+            if df_cosmos2020 is None: df_cosmos2020 = read_COSMOS2020_catalog(args=args, filename=args.cosmos2020_filename)
 
             # -------making subset of df_cosmos-------
             cosmos_ids = df_int['cosmos_id'].values
-            df_cosmos_subset = df_cosmos[df_cosmos['id'].isin(cosmos_ids)]
+            df_cosmos_subset = df_cosmos2020[df_cosmos2020['id'].isin(cosmos_ids)]
             df_cosmos_subset = df_cosmos_subset.rename(columns={'id': 'cosmos_id'})
 
             # -------determining other columns to extract from df_cosmos-------
@@ -558,6 +560,20 @@ def get_flux_catalog(photcat_filename, df_int, args):
             cols_to_extract = np.hstack((['cosmos_id', 'ra', 'dec', 'ID_COSMOS2015', 'ez_z_phot', 'lp_MK', 'lp_zBEST'], lp_cols, ez_cols, flux_and_err_cols)).tolist()
             df_fluxes = pd.merge(df_int[['field', 'objid', 'redshift', 'cosmos_id']], df_cosmos_subset[cols_to_extract], on='cosmos_id', how='inner')
             df_fluxes = df_fluxes.dropna(axis=1, how='all')
+
+            # -------reading in df_cosmoswebb fluxes-------
+            df_fluxes['passage_id'] = df_fluxes['field'].astype(str) + '-' + df_fluxes['objid'].astype(str)
+            for thisfield in np.unique(df_fluxes['field']):
+                print(f'Merging COSMOS Webb catalog for field {thisfield}..')
+                cosmoswebb_photcat_for_thisfield_fielname = args.input_dir / 'COSMOS' / f'cosmoswebb_objects_in_{thisfield}.fits'
+                cosmoswebb_photcat_for_thisfield = read_COSMOSWebb_catalog(args=None, filename=cosmoswebb_photcat_for_thisfield_fielname, aperture=1.0)
+                nircam_fluxcols = [item for item in cosmoswebb_photcat_for_thisfield.columns if 'FLUX_APER' in item]
+                nircam_errcols = [item for item in cosmoswebb_photcat_for_thisfield.columns if 'FLUX_ERR_APER' in item]
+                cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield[np.hstack([nircam_fluxcols, nircam_errcols, ['passage_id', 'id']])]
+                cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns={'id': 'COSMOSWebb_ID'})
+                cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, 'NIRCAM_' + item[-5:] + '_FLUXERR') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_ERR_APER' in item]))
+                cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, 'NIRCAM_' + item[-5:] + '_FLUX') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_APER' in item]))
+                df_fluxes = pd.merge(df_fluxes, cosmoswebb_photcat_for_thisfield, on='passage_id', how='left')
 
             # -------writing cosmos fluxes df into file-------
             df_fluxes.to_csv(filename, index=None)
@@ -811,7 +827,7 @@ if __name__ == "__main__":
                     df_fluxes.drop(fluxcol.replace('_sci', '_err'), axis=1, inplace=True)
 
         # --------discarding bands based on flux and snr threshold--------
-        elif np.array([item in args.run for item in ['narrow_z', 'only_good', 'drop_bad']]).any() :
+        else:
             snr_thresh = 10
             flux_thresh = 0.05 # in uJy
             print(f'\nDropping flux cols that are below flux={flux_thresh} and snr={snr_thresh} for ALL objects')
@@ -825,6 +841,11 @@ if __name__ == "__main__":
                     print(f'Dropping {fluxcol}..')
                     df_fluxes.drop(fluxcol, axis=1, inplace=True)
                     df_fluxes.drop(fluxcol.replace('_sci', '_err'), axis=1, inplace=True)
+
+        # ------------dropping MIRI until transmission file acquired---------
+        if args.run == 'including_nircam':
+            df_fluxes.drop('NIRCAM_F770W_sci', axis=1, inplace=True)
+            df_fluxes.drop('NIRCAM_F770W_err', axis=1, inplace=True)
 
         df_fluxes.to_csv(photcat_filename_sed, index=None)
         print(f'Written {photcat_filename_sed} with only the reliable flux columns.')

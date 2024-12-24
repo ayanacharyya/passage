@@ -414,7 +414,7 @@ def read_COSMOSWebb_catalog(args=None, filename=None, aperture=1.0):
     df  = table[single_index_columns].to_pandas()
     for thiscol in multi_index_columns: df[thiscol] = table[thiscol][:, aperture_dict[aperture]]
 
-    df = df.rename(columns={'ID':'id', 'REC_DETEC':'ra', 'DEC_DETEC':'dec'})
+    df = df.rename(columns={'ID':'id', 'RA_DETEC':'ra', 'DEC_DETEC':'dec'})
     print(f'Completed reading COSMOSWebb catalog in {timedelta(seconds=(datetime.now() - start_time2).seconds)}')
 
     return df
@@ -527,14 +527,16 @@ def split_COSMOS_subset_table_by_par(args):
             print(f'{catalog_file} does not exist, so skipping {thisfield}.')
 
 # -------------------------------------------------------------------------------------------------------
-def split_COSMOSWebb_table_by_par(args):
+def split_COSMOSWebb_table_by_par(args, filename=None):
     '''
     Reads in the COSMOSWebb catalog and splits it into smaller tables with only objects that are overlapping with individual PASSAGE fields
     '''
     # -------reading in the COSMOS2020 (sub)catalog------
-    filename = Path(args.input_dir) / 'COSMOS' / 'COSMOS_Web_for_Ayan_Dec23.fits'
+    if filename is None: filename = Path(args.input_dir) / 'COSMOS' / 'COSMOS_Web_for_Ayan_Dec23.fits'
     data = fits.open(filename)
     table_cosmos = Table(data[1].data)
+    table_cosmos.remove_column('ID')
+    table_cosmos.rename_column('ID_SE++', 'ID')
     cosmos_coords = SkyCoord(table_cosmos['RA_DETEC'], table_cosmos['DEC_DETEC'], unit='deg')
 
     for index, field_id in enumerate(passage_fields_in_cosmos):
