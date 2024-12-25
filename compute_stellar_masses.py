@@ -537,7 +537,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
         filename = args.input_dir / 'COSMOS' / f'{args.plot_conditions}_cosmos_fluxes_subset.csv'
 
         if os.path.exists(filename):
-            print(f'Reading cosmos2020 flux values from existing {filename}')
+            print(f'Reading cosmos2020 and cosmoswebb flux values from existing {filename}')
             df_fluxes = pd.read_csv(filename)
         else:
             print(f'{filename} does not exist, so preparing the flux list..')
@@ -562,6 +562,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
             df_fluxes = df_fluxes.dropna(axis=1, how='all')
 
             # -------reading in df_cosmoswebb fluxes-------
+            ergs_s_cm2_hz_to_ujy_factor = 1e29 # 1 ergs/s/cm^2/Hz = 10^29 uJy
             df_fluxes['passage_id'] = df_fluxes['field'].astype(str) + '-' + df_fluxes['objid'].astype(str)
             for thisfield in np.unique(df_fluxes['field']):
                 print(f'Merging COSMOS Webb catalog for field {thisfield}..')
@@ -570,6 +571,11 @@ def get_flux_catalog(photcat_filename, df_int, args):
                 nircam_fluxcols = [item for item in cosmoswebb_photcat_for_thisfield.columns if 'FLUX_APER' in item]
                 nircam_errcols = [item for item in cosmoswebb_photcat_for_thisfield.columns if 'FLUX_ERR_APER' in item]
                 cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield[np.hstack([nircam_fluxcols, nircam_errcols, ['passage_id', 'id']])]
+                cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.replace({-998: np.nan})
+                for thiscol in nircam_fluxcols:
+                    cosmoswebb_photcat_for_thisfield[thiscol] = cosmoswebb_photcat_for_thisfield[thiscol] * ergs_s_cm2_hz_to_ujy_factor # converting from ergs/s/cm^2/Hz to micro Jansky
+                    cosmoswebb_photcat_for_thisfield[thiscol.replace('FLUX', 'FLUX_ERR')] = cosmoswebb_photcat_for_thisfield[thiscol.replace('FLUX', 'FLUX_ERR')] * ergs_s_cm2_hz_to_ujy_factor  # converting from ergs/s/cm^2/Hz to micro Jansky
+
                 cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns={'id': 'COSMOSWebb_ID'})
                 cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, 'NIRCAM_' + item[-5:] + '_FLUXERR') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_ERR_APER' in item]))
                 cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, 'NIRCAM_' + item[-5:] + '_FLUX') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_APER' in item]))
@@ -843,7 +849,7 @@ if __name__ == "__main__":
                     df_fluxes.drop(fluxcol.replace('_sci', '_err'), axis=1, inplace=True)
 
         # ------------dropping MIRI until transmission file acquired---------
-        if args.run == 'including_nircam':
+        if args.run == 'including_nircam' and 'NIRCAM_F770W_sci' in df_fluxes.columns:
             df_fluxes.drop('NIRCAM_F770W_sci', axis=1, inplace=True)
             df_fluxes.drop('NIRCAM_F770W_err', axis=1, inplace=True)
 
