@@ -875,7 +875,7 @@ if __name__ == "__main__":
 
         # ---------Loop over the objects-------------
         if args.test_sed:
-            df_sed = df_sed[:1]
+            df_sed = df_sed[1:2] ##
             print(f'Only runing on {len(df_sed)} object as a test; for doing SED all objects, remove --test_sed and re-run')
 
         for index, obj in df_sed.iterrows():

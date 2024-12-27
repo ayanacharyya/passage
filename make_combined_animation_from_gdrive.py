@@ -134,8 +134,11 @@ if __name__ == "__main__":
                 print(f'Downloads already present, so proceeding to unzipping.')
             else:
                 print(f'Downloading folder {field} from google drive..')
-                folder_id = field_url_dict[field]
-                download_folder_from_google_drive(folder_id, products_path, credentials=credentials)
+                try:
+                    folder_id = field_url_dict[field]
+                    download_folder_from_google_drive(folder_id, products_path, credentials=credentials)
+                except KeyError:
+                    print(f'{field} does not exist on google drive, but proceeding anyway, hoping it is already downloaded.')
 
             if args.only_download:
                 print('--only_download option was used, hence skipping all other steps. Remove this option to access subsequent steps')

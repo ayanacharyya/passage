@@ -593,10 +593,6 @@ if __name__ == "__main__":
             for index, args.field in enumerate(available_fields):
                 print(f'Doing field {args.field} which is {index+1} of {len(available_fields)}..')
                 args.filters = available_filters_for_field_dict[args.field]
-                if '51' in args.field:
-                    args.re_extract = True
-                else:
-                    args.re_extract = False
 
                 # ---------determining filename suffixes-------------------------------
                 output_dir = args.output_dir / args.field

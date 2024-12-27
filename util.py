@@ -532,7 +532,7 @@ def split_COSMOSWebb_table_by_par(args, filename=None):
     Reads in the COSMOSWebb catalog and splits it into smaller tables with only objects that are overlapping with individual PASSAGE fields
     '''
     # -------reading in the COSMOS2020 (sub)catalog------
-    if filename is None: filename = Path(args.input_dir) / 'COSMOS' / 'COSMOS_Web_for_Ayan_Dec23.fits'
+    if filename is None: filename = Path(args.input_dir) / 'COSMOS' / 'COSMOS_Web_for_Ayan_Dec24.fits'
     data = fits.open(filename)
     table_cosmos = Table(data[1].data)
     table_cosmos.remove_column('ID')
