@@ -1347,8 +1347,6 @@ if __name__ == "__main__":
     if args.plot_slope_vs_mass: args.plot_starburst, args.plot_radial_profiles = True, True
 
     # ---------determining filename suffixes-------------------------------
-    product_dir = args.input_dir / args.field / 'Products'
-
     radial_plot_text = '_wradprof' if args.plot_radial_profiles else ''
     snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
     only_seg_text = '_onlyseg' if args.only_seg else ''
@@ -1369,10 +1367,15 @@ if __name__ == "__main__":
         args.field = f'Par{int(field[3:]):03}' if len(field) < 6 else field
         print(f'\n\nCommencing field {args.field} which is {index2 + 1} of {len(field_list)}..')
 
+        product_dir = args.input_dir / args.field / 'Products'
         output_dir = args.output_dir / args.field
         if args.re_extract: output_dir = output_dir / 're_extracted'
         output_dir.mkdir(parents=True, exist_ok=True)
         outfilename = output_dir / f'{args.field}_all_diag_results.csv'
+
+        if os.path.exists(outfilename) and not args.clobber and args.write_file:
+            print(f'result file for {args.field} already exists as {outfilename}, so skipping this field.')
+            continue
 
         # ---------prep the catalog file--------------------
         catalog_file = product_dir / f'{args.field}_photcat.fits'
