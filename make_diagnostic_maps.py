@@ -1379,6 +1379,10 @@ if __name__ == "__main__":
 
         # ---------prep the catalog file--------------------
         catalog_file = product_dir / f'{args.field}_photcat.fits'
+        if not os.path.exists(catalog_file):
+            print(f'photcat file for {args.field} does not exist, please download from gdrive or run data reduction. Until then, skipping this field.')
+            continue
+
         catalog = GTable.read(catalog_file)
 
         # --------determine which objects to loop over----------
