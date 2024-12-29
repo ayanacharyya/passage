@@ -24,18 +24,6 @@ from util import *
 start_time = datetime.now()
 
 # -------------------------------------------------------------------------------------------------------
-def atoi(text):
-    return int(text) if text.isdigit() else text
-
-def natural_keys(text):
-    '''
-    alist.sort(key=natural_keys) sorts in human order
-    http://nedbatchelder.com/blog/200712/human_sorting.html
-    (See Toothy's implementation in the comments)
-    '''
-    return [ atoi(c) for c in re.split(r'(\d+)', text) ]
-
-# -------------------------------------------------------------------------------------------------------
 def make_set(df, condition, label, set_arr, label_arr):
     '''
     Applies the given condition on given df and appends the ID list into a set and assigns a label
@@ -425,7 +413,7 @@ def read_stats_df(df_filename, args):
     '''
     extract_dir = args.input_dir / args.field / 'Extractions'
     # -------initiliasing dataframe-------------------------------
-    df = pd.read_table(df_filename, delim_whitespace=True)
+    df = pd.read_csv(df_filename)
 
     # ------------getting magnitudes from phot catalog----------------------
     try:
@@ -525,31 +513,35 @@ def get_crossmatch_with_cosmos(df, args):
     if 'passage_id' in df_cosmos: df_cosmos = df_cosmos.drop('passage_id', axis=1)
 
     # -------cross-matching RA/DEC of both catalogs------
-    print(f'\nDoing cross-matching between PASSAGE and COSMOS catalogs..')
-    passage_coords = SkyCoord(df['ra'], df['dec'], unit='deg')
-    cosmos_coords = SkyCoord(df_cosmos['ra'], df_cosmos['dec'], unit='deg')
-    nearest_id_in_cosmos, sep_from_nearest_id_in_cosmos, _ = passage_coords.match_to_catalog_sky(cosmos_coords)
+    if len(df_cosmos) > 0:
+        print(f'\nDoing cross-matching between PASSAGE and COSMOS catalogs..')
+        passage_coords = SkyCoord(df['ra'], df['dec'], unit='deg')
+        cosmos_coords = SkyCoord(df_cosmos['ra'], df_cosmos['dec'], unit='deg')
+        nearest_id_in_cosmos, sep_from_nearest_id_in_cosmos, _ = passage_coords.match_to_catalog_sky(cosmos_coords)
 
-    df_crossmatch = pd.DataFrame({'passage_id': df['par_obj'].values, 'cosmos_id': df_cosmos['id'].iloc[nearest_id_in_cosmos].values, 'sep': sep_from_nearest_id_in_cosmos.arcsec})
-    df_crossmatch = df_crossmatch[df_crossmatch['sep'] < 1.]  # separation within 1 arcsecond
-    df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='cosmos_id', keep='first').reset_index(drop=True)  # to avoid multiple PASSAGE objects being linked to the same COSMOS object
-    df_crossmatch = pd.merge(df_crossmatch[['passage_id', 'cosmos_id']], df_cosmos, left_on='cosmos_id', right_on='id', how='inner').drop(['id', 'ra', 'dec'], axis=1)
+        df_crossmatch = pd.DataFrame({'passage_id': df['par_obj'].values, 'cosmos_id': df_cosmos['id'].iloc[nearest_id_in_cosmos].values, 'sep': sep_from_nearest_id_in_cosmos.arcsec})
+        df_crossmatch = df_crossmatch[df_crossmatch['sep'] < 1.]  # separation within 1 arcsecond
+        df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='cosmos_id', keep='first').reset_index(drop=True)  # to avoid multiple PASSAGE objects being linked to the same COSMOS object
+        df_crossmatch = pd.merge(df_crossmatch[['passage_id', 'cosmos_id']], df_cosmos, left_on='cosmos_id', right_on='id', how='inner').drop(['id', 'ra', 'dec'], axis=1)
 
-    try: df_crossmatch_subset = df_crossmatch[['passage_id', 'cosmos_id', 'ez_z_phot', 'lp_MK', 'lp_zBEST']]
-    except: df_crossmatch_subset = df_crossmatch[['passage_id', 'cosmos_id', 'ez_z_phot', 'lp_MK']]
-    lp_quants = ['lp_SFR', 'lp_mass', 'lp_sSFR']
-    ez_quants = ['ez_mass', 'ez_sfr', 'ez_ssfr']
+        try: df_crossmatch_subset = df_crossmatch[['passage_id', 'cosmos_id', 'ez_z_phot', 'lp_MK', 'lp_zBEST']]
+        except: df_crossmatch_subset = df_crossmatch[['passage_id', 'cosmos_id', 'ez_z_phot', 'lp_MK']]
+        lp_quants = ['lp_SFR', 'lp_mass', 'lp_sSFR']
+        ez_quants = ['ez_mass', 'ez_sfr', 'ez_ssfr']
 
-    for quant in lp_quants:
-        df_crossmatch_subset[quant] = df_crossmatch[quant + '_med']
-        df_crossmatch_subset[quant + '_u'] = (df_crossmatch[quant + '_med_max68'] - df_crossmatch[quant + '_med_min68']) / 2
+        for quant in lp_quants:
+            df_crossmatch_subset[quant] = df_crossmatch[quant + '_med']
+            df_crossmatch_subset[quant + '_u'] = (df_crossmatch[quant + '_med_max68'] - df_crossmatch[quant + '_med_min68']) / 2
 
-    for quant in ez_quants:
-        df_crossmatch_subset[quant] = df_crossmatch[quant + '_p500']
-        df_crossmatch_subset[quant + '_u'] = (df_crossmatch[quant + '_p840'] - df_crossmatch[quant + '_p160']) / 2
+        for quant in ez_quants:
+            df_crossmatch_subset[quant] = df_crossmatch[quant + '_p500']
+            df_crossmatch_subset[quant + '_u'] = (df_crossmatch[quant + '_p840'] - df_crossmatch[quant + '_p160']) / 2
 
-    print(f'\nFound a total of {len(df_crossmatch_subset)} matching objects')
-    df = pd.merge(df, df_crossmatch_subset, left_on='par_obj', right_on='passage_id', how='outer').drop('passage_id', axis=1)
+        print(f'\nFound a total of {len(df_crossmatch_subset)} matching objects')
+        df = pd.merge(df, df_crossmatch_subset, left_on='par_obj', right_on='passage_id', how='outer').drop('passage_id', axis=1)
+    else:
+        df = pd.DataFrame()
+        print(f'None of the {len(fields)} that have all_diag.csv files have any matching objects with COSMOS2020')
 
     return df
 
@@ -597,7 +589,7 @@ if __name__ == "__main__":
                 # ---------determining filename suffixes-------------------------------
                 output_dir = args.output_dir / args.field
                 if args.re_extract: output_dir = output_dir / 're_extracted'
-                df_filename = output_dir / f'{args.field}_all_diag_results.txt'
+                df_filename = output_dir / f'{args.field}_all_diag_results.csv'
 
                 if os.path.exists(df_filename):
                     thisdf_stat = read_stats_df(df_filename, args)  # read in the stats dataframe
@@ -640,7 +632,6 @@ if __name__ == "__main__":
         df['filters'] = df['field'].map(lambda x: ', '.join(available_filters_for_field_dict[x]))
         df['n_filters'] = df['filters'].map(lambda x: len(x.split(',')))
         EW_cols = [item for item in df.columns if 'EW' in item]
-        for thiscol in EW_cols: df[thiscol] = df[thiscol] / (1 + df['redshift']) # converting ALL EWs to rest-frame
 
         # ------------merging cosmos datasets for the venn diagrams--------------------
         conditions_from_cosmos = ['mass', 'sfr', 'sSFR']

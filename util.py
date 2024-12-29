@@ -12,6 +12,18 @@
 
 from header import *
 
+# -------------------------------------------------------------------------------------------------------
+def atoi(text):
+    return int(text) if text.isdigit() else text
+
+def natural_keys(text):
+    '''
+    alist.sort(key=natural_keys) sorts in human order
+    http://nedbatchelder.com/blog/200712/human_sorting.html
+    (See Toothy's implementation in the comments)
+    '''
+    return [ atoi(c) for c in re.split(r'(\d+)', text) ]
+
 # --------------------------------------------------------------------------------------------------------------------
 def parse_args():
     '''
@@ -496,10 +508,14 @@ def split_COSMOS_subset_table_by_par(args):
     table_cosmos = Table(data[1].data)
     cosmos_coords = SkyCoord(table_cosmos['ALPHA_J2000'], table_cosmos['DELTA_J2000'], unit='deg')
 
-    for index, field_id in enumerate(passage_fields_in_cosmos):
-        print(f'Starting {index+1} of {len(passage_fields_in_cosmos)} fields..')
+    field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par*') + '/')]
+    field_list += [f'Par{item:03d}' for item in passage_fields_in_cosmos]
+    field_list = list(np.unique(field_list))
+    field_list.sort(key=natural_keys)
+
+    for index, thisfield in enumerate(field_list):
+        print(f'Starting {index+1} of {len(field_list)} fields..')
         # -------determining path to photometric catalog------
-        thisfield = f'Par{field_id:03d}'
         product_dir = args.input_dir / thisfield / 'Products'
         catalog_file = product_dir / f'{thisfield}_photcat.fits'
 
@@ -515,14 +531,17 @@ def split_COSMOS_subset_table_by_par(args):
             df_crossmatch = pd.DataFrame({'passage_id': df['id'].values, 'ID': table_cosmos['ID'][nearest_id_in_cosmos].value.astype(np.int32), 'sep': sep_from_nearest_id_in_cosmos.arcsec})
             df_crossmatch['passage_id'] = thisfield + '-' + df_crossmatch['passage_id'].astype(str)  # making a unique combination of field and object id
             df_crossmatch = df_crossmatch[df_crossmatch['sep'] < 1.]  # separation within 1 arcsecond
-            df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='ID', keep='first').reset_index(drop=True)  # to avoid multiple PASSAGE objects being linked to the same COSMOS object
-            table_crossmatch = Table.from_pandas(df_crossmatch)
+            if len(df_crossmatch) > 0:
+                df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='ID', keep='first').reset_index(drop=True)  # to avoid multiple PASSAGE objects being linked to the same COSMOS object
+                table_crossmatch = Table.from_pandas(df_crossmatch)
 
-            table_cosmos_thisfield = join(table_cosmos, table_crossmatch, keys='ID')
+                table_cosmos_thisfield = join(table_cosmos, table_crossmatch, keys='ID')
 
-            outfilename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
-            table_cosmos_thisfield.write(outfilename, overwrite=True)
-            print(f'Saved subset table as {outfilename}')
+                outfilename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
+                table_cosmos_thisfield.write(outfilename, overwrite=True)
+                print(f'Saved subset table as {outfilename}')
+            else:
+                print(f'No overlapping objects found in field {thisfield}')
         else:
             print(f'{catalog_file} does not exist, so skipping {thisfield}.')
 
@@ -539,10 +558,14 @@ def split_COSMOSWebb_table_by_par(args, filename=None):
     table_cosmos.rename_column('ID_SE++', 'ID')
     cosmos_coords = SkyCoord(table_cosmos['RA_DETEC'], table_cosmos['DEC_DETEC'], unit='deg')
 
-    for index, field_id in enumerate(passage_fields_in_cosmos):
-        print(f'Starting {index+1} of {len(passage_fields_in_cosmos)} fields..')
+    field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par*') + '/')]
+    field_list += [f'Par{item:03d}' for item in passage_fields_in_cosmos]
+    field_list = list(np.unique(field_list))
+    field_list.sort(key=natural_keys)
+
+    for index, thisfield in enumerate(field_list):
+        print(f'Starting {index+1} of {len(field_list)} fields..')
         # -------determining path to photometric catalog------
-        thisfield = f'Par{field_id:03d}'
         product_dir = args.input_dir / thisfield / 'Products'
         catalog_file = product_dir / f'{thisfield}_photcat.fits'
 

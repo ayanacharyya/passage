@@ -175,7 +175,7 @@ if __name__ == "__main__":
                     os.rename(thisfile, thisfile.replace(field, args.field))
 
             # ------------run make_diagnostic_maps.py------------------
-            diag_results_file = output_dir / f'{args.field}_all_diag_results.txt'
+            diag_results_file = output_dir / f'{args.field}_all_diag_results.csv'
             if os.path.exists(diag_results_file) and not args.clobber:
                 print(f'Diagnostic results file already present, so proceeding to making combined diagnostics and extraction images.')
             elif not (os.path.exists(products_path / 'maps') and os.path.exists(products_path / 'spec1D')):
@@ -183,7 +183,7 @@ if __name__ == "__main__":
                 continue
             else:
                 print(f'Running make_diagnostic_maps.py..')
-                dummy = subprocess.run(['python', 'make_diagnostic_maps.py', '--field', f'{args.field}', '--do_all_obj', '--plot_radial_profiles', '--only_seg', '--snr_cut', '3', '--write_file', '--hide'])
+                dummy = subprocess.run(['python', 'make_diagnostic_maps.py', '--field', f'{args.field}', '--do_all_obj', '--plot_radial_profiles', '--only_seg', '--snr_cut', '3', '--write_file', '--clobber', '--hide'])
 
             # ------------run combine_diagnostics_and_extractions.py------------------
             diagnostic_img_files = glob.glob(str(output_dir / f'{description_text1}') + f'/{args.field}_*_{description_text1}.png')
