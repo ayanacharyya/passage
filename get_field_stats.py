@@ -10,7 +10,7 @@
              run get_field_stats.py --mag_lim 26 --line_list OIII,Ha --do_all_fields --plot_conditions EW,mag,compact
              run get_field_stats.py --mag_lim 24 --EW_thresh 300 --log_SFR_thresh 0 --line_list OIII,Ha --do_all_fields --plot_conditions EW,mag,PA,mass
              run get_field_stats.py --line_list OIII,Ha --do_all_fields --plot_conditions EW,mass,PA,a_image --clobber_venn
-             run get_field_stats.py --line_list OIII,Ha --do_all_fields --plot_conditions EW,mass,PA --clobber_venn
+             run get_field_stats.py --line_list OIII,Ha --do_all_fields --plot_conditions EW,mass,PA --clobber_venn --EW_thresh 300
              run get_field_stats.py --line_list Ha --do_all_fields --plot_conditions has,PA --clobber_venn
              run get_field_stats.py --line_list Ha --do_all_fields --plot_conditions SNR,mass,F115W,F150W,F200W --SNR_thresh 10 --clobber_venn
              run get_field_stats.py --line_list Ha --do_all_fields --plot_pie

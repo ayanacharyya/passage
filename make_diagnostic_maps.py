@@ -19,6 +19,7 @@
              run make_diagnostic_maps.py --field Par28 --id 646,1457,1585,1588,2195,2343 --plot_BPT --only_seg --vorbin --voronoi_snr 3 --plot_separately
              run make_diagnostic_maps.py --field Par28 --id 2343 --test_cutout
              run make_diagnostic_maps.py --do_all_fields --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file --clobber
+             run make_diagnostic_maps.py --field Par28 --id 58,155,690,1200,1228,1395,1457,1585,1588 --plot_radial_profiles --only_seg --vorbin --voronoi_snr 3
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -416,7 +417,7 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
     else:
         radprof_fit = [np.nan, np.nan] # dummy values for when the fit was not performed
 
-    ax.contour(args.segmentation_map != args.id, levels=0, colors='w' if args.fortalk else 'k', extent=args.extent, linewidths=2)
+    ax.contour(args.segmentation_map != args.id, levels=0, colors='w' if args.fortalk else 'k', extent=args.extent, linewidths=0.5) # demarcating the segmentation map zone
 
     if args.vorbin and args.plot_vorbin and vorbin_ax is not None:
         vorbin_IDs = args.voronoi_bin_IDs
@@ -534,8 +535,8 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
 
     # -----------getting the integrated EW value-----------------
     line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
-    line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}'] / (1 + args.z) # converting to rest-frame EW
-    line_ew_err = full_hdu[2].header[f'EWHW_{line_index_in_cov:03d}'] / (1 + args.z) # converting to rest-frame EW uncertainty
+    line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}'] # rest-frame EW
+    line_ew_err = full_hdu[2].header[f'EWHW_{line_index_in_cov:03d}'] # rest-frame EW uncertainty
     line_ew = ufloat(line_ew, line_ew_err)
 
     # -----------getting the dereddened flux value-----------------
@@ -556,7 +557,7 @@ def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, 
 
     line_map, line_wave, line_int, line_ew = get_emission_line_map(line, full_hdu, args, dered=False)
     ax, _ = plot_2D_map(line_map, ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int.n), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
-    ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[0] * 0.88, f'EW_r = {line_ew:.1f}', c='k', fontsize=args.fontsize, ha='left', va='bottom', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+    ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[0] * 0.88, f'EW = {line_ew:.1f}', c='k', fontsize=args.fontsize, ha='left', va='bottom', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
 
     return ax
 
@@ -736,7 +737,7 @@ def plot_SFR_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [-4, -2], 'SFR'
     SFR_map, SFR_int = get_SFR(full_hdu, args)
-    ax, SFR_radfit = plot_2D_map(SFR_map, ax, args, label=r'%s$_{\rm int}$ = %.1f' % (label, SFR_int.n), cmap='Blues', radprof_ax=radprof_ax, vmin=lim[0], vmax=lim[1])
+    ax, SFR_radfit = plot_2D_map(SFR_map, ax, args, label=r'log %s$_{\rm int}$ = %.1f' % (label, SFR_int.n), cmap='Blues', radprof_ax=radprof_ax, vmin=lim[0], vmax=lim[1])
 
     return ax, SFR_map, SFR_radfit, SFR_int
 
@@ -805,7 +806,7 @@ def plot_Te_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [1, 7], r'T$_e$'
     Te_map, Te_int = get_Te(full_hdu, args)
-    ax, Te_radfit = plot_2D_map(Te_map, ax, args, label=r'%s$_{\rm int}$ = %.1e' % (label, Te_int.n), cmap='OrRd_r', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, Te_radfit = plot_2D_map(Te_map, ax, args, label=r'log %s$_{\rm int}$ = %.1e' % (label, Te_int.n), cmap='OrRd_r', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, Te_map, Te_radfit, Te_int
 
