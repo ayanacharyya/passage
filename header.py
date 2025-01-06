@@ -50,6 +50,7 @@ from urllib.parse import quote as urlencode
 from urllib.request import urlretrieve
 from mastquery import utils as mastutils
 from mastquery import query
+from astroquery.mast import Observations
 import plotly.express as px
 
 import matplotlib

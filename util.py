@@ -159,6 +159,7 @@ def parse_args():
     parser.add_argument('--plot_restframe', dest='plot_restframe', action='store_true', default=False, help='Plot fitted SED in restframe? Default is no.')
     parser.add_argument('--log_x', dest='log_x', action='store_true', default=False, help='Plot x-axis of SED in log scale? Default is no.')
     parser.add_argument('--test_sed', dest='test_sed', action='store_true', default=False, help='Fit and plot just one objects SED as a test? Default is no.')
+    parser.add_argument('--include_cosmoswebb', dest='include_cosmoswebb', action='store_true', default=False, help='Include COSMOS Webb filters in the SED fitting? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()

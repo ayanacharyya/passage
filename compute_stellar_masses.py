@@ -21,7 +21,10 @@
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z_narrow_mass --plot_restframe
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --use_only_bands acs,niriss --run only_st_bands --plot_restframe
 
-             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run including_nircam --plot_restframe
+             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --include_cosmoswebb --run including_nircam --plot_restframe
+
+             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z --plot_restframe --ncpus 2
+             run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --run narrow_z --plot_restframe --ncpus 2
 '''
 from header import *
 from util import *
@@ -562,24 +565,27 @@ def get_flux_catalog(photcat_filename, df_int, args):
             df_fluxes = df_fluxes.dropna(axis=1, how='all')
 
             # -------reading in df_cosmoswebb fluxes-------
-            ergs_s_cm2_hz_to_ujy_factor = 1e29 # 1 ergs/s/cm^2/Hz = 10^29 uJy
-            df_fluxes['passage_id'] = df_fluxes['field'].astype(str) + '-' + df_fluxes['objid'].astype(str)
-            for thisfield in np.unique(df_fluxes['field']):
-                print(f'Merging COSMOS Webb catalog for field {thisfield}..')
-                cosmoswebb_photcat_for_thisfield_fielname = args.input_dir / 'COSMOS' / f'cosmoswebb_objects_in_{thisfield}.fits'
-                cosmoswebb_photcat_for_thisfield = read_COSMOSWebb_catalog(args=None, filename=cosmoswebb_photcat_for_thisfield_fielname, aperture=1.0)
-                nircam_fluxcols = [item for item in cosmoswebb_photcat_for_thisfield.columns if 'FLUX_APER' in item]
-                nircam_errcols = [item for item in cosmoswebb_photcat_for_thisfield.columns if 'FLUX_ERR_APER' in item]
-                cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield[np.hstack([nircam_fluxcols, nircam_errcols, ['passage_id', 'id']])]
-                cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.replace({-998: np.nan})
-                for thiscol in nircam_fluxcols:
-                    cosmoswebb_photcat_for_thisfield[thiscol] = cosmoswebb_photcat_for_thisfield[thiscol] * ergs_s_cm2_hz_to_ujy_factor # converting from ergs/s/cm^2/Hz to micro Jansky
-                    cosmoswebb_photcat_for_thisfield[thiscol.replace('FLUX', 'FLUX_ERR')] = cosmoswebb_photcat_for_thisfield[thiscol.replace('FLUX', 'FLUX_ERR')] * ergs_s_cm2_hz_to_ujy_factor  # converting from ergs/s/cm^2/Hz to micro Jansky
+            if args.include_cosmoswebb:
+                print(f'\nAttempting to include COSMOSWebb filters for thse objects if any..')
 
-                cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns={'id': 'COSMOSWebb_ID'})
-                cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, 'NIRCAM_' + item[-5:] + '_FLUXERR') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_ERR_APER' in item]))
-                cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, 'NIRCAM_' + item[-5:] + '_FLUX') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_APER' in item]))
-                df_fluxes = pd.merge(df_fluxes, cosmoswebb_photcat_for_thisfield, on='passage_id', how='left')
+                ergs_s_cm2_hz_to_ujy_factor = 1e29 # 1 ergs/s/cm^2/Hz = 10^29 uJy
+                df_fluxes['passage_id'] = df_fluxes['field'].astype(str) + '-' + df_fluxes['objid'].astype(str)
+                for thisfield in np.unique(df_fluxes['field']):
+                    print(f'Merging COSMOS Webb catalog for field {thisfield}..')
+                    cosmoswebb_photcat_for_thisfield_fielname = args.input_dir / 'COSMOS' / f'cosmoswebb_objects_in_{thisfield}.fits'
+                    cosmoswebb_photcat_for_thisfield = read_COSMOSWebb_catalog(args=None, filename=cosmoswebb_photcat_for_thisfield_fielname, aperture=1.0)
+                    nircam_fluxcols = [item for item in cosmoswebb_photcat_for_thisfield.columns if 'FLUX_APER' in item]
+                    nircam_errcols = [item for item in cosmoswebb_photcat_for_thisfield.columns if 'FLUX_ERR_APER' in item]
+                    cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield[np.hstack([nircam_fluxcols, nircam_errcols, ['passage_id', 'id']])]
+                    cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.replace({-998: np.nan})
+                    for thiscol in nircam_fluxcols:
+                        cosmoswebb_photcat_for_thisfield[thiscol] = cosmoswebb_photcat_for_thisfield[thiscol] * ergs_s_cm2_hz_to_ujy_factor # converting from ergs/s/cm^2/Hz to micro Jansky
+                        cosmoswebb_photcat_for_thisfield[thiscol.replace('FLUX', 'FLUX_ERR')] = cosmoswebb_photcat_for_thisfield[thiscol.replace('FLUX', 'FLUX_ERR')] * ergs_s_cm2_hz_to_ujy_factor  # converting from ergs/s/cm^2/Hz to micro Jansky
+
+                    cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns={'id': 'COSMOSWebb_ID'})
+                    cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, 'NIRCAM_' + item[-5:] + '_FLUXERR') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_ERR_APER' in item]))
+                    cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, 'NIRCAM_' + item[-5:] + '_FLUX') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_APER' in item]))
+                    df_fluxes = pd.merge(df_fluxes, cosmoswebb_photcat_for_thisfield, on='passage_id', how='left')
 
             # -------writing cosmos fluxes df into file-------
             df_fluxes.to_csv(filename, index=None)
