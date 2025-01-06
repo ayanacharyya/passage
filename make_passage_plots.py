@@ -353,7 +353,14 @@ if __name__ == "__main__":
 
         else:
             figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
+            if df['SFR_int'].dtype == object: # accompanied by uncertainty in the same column
+                a, b = np.transpose([np.array(item.split('+/-')).astype(np.float64) for item in df['SFR_int']])
+                df['SFR_int'] = a
+                df['SFR_int_u']= b
+                quant = unp.uarray(a, b)
+                df['log_SFR_int_u'] = unp.std_devs(unp.log10(quant))
             df['log_SFR_int'] = np.log10(df['SFR_int'])
+
 
             # ---------SFMS from df-------
             p = ax.scatter(df[args.xcol], df[args.ycol], c='gold' if args.foggie_comp else df[args.colorcol], plotnonfinite=True, marker='*' if args.foggie_comp else 'o', s=1000 if args.foggie_comp else 100, lw=1, edgecolor='w' if args.fortalk else 'k', vmin=bounds_dict[args.colorcol][0] if args.colorcol in bounds_dict else None, vmax=bounds_dict[args.colorcol][1] if args.colorcol in bounds_dict else None, cmap=colormap_dict[args.colorcol])

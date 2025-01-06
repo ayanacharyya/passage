@@ -620,7 +620,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
                 except KeyError: df_fluxes.loc[index, thiscol] = np.nan
 
         # -------dropping rows with no NIRISS fluxes-------
-        df_fluxes = df_fluxes.dropna(axis=0, subset=cols_to_extract).reset_index(drop=True) # drop all objects (rows) that have any NaNs in them
+        df_fluxes = df_fluxes.dropna(axis=0, subset=cols_to_extract, how='all').reset_index(drop=True) # drop objects (rows) that have ALL PASSAGE columns as NaNs
 
         # -------modiyfying all flux columns to have uniform nomenclature-------
         fluxcols = [item for item in df_fluxes.columns if 'flux' in item.lower() and 'fluxerr' not in item.lower()]
