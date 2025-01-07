@@ -21,7 +21,8 @@
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z_narrow_mass --plot_restframe
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --use_only_bands acs,niriss --run only_st_bands --plot_restframe
 
-             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --include_cosmoswebb --run including_nircam --plot_restframe
+             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --include_cosmoswebb --run including_nircam --plot_restframe --ncpus 2
+             run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --include_cosmoswebb --run including_nircam  --plot_restframe --ncpus 2
 
              run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z --plot_restframe --ncpus 2
              run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --run narrow_z --plot_restframe --ncpus 2
@@ -537,7 +538,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
         df_fluxes = pd.read_csv(photcat_filename)
     else:
         print(f'{photcat_filename} does not exist, so preparing the flux list..')
-        filename = args.input_dir / 'COSMOS' / f'{args.plot_conditions}_cosmos_fluxes_subset.csv'
+        filename = args.input_dir / 'COSMOS' / f'{args.plot_conditions}_cosmos_fluxes_subset{args.cosmos_webb_text}.csv'
 
         if os.path.exists(filename):
             print(f'Reading cosmos2020 and cosmoswebb flux values from existing {filename}')
@@ -782,7 +783,8 @@ if __name__ == "__main__":
 
     # --------------declaring all paths-----------------
     args.cosmos2020_filename = args.input_dir / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3.fits'
-    photcat_filename = args.output_dir / f'{args.plot_conditions}_passage_cosmos_fluxes.csv'
+    args.cosmos_webb_text = '_wCWebb' if args.include_cosmoswebb else ''
+    photcat_filename = args.output_dir / f'{args.plot_conditions}_passage_cosmos_fluxes{args.cosmos_webb_text}.csv'
     filter_dir = args.input_dir / 'COSMOS' / 'transmission_curves'
     pipes_dir = args.output_dir / 'pipes'
     pipes_sub_dirs = ['posterior', 'cats', 'plots']

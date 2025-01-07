@@ -354,11 +354,19 @@ if __name__ == "__main__":
         else:
             figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
             if df['SFR_int'].dtype == object: # accompanied by uncertainty in the same column
-                a, b = np.transpose([np.array(item.split('+/-')).astype(np.float64) for item in df['SFR_int']])
-                df['SFR_int'] = a
-                df['SFR_int_u']= b
-                quant = unp.uarray(a, b)
-                df['log_SFR_int_u'] = unp.std_devs(unp.log10(quant))
+                quant_arr = []
+                for item in df['SFR_int']:
+                    if 'e' in item:
+                        pow = float(item[item.find('e')+1:])
+                        base = np.array(item[1:item.find('e')-1].split('+/-')).astype(np.float64)
+                        quant = base * 10 ** pow
+                    else:
+                        quant = np.array(item.split('+/-')).astype(np.float64)
+                    quant_arr.append(ufloat(quant[0], quant[1]))
+
+                df['SFR_int'] = unp.nominal_values(quant_arr)
+                df['SFR_int_u']= unp.std_devs(quant_arr)
+                df['log_SFR_int_u'] = unp.std_devs(unp.log10(quant_arr))
             df['log_SFR_int'] = np.log10(df['SFR_int'])
 
 
