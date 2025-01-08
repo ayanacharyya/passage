@@ -4,25 +4,25 @@
     Author : Ayan
     Created: 10-09-24
     Example: run make_passage_plots.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol lp_mass --ycol lp_SFR --colorcol OIII_EW
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol lp_mass --ycol logOH_slope --colorcol redshift
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol redshift --ycol logOH_slope --foggie_comp
-             run make_passage_plots.py --plot_conditions EW,mass,PA,a_image --plot_BPT
+             run make_passage_plots.py --line_list OIII,Ha --plot_conditions EW,mass,PA --xcol lp_mass --ycol lp_SFR --colorcol OIII_EW
+             run make_passage_plots.py --line_list OIII,Ha --plot_conditions EW,mass,PA --xcol lp_mass --ycol logOH_slope --colorcol redshift
+             run make_passage_plots.py --line_list OIII,Ha --plot_conditions EW,mass,PA --xcol redshift --ycol logOH_slope --foggie_comp
+             run make_passage_plots.py --line_list OIII,Ha --plot_conditions EW,mass,PA,a_image --plot_BPT
              run make_passage_plots.py --plot_flux_vs_mag
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_SFR_int --ycol lp_SFR --colorcol redshift
+             run make_passage_plots.py --line_list OIII,Ha --plot_conditions EW,mass,PA --xcol log_SFR_int --ycol lp_SFR --colorcol redshift
 
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol lp_mass --colorcol redshift --run narrow_z
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol ez_mass --colorcol redshift --run narrow_z
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol z_bgp --ycol lp_zBEST --colorcol redshift --run narrow_z
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_sfr_bgp --ycol log_SFR_int --colorcol redshift --run narrow_z
-             run make_passage_plots.py --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol log_SFR_int --colorcol OIII_EW --run narrow_z
+             run make_passage_plots.py --line_list OIII,Ha --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol lp_mass --colorcol redshift --run narrow_z
+             run make_passage_plots.py --line_list OIII,Ha --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol ez_mass --colorcol redshift --run narrow_z
+             run make_passage_plots.py --line_list OIII,Ha --plot_conditions EW,mass,PA --xcol z_bgp --ycol lp_zBEST --colorcol redshift --run narrow_z
+             run make_passage_plots.py --line_list OIII,Ha --plot_conditions EW,mass,PA --xcol log_sfr_bgp --ycol log_SFR_int --colorcol redshift --run narrow_z
+             run make_passage_plots.py --line_list OIII,Ha --plot_conditions EW,mass,PA --xcol log_mass_bgp --ycol log_SFR_int --colorcol OIII_EW --run narrow_z
 
-             run make_passage_plots.py --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol OIII_EW --run narrow_z
-             run make_passage_plots.py --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol Ha_EW --run narrow_z_narrow_mass
-             run make_passage_plots.py --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol Ha_EW --run only_st_bands
+             run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol OIII_EW --run narrow_z
+             run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol Ha_EW --run narrow_z_narrow_mass
+             run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol Ha_EW --run only_st_bands
 
-             run make_passage_plots.py --plot_conditions SNR,mass,F115W,F150W,F200W --plot_BPT --colorcol distance_from_K01 --run narrow_z_narrow_mass
-             run make_passage_plots.py --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol distance_from_K01 --run narrow_z_narrow_mass
+             run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --plot_BPT --colorcol distance_from_K01 --run narrow_z_narrow_mass
+             run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol distance_from_K01 --run narrow_z_narrow_mass
 '''
 
 from header import *

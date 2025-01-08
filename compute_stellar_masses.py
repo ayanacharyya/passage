@@ -3,29 +3,29 @@
     Notes: Computes stellar masses for a given list of PASSAGE galaxies that also have fluxes from COSMOS2020
     Author : Ayan
     Created: 19-08-24
-    Example: run compute_stellar_masses.py  --plot_conditions EW,mass,PA --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
-             run compute_stellar_masses.py  --plot_conditions EW,mass,PA --plot_transmission --plot_SED
-             run compute_stellar_masses.py --plot_conditions EW,mass,PA --plot_filter_cutouts --plot_all --arcsec_limit 1 --only_seg
-             run compute_stellar_masses.py --plot_conditions EW,mass,PA --plot_filter_cutouts --plot_cutout_errors
-             run compute_stellar_masses.py --plot_conditions EW,mass,PA --plot_filter_cutouts
-             run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --run narrow_z
-             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --plot_niriss_direct --filters F115W,F150W,F200W
-             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z
-             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z_narrow_mass
-             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --clobber_sed_photcat --use_only_bands acs,niriss --run only_st_bands --ncpus 3
-             run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --run narrow_z_narrow_mass --ncpus 1 --plot_restframe --log_x --test_sed
+    Example: run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/
+             run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --plot_transmission --plot_SED
+             run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --plot_filter_cutouts --plot_all --arcsec_limit 1 --only_seg
+             run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --plot_filter_cutouts --plot_cutout_errors
+             run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --plot_filter_cutouts
+             run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --fit_sed --run narrow_z
+             run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --plot_niriss_direct --filters F115W,F150W,F200W
+             run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z
+             run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z_narrow_mass
+             run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --clobber_sed_photcat --use_only_bands acs,niriss --run only_st_bands --ncpus 3
+             run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --fit_sed --run narrow_z_narrow_mass --ncpus 1 --plot_restframe --log_x --test_sed
 
-             run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --run narrow_z_narrow_mass --plot_restframe
-             run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --use_only_bands acs,niriss --run only_st_bands --plot_restframe
+             run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --fit_sed --run narrow_z_narrow_mass --plot_restframe
+             run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --fit_sed --use_only_bands acs,niriss --run only_st_bands --plot_restframe
 
-             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z_narrow_mass --plot_restframe
-             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --use_only_bands acs,niriss --run only_st_bands --plot_restframe
+             run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z_narrow_mass --plot_restframe
+             run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --use_only_bands acs,niriss --run only_st_bands --plot_restframe
 
-             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --include_cosmoswebb --run including_nircam --plot_restframe --ncpus 2
-             run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --include_cosmoswebb --run including_nircam  --plot_restframe --ncpus 2
+             run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --include_cosmoswebb --run including_nircam --plot_restframe --ncpus 2
+             run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --fit_sed --include_cosmoswebb --run including_nircam  --plot_restframe --ncpus 2
 
-             run compute_stellar_masses.py --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z --plot_restframe --ncpus 2
-             run compute_stellar_masses.py --plot_conditions EW,mass,PA --fit_sed --run narrow_z --plot_restframe --ncpus 2
+             run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z --plot_restframe --ncpus 2
+             run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --fit_sed --run narrow_z --plot_restframe --ncpus 2
 '''
 from header import *
 from util import *
