@@ -777,14 +777,15 @@ if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
     if args.plot_conditions == ['detected']: args.plot_conditions = ['EW', 'mass', 'PA']
-    args.plot_conditions = f'allpar_venn_{",".join(args.plot_conditions)}'
     if args.fontsize == 10: args.fontsize = 15
     args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
 
     # --------------declaring all paths-----------------
     args.cosmos2020_filename = args.input_dir / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3.fits'
     args.cosmos_webb_text = '_wCWebb' if args.include_cosmoswebb else ''
-    photcat_filename = args.output_dir / f'{args.plot_conditions}_passage_cosmos_fluxes{args.cosmos_webb_text}.csv'
+    plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
+    plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
+    photcat_filename = args.output_dir / f'allpar_venn_{plot_conditions_text}_passage_cosmos_fluxes{args.cosmos_webb_text}.csv'
     filter_dir = args.input_dir / 'COSMOS' / 'transmission_curves'
     pipes_dir = args.output_dir / 'pipes'
     pipes_sub_dirs = ['posterior', 'cats', 'plots']
@@ -793,7 +794,7 @@ if __name__ == "__main__":
         this_dir.mkdir(exist_ok=True, parents=True)
 
     # -----------reading in flux and transmission files------------------
-    df_int_filename = args.output_dir / f'{args.plot_conditions}_df.txt'
+    df_int_filename = args.output_dir / f'allpar_venn_{plot_conditions_text}_df.txt'
     df_int = pd.read_csv(df_int_filename)
 
     df_fluxes = get_flux_catalog(photcat_filename, df_int, args)

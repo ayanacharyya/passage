@@ -329,7 +329,9 @@ if __name__ == "__main__":
 
     else:
         # -------reading in dataframe produced by get_field_stats.py or by compute_stellar_masses.py----------------
-        df_infilename = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df_withSED_{args.run}.csv'
+        plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
+        plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
+        df_infilename = args.output_dir / f'allpar_venn_{plot_conditions_text}_df_withSED_{args.run}.csv'
         df = pd.read_csv(df_infilename)
         print(f'Reading in main df from {df_infilename}')
 

@@ -3,8 +3,8 @@
     Notes: Plots various quantities from 2 different dataframes corresponding to 2 different runs of SED fitting, on the same data (produced by compute_stellar_masses.py)
     Author : Ayan
     Created: 20-12-24
-    Example: run compare_sed_runs.py --plot_conditions EW,mass,PA --xcol log_mass_bgp_x --ycol log_mass_bgp_y --colorcol redshift --run narrow_z_narrow_mass,only_st_bands
-             run compare_sed_runs.py --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp_x --ycol log_mass_bgp_y --colorcol redshift --run narrow_z_narrow_mass,only_st_bands
+    Example: run compare_sed_runs.py --line_list OIII,Ha --plot_conditions EW,mass,PA --xcol log_mass_bgp_x --ycol log_mass_bgp_y --colorcol redshift --run narrow_z_narrow_mass,only_st_bands
+             run compare_sed_runs.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp_x --ycol log_mass_bgp_y --colorcol redshift --run narrow_z_narrow_mass,only_st_bands
 '''
 
 from header import *
@@ -29,7 +29,9 @@ if __name__ == "__main__":
     # -------determining SED runs and file names----------------
     runs = args.run.split(',')
     suffix_dict = defaultdict(lambda: '', _x=f': {run_labels_dict[runs[0]]}', _y=f': {run_labels_dict[runs[1]]}')
-    figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df_{args.xcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_vs_{args.ycol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_colorby_{args.colorcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}.png'
+    plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
+    plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
+    figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_SEDcomp_{args.xcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_vs_{args.ycol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_colorby_{args.colorcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}.png'
 
     # -------reading in and merging dataframe produced by compute_stellar_masses.py----------------
     df_infilename = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df.txt'
