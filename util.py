@@ -404,6 +404,30 @@ def copy_from_hd_to_local(files_to_move=['*.txt', '*.png']):
     print('All done')
 
 # -------------------------------------------------------------------------------------------------------
+def get_fluxcols(args):
+    '''
+    Function to load or generate the list of filters and correpsonding flux columns in COSMOS2020 catalog
+    Returns list of columns, and optionally the full cosmos2020 dataframe
+    '''
+    filepath = args.input_dir / 'COSMOS' / 'cosmos_fluxcols.npy'
+
+    if os.path.exists(filepath):
+        print(f'Reading flux columns from existing {filepath}')
+        fluxcols = np.load(filepath)
+        df_cosmos = None
+    else:
+        print(f'{filepath} does not exist, so preparing the list..')
+        df_cosmos = read_COSMOS2020_catalog(args=args, filename=args.input_dir / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3.fits')
+
+        all_flux_cols = [item for item in df_cosmos.columns if 'FLUX' in item and item != 'FLUX_RADIUS' and 'FLUXERR' not in item]
+        filters = [item[:item.find('FLUX')] for item in all_flux_cols]
+        fluxcols = [item + 'FLUX_AUTO' if item + 'FLUX_AUTO' in df_cosmos.columns else item + 'FLUX' for item in filters]
+        fluxcols = list(dict.fromkeys(fluxcols)) # to remove duplicates
+        np.save(filepath, fluxcols)
+
+    return fluxcols, df_cosmos
+
+# -------------------------------------------------------------------------------------------------------
 def read_COSMOSWebb_catalog(args=None, filename=None, aperture=1.0):
     '''
     Reads in the zCOSMOS galaxy catalog
@@ -475,19 +499,22 @@ def read_zCOSMOS_catalog(args=None, filename=None):
     return df
 
 # -------------------------------------------------------------------------------------------------------
-def make_COSMOS_subset_table(filename):
+def make_COSMOS_subset_table(filename, args):
     '''
     Reads in the massive COSMOS2020 catalog and makes a smaller table with subset of columns and saves it
     '''
     suffix = '_subsetcolumns'
     filename = str(filename)
     if suffix in filename: filename = filename[:filename.find(suffix)] + '.fits'
+
+    # -------determining flux column other columns to extract from df_cosmos-------
+    fluxcols, _ = get_fluxcols(args)
     lp_cols_suffix = ['med', 'med_min68', 'med_max68', 'best']
     lp_cols = np.ravel([f'lp_{item}_{suffix}' for item in ['mass', 'SFR', 'sSFR'] for suffix in lp_cols_suffix])
     ez_cols_suffix = ['', '_p160', '_p500', '_p840']
     ez_cols = np.ravel([f'ez_{item}{suffix}' for item in ['mass', 'sfr', 'ssfr'] for suffix in ez_cols_suffix])
-
-    cols_to_extract = np.hstack((['ID', 'ALPHA_J2000', 'DELTA_J2000', 'ID_COSMOS2015', 'ez_z_phot', 'lp_MK', 'lp_zBEST'], lp_cols, ez_cols)).tolist()
+    flux_and_err_cols = np.ravel([[item, item.replace('FLUX', 'FLUXERR')] for item in fluxcols])
+    cols_to_extract = np.hstack((['cosmos_id', 'ra', 'dec', 'ID_COSMOS2015', 'ez_z_phot', 'lp_MK', 'lp_zBEST'], lp_cols, ez_cols, flux_and_err_cols)).tolist()
 
     print(f'Trying to read in  {filename}; can take a while..')
     data = fits.open(filename)

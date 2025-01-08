@@ -167,7 +167,7 @@ def plot_SED(df_fluxes, df_trans, args, x_scale='linear'):
     ax.set_xticklabels(['%.0e' % item for item in ax.get_xticks()], fontsize=args.fontsize)
     ax.set_yticklabels(['%.1f' % item for item in ax.get_yticks()], fontsize=args.fontsize)
 
-    figname = args.output_dir / f'{args.plot_conditions}_SED.png'
+    figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_SED.png'
     fig.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
@@ -296,7 +296,7 @@ def plot_niriss_direct(df_fluxes, args):
         header = data[0].header
         wcs_header = pywcs.WCS(header)
 
-        figname = args.output_dir / f'{args.plot_conditions}_niriss_direct_{filter}_{cutout_size:.1f}"_cutouts.pdf'
+        figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_niriss_direct_{filter}_{cutout_size:.1f}"_cutouts.pdf'
         pdf = PdfPages(figname)
 
         # ----------getting the seg map----------------
@@ -408,7 +408,7 @@ def plot_filter_cutouts(df_fluxes, args):
 
     all_text = 'all' if args.plot_all else 'subset'
     if args.plot_cutout_errors: all_text += '_wunc'
-    figname = args.output_dir / f'{args.plot_conditions}_{all_text}_{cutout_size:.1f}"_cutouts.pdf'
+    figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_{all_text}_{cutout_size:.1f}"_cutouts.pdf'
     pdf = PdfPages(figname)
 
     # ----------getting the seg map----------------
@@ -504,30 +504,6 @@ def plot_filter_cutouts(df_fluxes, args):
     return fig_arr
 
 # -------------------------------------------------------------------------------------------------------
-def get_fluxcols(args):
-    '''
-    Function to load or generate the list of filters and correpsonding flux columns in COSMOS2020 catalog
-    Returns list of columns, and optionally the full cosmos2020 dataframe
-    '''
-    filepath = args.input_dir / 'COSMOS' / 'cosmos_fluxcols.npy'
-
-    if os.path.exists(filepath):
-        print(f'Reading flux columns from existing {filepath}')
-        fluxcols = np.load(filepath)
-        df_cosmos = None
-    else:
-        print(f'{filepath} does not exist, so preparing the list..')
-        df_cosmos = read_COSMOS2020_catalog(args=args, filename=args.cosmos2020_filename)
-
-        all_flux_cols = [item for item in df_cosmos.columns if 'FLUX' in item and item != 'FLUX_RADIUS' and 'FLUXERR' not in item]
-        filters = [item[:item.find('FLUX')] for item in all_flux_cols]
-        fluxcols = [item + 'FLUX_AUTO' if item + 'FLUX_AUTO' in df_cosmos.columns else item + 'FLUX' for item in filters]
-        fluxcols = list(dict.fromkeys(fluxcols)) # to remove duplicates
-        np.save(filepath, fluxcols)
-
-    return fluxcols, df_cosmos
-
-# -------------------------------------------------------------------------------------------------------
 def get_flux_catalog(photcat_filename, df_int, args):
     '''
     Function to load or generate the catalog of flux values for galaxies of interest from the COSMOS2020 catalog, and add PASSAGE fluxes too
@@ -538,7 +514,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
         df_fluxes = pd.read_csv(photcat_filename)
     else:
         print(f'{photcat_filename} does not exist, so preparing the flux list..')
-        filename = args.input_dir / 'COSMOS' / f'{args.plot_conditions}_cosmos_fluxes_subset{args.cosmos_webb_text}.csv'
+        filename = args.input_dir / 'COSMOS' / f'allpar_venn_{plot_conditions_text}_cosmos_fluxes_subset{args.cosmos_webb_text}.csv'
 
         if os.path.exists(filename):
             print(f'Reading cosmos2020 and cosmoswebb flux values from existing {filename}')
@@ -546,26 +522,17 @@ def get_flux_catalog(photcat_filename, df_int, args):
         else:
             print(f'{filename} does not exist, so preparing the flux list..')
 
-            # -------reading in flux columns names and df_cosmos2020-------
-            fluxcols, df_cosmos2020 = get_fluxcols(args)
-            if df_cosmos2020 is None: df_cosmos2020 = read_COSMOS2020_catalog(args=args, filename=args.cosmos2020_filename)
+            # -------reading in cosmos 2020 fluxes-------
+            df_fluxes = pd.DataFrame()
+            for thisfield in np.unique(df_int['field']):
+                print(f'Merging COSMOS 2020 catalog for field {thisfield}..')
+                cosmos2020_photcat_for_thisfield_filename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
+                cosmos2020_photcat_for_thisfield = read_COSMOS2020_catalog(args=None, filename=cosmos2020_photcat_for_thisfield_filename)
+                cosmos2020_photcat_for_thisfield = cosmos2020_photcat_for_thisfield.rename(columns={'id': 'cosmos_id'})
+                df_cosmos_thisfield = pd.merge(df_int[['field', 'objid', 'redshift', 'cosmos_id']], cosmos2020_photcat_for_thisfield, on='cosmos_id', how='inner')
+                df_fluxes = pd.concat([df_fluxes, df_cosmos_thisfield])
 
-            # -------making subset of df_cosmos-------
-            cosmos_ids = df_int['cosmos_id'].values
-            df_cosmos_subset = df_cosmos2020[df_cosmos2020['id'].isin(cosmos_ids)]
-            df_cosmos_subset = df_cosmos_subset.rename(columns={'id': 'cosmos_id'})
-
-            # -------determining other columns to extract from df_cosmos-------
-            lp_cols_suffix = ['med', 'med_min68', 'med_max68', 'best']
-            lp_cols = np.ravel([f'lp_{item}_{suffix}' for item in ['mass', 'SFR', 'sSFR'] for suffix in lp_cols_suffix])
-            ez_cols_suffix = ['', '_p160', '_p500', '_p840']
-            ez_cols = np.ravel([f'ez_{item}{suffix}' for item in ['mass', 'sfr', 'ssfr'] for suffix in ez_cols_suffix])
-            flux_and_err_cols = np.ravel([[item, item.replace('FLUX', 'FLUXERR')] for item in fluxcols])
-            cols_to_extract = np.hstack((['cosmos_id', 'ra', 'dec', 'ID_COSMOS2015', 'ez_z_phot', 'lp_MK', 'lp_zBEST'], lp_cols, ez_cols, flux_and_err_cols)).tolist()
-            df_fluxes = pd.merge(df_int[['field', 'objid', 'redshift', 'cosmos_id']], df_cosmos_subset[cols_to_extract], on='cosmos_id', how='inner')
-            df_fluxes = df_fluxes.dropna(axis=1, how='all')
-
-            # -------reading in df_cosmoswebb fluxes-------
+            # -------reading in cosmoswebb fluxes-------
             if args.include_cosmoswebb:
                 print(f'\nAttempting to include COSMOSWebb filters for thse objects if any..')
 
@@ -573,8 +540,8 @@ def get_flux_catalog(photcat_filename, df_int, args):
                 df_fluxes['passage_id'] = df_fluxes['field'].astype(str) + '-' + df_fluxes['objid'].astype(str)
                 for thisfield in np.unique(df_fluxes['field']):
                     print(f'Merging COSMOS Webb catalog for field {thisfield}..')
-                    cosmoswebb_photcat_for_thisfield_fielname = args.input_dir / 'COSMOS' / f'cosmoswebb_objects_in_{thisfield}.fits'
-                    cosmoswebb_photcat_for_thisfield = read_COSMOSWebb_catalog(args=None, filename=cosmoswebb_photcat_for_thisfield_fielname, aperture=1.0)
+                    cosmoswebb_photcat_for_thisfield_filename = args.input_dir / 'COSMOS' / f'cosmoswebb_objects_in_{thisfield}.fits'
+                    cosmoswebb_photcat_for_thisfield = read_COSMOSWebb_catalog(args=None, filename=cosmoswebb_photcat_for_thisfield_filename, aperture=1.0)
                     nircam_fluxcols = [item for item in cosmoswebb_photcat_for_thisfield.columns if 'FLUX_APER' in item]
                     nircam_errcols = [item for item in cosmoswebb_photcat_for_thisfield.columns if 'FLUX_ERR_APER' in item]
                     cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield[np.hstack([nircam_fluxcols, nircam_errcols, ['passage_id', 'id']])]
@@ -776,12 +743,10 @@ def generate_fit_params(obj_z, z_range = 0.01, num_age_bins = 5, min_age_bin = 3
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
-    if args.plot_conditions == ['detected']: args.plot_conditions = ['EW', 'mass', 'PA']
     if args.fontsize == 10: args.fontsize = 15
     args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
 
     # --------------declaring all paths-----------------
-    args.cosmos2020_filename = args.input_dir / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3.fits'
     args.cosmos_webb_text = '_wCWebb' if args.include_cosmoswebb else ''
     plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
     plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
