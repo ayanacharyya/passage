@@ -117,7 +117,7 @@ def parse_args():
 
 
     # ------- args added for get_field_stats.py ------------------------------
-    parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=100, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
+    parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
     parser.add_argument('--SNR_thresh', metavar='SNR_thresh', type=float, action='store', default=10, help='SNR threshold to consider good detection for emission line maps; default is 10')
     parser.add_argument('--log_SFR_thresh', metavar='log_SFR_thresh', type=float, action='store', default=0, help='SFR threshold (in log) to consider highly star-forming; default is 0')
     parser.add_argument('--log_sSFR_thresh', metavar='log_sSFR_thresh', type=float, action='store', default=-9, help='specific SFR threshold (in log) to consider highly star-forming; default is 0')
