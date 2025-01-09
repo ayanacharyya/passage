@@ -362,7 +362,7 @@ label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$ (LePhare)', 'ez_mass': r'log M$
               'logOH_slope':r'log $\nabla$Z$_r$ (dex/kpc)'}
 bounds_dict = {'lp_mass': (6, 9), 'ez_mass': (6, 9), 'log_mass_bgp': (6.5, 10.5), \
                'lp_SFR': (-3, 1), 'ez_sfr': (-3, 1), 'log_sfr_bgp': (-3, 2), 'log_SFR_int': (-3, 2.5), \
-               'ez_z_phot': (0, 3), 'lp_zBEST': (0, 3), 'z_bgp': (0, 3), 'redshift': (0.5, 2), \
+               'ez_z_phot': (0, 3), 'lp_zBEST': (0, 3), 'z_bgp': (0, 3), 'redshift': (0.5, 2.2), \
                'logOH_slope': (-0.4, 0.1)}
 colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma', distance_from_K01='BrBG')
 
@@ -406,7 +406,7 @@ if __name__ == "__main__":
         # -------making the dsired plots----------------
         if args.plot_BPT:
             colorby_text = f'_colorby_z' if args.colorcol == 'ez_z_phot' else f'_colorby_{args.colorcol}'
-            figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_BPT{colorby_text}.png'
+            figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_run_{args.run}_BPT{colorby_text}.png'
             ax, df = plot_BPT(df, ax, args)
 
             # ------writing out distance from K01 AGN-SF line--------------------------
@@ -415,7 +415,7 @@ if __name__ == "__main__":
                 print(f'\nAdded distance_from_K01 column to df and saved in {df_infilename}.')
 
         else:
-            figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
+            figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_run_{args.run}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
             if df['SFR_int'].dtype == object: # accompanied by uncertainty in the same column
                 quant_arr = []
                 for item in df['SFR_int']:

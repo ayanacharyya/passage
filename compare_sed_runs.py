@@ -34,7 +34,7 @@ if __name__ == "__main__":
     figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_SEDcomp_{args.xcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_vs_{args.ycol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_colorby_{args.colorcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}.png'
 
     # -------reading in and merging dataframe produced by compute_stellar_masses.py----------------
-    df_infilename = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df.txt'
+    df_infilename = args.output_dir / f'allpar_venn_{plot_conditions_text}_df.txt'
     df_infilename_x = Path(str(df_infilename).replace('.txt', f'_withSED_{runs[0]}.csv'))
     df_infilename_y = Path(str(df_infilename).replace('.txt', f'_withSED_{runs[1]}.csv'))
 
@@ -68,6 +68,7 @@ if __name__ == "__main__":
     if args.xcol[:-2] == args.ycol[:-2]:
         line = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 10)
         ax.plot(line, line, ls='dashed', c='k', lw=1)
+        if 'mass_bgp' in args.xcol and 'mass_bgp' in args.ycol: ax.plot(line, line - np.median(df[args.xcol].values - df[args.ycol].values), ls='dashed', c='r', lw=1)
 
     # --------for talk plots--------------
     if args.fortalk:

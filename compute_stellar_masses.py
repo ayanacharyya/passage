@@ -834,6 +834,11 @@ if __name__ == "__main__":
 
     df_sed = pd.read_csv(photcat_filename_sed)
     df_sed = df_sed.sort_values(by='objid')
+
+    #df_sed = df_sed.drop(columns=df_sed.columns[df_sed.columns.str.contains('NIRCAM')], axis=1) ## test to remove NIRCAM filters
+    photcat_filename_sed = Path(str(photcat_filename_sed).replace('.csv', '_testnircam.csv'))
+    df_sed.to_csv(photcat_filename_sed, index=None)
+
     filter_list = [str(filter_dir) + '/' + item[:item.lower().find('_sci')] + '.txt' for item in df_sed.columns if '_sci' in item]
     print(f'Resultant photcat has {len(filter_list)} filters')
 
@@ -848,9 +853,12 @@ if __name__ == "__main__":
         for thiscol in new_columns: df_int[thiscol] = np.zeros(len(df_int))
 
         # ---------Loop over the objects-------------
-        if args.test_sed:
-            df_sed = df_sed[1:2] ##
-            print(f'Only runing on {len(df_sed)} object as a test; for doing SED all objects, remove --test_sed and re-run')
+        if args.test_sed is not None:
+            index = df_sed[df_sed['objid'] == args.test_sed].index
+            if len(index) == 0: index = 0
+            else: index = index[0]
+            df_sed = df_sed[index : index + 1] ##
+            print(f'Only runing on object {args.test_sed} as a test; for doing SED all objects, remove --test_sed and re-run')
 
         for index, obj in df_sed.iterrows():
             print(f'\nLooping over object {index + 1} of {len(df_sed)}..')
@@ -890,8 +898,12 @@ if __name__ == "__main__":
         os.chdir(args.code_dir)
 
         # ------writing modified df with stellar masses etc-------------------
-        df_int_filename_sed = Path(str(df_int_filename).replace('.txt', f'_withSED_{args.run}.csv'))
-        df_int.to_csv(df_int_filename_sed, index=None)
-        print(f'Added SED results to df and saved in {df_int_filename_sed}.')
+        if args.test_sed is None:
+            df_int_filename_sed = Path(str(df_int_filename).replace('.txt', f'_withSED_{args.run}.csv'))
+            df_int.to_csv(df_int_filename_sed, index=None)
+            print(f'Added SED results to df and saved in {df_int_filename_sed}.')
+        else:
+            print(f'Did not write out SED results to df because this was run only in --test_sed mode.')
+
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
