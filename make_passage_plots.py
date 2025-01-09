@@ -32,6 +32,61 @@ from make_diagnostic_maps import compute_EB_V, get_dereddened_flux
 start_time = datetime.now()
 
 # --------------------------------------------------------------------------------------------------------------------
+def plot_SFMS_Whitaker14(ax, redshift, color='olivegreen'):
+    '''
+    Overplots fitted SFMS based on Whitaker+14 (https://iopscience.iop.org/article/10.1088/0004-637X/795/2/104/pdf) Table 1, eq 2
+    Then overplots this on a given existing axis handle
+    Returns axis handle
+    '''
+    log_mass_low_lim = 9.2 # lower limit of mass they fitted up to
+    if redshift >= 0.5 and redshift < 1.0:
+        a, b, c, z1, z2 = -27.40, 5.02, -0.22, 0.5, 1.0 # polynomial coefficients from Table 1, for this z range
+    elif redshift >= 1.0 and redshift < 1.5:
+        a, b, c, z1, z2 = -26.03, 4.62, -0.19, 1.0, 1.5 # polynomial coefficients from Table 1, for this z range
+    elif redshift >= 1.5 and redshift < 2.0:
+        a, b, c, z1, z2 = -24.04, 4.17, -0.16, 1.5, 2.0 # polynomial coefficients from Table 1, for this z range
+    elif redshift >= 2.0 and redshift < 2.5:
+        a, b, c, z1, z2 = -19.99, 3.44, -0.13, 2.0, 2.5 # polynomial coefficients from Table 1, for this z range
+    else:
+        print(f'Provided redshift {redshift} should be between 0.5 and 2.5, otherwise cannot plot')
+        return ax
+
+    log_mass1 = np.linspace(ax.get_xlim()[0], log_mass_low_lim, 20)
+    log_SFR1 = np.poly1d([c, b, a])(log_mass1)
+
+    log_mass2 = np.linspace(log_mass_low_lim, ax.get_xlim()[1], 20)
+    log_SFR2 = np.poly1d([c, b, a])(log_mass2)
+
+    ax.plot(log_mass1, log_SFR1, ls='dashed', c=color, lw=2)
+    ax.plot(log_mass2, log_SFR2, ls='solid', c=color, lw=2, label=f'Whitaker+14: {z1}<z<{z2}')
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_SFMS_Shivaei15(ax, color='salmon'):
+    '''
+    Overplots fitted SFMS based on Shivaei+15 (https://iopscience.iop.org/article/10.1088/0004-637X/815/2/98/pdf) Table 1
+    Then overplots this on a given existing axis handle
+    Returns axis handle
+    '''
+    a1, b1, c1 = 0.65, -5.40, 0.40 # slope, intercept, scatter from Table 1, values for SFR(H alpha), z range 1.37-2.61
+    a2, b2, c2 = 0.58, -4.65, 0.36 # slope, intercept, scatter from Table 1, values for SFR(H alpha), z range 2.09-2.61
+    log_mass_low_lim = 9.5 # lower limit of mass they fitted up to
+
+    log_mass1 = np.linspace(ax.get_xlim()[0], log_mass_low_lim, 20)
+    log_SFR1 = a1 * log_mass1 + b1
+
+    log_mass2 = np.linspace(log_mass_low_lim, ax.get_xlim()[1], 20)
+    log_SFR2 = a1 * log_mass2 + b1
+
+    ax.plot(log_mass1, log_SFR1, ls='dashed', c=color, lw=2)
+    ax.fill_between(log_mass1, log_SFR1 - c1/2, log_SFR1 + c1/2, alpha=0.3, facecolor=color)
+    ax.plot(log_mass2, log_SFR2, ls='solid', c=color, lw=2, label=f'Shivaei+15: z~2')
+    ax.fill_between(log_mass2, log_SFR2 - c1/2, log_SFR2 + c1/2, alpha=0.3, facecolor=color)
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_SFMS_Popesso22(ax, redshift, color='cornflowerblue'):
     '''
     Computes an empirical SFMS based on Popesso+22 (https://arxiv.org/abs/2203.10487) Eq 10, for given redshift
@@ -39,12 +94,18 @@ def plot_SFMS_Popesso22(ax, redshift, color='cornflowerblue'):
     Returns axis handle
     '''
     a0, a1, b0, b1, b2 = 0.2, -0.034, -26.134, 4.722, -0.1925  # Table 2, Eq 10
+    log_mass_low_lim = 8.7 # lower limit of mass they fitted up to
 
-    log_mass = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 20)
     age_at_z = cosmo.age(redshift).value # Gyr
-    log_SFR = (a1 * age_at_z + b1) * log_mass + b2 * (log_mass) ** 2 + b0 + a0 * age_at_z
 
-    ax.plot(log_mass, log_SFR, c=color, lw=2, label=f'Popesso+22: z~{redshift}')
+    log_mass1 = np.linspace(ax.get_xlim()[0], log_mass_low_lim, 20)
+    log_SFR1 = (a1 * age_at_z + b1) * log_mass1 + b2 * (log_mass1) ** 2 + b0 + a0 * age_at_z
+
+    log_mass2 = np.linspace(log_mass_low_lim, ax.get_xlim()[1], 20)
+    log_SFR2 = (a1 * age_at_z + b1) * log_mass2 + b2 * (log_mass2) ** 2 + b0 + a0 * age_at_z
+
+    ax.plot(log_mass1, log_SFR1, ls='dashed', c=color, lw=2)
+    ax.plot(log_mass2, log_SFR2, ls='solid', c=color, lw=2, label=f'Popesso+22: z~{redshift}')
 
     return ax
 
@@ -300,7 +361,7 @@ label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$ (LePhare)', 'ez_mass': r'log M$
               'lp_zBEST': 'Redshift (LePhare)', 'ez_z_phot': 'Redshift (EAZY)', 'z_bgp': 'Redshift (Bagpipes)', 'redshift': 'Redshift (Grizli)', \
               'logOH_slope':r'log $\nabla$Z$_r$ (dex/kpc)'}
 bounds_dict = {'lp_mass': (6, 9), 'ez_mass': (6, 9), 'log_mass_bgp': (6.5, 10.5), \
-               'lp_SFR': (-3, 1), 'ez_sfr': (-3, 1), 'log_sfr_bgp': (-3, 2), 'log_SFR_int': (-3, 2), \
+               'lp_SFR': (-3, 1), 'ez_sfr': (-3, 1), 'log_sfr_bgp': (-3, 2), 'log_SFR_int': (-3, 2.5), \
                'ez_z_phot': (0, 3), 'lp_zBEST': (0, 3), 'z_bgp': (0, 3), 'redshift': (0.5, 2), \
                'logOH_slope': (-0.4, 0.1)}
 colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma', distance_from_K01='BrBG')
@@ -345,7 +406,7 @@ if __name__ == "__main__":
         # -------making the dsired plots----------------
         if args.plot_BPT:
             colorby_text = f'_colorby_z' if args.colorcol == 'ez_z_phot' else f'_colorby_{args.colorcol}'
-            figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_BPT{colorby_text}.png'
+            figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_BPT{colorby_text}.png'
             ax, df = plot_BPT(df, ax, args)
 
             # ------writing out distance from K01 AGN-SF line--------------------------
@@ -354,7 +415,7 @@ if __name__ == "__main__":
                 print(f'\nAdded distance_from_K01 column to df and saved in {df_infilename}.')
 
         else:
-            figname = args.output_dir / f'allpar_venn_{",".join(args.plot_conditions)}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
+            figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
             if df['SFR_int'].dtype == object: # accompanied by uncertainty in the same column
                 quant_arr = []
                 for item in df['SFR_int']:
@@ -385,9 +446,13 @@ if __name__ == "__main__":
 
             # ---------SFMS from literature-------
             if 'mass' in args.xcol and 'sfr' in args.ycol.lower():
-                ax = plot_SFMS_Popesso22(ax, 1.8, color='cornflowerblue')
-                ax = plot_SFMS_Popesso22(ax, 1.2, color='blue')
                 ax = plot_SFMS_Popesso22(ax, 0.5, color='darkblue')
+                ax = plot_SFMS_Popesso22(ax, 1.2, color='blue')
+                ax = plot_SFMS_Popesso22(ax, 2.0, color='cornflowerblue')
+                ax = plot_SFMS_Shivaei15(ax, color='salmon')
+                ax = plot_SFMS_Whitaker14(ax, 0.6, color='forestgreen')
+                ax = plot_SFMS_Whitaker14(ax, 1.2, color='limegreen')
+                ax = plot_SFMS_Whitaker14(ax, 1.8, color='yellowgreen')
 
             # ---------MZR from literature-------
             if args.xcol == 'lp_mass' and 'logOH' in args.ycol and 'slope' not in args.ycol:
