@@ -26,6 +26,9 @@
 
              run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z --plot_restframe --ncpus 2
              run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --fit_sed --run narrow_z --plot_restframe --ncpus 2
+
+             run compute_stellar_masses.py --do_field Par028 --fit_sed --include_cosmoswebb --run Par028_including_nircam --plot_restframe --ncpus 2
+             run compute_stellar_masses.py --do_field Par052 --fit_sed --include_cosmoswebb --run Par052_including_nircam --plot_restframe --ncpus 2
 '''
 from header import *
 from util import *
@@ -167,7 +170,7 @@ def plot_SED(df_fluxes, df_trans, args, x_scale='linear'):
     ax.set_xticklabels(['%.0e' % item for item in ax.get_xticks()], fontsize=args.fontsize)
     ax.set_yticklabels(['%.1f' % item for item in ax.get_yticks()], fontsize=args.fontsize)
 
-    figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_SED.png'
+    figname = args.output_dir / f'{args.field_set_plot_conditions_text}_SED.png'
     fig.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
@@ -296,7 +299,7 @@ def plot_niriss_direct(df_fluxes, args):
         header = data[0].header
         wcs_header = pywcs.WCS(header)
 
-        figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_niriss_direct_{filter}_{cutout_size:.1f}"_cutouts.pdf'
+        figname = args.output_dir / f'{args.field_set_plot_conditions_text}_niriss_direct_{filter}_{cutout_size:.1f}"_cutouts.pdf'
         pdf = PdfPages(figname)
 
         # ----------getting the seg map----------------
@@ -408,7 +411,7 @@ def plot_filter_cutouts(df_fluxes, args):
 
     all_text = 'all' if args.plot_all else 'subset'
     if args.plot_cutout_errors: all_text += '_wunc'
-    figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_{all_text}_{cutout_size:.1f}"_cutouts.pdf'
+    figname = args.output_dir / f'{args.field_set_plot_conditions_text}_{all_text}_{cutout_size:.1f}"_cutouts.pdf'
     pdf = PdfPages(figname)
 
     # ----------getting the seg map----------------
@@ -514,14 +517,14 @@ def get_flux_catalog(photcat_filename, df_int, args):
         df_fluxes = pd.read_csv(photcat_filename)
     else:
         print(f'{photcat_filename} does not exist, so preparing the flux list..')
-        filename = args.input_dir / 'COSMOS' / f'allpar_venn_{plot_conditions_text}_cosmos_fluxes_subset{args.cosmos_webb_text}.csv'
+        filename = args.input_dir / 'COSMOS' / f'{args.field_set_plot_conditions_text}_cosmos_fluxes_subset{args.cosmos_webb_text}.csv'
 
-        if os.path.exists(filename):
+        if os.path.exists(filename) and not args.clobber:
             print(f'Reading cosmos2020 and cosmoswebb flux values from existing {filename}')
             df_fluxes = pd.read_csv(filename)
         else:
             print(f'{filename} does not exist, so preparing the flux list..')
-
+            df_int['passage_id'] = df_int['field'].astype(str) + '-' + df_int['objid'].astype(str)
             # -------reading in cosmos 2020 fluxes-------
             df_fluxes = pd.DataFrame()
             for thisfield in np.unique(df_int['field']):
@@ -529,7 +532,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
                 cosmos2020_photcat_for_thisfield_filename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
                 cosmos2020_photcat_for_thisfield = read_COSMOS2020_catalog(args=None, filename=cosmos2020_photcat_for_thisfield_filename)
                 cosmos2020_photcat_for_thisfield = cosmos2020_photcat_for_thisfield.rename(columns={'id': 'cosmos_id'})
-                df_cosmos_thisfield = pd.merge(df_int[['field', 'objid', 'redshift', 'cosmos_id']], cosmos2020_photcat_for_thisfield, on='cosmos_id', how='inner')
+                df_cosmos_thisfield = pd.merge(df_int[['field', 'objid', 'redshift', 'passage_id']], cosmos2020_photcat_for_thisfield, on='passage_id', how='inner')
                 df_fluxes = pd.concat([df_fluxes, df_cosmos_thisfield])
 
             # -------reading in cosmoswebb fluxes-------
@@ -553,7 +556,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
                     cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns={'id': 'COSMOSWebb_ID'})
                     cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, 'NIRCAM_' + item[-5:] + '_FLUXERR') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_ERR_APER' in item]))
                     cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, 'NIRCAM_' + item[-5:] + '_FLUX') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_APER' in item]))
-                    df_fluxes = pd.merge(df_fluxes, cosmoswebb_photcat_for_thisfield, on='passage_id', how='left')
+                    df_fluxes = pd.merge(df_fluxes, cosmoswebb_photcat_for_thisfield, on='passage_id', how='left' if args.do_field is None else 'inner')
 
             # -------writing cosmos fluxes df into file-------
             df_fluxes.to_csv(filename, index=None)
@@ -748,9 +751,6 @@ if __name__ == "__main__":
 
     # --------------declaring all paths-----------------
     args.cosmos_webb_text = '_wCWebb' if args.include_cosmoswebb else ''
-    plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
-    plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
-    photcat_filename = args.output_dir / f'allpar_venn_{plot_conditions_text}_passage_cosmos_fluxes{args.cosmos_webb_text}.csv'
     filter_dir = args.input_dir / 'COSMOS' / 'transmission_curves'
     pipes_dir = args.output_dir / 'pipes'
     pipes_sub_dirs = ['posterior', 'cats', 'plots']
@@ -759,7 +759,17 @@ if __name__ == "__main__":
         this_dir.mkdir(exist_ok=True, parents=True)
 
     # -----------reading in flux and transmission files------------------
-    df_int_filename = args.output_dir / f'allpar_venn_{plot_conditions_text}_df.txt'
+    if args.do_field is None:
+        plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
+        plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
+        args.field_set_plot_conditions_text = f'allpar_venn_{plot_conditions_text}'
+        df_int_filename = args.output_dir / f'{args.field_set_plot_conditions_text}_df.txt'
+    else:
+        args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
+        args.field_set_plot_conditions_text = f'{args.field}_allmatch'
+        df_int_filename = args.output_dir / args.field / f'{args.field}_all_diag_results.csv'
+
+    photcat_filename = args.output_dir / f'{args.field_set_plot_conditions_text}_passage_cosmos_fluxes{args.cosmos_webb_text}.csv'
     df_int = pd.read_csv(df_int_filename)
 
     df_fluxes = get_flux_catalog(photcat_filename, df_int, args)
@@ -823,7 +833,7 @@ if __name__ == "__main__":
                     df_fluxes.drop(fluxcol.replace('_sci', '_err'), axis=1, inplace=True)
 
         # ------------dropping MIRI until transmission file acquired---------
-        if args.run == 'including_nircam' and 'NIRCAM_F770W_sci' in df_fluxes.columns:
+        if 'NIRCAM_F770W_sci' in df_fluxes.columns and not os.path.exists(filter_dir / 'NIRCAM_F770W.txt'):
             df_fluxes.drop('NIRCAM_F770W_sci', axis=1, inplace=True)
             df_fluxes.drop('NIRCAM_F770W_err', axis=1, inplace=True)
 
@@ -834,10 +844,6 @@ if __name__ == "__main__":
 
     df_sed = pd.read_csv(photcat_filename_sed)
     df_sed = df_sed.sort_values(by='objid')
-
-    #df_sed = df_sed.drop(columns=df_sed.columns[df_sed.columns.str.contains('NIRCAM')], axis=1) ## test to remove NIRCAM filters
-    photcat_filename_sed = Path(str(photcat_filename_sed).replace('.csv', '_testnircam.csv'))
-    df_sed.to_csv(photcat_filename_sed, index=None)
 
     filter_list = [str(filter_dir) + '/' + item[:item.lower().find('_sci')] + '.txt' for item in df_sed.columns if '_sci' in item]
     print(f'Resultant photcat has {len(filter_list)} filters')
@@ -854,10 +860,10 @@ if __name__ == "__main__":
 
         # ---------Loop over the objects-------------
         if args.test_sed is not None:
-            index = df_sed[df_sed['objid'] == args.test_sed].index
-            if len(index) == 0: index = 0
-            else: index = index[0]
-            df_sed = df_sed[index : index + 1] ##
+            index2 = df_sed[df_sed['objid'] == args.test_sed].index
+            if len(index2) == 0: index2 = 0
+            else: index2 = index2[0]
+            df_sed = df_sed[index2 : index2 + 1] ##
             print(f'Only runing on object {args.test_sed} as a test; for doing SED all objects, remove --test_sed and re-run')
 
         for index, obj in df_sed.iterrows():
@@ -899,7 +905,7 @@ if __name__ == "__main__":
 
         # ------writing modified df with stellar masses etc-------------------
         if args.test_sed is None:
-            df_int_filename_sed = Path(str(df_int_filename).replace('.txt', f'_withSED_{args.run}.csv'))
+            df_int_filename_sed = Path(str(df_int_filename).replace('.csv', f'_withSED_{args.run}.csv').replace('.txt', f'_withSED_{args.run}.csv'))
             df_int.to_csv(df_int_filename_sed, index=None)
             print(f'Added SED results to df and saved in {df_int_filename_sed}.')
         else:

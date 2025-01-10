@@ -160,6 +160,7 @@ def parse_args():
     parser.add_argument('--log_x', dest='log_x', action='store_true', default=False, help='Plot x-axis of SED in log scale? Default is no.')
     parser.add_argument('--test_sed', metavar='test_sed', type=int, action='store', default=None, help='Fit and plot just one object fo the given ID SED as a test? Default is None')
     parser.add_argument('--include_cosmoswebb', dest='include_cosmoswebb', action='store_true', default=False, help='Include COSMOS Webb filters in the SED fitting? Default is no.')
+    parser.add_argument('--do_field', metavar='do_field', type=str, action='store', default=None, help='To run SED fitting on all overlapping objects of a given PASSAGE field? Default is None, i.e., use all fields')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
