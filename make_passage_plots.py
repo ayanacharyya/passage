@@ -20,6 +20,7 @@
              run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol OIII_EW --run narrow_z
              run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol Ha_EW --run narrow_z_narrow_mass
              run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol Ha_EW --run only_st_bands
+             run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol redshift --run including_nircam
 
              run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --plot_BPT --colorcol distance_from_K01 --run narrow_z_narrow_mass
              run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol distance_from_K01 --run narrow_z_narrow_mass
