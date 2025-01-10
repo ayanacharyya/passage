@@ -538,6 +538,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
             # -------reading in cosmoswebb fluxes-------
             if args.include_cosmoswebb:
                 print(f'\nAttempting to include COSMOSWebb filters for thse objects if any..')
+                filter_intrument_dict = {'F115W':'NIRCAM', 'F150W':'NIRCAM', 'F277W':'NIRCAM', 'F444W':'NIRCAM', 'F770W':'MIRI'}
 
                 ergs_s_cm2_hz_to_ujy_factor = 1e29 # 1 ergs/s/cm^2/Hz = 10^29 uJy
                 df_fluxes['passage_id'] = df_fluxes['field'].astype(str) + '-' + df_fluxes['objid'].astype(str)
@@ -554,8 +555,8 @@ def get_flux_catalog(photcat_filename, df_int, args):
                         cosmoswebb_photcat_for_thisfield[thiscol.replace('FLUX', 'FLUX_ERR')] = cosmoswebb_photcat_for_thisfield[thiscol.replace('FLUX', 'FLUX_ERR')] * ergs_s_cm2_hz_to_ujy_factor  # converting from ergs/s/cm^2/Hz to micro Jansky
 
                     cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns={'id': 'COSMOSWebb_ID'})
-                    cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, 'NIRCAM_' + item[-5:] + '_FLUXERR') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_ERR_APER' in item]))
-                    cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, 'NIRCAM_' + item[-5:] + '_FLUX') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_APER' in item]))
+                    cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, filter_intrument_dict[item.split('_')[-1]] + '_' + item[-5:] + '_FLUXERR') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_ERR_APER' in item]))
+                    cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, filter_intrument_dict[item.split('_')[-1]] + '_' + item[-5:] + '_FLUX') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_APER' in item]))
                     df_fluxes = pd.merge(df_fluxes, cosmoswebb_photcat_for_thisfield, on='passage_id', how='left' if args.do_field is None else 'inner')
 
             # -------writing cosmos fluxes df into file-------
