@@ -170,7 +170,7 @@ def plot_SED(df_fluxes, df_trans, args, x_scale='linear'):
     ax.set_xticklabels(['%.0e' % item for item in ax.get_xticks()], fontsize=args.fontsize)
     ax.set_yticklabels(['%.1f' % item for item in ax.get_yticks()], fontsize=args.fontsize)
 
-    figname = args.output_dir / f'{args.field_set_plot_conditions_text}_SED.png'
+    figname = args.output_dir / 'plots' / f'{args.field_set_plot_conditions_text}_SED.png'
     fig.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
@@ -299,7 +299,7 @@ def plot_niriss_direct(df_fluxes, args):
         header = data[0].header
         wcs_header = pywcs.WCS(header)
 
-        figname = args.output_dir / f'{args.field_set_plot_conditions_text}_niriss_direct_{filter}_{cutout_size:.1f}"_cutouts.pdf'
+        figname = args.output_dir / 'plots' / f'{args.field_set_plot_conditions_text}_niriss_direct_{filter}_{cutout_size:.1f}"_cutouts.pdf'
         pdf = PdfPages(figname)
 
         # ----------getting the seg map----------------
@@ -411,7 +411,7 @@ def plot_filter_cutouts(df_fluxes, args):
 
     all_text = 'all' if args.plot_all else 'subset'
     if args.plot_cutout_errors: all_text += '_wunc'
-    figname = args.output_dir / f'{args.field_set_plot_conditions_text}_{all_text}_{cutout_size:.1f}"_cutouts.pdf'
+    figname = args.output_dir / 'plots' / f'{args.field_set_plot_conditions_text}_{all_text}_{cutout_size:.1f}"_cutouts.pdf'
     pdf = PdfPages(figname)
 
     # ----------getting the seg map----------------
@@ -764,13 +764,13 @@ if __name__ == "__main__":
         plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
         plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
         args.field_set_plot_conditions_text = f'allpar_venn_{plot_conditions_text}'
-        df_int_filename = args.output_dir / f'{args.field_set_plot_conditions_text}_df.txt'
+        df_int_filename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df.txt'
     else:
         args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
         args.field_set_plot_conditions_text = f'{args.field}_allmatch'
         df_int_filename = args.output_dir / args.field / f'{args.field}_all_diag_results.csv'
 
-    photcat_filename = args.output_dir / f'{args.field_set_plot_conditions_text}_passage_cosmos_fluxes{args.cosmos_webb_text}.csv'
+    photcat_filename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_passage_cosmos_fluxes{args.cosmos_webb_text}.csv'
     df_int = pd.read_csv(df_int_filename)
 
     df_fluxes = get_flux_catalog(photcat_filename, df_int, args)

@@ -181,7 +181,7 @@ def plot_venn(df, args):
     fig = ax.figure
     fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
     fig.text(0.99, 0.99, f'Total {n_fields} fields: Par{args.field_text}\nTotal {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes)
-    figname = args.output_dir / f'Par{args.field_text}_venn_diagram_{",".join(args.plot_conditions)}.png'
+    figname = args.output_dir / 'plots' / f'Par{args.field_text}_venn_diagram_{",".join(args.plot_conditions)}.png'
 
     # --------for talk plots--------------
     if args.fortalk:
@@ -275,7 +275,7 @@ def plot_nested_pie(df_subset, args, outer_col='nPA', inner_col='filters'):
     # ----------annotate and save the diagram----------
     fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
     fig.text(0.99, 0.99, f'Total {n_fields} fields: Par{args.field_text}\nTotal {len(df_subset)} objects', c='k', ha='right', va='top', transform=ax.transAxes)
-    figname = args.output_dir / f'Par{args.field_text}_pie_diagram.png'
+    figname = args.output_dir / 'plots' / f'Par{args.field_text}_pie_diagram.png'
 
     # --------for talk plots--------------
     if args.fortalk:
@@ -305,7 +305,7 @@ def plot_sunburst_pie(df, args, outer_col='nPA', inner_col='filters'):
 
 
     # ----------annotate and save the diagram----------
-    figname = args.output_dir / f'Par{args.field_text}_sunburst_diagram.png'
+    figname = args.output_dir / 'plots' / f'Par{args.field_text}_sunburst_diagram.png'
     fig.write_image(figname)
     print(f'\nSaved figure as {figname}')
     #fig.show()
@@ -343,7 +343,7 @@ def plot_columns(df, args):
         ax.plot(line, line, ls='dashed', c='k', lw=1)
 
     fig.text(0.99, 0.99, f'Total {len(pd.unique(df["field"]))} fields: Par{args.field_text}\nTotal {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes)
-    figname = args.output_dir / f'all_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
+    figname = args.output_dir / 'plots' / f'all_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
     fig.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
@@ -385,10 +385,10 @@ def get_detection_fraction(df, line, args):
 
     if args.do_all_fields:
         ax.text(0.02, 0.8, f'Par{args.field_text}', c='k', ha='left', va='top', transform=ax.transAxes)
-        figname = args.output_dir / f'Par{args.field_text}_{line}_EW_histogram.png'
+        figname = args.output_dir / 'plots' / f'Par{args.field_text}_{line}_EW_histogram.png'
     else:
         ax.text(0.02, 0.8, f'Par{args.field_text}', c='k', ha='left', va='top', transform=ax.transAxes)
-        figname = args.output_dir / f'{args.field}' / f'{args.field}_{line}_EW_histogram.png'
+        figname = args.output_dir / 'plots' / f'{args.field}' / f'{args.field}_{line}_EW_histogram.png'
 
     # --------for talk plots--------------
     if args.fortalk:
@@ -564,11 +564,11 @@ if __name__ == "__main__":
     else:
         available_fields = args.field_arr
 
-    df_stats_filename = args.output_dir / f'all_fields_diag_results.txt'
-    df_visual_filename = args.output_dir / f'all_fields_visual_inspection_results.txt'
+    df_stats_filename = args.output_dir / 'catalogs' / f'all_fields_diag_results.txt'
+    df_visual_filename = args.output_dir / 'catalogs' / f'all_fields_visual_inspection_results.txt'
     plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
     plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
-    df_outfilename = args.output_dir / f'allpar_venn_{plot_conditions_text}_df.txt'
+    df_outfilename = args.output_dir / 'catalogs' / f'allpar_venn_{plot_conditions_text}_df.txt'
 
     # -------------------------------------------------------------------
     if not os.path.exists(df_outfilename) or args.clobber_venn_df:

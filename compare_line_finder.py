@@ -48,7 +48,7 @@ if __name__ == "__main__":
         #axes[index].set_ylim(-0.1, 1)
 
     # ---------annotate axes and save figure-------
-    figname = args.output_dir / f'line_finder_comparison.png'
+    figname = args.output_dir / 'plots' / f'line_finder_comparison.png'
     axes[-1].set_xlabel(r'Galaxies', fontsize=args.fontsize)
     axes[-1].set_xticklabels([f'#{df.iloc[int(item)]["objid"]}' if item >=0 and item < len(df) else '' for item in axes[-1].get_xticks()], fontsize=args.fontsize)
 

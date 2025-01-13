@@ -31,10 +31,10 @@ if __name__ == "__main__":
     suffix_dict = defaultdict(lambda: '', _x=f': {run_labels_dict[runs[0]]}', _y=f': {run_labels_dict[runs[1]]}')
     plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
     plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
-    figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_SEDcomp_{args.xcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_vs_{args.ycol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_colorby_{args.colorcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}.png'
+    figname = args.output_dir / 'plots' / f'allpar_venn_{plot_conditions_text}_SEDcomp_{args.xcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_vs_{args.ycol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_colorby_{args.colorcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}.png'
 
     # -------reading in and merging dataframe produced by compute_stellar_masses.py----------------
-    df_infilename = args.output_dir / f'allpar_venn_{plot_conditions_text}_df.txt'
+    df_infilename = args.output_dir / 'catalogs' / f'allpar_venn_{plot_conditions_text}_df.txt'
     df_infilename_x = Path(str(df_infilename).replace('.txt', f'_withSED_{runs[0]}.csv'))
     df_infilename_y = Path(str(df_infilename).replace('.txt', f'_withSED_{runs[1]}.csv'))
 

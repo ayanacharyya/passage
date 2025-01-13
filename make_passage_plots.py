@@ -320,7 +320,7 @@ def plot_flux_vs_mag(ax, args):
     Plots line flux vs magnitude based on integrated fluxes from grizli
     Returns axis handle
     '''
-    df_filename = args.output_dir / f'all_fields_diag_results.txt'
+    df_filename = args.output_dir / 'catalogs' / f'all_fields_diag_results.txt'
     df = pd.read_table(df_filename)
 
     xcol, ycol1, ycol2, colorcol = 'mag', 'OIII_int', 'Ha_int', 'redshift'
@@ -386,19 +386,19 @@ if __name__ == "__main__":
 
     # ---------flux vs mag for full sample------
     if args.plot_flux_vs_mag:
-        figname = args.output_dir / f'allpar_flux_vs_mag.png'
+        figname = args.output_dir / 'plots' / f'allpar_flux_vs_mag.png'
         ax = plot_flux_vs_mag(ax, args)
 
     else:
         # -------reading in dataframe produced by get_field_stats.py or by compute_stellar_masses.py----------------
         plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
         plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
-        df_infilename = args.output_dir / f'allpar_venn_{plot_conditions_text}_df_withSED_{args.run}.csv'
+        df_infilename = args.output_dir / 'catalogs' / f'allpar_venn_{plot_conditions_text}_df_withSED_{args.run}.csv'
         df = pd.read_csv(df_infilename)
         print(f'Reading in main df from {df_infilename}')
 
         # -------combing with metallicity dataframe if it exists----------------
-        logOHgrad_filename = args.output_dir / f'logOHgrad_df_onlyseg_vorbin_at_Ha_SNR_3.0.txt'
+        logOHgrad_filename = args.output_dir / 'catalogs' / f'logOHgrad_df_onlyseg_vorbin_at_Ha_SNR_3.0.txt'
         if os.path.exists(logOHgrad_filename):
             print(f'Reading in and merging logOH gradient df: {logOHgrad_filename}')
             df_logOHgrad = pd.read_csv(logOHgrad_filename)
@@ -407,7 +407,7 @@ if __name__ == "__main__":
         # -------making the dsired plots----------------
         if args.plot_BPT:
             colorby_text = f'_colorby_z' if args.colorcol == 'ez_z_phot' else f'_colorby_{args.colorcol}'
-            figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_run_{args.run}_BPT{colorby_text}.png'
+            figname = args.output_dir / 'plots' / f'allpar_venn_{plot_conditions_text}_run_{args.run}_BPT{colorby_text}.png'
             ax, df = plot_BPT(df, ax, args)
 
             # ------writing out distance from K01 AGN-SF line--------------------------
@@ -416,7 +416,7 @@ if __name__ == "__main__":
                 print(f'\nAdded distance_from_K01 column to df and saved in {df_infilename}.')
 
         else:
-            figname = args.output_dir / f'allpar_venn_{plot_conditions_text}_run_{args.run}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
+            figname = args.output_dir / 'plots' / f'allpar_venn_{plot_conditions_text}_run_{args.run}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
             if df['SFR_int'].dtype == object: # accompanied by uncertainty in the same column
                 quant_arr = []
                 for item in df['SFR_int']:

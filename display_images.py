@@ -45,7 +45,7 @@ if __name__ == "__main__":
     '''
 
     output_dir = Path('/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/')
-    df = pd.read_csv(output_dir / 'allpar_venn_EW,PA_df.txt')
+    df = pd.read_csv(output_dir / 'catalogs' / 'allpar_venn_EW,PA_df.txt')
 
     suffix = 'diagnostics_and_extractions'
     new_dir = output_dir / f'allpar_venn_EW,PA_{suffix}'

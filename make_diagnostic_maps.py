@@ -1372,7 +1372,7 @@ if __name__ == "__main__":
         output_dir = args.output_dir / args.field
         if args.re_extract: output_dir = output_dir / 're_extracted'
         output_dir.mkdir(parents=True, exist_ok=True)
-        outfilename = output_dir / f'{args.field}_all_diag_results.csv'
+        outfilename = output_dir / 'catalogs' / f'{args.field}_all_diag_results.csv'
 
         if os.path.exists(outfilename) and not args.clobber and args.write_file:
             print(f'result file for {args.field} already exists as {outfilename}, so skipping this field.')
@@ -1394,7 +1394,7 @@ if __name__ == "__main__":
             args.id_arr = args.id
 
         if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
-        fig_dir = output_dir / f'{description_text}'
+        fig_dir = output_dir / 'plots' / f'{description_text}'
         fig_dir.mkdir(parents=True, exist_ok=True)
 
         # ---------for diplay and amimations----------------
@@ -1403,7 +1403,7 @@ if __name__ == "__main__":
         else: args.make_anim = False
 
         if args.make_anim:
-            outputfile = output_dir / f'{args.field}_{description_text}.mp4'
+            outputfile = output_dir / 'plots' / f'{args.field}_{description_text}.mp4'
             duration_per_frame = 0.1 #sec
             writer = imageio.get_writer(outputfile, mode='I', fps=int(1. / duration_per_frame))
 
@@ -1702,7 +1702,7 @@ if __name__ == "__main__":
 
         # ------------------writing out Z gradient fits, for making MZGR plot later--------------------------
         if args.plot_metallicity:
-            outfilename = args.output_dir / f'logOHgrad_df{snr_text}{only_seg_text}{vorbin_text}.txt'
+            outfilename = args.output_dir / 'catalogs' / f'logOHgrad_df{snr_text}{only_seg_text}{vorbin_text}.txt'
             df_logOH_radfit.to_csv(outfilename, index=None, mode='a', header=not os.path.exists(outfilename))
             print(f'Appended metallicity gradient fits to catalog file {outfilename}')
 

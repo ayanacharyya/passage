@@ -37,7 +37,7 @@ def make_datashader_plot_mpl(df, args):
     fig.text(cax_xpos + cax_width / 2, cax_ypos + cax_height + 0.005, label_dict[args.colorcol], ha='center', va='bottom')
 
     # ---------to annotate and save the figure----------------------
-    figname = args.output_dir / f'cosmos2020_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
+    figname = args.output_dir / 'plots' / f'cosmos2020_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
     plt.savefig(figname, transparent=False)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
