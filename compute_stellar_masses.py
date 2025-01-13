@@ -27,6 +27,9 @@
              run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z --plot_restframe --ncpus 2
              run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --fit_sed --run narrow_z --plot_restframe --ncpus 2
 
+             run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --include_cosmoswebb --use_only_bands acs,niriss,nircam,miri --fit_sed --run all_st_bands --plot_restframe
+             run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --include_cosmoswebb --use_only_bands acs,niriss,nircam,miri --fit_sed --run all_st_bands --plot_restframe
+
              run compute_stellar_masses.py --do_field Par028 --fit_sed --include_cosmoswebb --run Par028_including_nircam --plot_restframe --ncpus 2
              run compute_stellar_masses.py --do_field Par052 --fit_sed --include_cosmoswebb --run Par052_including_nircam --plot_restframe --ncpus 2
 '''
@@ -794,7 +797,7 @@ if __name__ == "__main__":
             print(f'\nSelecting only bands with {args.use_only_bands} in the filter name..')
             use_bands = args.use_only_bands.split(',')
             useless_fluxcols = [col for col in fluxcols if np.array([band.lower() not in col.lower() for band in use_bands]).all()]
-            print(f'Therefore, dropping {useless_fluxcols} bands..\n..and keeping {list(set(fluxcols) - set(useless_fluxcols))} bands\n')
+            print(f'Therefore, dropping {useless_fluxcols} bands..\n\n..and keeping {list(set(fluxcols) - set(useless_fluxcols))} bands\n')
             useless_errcols = [item.replace('_sci', '_err') for item in useless_fluxcols]
             df_fluxes.drop(useless_fluxcols, axis=1, inplace=True)
             df_fluxes.drop(useless_errcols, axis=1, inplace=True)

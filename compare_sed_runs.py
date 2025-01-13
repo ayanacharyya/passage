@@ -5,6 +5,9 @@
     Created: 20-12-24
     Example: run compare_sed_runs.py --line_list OIII,Ha --plot_conditions EW,mass,PA --xcol log_mass_bgp_x --ycol log_mass_bgp_y --colorcol redshift --run narrow_z_narrow_mass,only_st_bands
              run compare_sed_runs.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp_x --ycol log_mass_bgp_y --colorcol redshift --run narrow_z_narrow_mass,only_st_bands
+
+             run compare_sed_runs.py --line_list OIII,Ha --plot_conditions EW,mass,PA --xcol log_mass_bgp_x --ycol log_mass_bgp_y --colorcol redshift --run narrow_z,all_st_bands
+             run compare_sed_runs.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp_x --ycol log_mass_bgp_y --colorcol redshift --run narrow_z,all_st_bands
 '''
 
 from header import *
