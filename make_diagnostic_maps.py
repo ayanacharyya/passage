@@ -1394,7 +1394,7 @@ if __name__ == "__main__":
             args.id_arr = args.id
 
         if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
-        fig_dir = output_dir / 'plots' / f'{description_text}'
+        fig_dir = output_dir / f'{description_text}'
         fig_dir.mkdir(parents=True, exist_ok=True)
 
         # ---------for diplay and amimations----------------
@@ -1403,7 +1403,7 @@ if __name__ == "__main__":
         else: args.make_anim = False
 
         if args.make_anim:
-            outputfile = output_dir / 'plots' / f'{args.field}_{description_text}.mp4'
+            outputfile = output_dir / f'{args.field}_{description_text}.mp4'
             duration_per_frame = 0.1 #sec
             writer = imageio.get_writer(outputfile, mode='I', fps=int(1. / duration_per_frame))
 
