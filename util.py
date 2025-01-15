@@ -98,10 +98,10 @@ def parse_args():
     parser.add_argument('--arcsec_limit', metavar='arcsec_limit', type=float, action='store', default=1.0, help='Half box size (in arcsec) of the thumbnails to plot; default is 1.5')
     parser.add_argument('--vorbin', dest='vorbin', action='store_true', default=False, help='Voronoi bin the 2D emission line maps? Default is no.')
     parser.add_argument('--voronoi_snr', metavar='voronoi_snr', type=float, action='store', default=3, help='Target SNR to Voronoi bin the emission line maps to; default is 3')
-    parser.add_argument('--voronoi_line', metavar='voronoi_line', type=str, action='store', default='Ha', help='Which emission line to be used for computing the Voronoi bins? Default is None i.e., the given emission line itself')
+    parser.add_argument('--voronoi_line', metavar='voronoi_line', type=str, action='store', default='Hb', help='Which emission line to be used for computing the Voronoi bins? Default is None i.e., the given emission line itself')
     parser.add_argument('--flam_max', metavar='flam_max', type=float, action='store', default=None, help='Maximum y-axis limit for f_lambda (in units of 1e-19 ergs/s/cm^2/A); default is None')
     parser.add_argument('--plot_radial_profiles', dest='plot_radial_profiles', action='store_true', default=False, help='Plot radial profiles corresponding to the 2D maps? Default is no.')
-    parser.add_argument('--snr_cut', metavar='snr_cut', type=float, action='store', default=None, help='Impose an SNR cut on the emission line maps to; default is None')
+    parser.add_argument('--snr_cut', metavar='snr_cut', type=float, action='store', default=0., help='Impose an SNR cut on the emission line maps to; default is 0')
     parser.add_argument('--only_seg', dest='only_seg', action='store_true', default=False, help='Cut out the emission line plots corresponding to the grizli segmentation map? Default is no.')
     parser.add_argument('--write_file', dest='write_file', action='store_true', default=False, help='Write the measured quantities to a master dataframe? Default is no.')
     parser.add_argument('--plot_mappings', dest='plot_mappings', action='store_true', default=False, help='Plot emission line locations as per MAPPINGS predictions (will lead to crowding of many lines)? Default is no.')
@@ -114,6 +114,8 @@ def parse_args():
     parser.add_argument('--plot_metallicity', dest='plot_metallicity', action='store_true', default=False, help='Plot the metallicity map instead of the full diagnostic figure? Default is no.')
     parser.add_argument('--test_cutout', dest='test_cutout', action='store_true', default=False, help='Plot the cutout 2D clear image as a testing phase? Default is no.')
     parser.add_argument('--plot_direct_filters', dest='plot_direct_filters', action='store_true', default=False, help='Plot the direct filter images instead of the full diagnostic figure? Default is no.')
+    parser.add_argument('--debug_vorbin', dest='debug_vorbin', action='store_true', default=False, help='Do extra plots and prints for debugging voronoi binning? Default is no.')
+    parser.add_argument('--do_not_correct_flux', dest='do_not_correct_flux', action='store_true', default=False, help='Skip the step where it corrects for certain belnded line fluxes e.g., OIII5007, Ha, SII 6717? Default is no.')
 
 
     # ------- args added for get_field_stats.py ------------------------------
@@ -739,6 +741,61 @@ def is_point_in_region(sky_coord, data, CDELT1='CD1_1', CDELT2='CD2_2', ORIENT='
     contains = sky_region.contains(sky_coord, pywcs.WCS(header))
 
     return contains
+
+# --------------------------------------------------------------------------------------------------------------------
+def distance(x, y, x0, y0):
+    """
+    Return distance between point
+    P[x0,y0] and a curve (x,y)
+    """
+    d_x = x - x0
+    d_y = y - y0
+    dis = np.sqrt(d_x ** 2 + d_y ** 2)
+    return dis
+
+# --------------------------------------------------------------------------------------------------------------------
+def min_distance(x, y, P, precision=5):
+    """
+    Compute minimum/a distance/s between
+    a point P[x0,y0] and a curve (x,y)
+    rounded at `precision`.
+
+    ARGS:
+        x, y      (array)
+        P         (tuple)
+        precision (int)
+
+    Returns min indexes and distances array.
+    """
+    # compute distance
+    d = distance(x, y, P[0], P[1])
+    d = np.round(d, precision)
+    # find the minima
+    glob_min_idxs = np.argwhere(d == np.min(d)).ravel()
+    return glob_min_idxs, d
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_distance_from_Kewley2001(xdata, ydata, args, x_num='SII'):
+    '''
+    Computes distance of each object in the given xdata and ydata (line ratios) arrays, from the Kewley+2011 AGN-SF line
+    Returns the distance as an array
+    '''
+    print(f'Computing distance form Kewley+2001 line on the BPT diagram..')
+    x = np.linspace(-2, 0, 100)
+
+    if x_num == 'NII':
+        y = 1.19 + 0.61 / (x - 0.47) # Eq 5 of K01
+    elif x_num == 'SII':
+        y = 1.3 + 0.72 / (x - 0.32) # Eq 6 of K01
+
+    min_dist_arr = []
+    for P in zip(xdata, ydata):
+        min_idxs, distances = min_distance(x, y, P)
+        if len(min_idxs) > 0: min_dist = distances[min_idxs[0]]
+        else: min_dist = np.nan
+        min_dist_arr.append(min_dist)
+
+    return np.array(min_dist_arr)
 
 # -----------------------------------------------------------------
 def rebin(array, dimensions=None, scale=None):

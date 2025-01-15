@@ -19,7 +19,10 @@
              run make_diagnostic_maps.py --field Par28 --id 646,1457,1585,1588,2195,2343 --plot_BPT --only_seg --vorbin --voronoi_snr 3 --plot_separately
              run make_diagnostic_maps.py --field Par28 --id 2343 --test_cutout
              run make_diagnostic_maps.py --do_all_fields --do_all_obj --plot_radial_profiles --only_seg --snr_cut 3 --write_file --clobber
+
              run make_diagnostic_maps.py --field Par28 --id 58,155,690,1200,1228,1395,1457,1585,1588 --plot_radial_profiles --only_seg --vorbin --voronoi_snr 3
+             run make_diagnostic_maps.py --field Par28 --id 58,155,690,1200,1228,1395,1457,1585,1588 --plot_BPT --only_seg --vorbin --voronoi_snr 3 --plot_separately
+             run make_diagnostic_maps.py --field Par28 --id 58,155,1200,1457,1588 --plot_metallicity --plot_radial_profile --only_seg --vorbin --voronoi_snr 3
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -438,45 +441,89 @@ def bin_2D(map, bin_IDs, map_err=None):
     Returns the binned 2D map (of same shape as input map)
     '''
     binned_map = np.zeros(np.shape(map))
-    for id in np.unique(bin_IDs):
-        binned_map[bin_IDs == id] = map[bin_IDs == id].mean()
-
-    try: binned_map = np.ma.masked_where(map.mask, binned_map) # propagating the masks from the original 2D image
-    except AttributeError: binned_map = np.ma.masked_where(False, binned_map)
+    for id in np.unique(np.ma.compressed(bin_IDs)):
+        candidates = map[bin_IDs == id]
+        candidates_wo_nan = np.ma.compressed(candidates)
+        # print(f'Deb445: data, {id}, {len(candidates)}, {np.nanmean(candidates) if len(candidates_wo_nan) > 0 else np.nan}, {len(candidates_wo_nan)}, {np.mean(candidates_wo_nan)}')  ##
+        if len(candidates_wo_nan) > 0: binned_map[bin_IDs == id] = np.mean(candidates_wo_nan)
+        else: binned_map[bin_IDs == id] = np.nan
 
     if map_err is not None:
         binned_map_err = np.zeros(np.shape(map_err))
-        for id in np.unique(bin_IDs):
+        for id in np.unique(np.ma.compressed(bin_IDs)):
             candidates = map_err[bin_IDs == id]
-            binned_map_err[bin_IDs == id] = np.sqrt(np.sum(candidates ** 2)) / len(candidates) # this is the apropriate error propagation for mean() operation (which the flux is undergoing above)
-
-        try: binned_map_err = np.ma.masked_where(map.mask, binned_map_err) # propagating the masks from the original 2D image
-        except AttributeError: binned_map_err = np.ma.masked_where(False, binned_map_err)
+            candidates_wo_nan = np.ma.compressed(candidates)
+            # print(f'Deb457: err, {id}, {len(candidates)}, {len(candidates_wo_nan)}, {np.sqrt(np.sum(candidates_wo_nan ** 2)) / len(candidates_wo_nan)}')  ##
+            binned_map_err[bin_IDs == id] = np.sqrt(np.sum(candidates_wo_nan ** 2)) / len(candidates_wo_nan) # this is the appropriate error propagation for mean() operation (which the flux is undergoing above)
 
     if map_err is None: return binned_map
     else: return binned_map, binned_map_err
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True):
+def make_combined_cmap(cmap1, cmap2, vmin, vmax, vcut):
+    '''
+    Combine cmap1 and cmap2 into a new colormap such that above vcut cmap1 is used and below vcut cmap2 is used
+    Returns new colormap
+    '''
+    cutoff_frac = (vcut - vmin) / (vmax - vmin)
+    if cutoff_frac < 0: cutoff_frac = 0.
+    col_above = plt.get_cmap(cmap1)(np.linspace(cutoff_frac, 1, int(256 * (1 - cutoff_frac))))
+    col_below = plt.get_cmap(cmap2)(np.linspace(0, cutoff_frac, int(256 * cutoff_frac)))
+    colors = np.vstack((col_below, col_above))
+    combined_cmap = mplcolors.LinearSegmentedColormap.from_list('combined_cmap', colors)
+
+    return combined_cmap
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
     '''
     Compute the Voronoi bin IDs a given 2D map and corresponding uncertainty and SNR threshold
     Returns the 2D map (of same shape as input map) with just the IDs
     '''
+    snr_cut_for_vorbin = 0
     x_size, y_size = np.shape(map)
     map_err = unp.std_devs(map)
     map = unp.nominal_values(map)
 
-    x_coords = np.repeat(np.arange(x_size), y_size)
-    y_coords = np.tile(np.arange(y_size), x_size)
+    map = np.ma.masked_where(map / map_err < snr_cut_for_vorbin, map)
+    map_err = np.ma.masked_where(map / map_err < snr_cut_for_vorbin, map_err)
 
-    map = np.ma.masked_where(~np.isfinite(map_err), map)
-    map_err = np.ma.masked_where(~np.isfinite(map_err), map_err)
+    if args is not None and args.debug_vorbin:
+        fig, axes = plt.subplots(1, 7, figsize=(14, 3))
+        fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.1, wspace=0.5)
+        cmap = 'viridis'
+        fig.text(0.05, 0.98, f'{args.field}: ID {args.id}: vorbin step', fontsize=args.fontsize, c='k', ha='left', va='top')
+        plot_2D_map(map, axes[0], args, takelog=False, label=f'input {args.voronoi_line} map', cmap=cmap, hide_yaxis=False)
+        plot_2D_map(map_err, axes[1], args, takelog=False, label=f'input {args.voronoi_line} err', cmap=cmap, hide_yaxis=True)
 
-    map = np.ma.masked_where(map / map_err < 1, map)
-    map_err = np.ma.masked_where(map / map_err < 1, map_err)
+        snr = map / map_err
+        combined_cmap = make_combined_cmap(cmap, 'Grays', np.min(snr), np.max(snr), snr_cut_for_vorbin)
+        plot_2D_map(snr, axes[2], args, takelog=False, label=f'input {args.voronoi_line} SNR', cmap=combined_cmap, hide_yaxis=True)
 
-    binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords, y_coords, map.flatten(), map_err.flatten(), snr_thresh, plot=plot, quiet=quiet, cvt=False, pixelsize=1)
-    binID_map = binIDs.reshape(np.shape(map))
+    x_coords_grid = np.reshape(np.repeat(np.arange(x_size), y_size), (x_size, y_size))
+    y_coords_grid = np.reshape(np.tile(np.arange(y_size), x_size), (x_size, y_size))
+    x_coords_grid_masked = np.ma.masked_where(map.mask, x_coords_grid)
+    y_coords_grid_masked = np.ma.masked_where(map.mask, y_coords_grid)
+
+    map_array = np.ma.compressed(map)
+    map_err_array = np.ma.compressed(map_err)
+    x_coords_array = np.ma.compressed(x_coords_grid_masked)
+    y_coords_array = np.ma.compressed(y_coords_grid_masked)
+
+    binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords_array, y_coords_array, map_array, map_err_array, snr_thresh, plot=False, quiet=quiet, cvt=False, wvt=True)
+
+    interp = NearestNDInterpolator(list(zip(x_coords_array, y_coords_array)), binIDs)
+    binID_map = interp(x_coords_grid, y_coords_grid)
+    binID_map = np.ma.masked_where(args.segmentation_map != args.id, binID_map)
+
+    if args is not None and args.debug_vorbin:
+        plot_2D_map(binID_map, axes[3], args, takelog=False, label='resultant bin IDs', cmap=cmap, hide_yaxis=True)
+
+        map, map_err = bin_2D(map, binID_map, map_err=map_err)
+        plot_2D_map(map, axes[4], args, takelog=False, label=f'binned {args.voronoi_line} map', cmap=cmap, hide_yaxis=False)
+        plot_2D_map(map_err, axes[5], args, takelog=False, label=f'binned {args.voronoi_line} err', cmap=cmap, hide_yaxis=True)
+        plot_2D_map(map / map_err, axes[6], args, takelog=False, label='binned SNR', cmap=cmap, hide_yaxis=True)
+        plt.show(block=False)
 
     return binID_map
 
@@ -502,6 +549,23 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     line_map = full_hdu[ext].data * 1e-17 # in units of ergs/s/cm^2
     line_wave = full_hdu[ext].header['RESTWAVE'] # in Angstrom
     line_map_err = 1e-17 / (full_hdu[ext + 3].data ** 0.5)  # 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
+    factor = 1.0
+
+    if not args.do_not_correct_flux:
+        if line == 'OIII': # special treatment for OIII 5007 line, in order to account for and remove the OIII 4959 component
+            ratio_5007_to_4959 = 2.98 # from grizli source code
+            factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
+            print(f'Correcting OIII for 4959 component, by factor of {factor:.3f}')
+        elif line == 'SII': # special treatment for SII 6717 line, in order to account for and remove the SII 6731 component
+            ratio_6717_to_6731 = 1. # from grizli source code
+            factor = ratio_6717_to_6731 / (1 + ratio_6717_to_6731)
+            print(f'Correcting SII for 6731 component, by factor of {factor:.3f}')
+        elif line == 'Ha': # special treatment for Ha line, in order to account for and remove the NII component
+            factor = 0.823 # from James et al. 2023?
+            print(f'Correcting Ha for NII component, by factor of {factor:.3f}')
+
+    line_map = line_map * factor
+    line_map_err = line_map_err * factor
 
     line_map = trim_image(line_map, args)
     line_map_err = trim_image(line_map_err, args)
@@ -512,15 +576,37 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
 
     if args.snr_cut is not None:
         snr_map = line_map / line_map_err
-        line_map = np.ma.masked_where(~np.isfinite(snr_map), line_map)
-        line_map = np.ma.masked_where(snr_map < args.snr_cut, line_map)
+        mask = (~np.isfinite(snr_map)) | (snr_map < args.snr_cut)
+        line_map = np.ma.masked_where(mask, line_map)
+        line_map_err = np.ma.masked_where(mask, line_map_err)
 
     if args.vorbin and not for_vorbin:
         if args.voronoi_line is None: # No reference emission line specified, so Voronoi IDs need to be computed now
-            bin_IDs = get_voronoi_bin_IDs(line_map, line_map_err, args.voronoi_snr)
+            bin_IDs = get_voronoi_bin_IDs(line_map, line_map_err, args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin)
         else: # Reference emission line specified for Voronoi binning, so bin IDs have been pre-computed
             bin_IDs = args.voronoi_bin_IDs
+
+        if args.debug_vorbin:
+            fig, axes = plt.subplots(1, 7, figsize=(14, 3))
+            fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.1, wspace=0.5)
+            cmap = 'viridis'
+            fig.text(0.05, 0.8, f'{args.field}: ID {args.id}: line {line}', fontsize=args.fontsize, c='k', ha='left', va='top')
+            plot_2D_map(np.log10(line_map), axes[0], args, takelog=False, label='map', cmap=cmap, hide_yaxis=True)
+            plot_2D_map(np.log10(line_map_err), axes[1], args, takelog=False, label='map err', cmap=cmap, hide_yaxis=True)
+            snr = line_map / line_map_err
+            combined_cmap = make_combined_cmap(cmap, 'Grays', np.min(snr), np.max(snr), args.snr_cut)
+            plot_2D_map(snr, axes[2], args, takelog=False, label='snr', cmap=combined_cmap, hide_yaxis=True)
+            plot_2D_map(bin_IDs, axes[3], args, takelog=False, label='bin IDs', cmap=cmap, hide_yaxis=False)
+
         line_map, line_map_err = bin_2D(line_map, bin_IDs, map_err=line_map_err)
+
+        if args.debug_vorbin:
+            plot_2D_map(np.log10(line_map), axes[4], args, takelog=False, label='binned map', cmap=cmap, hide_yaxis=True)
+            plot_2D_map(np.log10(line_map_err), axes[5], args, takelog=False, label='binned map err', cmap=cmap, hide_yaxis=True)
+            snr = line_map / line_map_err
+            combined_cmap = make_combined_cmap(cmap, 'Grays', np.nanmin(snr), np.nanmax(snr), args.snr_cut)
+            plot_2D_map(snr, axes[6], args, takelog=False, label='binned snr', cmap=combined_cmap, hide_yaxis=True)
+            plt.show(block=False)
 
     line_map = unp.uarray(line_map, line_map_err)
 
@@ -531,6 +617,8 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     # -----------getting the integrated flux value from grizli-----------------
     line_int = full_hdu[0].header[f'FLUX{line_index + 1:03d}'] # ergs/s/cm^2
     line_int_err = full_hdu[0].header[f'ERR{line_index + 1:03d}'] # ergs/s/cm^2
+    line_int = line_int * factor
+    line_int_err = line_int_err * factor
     line_int = ufloat(line_int, line_int_err)
 
     # -----------getting the integrated EW value-----------------
@@ -942,7 +1030,7 @@ def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux):
 
     else: # if it is scalar
         try:
-            ratio =(OII3727_flux + OIII5007_flux) / Hbeta_flux # in case 'Hbeta_flux' happens to be 0
+            ratio = (OII3727_flux + OIII5007_flux) / Hbeta_flux # in case 'Hbeta_flux' happens to be 0
             R23 = unp.log10(ratio)
             p = k[1] ** 2 - 4 * k[2] * (k[0] - R23)
             log_OH = (-k[1] + unp.sqrt(p)) / (2 * k[2])
@@ -1232,7 +1320,7 @@ def plot_metallicity_map(full_hdu, args):
         logOH_map, logOH_int = get_Z_R23(full_hdu, args)
 
         # ---------plotting-------------
-        lim, label = [6.5, 8.5], 'log(O/H) (R23)'
+        lim, label = [7.3, 8.3], 'log(O/H) (R23)'
         axes[0], logOH_radfit = plot_2D_map(logOH_map, axes[0], args, takelog=False, label=r'%s$_{\rm int}$ = %.1f $\pm$ %.1f' % (label, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
         logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
@@ -1261,6 +1349,9 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis'):
     SII_map, SII_wave, SII_int, _ = get_emission_line_map('SII', full_hdu, args)
     Halpha_map, Halpha_wave, Halpha_int, _ = get_emission_line_map('Ha', full_hdu, args)
 
+    def func(x):
+        return 1.3 + 0.72 / (x - 0.32)  # Eq 6 of K01
+
     try:
         # -----------integrated-----------------------
         color = mpl_cm.get_cmap(cmap)(0.5)
@@ -1276,6 +1367,13 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis'):
             p = ax_indiv.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
             ax_indiv.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c=color, fmt='none', lw=2)
 
+    except ValueError:
+        print(f'Galaxy {args.id} in {args.field} has a negative integrated flux in one of the following lines, hence skipping this.')
+        print(f'OIII = {OIII_int}\nHb = {Hbeta_int}\nSII = {SII_int}\nHa = {Halpha_int}\n')
+        scatter_plot_handle = None
+        pass
+
+    try:
         # -----------spatially_resolved-----------------------
         distance_map = get_distance_map(np.shape(OIII_map), args)
         distance_map = np.ma.masked_where(False, distance_map)
@@ -1298,27 +1396,34 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis'):
         y_ratio = np.ma.compressed(np.ma.masked_where(net_mask, y_ratio))
         distance_map = np.ma.compressed(np.ma.masked_where(net_mask, distance_map))
 
+        sign_map = y_ratio > func(x_ratio)
+        sign_map[sign_map == 0] = -1
+        distance_from_K01_map = sign_map * get_distance_from_Kewley2001(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), args, x_num='SII')
+
         df = pd.DataFrame({'log_sii/ha': unp.nominal_values(x_ratio).flatten(), 'log_sii/ha_err': unp.std_devs(x_ratio).flatten(), 'log_oiii/hb': unp.nominal_values(y_ratio).flatten(), 'log_oiii/hb_err':  unp.std_devs(y_ratio).flatten(), 'distance': distance_map.flatten()})
         df = df.sort_values(by='distance')
         df = df.drop_duplicates().reset_index(drop=True)
+        df['sign'] = df.apply(lambda row: 1 if row['log_oiii/hb'] > func(row['log_sii/ha']) else -1, axis=1)
+        df['distance_from_K01'] = df['sign'] * get_distance_from_Kewley2001(df['log_sii/ha'], df['log_oiii/hb'], args, x_num='SII')
 
-        scatter_plot_handle = ax.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df['distance'], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0, vmax=6)
+        scatter_plot_handle = ax.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else None, vmax=6 if args.colorcol == 'distance' else None)
         ax.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
 
         if args.plot_separately:
-            scatter_plot_handle_indiv = ax_indiv.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df['distance'], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8)
+            scatter_plot_handle_indiv = ax_indiv.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else None, vmax=6 if args.colorcol == 'distance' else None)
             ax_indiv.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
+            ax_inset = ax_indiv.inset_axes([0.6, 0.6, 0.3, 0.3])
+            plot_2D_map(distance_from_K01_map, ax_inset, args, takelog=False, label='dist from K01', cmap='BrBG', hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
 
     except ValueError:
-        print(f'Galaxy {args.id} in {args.field} has a negative integrated flux in one of the following lines, hence skipping this.')
-        print(f'OIII = {OIII_int}\nHb = {Hbeta_int}\nSII = {SII_int}\nHa = {Halpha_int}\n')
+        print(f'Galaxy {args.id} in {args.field} has some negative spatially resolved fluxes, hence skipping this object.')
         scatter_plot_handle = None
         pass
 
     if args.plot_separately:
         # ---------annotate axes-------
         cbar = plt.colorbar(scatter_plot_handle_indiv)
-        cbar.set_label('Distance (kpc)')
+        cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from K01' if args.colorcol == 'distance_from_K01' else '')
 
         ax_indiv.set_xlim(-2, 0.3)
         ax_indiv.set_ylim(-1, 2)
@@ -1327,7 +1432,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis'):
 
         # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
         x = np.linspace(ax_indiv.get_xlim()[0], ax_indiv.get_xlim()[1], 100)
-        y = 1.3 + 0.72 / (x - 0.32)  # Eq 6 of K01
+        y = func(x)  # Eq 6 of K01
         ax_indiv.plot(x, y, c='w' if args.fortalk else 'k', ls='dashed', lw=2, label='Kewley+2001')
         plt.legend()
         fig_indiv.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
@@ -1408,7 +1513,7 @@ if __name__ == "__main__":
             writer = imageio.get_writer(outputfile, mode='I', fps=int(1. / duration_per_frame))
 
         # ----------------------initiliasing dataframe-------------------------------
-        all_lines_to_plot = ['Ha', 'Hb', 'OII', 'OIII-4363', 'OIII']
+        all_lines_to_plot = ['Ha', 'Hb', 'OII', 'OIII-4363', 'OIII']#, 'SII']
         all_lines_to_save = args.line_list
         measured_quantities_to_plot = ['EB_V', 'SFR', 'Te', 'logOH_Te', 'logOH_R23']
 
@@ -1442,7 +1547,7 @@ if __name__ == "__main__":
         # ---------plotting spatially resolved BPT-----------------------------
         if args.plot_BPT:
             fig, ax = plt.subplots(1, figsize=(8, 6))
-            cmap_arr = ['Reds_r', 'Greens_r', 'Purples_r', 'Greys_r', 'Oranges_r', 'Blues_r', 'YlGnBu_r']
+            cmap_arr = ['Reds_r', 'Greens_r', 'Purples_r', 'Greys_r', 'Oranges_r', 'Blues_r', 'YlGnBu_r', 'BuPu_r', 'GnBu_r', 'spring']
 
         # ---------lotting metallicity profiles and gradients----------------------
         if args.plot_metallicity:
@@ -1509,7 +1614,10 @@ if __name__ == "__main__":
             # ---------------voronoi binning stuff---------------
             if args.vorbin and args.voronoi_line is not None:
                 line_map, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True)
-                args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr)#, plot=True, quiet=False)
+                args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
+                if args.debug_vorbin:
+                    print(f'Running in --debug_vorbin mode, hence not proceeding further.')
+                    #continue
 
             # ---------------radial profile stuff---------------
             if args.plot_radial_profiles:
@@ -1536,7 +1644,7 @@ if __name__ == "__main__":
 
             # ---------plotting spatially resolved BPT-----------------------------
             elif args.plot_BPT:
-                ax, scatter_plot_handle = plot_BPT(full_hdu, ax, args, cmap=cmap_arr[index])
+                ax, scatter_plot_handle = plot_BPT(full_hdu, ax, args, cmap='BrBG_r' if args.colorcol == 'distance_from_K01' else cmap_arr[index])
 
             # ---------initialising the starburst figure------------------------------
             elif args.plot_starburst:
@@ -1569,9 +1677,11 @@ if __name__ == "__main__":
                 axis_dirimg = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 0), colspan=1)
                 axis_1dspec = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 1), colspan=ncol - 1)
                 ax_em_lines = [plt.subplot2grid(shape=(nrow, ncol), loc=(1, item), colspan=1) for item in np.arange(ncol)]  # H alpha, H beta, OII, OIII-4363, OIII
-                [ax_SFR, ax_EB_V, ax_Te, ax_Z_Te, ax_Z_R23] = [plt.subplot2grid(shape=(nrow, ncol), loc=(2, item), colspan=1) for item in np.arange(ncol)]  # SFR, E(B-V), Te, Z (Te), Z (R23)
+                ax_derived_quant_arr = [plt.subplot2grid(shape=(nrow, ncol), loc=(2, item), colspan=1) for item in np.arange(ncol)]  # SFR, E(B-V), Te, Z (Te), Z (R23)
+                ax_SFR, ax_EB_V, ax_Te, ax_Z_Te, ax_Z_R23 = ax_derived_quant_arr[0], ax_derived_quant_arr[1], ax_derived_quant_arr[2], ax_derived_quant_arr[3], ax_derived_quant_arr[4]
                 if args.plot_radial_profiles:
-                    [rax_SFR, rax_EB_V, rax_Te, rax_Z_Te, rax_Z_R23] = [plt.subplot2grid(shape=(nrow, ncol), loc=(3, item), colspan=1) for item in np.arange(ncol)]  # SFR, E(B-V), Te, Z (Te), Z (R23)
+                    ax_radprof_arr = [plt.subplot2grid(shape=(nrow, ncol), loc=(3, item), colspan=1) for item in np.arange(ncol)]  # SFR, E(B-V), Te, Z (Te), Z (R23)
+                    rax_SFR, rax_EB_V, rax_Te, rax_Z_Te, rax_Z_R23 = ax_radprof_arr[0], ax_radprof_arr[1], ax_radprof_arr[2], ax_radprof_arr[3], ax_radprof_arr[4]
                 else:
                     [rax_SFR, rax_EB_V, rax_Te, rax_Z_Te, rax_Z_R23] = np.tile(None, ncol)
                 # ---------direct imaging------------------------------
@@ -1710,7 +1820,7 @@ if __name__ == "__main__":
         if args.plot_BPT and not (args.plot_separately and len(args.id_arr) == 1):
             # ---------annotate axes-------
             cbar = plt.colorbar(scatter_plot_handle)
-            cbar.set_label('Distance (kpc)')
+            cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from K01' if args.colorcol == 'distance_from_K01' else '')
 
             ax.set_xlim(-2, 0.3)
             ax.set_ylim(-1, 2)

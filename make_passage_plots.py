@@ -148,61 +148,6 @@ def get_integrated_line_flux(line, full_hdu, args, dered=True):
     return line_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def distance(x, y, x0, y0):
-    """
-    Return distance between point
-    P[x0,y0] and a curve (x,y)
-    """
-    d_x = x - x0
-    d_y = y - y0
-    dis = np.sqrt(d_x ** 2 + d_y ** 2)
-    return dis
-
-# --------------------------------------------------------------------------------------------------------------------
-def min_distance(x, y, P, precision=5):
-    """
-    Compute minimum/a distance/s between
-    a point P[x0,y0] and a curve (x,y)
-    rounded at `precision`.
-
-    ARGS:
-        x, y      (array)
-        P         (tuple)
-        precision (int)
-
-    Returns min indexes and distances array.
-    """
-    # compute distance
-    d = distance(x, y, P[0], P[1])
-    d = np.round(d, precision)
-    # find the minima
-    glob_min_idxs = np.argwhere(d == np.min(d)).ravel()
-    return glob_min_idxs, d
-
-# --------------------------------------------------------------------------------------------------------------------
-def get_distance_from_Kewley2001(xdata, ydata, args, x_num='SII'):
-    '''
-    Computes distance of each object in the given xdata and ydata (line ratios) arrays, from the Kewley+2011 AGN-SF line
-    Returns the distance as an array
-    '''
-    print(f'Computing distance form Kewley+2001 line on the BPT diagram..')
-    x = np.linspace(-2, 0, 100)
-
-    if x_num == 'NII':
-        y = 1.19 + 0.61 / (x - 0.47) # Eq 5 of K01
-    elif x_num == 'SII':
-        y = 1.3 + 0.72 / (x - 0.32) # Eq 6 of K01
-
-    min_dist_arr = []
-    for P in zip(xdata, ydata):
-        min_idxs, distances = min_distance(x, y, P)
-        if len(min_idxs) > 0: min_dist = distances[min_idxs[0]]
-        else: min_dist = np.nan
-        min_dist_arr.append(min_dist)
-
-    return np.array(min_dist_arr)
-
-# --------------------------------------------------------------------------------------------------------------------
 def plot_BPT(df, ax, args):
     '''
     Plots BPT diagram based on integrated fluxes from grizli
