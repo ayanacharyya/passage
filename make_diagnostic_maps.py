@@ -23,6 +23,8 @@
              run make_diagnostic_maps.py --field Par28 --id 58,155,690,1200,1228,1395,1457,1585,1588 --plot_radial_profiles --only_seg --vorbin --voronoi_snr 3
              run make_diagnostic_maps.py --field Par28 --id 58,155,690,1200,1228,1395,1457,1585,1588 --plot_BPT --only_seg --vorbin --voronoi_snr 3 --plot_separately
              run make_diagnostic_maps.py --field Par28 --id 58,155,1200,1457,1588 --plot_metallicity --plot_radial_profile --only_seg --vorbin --voronoi_snr 3
+
+             run make_diagnostic_maps.py --field Par28 --id 1457 --plot_AGN_frac --only_seg --vorbin --voronoi_snr 3
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -1355,7 +1357,6 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis'):
     try:
         # -----------integrated-----------------------
         color = mpl_cm.get_cmap(cmap)(0.5)
-        print(f'Deb1258: cmap={cmap}, color={color}') ##
 
         y_ratio = unp.log10(OIII_int / Hbeta_int)
         x_ratio = unp.log10(SII_int / Halpha_int)
@@ -1392,28 +1393,36 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis'):
         x_ratio = np.ma.masked_where(x_ratio_mask | SII_map.mask | Halpha_map.mask, x_ratio)
 
         net_mask = y_ratio.mask | x_ratio.mask
+
+        sign_map = (unp.nominal_values(y_ratio.data) > func(unp.nominal_values(x_ratio.data))).astype(int)
+        sign_map[sign_map == 0] = -1
+        distance_from_K01_map = sign_map * get_distance_from_Kewley2001(unp.nominal_values(x_ratio.data), unp.nominal_values(y_ratio.data), args, x_num='SII')
+        distance_from_K01_map = np.ma.masked_where(net_mask, distance_from_K01_map)
+
         x_ratio = np.ma.compressed(np.ma.masked_where(net_mask, x_ratio))
         y_ratio = np.ma.compressed(np.ma.masked_where(net_mask, y_ratio))
         distance_map = np.ma.compressed(np.ma.masked_where(net_mask, distance_map))
+        distance_from_K01_arr = np.ma.compressed(distance_from_K01_map)
+        dist_lim = max(np.abs(np.max(distance_from_K01_arr)), np.abs(np.min(distance_from_K01_arr)))
 
-        sign_map = y_ratio > func(x_ratio)
-        sign_map[sign_map == 0] = -1
-        distance_from_K01_map = sign_map * get_distance_from_Kewley2001(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), args, x_num='SII')
-
-        df = pd.DataFrame({'log_sii/ha': unp.nominal_values(x_ratio).flatten(), 'log_sii/ha_err': unp.std_devs(x_ratio).flatten(), 'log_oiii/hb': unp.nominal_values(y_ratio).flatten(), 'log_oiii/hb_err':  unp.std_devs(y_ratio).flatten(), 'distance': distance_map.flatten()})
+        df = pd.DataFrame({'log_sii/ha': unp.nominal_values(x_ratio).flatten(), 'log_sii/ha_err': unp.std_devs(x_ratio).flatten(), 'log_oiii/hb': unp.nominal_values(y_ratio).flatten(), 'log_oiii/hb_err':  unp.std_devs(y_ratio).flatten(), 'distance': distance_map.flatten(), 'distance_from_K01': distance_from_K01_arr.flatten()})
         df = df.sort_values(by='distance')
         df = df.drop_duplicates().reset_index(drop=True)
-        df['sign'] = df.apply(lambda row: 1 if row['log_oiii/hb'] > func(row['log_sii/ha']) else -1, axis=1)
-        df['distance_from_K01'] = df['sign'] * get_distance_from_Kewley2001(df['log_sii/ha'], df['log_oiii/hb'], args, x_num='SII')
 
-        scatter_plot_handle = ax.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else None, vmax=6 if args.colorcol == 'distance' else None)
+        scatter_plot_handle = ax.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_K01' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_K01' else None)
         ax.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
 
+        if args.plot_AGN_frac and not args.plot_separately:
+            ax_inset = ax.inset_axes([0.55, 0.75, 0.3, 0.3])
+            plot_2D_map(distance_from_K01_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim)
+
         if args.plot_separately:
-            scatter_plot_handle_indiv = ax_indiv.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else None, vmax=6 if args.colorcol == 'distance' else None)
+            scatter_plot_handle_indiv = ax_indiv.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_K01' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_K01' else None)
             ax_indiv.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
-            ax_inset = ax_indiv.inset_axes([0.6, 0.6, 0.3, 0.3])
-            plot_2D_map(distance_from_K01_map, ax_inset, args, takelog=False, label='dist from K01', cmap='BrBG', hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
+
+            if args.plot_AGN_frac:
+                ax_inset = ax_indiv.inset_axes([0.55, 0.75, 0.3, 0.3])
+                plot_2D_map(distance_from_K01_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim)
 
     except ValueError:
         print(f'Galaxy {args.id} in {args.field} has some negative spatially resolved fluxes, hence skipping this object.')
@@ -1451,6 +1460,9 @@ if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
     if args.plot_slope_vs_mass: args.plot_starburst, args.plot_radial_profiles = True, True
+    if args.plot_AGN_frac: args.plot_BPT, args.plot_separately = True, True
+    if args.plot_BPT and args.colorcol == 'ez_z_phot': args.colorcol = 'distance'
+    args.diverging_cmap = get_custom_cmap(args.diverging_cmap)
 
     # ---------determining filename suffixes-------------------------------
     radial_plot_text = '_wradprof' if args.plot_radial_profiles else ''
@@ -1499,6 +1511,7 @@ if __name__ == "__main__":
             args.id_arr = args.id
 
         if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
+        if len(args.id_arr) == 1: args.plot_separately = False
         fig_dir = output_dir / f'{description_text}'
         fig_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1644,7 +1657,7 @@ if __name__ == "__main__":
 
             # ---------plotting spatially resolved BPT-----------------------------
             elif args.plot_BPT:
-                ax, scatter_plot_handle = plot_BPT(full_hdu, ax, args, cmap='BrBG_r' if args.colorcol == 'distance_from_K01' else cmap_arr[index])
+                ax, scatter_plot_handle = plot_BPT(full_hdu, ax, args, cmap=args.diverging_cmap if args.colorcol == 'distance_from_K01' else cmap_arr[index])
 
             # ---------initialising the starburst figure------------------------------
             elif args.plot_starburst:
@@ -1817,7 +1830,7 @@ if __name__ == "__main__":
             print(f'Appended metallicity gradient fits to catalog file {outfilename}')
 
         # ---------plotting spatially resolved BPT-----------------------------
-        if args.plot_BPT and not (args.plot_separately and len(args.id_arr) == 1):
+        if args.plot_BPT:
             # ---------annotate axes-------
             cbar = plt.colorbar(scatter_plot_handle)
             cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from K01' if args.colorcol == 'distance_from_K01' else '')

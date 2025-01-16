@@ -24,6 +24,9 @@
 
              run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --plot_BPT --colorcol distance_from_K01 --run narrow_z_narrow_mass
              run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol distance_from_K01 --run narrow_z_narrow_mass
+
+             run make_passage_plots.py  --do_field Par028 --xcol log_mass_bgp --ycol log_SFR_int --colorcol redshift --run Par028_including_nircam
+             run make_passage_plots.py  --do_field Par052 --xcol log_mass_bgp --ycol log_SFR_int --colorcol redshift --run Par052_including_nircam
 '''
 
 from header import *
@@ -336,23 +339,31 @@ if __name__ == "__main__":
 
     else:
         # -------reading in dataframe produced by get_field_stats.py or by compute_stellar_masses.py----------------
-        plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
-        plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
-        df_infilename = args.output_dir / 'catalogs' / f'allpar_venn_{plot_conditions_text}_df_withSED_{args.run}.csv'
+        if args.do_field is None:
+            plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
+            plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
+            args.field_set_plot_conditions_text = f'allpar_venn_{plot_conditions_text}'
+            df_infilename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df_withSED_{args.run}.csv'
+        else:
+            args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
+            args.field_set_plot_conditions_text = f'{args.field}_allmatch'
+            df_infilename = args.output_dir / args.field / f'{args.field}_all_diag_results_withSED_{args.run}.csv'
+
         df = pd.read_csv(df_infilename)
         print(f'Reading in main df from {df_infilename}')
 
         # -------combing with metallicity dataframe if it exists----------------
         logOHgrad_filename = args.output_dir / 'catalogs' / f'logOHgrad_df_onlyseg_vorbin_at_Ha_SNR_3.0.txt'
-        if os.path.exists(logOHgrad_filename):
+        if os.path.exists(logOHgrad_filename) and args.do_field is None:
             print(f'Reading in and merging logOH gradient df: {logOHgrad_filename}')
             df_logOHgrad = pd.read_csv(logOHgrad_filename)
+            df_logOHgrad = df_logOHgrad.drop_duplicates(subset=['field', 'objid'], keep='last')
             df = pd.merge(df, df_logOHgrad, on=['field', 'objid'], how='outer')
 
         # -------making the dsired plots----------------
         if args.plot_BPT:
             colorby_text = f'_colorby_z' if args.colorcol == 'ez_z_phot' else f'_colorby_{args.colorcol}'
-            figname = args.output_dir / 'plots' / f'allpar_venn_{plot_conditions_text}_run_{args.run}_BPT{colorby_text}.png'
+            figname = args.output_dir / 'plots' / f'{args.field_set_plot_conditions_text}_run_{args.run}_BPT{colorby_text}.png'
             ax, df = plot_BPT(df, ax, args)
 
             # ------writing out distance from K01 AGN-SF line--------------------------
@@ -361,23 +372,28 @@ if __name__ == "__main__":
                 print(f'\nAdded distance_from_K01 column to df and saved in {df_infilename}.')
 
         else:
-            figname = args.output_dir / 'plots' / f'allpar_venn_{plot_conditions_text}_run_{args.run}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
+            figname = args.output_dir / 'plots' / f'{args.field_set_plot_conditions_text}_run_{args.run}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
             if df['SFR_int'].dtype == object: # accompanied by uncertainty in the same column
-                quant_arr = []
-                for item in df['SFR_int']:
+                counter = 0
+                for index, item in enumerate(df['SFR_int']):
                     if 'e' in item:
                         pow = float(item[item.find('e')+1:])
                         base = np.array(item[1:item.find('e')-1].split('+/-')).astype(np.float64)
                         quant = base * 10 ** pow
                     else:
                         quant = np.array(item.split('+/-')).astype(np.float64)
-                    quant_arr.append(ufloat(quant[0], quant[1]))
-
-                df['SFR_int'] = unp.nominal_values(quant_arr)
-                df['SFR_int_u']= unp.std_devs(quant_arr)
-                df['log_SFR_int_u'] = unp.std_devs(unp.log10(quant_arr))
-            df['log_SFR_int'] = np.log10(df['SFR_int'])
-
+                    df.at[index, 'SFR_int'] = quant[0]
+                    df.at[index, 'SFR_int_u'] = quant[1]
+                    try:
+                        log_quant = unp.log10(ufloat(quant[0], quant[1]))
+                        df.at[index, 'log_SFR_int'] = unp.nominal_values(log_quant)
+                        df.at[index, 'log_SFR_int_u'] = unp.std_devs(log_quant)
+                    except ValueError:
+                        df.at[index, 'log_SFR_int'] = np.nan
+                        df.at[index, 'log_SFR_int_u'] = np.nan
+                        counter += 1
+                        pass
+                if counter > 0: print(f'\n{counter} out of {len(df)} had -ve SFRs!')
 
             # ---------SFMS from df-------
             p = ax.scatter(df[args.xcol], df[args.ycol], c='gold' if args.foggie_comp else df[args.colorcol], plotnonfinite=True, marker='*' if args.foggie_comp else 'o', s=1000 if args.foggie_comp else 100, lw=1, edgecolor='w' if args.fortalk else 'k', vmin=bounds_dict[args.colorcol][0] if args.colorcol in bounds_dict else None, vmax=bounds_dict[args.colorcol][1] if args.colorcol in bounds_dict else None, cmap=colormap_dict[args.colorcol])

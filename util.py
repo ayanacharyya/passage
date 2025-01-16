@@ -116,7 +116,8 @@ def parse_args():
     parser.add_argument('--plot_direct_filters', dest='plot_direct_filters', action='store_true', default=False, help='Plot the direct filter images instead of the full diagnostic figure? Default is no.')
     parser.add_argument('--debug_vorbin', dest='debug_vorbin', action='store_true', default=False, help='Do extra plots and prints for debugging voronoi binning? Default is no.')
     parser.add_argument('--do_not_correct_flux', dest='do_not_correct_flux', action='store_true', default=False, help='Skip the step where it corrects for certain belnded line fluxes e.g., OIII5007, Ha, SII 6717? Default is no.')
-
+    parser.add_argument('--plot_AGN_frac', dest='plot_AGN_frac', action='store_true', default=False, help='Plot AGN fraction 2D map (based on BPT diagram)? Default is no.')
+    parser.add_argument('--diverging_cmap', metavar='diverging_cmap', type=str, action='store', default='cork', help='Which diverging colormap to use (out of managua, vanimo, lisbon, berlin)? Default is cork')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
@@ -789,13 +790,13 @@ def get_distance_from_Kewley2001(xdata, ydata, args, x_num='SII'):
         y = 1.3 + 0.72 / (x - 0.32) # Eq 6 of K01
 
     min_dist_arr = []
-    for P in zip(xdata, ydata):
+    for P in zip(xdata.flatten(), ydata.flatten()):
         min_idxs, distances = min_distance(x, y, P)
         if len(min_idxs) > 0: min_dist = distances[min_idxs[0]]
         else: min_dist = np.nan
         min_dist_arr.append(min_dist)
 
-    return np.array(min_dist_arr)
+    return np.reshape(min_dist_arr, np.shape(xdata))
 
 # -----------------------------------------------------------------
 def rebin(array, dimensions=None, scale=None):
@@ -874,6 +875,31 @@ def rebin(array, dimensions=None, scale=None):
     allowError = 0.1
     if array.sum() > 0: assert (array.sum() < result.sum() * (1 + allowError)) & (array.sum() > result.sum() * (1 - allowError))
     return result
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_custom_cmap(cmap_name, cmap_path=None):
+    '''
+    Computes custom colormaps, code borrowed from Eduardo Vitral
+
+    SET COLORMAPS FROM:
+    Crameri, F., G.E. Shephard, and P.J. Heron (2020)
+    The misuse of colour in science communication,
+    Nature Communications, 11, 5444.
+    https://doi.org/10.1038/s41467-020-19160-7
+    ---
+    Crameri, F.: Geodynamic diagnostics, scientific visualisation
+    and StagLab 3.0, Geosci. Model Dev. Discuss.,
+    https://doi.org/10.5194/gmd-2017-328, 2018.
+
+    Returns the colormap
+    '''
+
+    if cmap_path is None: cmap_path = HOME / 'Work/astro/ayan_codes/ScientificColourMaps8'
+    cpal_quant = np.loadtxt(cmap_path / cmap_name / f'{cmap_name}.txt')
+    mycmap_quant = mplcolors.ListedColormap(cpal_quant, name=cmap_name)
+
+    return mycmap_quant
+
 
 # --------------------------------------------------------------------------------------------------
 args = parse_args()
