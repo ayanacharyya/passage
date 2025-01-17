@@ -30,7 +30,7 @@ if __name__ == "__main__":
     plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
     description_text2 = f'diagnostics_and_extractions_{plot_conditions_text}'
 
-    df_int_filename = args.output_dir / f'allpar_venn_{plot_conditions_text}_df.txt'
+    df_int_filename = args.output_dir / 'catalogs' / f'allpar_venn_{plot_conditions_text}_df.txt'
     df_int = pd.read_csv(df_int_filename)
     df_int = df_int.sort_values(by=['field', 'objid']).reset_index(drop=True)
 

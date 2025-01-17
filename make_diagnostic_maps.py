@@ -22,7 +22,8 @@
 
              run make_diagnostic_maps.py --field Par28 --id 58,155,690,1200,1228,1395,1457,1585,1588 --plot_radial_profiles --only_seg --vorbin --voronoi_snr 3
              run make_diagnostic_maps.py --field Par28 --id 58,155,690,1200,1228,1395,1457,1585,1588 --plot_BPT --only_seg --vorbin --voronoi_snr 3 --plot_separately
-             run make_diagnostic_maps.py --field Par28 --id 58,155,1200,1457,1588 --plot_metallicity --plot_radial_profile --only_seg --vorbin --voronoi_snr 3
+             run make_diagnostic_maps.py --field Par28 --id 58,155,638,689,916,1457,1588 --plot_metallicity --plot_radial_profile --only_seg --vorbin --voronoi_snr 3
+             run make_diagnostic_maps.py --field Par28 --id 58,155,638,689,916,1457,1588 --plot_starburst --plot_radial_profile --only_seg --vorbin --voronoi_snr 3
 
              run make_diagnostic_maps.py --field Par28 --id 1457 --plot_AGN_frac --only_seg --vorbin --voronoi_snr 3
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
@@ -569,6 +570,12 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     line_map = line_map * factor
     line_map_err = line_map_err * factor
 
+    ndelta_xpix, ndelta_ypix = -2, 0
+    line_map = np.roll(line_map, ndelta_xpix, axis=1)
+    line_map_err = np.roll(line_map_err, ndelta_xpix, axis=1)
+    line_map = np.roll(line_map, ndelta_ypix, axis=0)
+    line_map_err = np.roll(line_map_err, ndelta_ypix, axis=0)
+
     line_map = trim_image(line_map, args)
     line_map_err = trim_image(line_map_err, args)
 
@@ -994,6 +1001,92 @@ def plot_Z_Te_map(full_hdu, ax, args, radprof_ax=None):
     return ax, logOH_map, logOH_radfit, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
+def compute_Z_O3S2(OIII5007_flux, Hbeta_flux, SII6717_flux, Halpha_flux):
+    '''
+    Calculates and returns the O3S2 metallicity given observed line fluxes
+    Conversion factor is from Curti+2019
+    '''
+    # -----handling masks separately because uncertainty package cannot handle masks---------
+    if np.ma.isMaskedArray(OIII5007_flux):
+        net_mask = SII6717_flux.mask | OIII5007_flux.mask | Hbeta_flux.mask | Halpha_flux.mask
+        OIII5007_flux = OIII5007_flux.data
+        Hbeta_flux = Hbeta_flux.data
+        SII6717_flux = SII6717_flux.data
+        Halpha_flux = Halpha_flux.data
+    else:
+        net_mask = False
+
+    k = [0.191, -4.292, -2.538, 0.053, 0.332]  # c0-4 parameters from Table 2 of Curti+19 last row
+
+    if hasattr(Hbeta_flux, "__len__"): # if it is an array
+        # --------computing the ratio and appropriate errors------------
+        new_mask1 = Hbeta_flux == 0
+        Hbeta_flux[new_mask1] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+
+        new_mask2 = Halpha_flux == 0
+        Halpha_flux[new_mask2] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+
+        new_mask3 = SII6717_flux == 0
+        SII6717_flux[new_mask3] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+
+        ratio = (OIII5007_flux / Hbeta_flux) / (SII6717_flux / Halpha_flux)
+        ratio = np.ma.masked_where(new_mask1 | new_mask2 | new_mask3, ratio)
+
+        # --------computing the log of the ratio and appropriate errors------------
+        new_mask = ratio <= 0
+        ratio[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        O3S2 = unp.log10(ratio.data)
+        O3S2 = np.ma.masked_where(new_mask | ratio.mask, O3S2)
+
+        # --------computing the polynomial and appropriate errors------------
+        log_OH = []
+        for this_O3S2 in O3S2.data.flatten():
+            solution = [item.real for item in np.roots(np.hstack([k[::-1], -1 * unp.nominal_values(this_O3S2)])) if item.imag == 0][0]
+            this_log_OH = solution + 8.69 # see Table 1 caption in Curti+19
+            log_OH.append(ufloat(this_log_OH, 0.))
+        log_OH = np.ma.masked_where(O3S2.mask | net_mask, np.reshape(log_OH, np.shape(O3S2)))
+
+    else: # if it is scalar
+        try:
+            ratio = (OIII5007_flux / Hbeta_flux) / (SII6717_flux / Halpha_flux)
+            O3S2 = unp.log10(ratio)
+            solution = [item.real for item in np.roots(np.hstack([k[::-1], -1 * unp.nominal_values(O3S2)])) if item.imag == 0][0]
+            log_OH = ufloat(solution + 8.69, 0.)  # see Table 1 caption in Curti+19
+        except:
+            log_OH = ufloat(np.nan, np.nan)
+
+    return log_OH
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_Z_O3S2(full_hdu, args):
+    '''
+    Computes and returns the spatially resolved as well as intregrated O3S2 metallicity from a given HDU
+    '''
+    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    Hbeta_map, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
+    SII6717_map, line_wave, SII6717_int, _ = get_emission_line_map('SII', full_hdu, args)
+    Halpha_map, line_wave, Halpha_int, _ = get_emission_line_map('Ha', full_hdu, args)
+
+    # special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back
+    ratio_5007_to_4959 = 2.98  # from grizli source code
+    factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
+    print(f'Re-correcting OIII to include the 4959 component, by factor of {factor:.3f}')
+    OIII5007_map = np.ma.masked_where(OIII5007_map.mask, OIII5007_map.data / factor)
+    OIII5007_int = OIII5007_int / factor
+
+    # special treatment for SII 6717 line, in order to account for and ADD the SII 6731 component back
+    ratio_6717_to_6731 = 1.  # from grizli source code
+    factor = ratio_6717_to_6731 / (1 + ratio_6717_to_6731)
+    print(f'Re-correcting SII to include 6731 component, by factor of {factor:.3f}')
+    SII6717_map = np.ma.masked_where(SII6717_map.mask, SII6717_map.data / factor)
+    SII6717_int = SII6717_int / factor
+
+    logOH_map = compute_Z_O3S2(OIII5007_map, Hbeta_map, SII6717_map, Halpha_map)
+    logOH_int = compute_Z_O3S2(OIII5007_int, Hbeta_int, SII6717_int, Halpha_int)
+
+    return logOH_map, logOH_int
+
+# --------------------------------------------------------------------------------------------------------------------
 def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux):
     '''
     Calculates and returns the R23 metallicity given observed line fluxes
@@ -1049,6 +1142,13 @@ def get_Z_R23(full_hdu, args):
     OII3727_map, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
     OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
     Hbeta_map, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
+
+    # special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back
+    ratio_5007_to_4959 = 2.98  # from grizli source code
+    factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
+    print(f'Re-correcting OIII to include the 4959 component, by factor of {factor:.3f}')
+    OIII5007_map = np.ma.masked_where(OIII5007_map.mask, OIII5007_map.data / factor)
+    OIII5007_int = OIII5007_int / factor
 
     logOH_map = compute_Z_R23(OII3727_map, OIII5007_map, Hbeta_map)
     logOH_int = compute_Z_R23(OII3727_int, OIII5007_int, Hbeta_int)
@@ -1320,13 +1420,15 @@ def plot_metallicity_map(full_hdu, args):
     if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
         # --------deriving the metallicity map-------------
         logOH_map, logOH_int = get_Z_R23(full_hdu, args)
+        #logOH_map, logOH_int = get_Z_O3S2(full_hdu, args)
 
         # ---------plotting-------------
         lim, label = [7.3, 8.3], 'log(O/H) (R23)'
         axes[0], logOH_radfit = plot_2D_map(logOH_map, axes[0], args, takelog=False, label=r'%s$_{\rm int}$ = %.1f $\pm$ %.1f' % (label, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
         logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
-        axes[1], _ = plot_2D_map(logOH_map_err, axes[1], args, takelog=False, label=r'%s uncertainty' % (label), cmap='cividis')
+        logOH_map_snr = np.ma.masked_where(logOH_map.mask, unp.nominal_values(10 ** logOH_map.data)) / np.ma.masked_where(logOH_map.mask, unp.std_devs(10 ** logOH_map.data))
+        axes[1], _ = plot_2D_map(logOH_map_snr, axes[1], args, takelog=False, label=r'%s SNR' % (label), cmap='cividis', vmin=0, vmax=6)
 
     else:
         print(f'Not all lines out of OIII, OII and Hb are available, so cannot compute R23 metallicity')
