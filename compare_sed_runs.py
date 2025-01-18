@@ -18,7 +18,7 @@ start_time = datetime.now()
 
 # -------------------------------------global dictionaries-------------------------------------------------------------------------------
 bounds_dict.update({'log_mass_bgp': (6.5, 10.5)})
-run_labels_dict = {'all_st_bands': 'Only ACS+NIRISS+NIRCAM+MIRI', 'including_nircam':'All+COSMOS Webb filters', 'narrow_z': 'All good filters', 'narrow_z_narrow_mass': 'All good filters', 'only_st_bands': 'Only ACS+NIRISS', 'increased_flux_err':' 30% more flux err'}
+run_labels_dict = {'Par028_including_nircam':'COSMOS+PASSAGE+COSMOS-Webb', 'Par028_all_st_bands':'Only ACS+NIRISS+NIRCAM+MIRI', 'Par052_including_nircam':'COSMOS+PASSAGE+COSMOS-Webb', 'Par052_all_st_bands':'Only ACS+NIRISS+NIRCAM+MIRI', 'all_st_bands': 'Only ACS+NIRISS+NIRCAM+MIRI', 'including_nircam':'All+COSMOS Webb filters', 'narrow_z': 'All good filters', 'narrow_z_narrow_mass': 'All good filters', 'only_st_bands': 'Only ACS+NIRISS', 'increased_flux_err':' 30% more flux err'}
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -31,13 +31,23 @@ if __name__ == "__main__":
 
     # -------determining SED runs and file names----------------
     runs = args.run.split(',')
-    suffix_dict = defaultdict(lambda: '', _x=f': {run_labels_dict[runs[0]]}', _y=f': {run_labels_dict[runs[1]]}')
+    try: suffix_dict = defaultdict(lambda: '', _x=f': {run_labels_dict[runs[0]]}', _y=f': {run_labels_dict[runs[1]]}')
+    except KeyError: suffix_dict = defaultdict(lambda: '', _x=f': {runs[0]}', _y=f': {runs[1]}')
     plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
     plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
     figname = args.output_dir / 'plots' / f'allpar_venn_{plot_conditions_text}_SEDcomp_{args.xcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_vs_{args.ycol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_colorby_{args.colorcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}.png'
 
     # -------reading in and merging dataframe produced by compute_stellar_masses.py----------------
-    df_infilename = args.output_dir / 'catalogs' / f'allpar_venn_{plot_conditions_text}_df.txt'
+    if args.do_field is None:
+        plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
+        plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
+        args.field_set_plot_conditions_text = f'allpar_venn_{plot_conditions_text}'
+        df_infilename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df.txt'
+    else:
+        args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
+        args.field_set_plot_conditions_text = f'{args.field}_allmatch'
+        df_infilename = args.output_dir / args.field / f'{args.field}_all_diag_results.txt'
+
     df_infilename_x = Path(str(df_infilename).replace('.txt', f'_withSED_{runs[0]}.csv'))
     df_infilename_y = Path(str(df_infilename).replace('.txt', f'_withSED_{runs[1]}.csv'))
 

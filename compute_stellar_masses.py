@@ -13,6 +13,7 @@
              run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z
              run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --run narrow_z_narrow_mass
              run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --clobber_sed_photcat --use_only_bands acs,niriss --run only_st_bands --ncpus 3
+             run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --fit_sed --clobber_sed_photcat --use_only_bands acs,niriss --run only_st_bands --ncpus 3
              run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --fit_sed --run narrow_z_narrow_mass --ncpus 1 --plot_restframe --log_x --test_sed
 
              run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --fit_sed --run narrow_z_narrow_mass --plot_restframe
