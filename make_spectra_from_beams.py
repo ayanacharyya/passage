@@ -20,7 +20,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     # ------determining directories and global variables---------
-    args.work_dir = args.input_dir / args.field / 'Extractions'
+    args.work_dir = args.input_dir / args.drv / args.field / 'Extractions'
     os.chdir(args.work_dir)
 
     # ------------read in catalog file--------------------------------
@@ -29,10 +29,10 @@ if __name__ == "__main__":
             id_arr = ids_to_re_extract_dict[args.field]
         else:
             try:
-                catalog_file = args.input_dir / args.field / 'Prep' / f'{args.field}_phot.fits'
+                catalog_file = args.input_dir / args.drv / args.field / 'Prep' / f'{args.field}_phot.fits'
                 catalog = GTable.read(catalog_file)
             except:
-                catalog_file = args.input_dir / args.field / 'Products' / f'{args.field}_photcat.fits'
+                catalog_file = args.input_dir / args.drv / args.field / 'Products' / f'{args.field}_photcat.fits'
                 catalog = GTable.read(catalog_file)
             id_arr = catalog['id']
     else:

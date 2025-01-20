@@ -7,6 +7,8 @@
     Example: run make_combined_animation_from_gdrive.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --plot_radial_profiles --only_seg --snr_cut 3
              run make_combined_animation_from_gdrive.py --plot_radial_profiles --only_seg --snr_cut 3 --only_download
              run make_combined_animation_from_gdrive.py --plot_radial_profiles --only_seg --snr_cut 3 --field Par47
+             run make_combined_animation_from_gdrive.py --do_only_fields Par28 --drv 0.5 --plot_radial_profiles --only_seg
+
 '''
 
 from header import *
@@ -95,20 +97,26 @@ if __name__ == "__main__":
     description_text2 = f'diagnostics_and_extractions'
 
     # --------query passage folder and see which fields available------------------
-    all_photcat_files = [args.input_dir / f'Par{int(field[3:]):03}' / 'Products' / f'Par{int(field[3:]):03}_photcat.fits' for field in fields_of_interest]
-    if np.array([os.path.exists(file) for file in all_photcat_files]).all():
-        field_list = fields_of_interest
-        print(f'All fields are of interest have been downloaded already, so skipping the goggle drive query step.')
-    else:
-        credentials = get_credentials()
-        items, _ = query_google_drive_folder(passage_url_id, credentials)
-        field_url_dict = {item['name']:item['id'] for item in items if item['name'].startswith('Par') and item ['mimeType'].endswith('.folder')}
-        fields_in_gdrive = list(field_url_dict.keys())
-        print(f'..out of which {len(fields_in_gdrive)} are PASSAGE fields...')
+    if args.do_only_fields is None:
+        all_photcat_files = [args.input_dir / f'Par{int(field[3:]):03}' / 'Products' / f'Par{int(field[3:]):03}_photcat.fits' for field in fields_of_interest]
+        if np.array([os.path.exists(file) for file in all_photcat_files]).all():
+            field_list = fields_of_interest
+            print(f'All fields are of interest have been downloaded already, so skipping the goggle drive query step.')
+        else:
+            credentials = get_credentials()
+            items, _ = query_google_drive_folder(passage_url_id, credentials)
+            field_url_dict = {item['name']:item['id'] for item in items if item['name'].startswith('Par') and item ['mimeType'].endswith('.folder')}
+            fields_in_gdrive = list(field_url_dict.keys())
+            print(f'..out of which {len(fields_in_gdrive)} are PASSAGE fields...')
 
         field_list = list(set(fields_of_interest).intersection(fields_in_gdrive))
+        field_list = np.unique(field_list + [f'Par{int(item.split("Par")[1])}' for item in args.field_arr]).tolist()  # adding some additional fields to the mix, if any
+    else:
+        args.field_arr = args.do_only_fields.split(',')
+        for index in range(len(args.field_arr)):
+            if 'Par' in args.field_arr[index]: args.field_arr[index] = f'Par{int(args.field_arr[index].split("Par")[1]):03d}'
+        field_list = args.field_arr
 
-    field_list = np.unique(field_list + [f'Par{int(item.split("Par")[1])}' for item in args.field_arr]).tolist() # adding some additional fields to the mix, if any
     field_list.sort(key=natural_keys)
     print(f'...out of which {len(field_list)} fields are of interest.')
 
@@ -119,8 +127,8 @@ if __name__ == "__main__":
         print(f'\n\nCommencing field {args.field} which is {index+1} of {len(field_list)}..')
 
         # ----------determining filenames etc. to check for presence----------
-        products_path = args.input_dir / args.field / 'Products'
-        extraction_path = args.input_dir / args.field / 'Extractions'
+        products_path = args.input_dir / args.drv / args.field / 'Products'
+        extraction_path = args.input_dir / args.drv / args.field / 'Extractions'
         output_dir = args.output_dir / args.field
         file_to_check_for = f'{args.field}__{description_text2}_anim.mp4'
 

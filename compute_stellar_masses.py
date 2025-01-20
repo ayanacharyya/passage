@@ -288,7 +288,7 @@ def plot_niriss_direct(df_fluxes, args):
     n_obj = len(df_fluxes)
     n_figs = int(np.ceil(n_obj / max_cutouts_per_page))
     cmap = 'viridis'
-    image_dir = args.input_dir / args.field / 'Products'
+    image_dir = args.input_dir / args.drv / args.field / 'Products'
 
     if args.fontsize == 10: args.fontsize = 15
     cutout_size = 2 * args.arcsec_limit # in arcsec

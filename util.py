@@ -42,8 +42,10 @@ def parse_args():
     parser.add_argument('--keep', dest='keep', action='store_true', default=False, help='Keep existing plot windows open? Default is no.')
     parser.add_argument('--forpaper', dest='forpaper', action='store_true', default=False, help='Format plots to paper quality? Default is no.')
     parser.add_argument('--fortalk', dest='fortalk', action='store_true', default=False, help='Format plots suitable for putting in talks? Default is no.')
+    parser.add_argument('--drv', metavar='drv', type=str, action='store', default='v0.1', help='Which data reduction version? Default v0.1')
 
     parser.add_argument('--field', metavar='field', type=str, action='store', default='Par3', help='Which passage field? Default is Par50')
+    parser.add_argument('--do_only_fields', metavar='do_only_fields', type=str, action='store', default=None, help='Which passage field? Default is Par50')
     parser.add_argument('--id', metavar='id', type=str, action='store', default='100', help='Object ID. Default is 100')
 
     # ------- args added for make_spectra_from_beam.py ------------------------------
@@ -167,6 +169,7 @@ def parse_args():
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
+    if 'v' not in args.drv: args.drv = 'v' + args.drv
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
 
     args.field_arr = args.field.split(',')

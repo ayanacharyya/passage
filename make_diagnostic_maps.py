@@ -1228,7 +1228,7 @@ def get_direct_image_per_filter(full_hdu, filter, target_header, args, plot_test
     pos = SkyCoord(*(pos * u.deg), frame='fk5')
 
     # ---------making cut outs-------------
-    drizzled_image_filename = glob.glob(str(args.input_dir / args.field / f'Products/{args.field}*{filter.lower()}_drz_sci.fits'))[0]
+    drizzled_image_filename = glob.glob(str(args.input_dir / args.drv / args.field / f'Products/{args.field}*{filter.lower()}_drz_sci.fits'))[0]
     direct_map = get_cutout(drizzled_image_filename, pos, size, target_header, args, plot_test_axes=plot_test_axes)
     direct_map_wht = get_cutout(drizzled_image_filename.replace('sci', 'wht'), pos, size, target_header, args)
 
@@ -1576,7 +1576,7 @@ if __name__ == "__main__":
 
     # ---------determining list of fields----------------
     if args.do_all_fields:
-        field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par*') + '/')]
+        field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / args.drv / 'Par*') + '/')]
         field_list.sort(key=natural_keys)
     else:
         field_list = args.field_arr
@@ -1587,7 +1587,7 @@ if __name__ == "__main__":
         args.field = f'Par{int(field[3:]):03}' if len(field) < 6 else field
         print(f'\n\nCommencing field {args.field} which is {index2 + 1} of {len(field_list)}..')
 
-        product_dir = args.input_dir / args.field / 'Products'
+        product_dir = args.input_dir / args.drv / args.field / 'Products'
         output_dir = args.output_dir / args.field
         if args.re_extract: output_dir = output_dir / 're_extracted'
         output_dir.mkdir(parents=True, exist_ok=True)

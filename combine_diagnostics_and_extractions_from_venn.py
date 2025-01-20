@@ -46,8 +46,8 @@ if __name__ == "__main__":
         args.field = row['field']
         args.id = row['objid']
 
-        extraction_path = args.input_dir / args.field / 'Extractions'
-        products_path = args.input_dir / args.field / 'Products'
+        extraction_path = args.input_dir / args.drv / args.field / 'Extractions'
+        products_path = args.input_dir / args.drv / args.field / 'Products'
         diag_img_dir = args.output_dir / args.field / f'{description_text}'
 
         # ------------read in grizli images and plot comparison--------------------------------

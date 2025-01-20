@@ -18,8 +18,8 @@ if __name__ == "__main__":
     args = parse_args()
 
     # ------determining directories and global variables---------
-    args.raw_dir = args.input_dir / args.field / 'RAW'
-    args.work_dir = args.input_dir / args.field / 'Extractions'
+    args.raw_dir = args.input_dir / args.drv / args.field / 'RAW'
+    args.work_dir = args.input_dir / args.drv / args.field / 'Extractions'
     os.chdir(args.work_dir)
     root = args.field
 

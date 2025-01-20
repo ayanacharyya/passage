@@ -18,8 +18,8 @@ if __name__ == "__main__":
     args = parse_args()
 
     # ------determining directories and global variables---------
-    args.raw_dir = args.input_dir / args.field / 'RAW'
-    args.work_dir = args.input_dir / args.field / 'Prep'
+    args.raw_dir = args.input_dir / args.drv / args.field / 'RAW'
+    args.work_dir = args.input_dir / args.drv / args.field / 'Prep'
     root = args.field
     os.chdir(args.work_dir)
 
@@ -90,7 +90,7 @@ if __name__ == "__main__":
 
         grp = multifit.GroupFLT(grism_files=glob.glob('*GrismFLT.fits'), catalog='{0}-ir.cat.fits'.format(root), cpu_count=-1, sci_extn=1, pad=800)
     else:
-        os.chdir(args.input_dir / args.field / 'Extractions')
+        os.chdir(args.input_dir / args.drv / args.field / 'Extractions')
         grp = multifit.GroupFLT(grism_files=glob.glob('*GrismFLT.fits'), catalog='{0}-ir.cat.fits'.format(root), cpu_count=-1, sci_extn=1, pad=800)
 
     # ---------------------------------------

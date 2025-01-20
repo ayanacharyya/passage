@@ -411,7 +411,7 @@ def read_stats_df(df_filename, args):
     To read in the dataframe produced by make_diagnostic_plots.py
     Returns dataframe
     '''
-    extract_dir = args.input_dir / args.field / 'Extractions'
+    extract_dir = args.input_dir / args.drv / args.field / 'Extractions'
     # -------initiliasing dataframe-------------------------------
     df = pd.read_csv(df_filename)
 
@@ -421,7 +421,7 @@ def read_stats_df(df_filename, args):
         phot_catalog = GTable.read(phot_catalog_file)
     except:
         try:
-            phot_catalog_file = args.input_dir / args.field / 'Products' / f'{args.field}_photcat.fits'
+            phot_catalog_file = args.input_dir / args.drv / args.field / 'Products' / f'{args.field}_photcat.fits'
             phot_catalog = GTable.read(phot_catalog_file)
         except:
             phot_catalog = None
@@ -445,7 +445,7 @@ def read_stats_df(df_filename, args):
     for line in line_list: columns_to_extract += [f'{item}_{line}' for item in grab_for_each_line]
 
     try:
-        spec_catalog_file = args.input_dir / args.field / 'Products' / f'{args.field}_speccat.fits'
+        spec_catalog_file = args.input_dir / args.drv / args.field / 'Products' / f'{args.field}_speccat.fits'
         spec_catalog = GTable.read(spec_catalog_file)
     except:
         spec_catalog = None
