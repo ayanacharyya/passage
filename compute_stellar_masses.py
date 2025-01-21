@@ -775,6 +775,16 @@ if __name__ == "__main__":
         df_int_filename = args.output_dir / args.field / f'{args.field}_all_diag_results.csv'
 
     photcat_filename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_passage_cosmos_fluxes{args.cosmos_webb_text}.csv'
+
+    if os.path.exists(df_int_filename):
+        print(f'Reading in main df from {df_int_filename}')
+    else:
+        print(f'Could not find {df_int_filename},')
+        df_int_filename = Path(str(df_int_filename).replace(f'_{args.drv}', ''))
+        if os.path.exists(df_int_filename):
+            print(f'Loading df from {df_int_filename} instead')
+        else:
+            sys.exit(f'{df_int_filename} does not exist')
     df_int = pd.read_csv(df_int_filename)
 
     df_fluxes = get_flux_catalog(photcat_filename, df_int, args)
@@ -797,7 +807,7 @@ if __name__ == "__main__":
         if args.use_only_bands is not None:
             print(f'\nSelecting only bands with {args.use_only_bands} in the filter name..')
             use_bands = args.use_only_bands.split(',')
-            useless_fluxcols = [col for col in fluxcols if np.array([band.lower() not in col.lower() for band in use_bands]).all()]
+            useless_fluxcols = [col for col in fluxcols if np.array([band not in col for band in use_bands]).all()]
             print(f'Therefore, dropping {useless_fluxcols} bands..\n\n..and keeping {list(set(fluxcols) - set(useless_fluxcols))} bands\n')
             useless_errcols = [item.replace('_sci', '_err') for item in useless_fluxcols]
             df_fluxes.drop(useless_fluxcols, axis=1, inplace=True)

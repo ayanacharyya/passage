@@ -359,7 +359,7 @@ if __name__ == "__main__":
                 print(f'Loading pre-SED df from {df_infilename} instead')
             else:
                 print(f'Could not find {df_infilename},')
-                df_infilename = Path(str(df_infilename).replace('_v0.5', ''))
+                df_infilename = Path(str(df_infilename).replace(f'_{args.drv}', ''))
                 if os.path.exists(df_infilename):
                     print(f'Loading df from {df_infilename} instead')
                 else:
