@@ -342,18 +342,33 @@ if __name__ == "__main__":
         if args.do_field is None:
             plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
             plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
-            args.field_set_plot_conditions_text = f'allpar_venn_{plot_conditions_text}'
-            df_infilename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df_withSED_{args.run}.csv'
+            args.field_set_plot_conditions_text = f'allpar_{args.drv}_venn_{plot_conditions_text}'
+            if len(args.run) > 0 and args.run[0] != '_': args.run = '_' + args.run
+            df_infilename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df_withSED{args.run}.csv'
         else:
             args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
-            args.field_set_plot_conditions_text = f'{args.field}_allmatch'
+            args.field_set_plot_conditions_text = f'{args.field}_{args.drv}_allmatch'
             df_infilename = args.output_dir / args.field / f'{args.field}_all_diag_results_withSED_{args.run}.csv'
 
+        if os.path.exists(df_infilename):
+            print(f'Reading in main df from {df_infilename}')
+        else:
+            print(f'Could not find {df_infilename},')
+            df_infilename = Path(str(df_infilename)[:str(df_infilename).find('withSED') - 1] + '.txt')
+            if os.path.exists(df_infilename):
+                print(f'Loading pre-SED df from {df_infilename} instead')
+            else:
+                print(f'Could not find {df_infilename},')
+                df_infilename = Path(str(df_infilename).replace('_v0.5', ''))
+                if os.path.exists(df_infilename):
+                    print(f'Loading df from {df_infilename} instead')
+                else:
+                    sys.exit(f'{df_infilename} does not exist')
+
         df = pd.read_csv(df_infilename)
-        print(f'Reading in main df from {df_infilename}')
 
         # -------combing with metallicity dataframe if it exists----------------
-        logOHgrad_filename = args.output_dir / 'catalogs' / f'logOHgrad_df_onlyseg_vorbin_at_Ha_SNR_3.0.txt'
+        logOHgrad_filename = args.output_dir / 'catalogs' / f'logOHgrad_df_snr{args.snr_cut}_onlyseg_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}.txt'
         if os.path.exists(logOHgrad_filename) and args.do_field is None:
             print(f'Reading in and merging logOH gradient df: {logOHgrad_filename}')
             df_logOHgrad = pd.read_csv(logOHgrad_filename)

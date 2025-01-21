@@ -568,7 +568,7 @@ if __name__ == "__main__":
     df_visual_filename = args.output_dir / 'catalogs' / f'all_fields_visual_inspection_results.txt'
     plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
     plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
-    df_outfilename = args.output_dir / 'catalogs' / f'allpar_venn_{plot_conditions_text}_df.txt'
+    df_outfilename = args.output_dir / 'catalogs' / f'allpar_{args.drv}_venn_{plot_conditions_text}_df.txt'
 
     # -------------------------------------------------------------------
     if not os.path.exists(df_outfilename) or args.clobber_venn_df:

@@ -103,7 +103,7 @@ if __name__ == "__main__":
         if not os.path.exists(alternate_path / diag_figname) and not os.path.exists(input_dir / diag_figname):
             print('Could not diagnostic maps image, so..')
 
-            command = ['python', 'make_diagnostic_maps.py', '--field', f'{args.field}', '--id', f'{args.id}']
+            command = ['python', 'make_diagnostic_maps.py', '--field', f'{args.field}', '--id', f'{args.id}', '--drv', f'{args.drv}']
             if args.plot_radial_profiles: command += ['--plot_radial_profiles']
             if args.only_seg: command += ['--only_seg']
             if args.snr_cut is not None: command += ['--snr_cut', f'{args.snr_cut}']

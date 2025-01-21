@@ -583,7 +583,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
         for index, row in df_fluxes.iterrows():
             print(f'Getting NIRISS fluxes for object {index+1} out of {len(df_fluxes)}..')
             field = row['field']
-            product_dir = args.input_dir / field / 'Products'
+            product_dir = args.input_dir / args.drv / field / 'Products'
             photcat_file = product_dir / f'{field}_photcat.fits'
             df_photcat = Table(fits.open(photcat_file)[1].data).to_pandas()
             df_photcat.columns = df_photcat.columns.str.replace('f115w', 'NIRISS_F115W', regex=True)
@@ -767,11 +767,11 @@ if __name__ == "__main__":
     if args.do_field is None:
         plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
         plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
-        args.field_set_plot_conditions_text = f'allpar_venn_{plot_conditions_text}'
+        args.field_set_plot_conditions_text = f'allpar_{args.drv}_venn_{plot_conditions_text}'
         df_int_filename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df.txt'
     else:
         args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
-        args.field_set_plot_conditions_text = f'{args.field}_allmatch'
+        args.field_set_plot_conditions_text = f'{args.field}_{args.drv}_allmatch'
         df_int_filename = args.output_dir / args.field / f'{args.field}_all_diag_results.csv'
 
     photcat_filename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_passage_cosmos_fluxes{args.cosmos_webb_text}.csv'

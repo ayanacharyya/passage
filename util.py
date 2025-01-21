@@ -188,7 +188,7 @@ def parse_args():
     if args.input_dir is None:
         args.input_dir = args.root_dir / 'passage_data/'
     if args.output_dir is None:
-        args.output_dir = args.root_dir / 'passage_output/'
+        args.output_dir = args.root_dir / 'passage_output/' / args.drv
 
     args.input_dir = Path(args.input_dir)
     args.output_dir = Path(args.output_dir)

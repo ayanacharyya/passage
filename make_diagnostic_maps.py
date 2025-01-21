@@ -1070,14 +1070,14 @@ def get_Z_O3S2(full_hdu, args):
     # special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back
     ratio_5007_to_4959 = 2.98  # from grizli source code
     factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
-    print(f'Re-correcting OIII to include the 4959 component, by factor of {factor:.3f}')
+    print(f'Re-correcting OIII to include the 4959 component, for computing O3S2 metallicity, by factor of {factor:.3f}')
     OIII5007_map = np.ma.masked_where(OIII5007_map.mask, OIII5007_map.data / factor)
     OIII5007_int = OIII5007_int / factor
 
     # special treatment for SII 6717 line, in order to account for and ADD the SII 6731 component back
     ratio_6717_to_6731 = 1.  # from grizli source code
     factor = ratio_6717_to_6731 / (1 + ratio_6717_to_6731)
-    print(f'Re-correcting SII to include 6731 component, by factor of {factor:.3f}')
+    print(f'Re-correcting SII to include 6731 component, for computing O3S2 metallicity, by factor of {factor:.3f}')
     SII6717_map = np.ma.masked_where(SII6717_map.mask, SII6717_map.data / factor)
     SII6717_int = SII6717_int / factor
 
@@ -1146,7 +1146,7 @@ def get_Z_R23(full_hdu, args):
     # special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back
     ratio_5007_to_4959 = 2.98  # from grizli source code
     factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
-    print(f'Re-correcting OIII to include the 4959 component, by factor of {factor:.3f}')
+    print(f'Re-correcting OIII to include the 4959 component, for computing R23 metallicity, by factor of {factor:.3f}')
     OIII5007_map = np.ma.masked_where(OIII5007_map.mask, OIII5007_map.data / factor)
     OIII5007_int = OIII5007_int / factor
 
@@ -1591,7 +1591,7 @@ if __name__ == "__main__":
         output_dir = args.output_dir / args.field
         if args.re_extract: output_dir = output_dir / 're_extracted'
         output_dir.mkdir(parents=True, exist_ok=True)
-        outfilename = output_dir / 'catalogs' / f'{args.field}_all_diag_results.csv'
+        outfilename = output_dir / f'{args.field}_all_diag_results.csv'
 
         if os.path.exists(outfilename) and not args.clobber and args.write_file:
             print(f'result file for {args.field} already exists as {outfilename}, so skipping this field.')
