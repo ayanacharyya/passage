@@ -18,7 +18,7 @@ start_time = datetime.now()
 
 # -------------------------------------global dictionaries-------------------------------------------------------------------------------
 bounds_dict.update({'log_mass_bgp': (6.5, 10.5)})
-run_labels_dict = {'Par028_including_nircam':'COSMOS+PASSAGE+COSMOS-Webb', 'Par028_all_st_bands':'Only ACS+NIRISS+NIRCAM+MIRI', 'Par052_including_nircam':'COSMOS+PASSAGE+COSMOS-Webb', 'Par052_all_st_bands':'Only ACS+NIRISS+NIRCAM+MIRI', 'all_st_bands': 'Only ACS+NIRISS+NIRCAM+MIRI', 'all_ground_based': 'Only CFHT+UVISTA+HSC+SC', 'including_nircam':'All+COSMOS Webb filters', 'narrow_z': 'All good filters', 'narrow_z_narrow_mass': 'All good filters', 'only_st_bands': 'Only ACS+NIRISS', 'increased_flux_err':' 30% more flux err'}
+run_labels_dict = {'Par028_including_nircam':'COSMOS+PASSAGE+COSMOS-Webb', 'Par028_all_st_bands':'Only ACS+NIRISS+NIRCAM+MIRI', 'Par052_including_nircam':'COSMOS+PASSAGE+COSMOS-Webb', 'Par052_all_st_bands':'Only ACS+NIRISS+NIRCAM+MIRI', 'all_st_bands':'Only ACS+NIRISS+NIRCAM+MIRI', 'all_ground_based':'Only CFHT+UVISTA+HSC+SC', 'all_space_based':'Only GALEX+IRAC+ACS+NIRISS+NIRCAM+MIRI', 'including_nircam':'All+COSMOS Webb filters', 'narrow_z': 'All good filters', 'narrow_z_narrow_mass': 'All good filters', 'only_st_bands': 'Only ACS+NIRISS', 'increased_flux_err':' 30% more flux err'}
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
