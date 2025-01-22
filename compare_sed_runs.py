@@ -10,6 +10,7 @@
              run compare_sed_runs.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp_x --ycol log_mass_bgp_y --colorcol redshift --run narrow_z,all_st_bands
 
              run compare_sed_runs.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --drv 0.1 --run all_ground_based,all_space_based --id 3139
+             run compare_sed_runs.py --line_list OIII,Ha --plot_conditions EW,mass,PA --drv 0.1 --run all_ground_based,all_space_based --do_all_obj
 '''
 
 from header import *
@@ -55,13 +56,20 @@ if __name__ == "__main__":
     runs = args.run.split(',')
 
     # --------------compare individual object properties---------------------
-    if args.id is not None:
-        args.id_arr = args.id
-        for args.id in args.id_arr:
+    if args.id is not None or args.do_all_obj:
+        all_ids = [int(os.path.split(item)[-1][:-3]) for item in glob.glob(str(args.output_dir / f'pipes/posterior/{runs[0]}/*.h5'))]
+        if args.do_all_obj: args.id_arr = all_ids
+        else: args.id_arr = args.id
+
+        output_dir = args.output_dir / 'pipes/plots/comparisons/'
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        for index, args.id in enumerate(args.id_arr):
+            print(f'\nCommencing ID {args.id} which is {index+1} of {len(args.id_arr)}..')
             # -------compare individual SED fits------------------
             fig, axes = plt.subplots(len(runs), 2, figsize=(14, 5))
             fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99, hspace=0.1, wspace=0.1)
-            figname = args.output_dir / 'plots' / f'allpar_venn_{plot_conditions_text}_{args.id}_SED_SFH_comp_{runs[0]}_vs_{runs[1]}.png'
+            figname = output_dir / f'allpar_venn_{plot_conditions_text}_{args.id}_SED_SFH_comp_{runs[0]}_vs_{runs[1]}.png'
 
             plot_paths = [args.output_dir / 'pipes/plots' / item for item in runs]
             posterior_paths = [args.output_dir / 'pipes/posterior' / item for item in runs]
@@ -71,7 +79,19 @@ if __name__ == "__main__":
                 axes[index][1] = display_file_in_ax(plot_paths[index] / f'{args.id}_sfh.pdf', axes[index][1])
 
                 posterior_file = h5py.File(posterior_paths[index] / f'{args.id}.h5', 'r')
-                axes[index][1].text(0.9, 0.8, f'log M = {posterior_file["median"][4]: .02f}', c='k', fontsize=args.fontsize, ha='right', va='top', transform=axes[index][1].transAxes)
+                axes[index][1].text(0.9, 0.8, f'log M* = {posterior_file["median"][4]: .02f}', c='k', fontsize=args.fontsize, ha='right', va='top', transform=axes[index][1].transAxes)
+
+            if len(args.id_arr) > 20: plt.close()
+            # --------for talk plots--------------
+            if args.fortalk:
+                try:
+                    mplcyberpunk.make_scatter_glow()
+                except:
+                    pass
+
+            fig.savefig(figname, transparent=args.fortalk)
+            print(f'\nSaved figure as {figname}')
+            plt.show(block=False)
 
     # --------------compare population properties---------------------
     else:
@@ -130,13 +150,13 @@ if __name__ == "__main__":
             ax.plot(line, line, ls='dashed', c='k', lw=1)
             if 'mass_bgp' in args.xcol and 'mass_bgp' in args.ycol: ax.plot(line, line - np.median(df[args.xcol].values - df[args.ycol].values), ls='dashed', c='r', lw=1)
 
-    # --------for talk plots--------------
-    if args.fortalk:
-        try: mplcyberpunk.make_scatter_glow()
-        except: pass
+        # --------for talk plots--------------
+        if args.fortalk:
+            try: mplcyberpunk.make_scatter_glow()
+            except: pass
 
-    fig.savefig(figname, transparent=args.fortalk)
-    print(f'\nSaved figure as {figname}')
-    plt.show(block=False)
+        fig.savefig(figname, transparent=args.fortalk)
+        print(f'\nSaved figure as {figname}')
+        plt.show(block=False)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

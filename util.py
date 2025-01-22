@@ -178,7 +178,7 @@ def parse_args():
         if 'Par' in args.field_arr[index]: args.field_arr[index] = f'Par{int(args.field_arr[index].split("Par")[1]):03d}'
     args.field = args.field_arr[0]
 
-    args.id = [int(item) for item in args.id.split(',')]
+    if args.id is not None: args.id = [int(item) for item in args.id.split(',')]
 
     if args.system == 'hd' and not os.path.exists('/Volumes/Elements/'): args.system = 'local'
     if args.line_list == 'all': args.line_list = ['Lya', 'OII', 'Hb', 'OIII-4363', 'OIII', 'Ha', 'NII','Ha+NII', 'SII', 'SIII', 'PaD','PaG','PaB','HeI-1083','PaA']
