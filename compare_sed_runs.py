@@ -8,10 +8,14 @@
 
              run compare_sed_runs.py --line_list OIII,Ha --plot_conditions EW,mass,PA --xcol log_mass_bgp_x --ycol log_mass_bgp_y --colorcol redshift --run narrow_z,all_st_bands
              run compare_sed_runs.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp_x --ycol log_mass_bgp_y --colorcol redshift --run narrow_z,all_st_bands
+
+             run compare_sed_runs.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --drv 0.1 --run all_ground_based,all_space_based --id 3139
 '''
 
 from header import *
 from util import *
+import h5py
+from PIL import Image
 from make_passage_plots import bounds_dict, label_dict, colormap_dict
 
 start_time = datetime.now()
@@ -25,63 +29,90 @@ if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
 
-    # -----------declaring fig handles--------
-    fig, ax = plt.subplots(1, figsize=(8, 6))
-    fig.subplots_adjust(left=0.1, right=0.98, bottom=0.1, top=0.95)
-
     # -------determining SED runs and file names----------------
-    runs = args.run.split(',')
-    try: suffix_dict = defaultdict(lambda: '', _x=f': {run_labels_dict[runs[0]]}', _y=f': {run_labels_dict[runs[1]]}')
-    except KeyError: suffix_dict = defaultdict(lambda: '', _x=f': {runs[0]}', _y=f': {runs[1]}')
     plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
     plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
-    figname = args.output_dir / 'plots' / f'allpar_venn_{plot_conditions_text}_SEDcomp_{args.xcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_vs_{args.ycol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_colorby_{args.colorcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}.png'
+    runs = args.run.split(',')
 
-    # -------reading in and merging dataframe produced by compute_stellar_masses.py----------------
-    if args.do_field is None:
-        plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
-        plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
-        args.field_set_plot_conditions_text = f'allpar_{args.drv}_venn_{plot_conditions_text}'
-        df_infilename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df.txt'
+    # --------------compare individual object properties---------------------
+    if True:
+        args.id_arr = args.id
+        for args.id in args.id_arr:
+            # -------compare individual SED fits------------------
+            fig, axes = plt.subplots(len(runs), 2, figsize=(14, 5))
+            fig.subplots_adjust(left=0.1, right=0.98, bottom=0.1, top=0.95, hspace=0.1, wspace=0.1)
+            figname = args.output_dir / 'plots' / f'allpar_venn_{plot_conditions_text}_{args.id}_SED_SFH_comp_{runs[0]}_vs_{runs[1]}.png'
+
+            plot_paths = [args.output_dir / 'pipes/plots' / item for item in runs]
+            posterior_paths = [args.output_dir / 'pipes/posterior' / item for item in runs]
+
+            for index in range(len(runs)):
+                pdf_file = fitz.open(file)
+                sed = mpimg.imread(plot_paths[index] / f'{args.id}_fit_log_x.pdf')
+                axes[index][0].imshow(sed, origin='upper')
+
+                sfh = mpimg.imread(plot_paths[index] / f'{args.id}_corner.pdf')
+                axes[index][0].imshow(sfh, origin='upper')
+
+                posterior_file = h5py.File(posterior_paths[index] / f'{args.id}.h5', 'r')
+                print(list(posterior_file.keys())) #
+
+    # --------------compare population properties---------------------
     else:
-        args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
-        args.field_set_plot_conditions_text = f'{args.field}_{args.drv}_allmatch'
-        df_infilename = args.output_dir / args.field / f'{args.field}_all_diag_results.txt'
+        # -----------declaring fig handles--------
+        fig, ax = plt.subplots(1, figsize=(8, 6))
+        fig.subplots_adjust(left=0.1, right=0.98, bottom=0.1, top=0.95)
 
-    df_infilename_x = Path(str(df_infilename).replace('.txt', f'_withSED_{runs[0]}.csv'))
-    df_infilename_y = Path(str(df_infilename).replace('.txt', f'_withSED_{runs[1]}.csv'))
+        # -------determining SED runs and file names----------------
+        try: suffix_dict = defaultdict(lambda: '', _x=f': {run_labels_dict[runs[0]]}', _y=f': {run_labels_dict[runs[1]]}')
+        except KeyError: suffix_dict = defaultdict(lambda: '', _x=f': {runs[0]}', _y=f': {runs[1]}')
+        figname = args.output_dir / 'plots' / f'allpar_venn_{plot_conditions_text}_SEDcomp_{args.xcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_vs_{args.ycol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}_colorby_{args.colorcol.replace("_x", "_" + runs[0]).replace("_y", "_" + runs[1])}.png'
 
-    df_x = pd.read_csv(df_infilename_x)
-    df_y = pd.read_csv(df_infilename_y)
-    print(f'Read in dfs to compare from {df_infilename_x} and {df_infilename_y}')
+        # -------reading in and merging dataframe produced by compute_stellar_masses.py----------------
+        if args.do_field is None:
+            plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
+            plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
+            args.field_set_plot_conditions_text = f'allpar_{args.drv}_venn_{plot_conditions_text}'
+            df_infilename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df.txt'
+        else:
+            args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
+            args.field_set_plot_conditions_text = f'{args.field}_{args.drv}_allmatch'
+            df_infilename = args.output_dir / args.field / f'{args.field}_all_diag_results.txt'
 
-    bgp_columns = [item for item in df_x.columns if 'bgp' in item]
-    other_columns = list(set(df_x.columns) - set(bgp_columns))
-    df = df_x.merge(df_y, on=other_columns)
+        df_infilename_x = Path(str(df_infilename).replace('.txt', f'_withSED_{runs[0]}.csv'))
+        df_infilename_y = Path(str(df_infilename).replace('.txt', f'_withSED_{runs[1]}.csv'))
 
-    # ---------making the plot-----------
-    p = ax.scatter(df[args.xcol], df[args.ycol], c=df[args.colorcol], plotnonfinite=True, s=100, lw=1, edgecolor='w' if args.fortalk else 'k', vmin=bounds_dict[args.colorcol.rstrip('_x').rstrip('_y')][0] if args.colorcol.rstrip('_x').rstrip('_y') in bounds_dict else None, vmax=bounds_dict[args.colorcol.rstrip('_x').rstrip('_y')][1] if args.colorcol.rstrip('_x').rstrip('_y') in bounds_dict else None)
-    if args.ycol + '_u' in df and not args.foggie_comp:  # if uncertainty column exists
-        ax.errorbar(df[args.xcol], df[args.ycol], yerr=df[args.ycol + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
-    if args.xcol + '_u' in df and not args.foggie_comp:  # if uncertainty column exists
-        ax.errorbar(df[args.xcol], df[args.ycol], xerr=df[args.xcol + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+        df_x = pd.read_csv(df_infilename_x)
+        df_y = pd.read_csv(df_infilename_y)
+        print(f'Read in dfs to compare from {df_infilename_x} and {df_infilename_y}')
 
-    cbar = plt.colorbar(p)
-    cbar.set_label(label_dict[args.colorcol.rstrip('_x').rstrip('_y')] + suffix_dict[args.colorcol[-2:]] if args.colorcol.rstrip('_x').rstrip('_y') in label_dict else args.colorcol)
+        bgp_columns = [item for item in df_x.columns if 'bgp' in item]
+        other_columns = list(set(df_x.columns) - set(bgp_columns))
+        df = df_x.merge(df_y, on=other_columns)
 
-    # ---------annotate axes and save figure-------
-    if len(ax.get_legend_handles_labels()[0]) > 0: plt.legend()
-    ax.set_xlabel(label_dict[args.xcol.rstrip('_x').rstrip('_y')] + suffix_dict[args.xcol[-2:]] if args.xcol.rstrip('_x').rstrip('_y') in label_dict else args.xcol)
-    ax.set_ylabel(label_dict[args.ycol.rstrip('_x').rstrip('_y')] + suffix_dict[args.ycol[-2:]] if args.ycol.rstrip('_x').rstrip('_y') in label_dict else args.ycol)
+        # ---------making the plot-----------
+        p = ax.scatter(df[args.xcol], df[args.ycol], c=df[args.colorcol], plotnonfinite=True, s=100, lw=1, edgecolor='w' if args.fortalk else 'k', vmin=bounds_dict[args.colorcol.rstrip('_x').rstrip('_y')][0] if args.colorcol.rstrip('_x').rstrip('_y') in bounds_dict else None, vmax=bounds_dict[args.colorcol.rstrip('_x').rstrip('_y')][1] if args.colorcol.rstrip('_x').rstrip('_y') in bounds_dict else None)
+        if args.ycol + '_u' in df and not args.foggie_comp:  # if uncertainty column exists
+            ax.errorbar(df[args.xcol], df[args.ycol], yerr=df[args.ycol + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+        if args.xcol + '_u' in df and not args.foggie_comp:  # if uncertainty column exists
+            ax.errorbar(df[args.xcol], df[args.ycol], xerr=df[args.xcol + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 
-    if args.xcol.rstrip('_x').rstrip('_y') in bounds_dict: ax.set_xlim(bounds_dict[args.xcol.rstrip('_x').rstrip('_y')][0], bounds_dict[args.xcol.rstrip('_x').rstrip('_y')][1])
-    if args.ycol.rstrip('_x').rstrip('_y') in bounds_dict: ax.set_ylim(bounds_dict[args.ycol.rstrip('_x').rstrip('_y')][0], bounds_dict[args.ycol.rstrip('_x').rstrip('_y')][1])
+        cbar = plt.colorbar(p)
+        cbar.set_label(label_dict[args.colorcol.rstrip('_x').rstrip('_y')] + suffix_dict[args.colorcol[-2:]] if args.colorcol.rstrip('_x').rstrip('_y') in label_dict else args.colorcol)
 
-    # ---------comparing SFRs-------
-    if args.xcol[:-2] == args.ycol[:-2]:
-        line = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 10)
-        ax.plot(line, line, ls='dashed', c='k', lw=1)
-        if 'mass_bgp' in args.xcol and 'mass_bgp' in args.ycol: ax.plot(line, line - np.median(df[args.xcol].values - df[args.ycol].values), ls='dashed', c='r', lw=1)
+        # ---------annotate axes and save figure-------
+        if len(ax.get_legend_handles_labels()[0]) > 0: plt.legend()
+        ax.set_xlabel(label_dict[args.xcol.rstrip('_x').rstrip('_y')] + suffix_dict[args.xcol[-2:]] if args.xcol.rstrip('_x').rstrip('_y') in label_dict else args.xcol)
+        ax.set_ylabel(label_dict[args.ycol.rstrip('_x').rstrip('_y')] + suffix_dict[args.ycol[-2:]] if args.ycol.rstrip('_x').rstrip('_y') in label_dict else args.ycol)
+
+        if args.xcol.rstrip('_x').rstrip('_y') in bounds_dict: ax.set_xlim(bounds_dict[args.xcol.rstrip('_x').rstrip('_y')][0], bounds_dict[args.xcol.rstrip('_x').rstrip('_y')][1])
+        if args.ycol.rstrip('_x').rstrip('_y') in bounds_dict: ax.set_ylim(bounds_dict[args.ycol.rstrip('_x').rstrip('_y')][0], bounds_dict[args.ycol.rstrip('_x').rstrip('_y')][1])
+
+        # ---------comparing SFRs-------
+        if args.xcol[:-2] == args.ycol[:-2]:
+            line = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 10)
+            ax.plot(line, line, ls='dashed', c='k', lw=1)
+            if 'mass_bgp' in args.xcol and 'mass_bgp' in args.ycol: ax.plot(line, line - np.median(df[args.xcol].values - df[args.ycol].values), ls='dashed', c='r', lw=1)
 
     # --------for talk plots--------------
     if args.fortalk:

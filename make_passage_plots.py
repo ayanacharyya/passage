@@ -410,6 +410,18 @@ if __name__ == "__main__":
                         pass
                 if counter > 0: print(f'\n{counter} out of {len(df)} had -ve SFRs!')
 
+            for thiscol in [item for item in df.columns if 'logOH' in item and 'int' in item]:
+                if df[thiscol].dtype == object: # accompanied by uncertainty in the same column
+                    for index, item in enumerate(df[thiscol]):
+                        if 'e' in item:
+                            pow = float(item[item.find('e') + 1:])
+                            base = np.array(item[1:item.find('e') - 1].split('+/-')).astype(np.float64)
+                            quant = base * 10 ** pow
+                        else:
+                            quant = np.array(item.split('+/-')).astype(np.float64)
+                        df.at[index, thiscol] = quant[0]
+                        df.at[index, thiscol + '_u'] = quant[1]
+
             # ---------SFMS from df-------
             p = ax.scatter(df[args.xcol], df[args.ycol], c='gold' if args.foggie_comp else df[args.colorcol], plotnonfinite=True, marker='*' if args.foggie_comp else 'o', s=1000 if args.foggie_comp else 100, lw=1, edgecolor='w' if args.fortalk else 'k', vmin=bounds_dict[args.colorcol][0] if args.colorcol in bounds_dict else None, vmax=bounds_dict[args.colorcol][1] if args.colorcol in bounds_dict else None, cmap=colormap_dict[args.colorcol])
             if args.ycol + '_u' in df and not args.foggie_comp: # if uncertainty column exists
@@ -432,7 +444,7 @@ if __name__ == "__main__":
                 ax = plot_SFMS_Whitaker14(ax, 1.8, color='yellowgreen')
 
             # ---------MZR from literature-------
-            if args.xcol == 'lp_mass' and 'logOH' in args.ycol and 'slope' not in args.ycol:
+            if 'mass' in args.xcol and 'logOH' in args.ycol and 'slope' not in args.ycol:
                 ax = plot_MZR_literature(ax)
 
             # ---------annotate axes and save figure-------
@@ -454,6 +466,10 @@ if __name__ == "__main__":
             if args.xcol == 'redshift' and args.ycol == 'logOH_slope' and args.foggie_comp: # special case, to match the FOGGIE plot limits
                 ax.set_xlim(4, 0.5)
                 ax.set_ylim(-0.5, 0.4)
+
+            if 'mass' in args.xcol and 'logOH' in args.ycol and 'slope' not in args.ycol:
+                ax.set_xlim(6.5, 12.0)
+                ax.set_ylim(6.5, 10.0)
 
     # --------for talk plots--------------
     if args.fortalk:

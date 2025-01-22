@@ -920,7 +920,7 @@ if __name__ == "__main__":
 
         # ------writing modified df with stellar masses etc-------------------
         if args.test_sed is None:
-            df_int_filename_sed = Path(str(df_int_filename).replace('.csv', f'_withSED_{args.run}.csv').replace('.txt', f'_withSED_{args.run}.csv'))
+            df_int_filename_sed = Path(str(df_int_filename).replace('allpar_venn', f'allpar_{args.drv}_venn').replace('.csv', f'_withSED_{args.run}.csv').replace('.txt', f'_withSED_{args.run}.csv'))
             df_int.to_csv(df_int_filename_sed, index=None)
             print(f'Added SED results to df and saved in {df_int_filename_sed}.')
         else:

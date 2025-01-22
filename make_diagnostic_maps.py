@@ -26,6 +26,8 @@
              run make_diagnostic_maps.py --field Par28 --id 58,155,638,689,916,1457,1588 --plot_starburst --plot_radial_profile --only_seg --vorbin --voronoi_snr 3
 
              run make_diagnostic_maps.py --field Par28 --id 1457 --plot_AGN_frac --only_seg --vorbin --voronoi_snr 3
+
+             run make_diagnostic_maps.py --field Par28 --id 1332,1500,1565,1692,1697,192,68,754 --plot_slope_vs_mass --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -554,6 +556,7 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     line_map_err = 1e-17 / (full_hdu[ext + 3].data ** 0.5)  # 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
     factor = 1.0
 
+    # ----------deblending flux--------------------
     if not args.do_not_correct_flux:
         if line == 'OIII': # special treatment for OIII 5007 line, in order to account for and remove the OIII 4959 component
             ratio_5007_to_4959 = 2.98 # from grizli source code
@@ -570,11 +573,14 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     line_map = line_map * factor
     line_map_err = line_map_err * factor
 
-    ndelta_xpix, ndelta_ypix = -2, 0
-    line_map = np.roll(line_map, ndelta_xpix, axis=1)
-    line_map_err = np.roll(line_map_err, ndelta_xpix, axis=1)
-    line_map = np.roll(line_map, ndelta_ypix, axis=0)
-    line_map_err = np.roll(line_map_err, ndelta_ypix, axis=0)
+    # -------------pixel offset----------------
+    if not args.do_not_correct_pixel:
+        ndelta_xpix, ndelta_ypix = -2, 0
+        print(f'Correcting emission lines for pixel offset by {ndelta_xpix} on x and {ndelta_ypix} on y')
+        line_map = np.roll(line_map, ndelta_xpix, axis=1)
+        line_map_err = np.roll(line_map_err, ndelta_xpix, axis=1)
+        line_map = np.roll(line_map, ndelta_ypix, axis=0)
+        line_map_err = np.roll(line_map_err, ndelta_ypix, axis=0)
 
     line_map = trim_image(line_map, args)
     line_map_err = trim_image(line_map_err, args)
@@ -1978,6 +1984,8 @@ if __name__ == "__main__":
             # ---------annotate axes and save figure-------
             ax.set_xlabel(r'log M$_*$/M$_{\odot}$')
             ax.set_ylabel(r'H$_\alpha$/F115W slope')
+
+            ax.set_ylim(-1.0, 1.0)
 
             # --------for talk plots--------------
             if args.fortalk:

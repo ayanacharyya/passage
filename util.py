@@ -120,6 +120,7 @@ def parse_args():
     parser.add_argument('--do_not_correct_flux', dest='do_not_correct_flux', action='store_true', default=False, help='Skip the step where it corrects for certain belnded line fluxes e.g., OIII5007, Ha, SII 6717? Default is no.')
     parser.add_argument('--plot_AGN_frac', dest='plot_AGN_frac', action='store_true', default=False, help='Plot AGN fraction 2D map (based on BPT diagram)? Default is no.')
     parser.add_argument('--diverging_cmap', metavar='diverging_cmap', type=str, action='store', default='cork', help='Which diverging colormap to use (out of managua, vanimo, lisbon, berlin)? Default is cork')
+    parser.add_argument('--do_not_correct_pixel', dest='do_not_correct_pixel', action='store_true', default=False, help='Skip the step where it corrects for pixel offset in the emission lines compared to direct images? Default is no.')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
