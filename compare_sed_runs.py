@@ -41,11 +41,11 @@ if __name__ == "__main__":
     if args.do_field is None:
         plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
         plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
-        args.field_set_plot_conditions_text = f'allpar_venn_{plot_conditions_text}'
+        args.field_set_plot_conditions_text = f'allpar_{args.drv}_venn_{plot_conditions_text}'
         df_infilename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df.txt'
     else:
         args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
-        args.field_set_plot_conditions_text = f'{args.field}_allmatch'
+        args.field_set_plot_conditions_text = f'{args.field}_{args.drv}_allmatch'
         df_infilename = args.output_dir / args.field / f'{args.field}_all_diag_results.txt'
 
     df_infilename_x = Path(str(df_infilename).replace('.txt', f'_withSED_{runs[0]}.csv'))
