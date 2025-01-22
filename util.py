@@ -474,7 +474,7 @@ def read_COSMOS2020_catalog(args=None, filename=None):
         else: input_dir = args.input_dir
         filename = Path(input_dir) / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3_subsetcolumns.fits'
 
-    if not os.path.exists(filename) or (args is not None and args.clobber_cosmos): make_COSMOS_subset_table(filename)
+    if not os.path.exists(filename) or (args is not None and args.clobber_cosmos): make_COSMOS_subset_table(filename, args)
 
     print(f'Reading in {filename}, might take a while..')
     start_time2 = datetime.now()
@@ -543,7 +543,7 @@ def split_COSMOS_subset_table_by_par(args):
     table_cosmos = Table(data[1].data)
     cosmos_coords = SkyCoord(table_cosmos['ALPHA_J2000'], table_cosmos['DELTA_J2000'], unit='deg')
 
-    field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par*') + '/')]
+    field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / args.drv / 'Par*') + '/')]
     field_list += [f'Par{item:03d}' for item in passage_fields_in_cosmos]
     field_list = list(np.unique(field_list))
     field_list.sort(key=natural_keys)
@@ -551,7 +551,7 @@ def split_COSMOS_subset_table_by_par(args):
     for index, thisfield in enumerate(field_list):
         print(f'Starting {index+1} of {len(field_list)} fields..')
         # -------determining path to photometric catalog------
-        product_dir = args.input_dir / thisfield / 'Products'
+        product_dir = args.input_dir / args.drv / thisfield / 'Products'
         catalog_file = product_dir / f'{thisfield}_photcat.fits'
 
         if os.path.exists(catalog_file):
@@ -572,7 +572,7 @@ def split_COSMOS_subset_table_by_par(args):
 
                 table_cosmos_thisfield = join(table_cosmos, table_crossmatch, keys='ID')
 
-                outfilename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
+                outfilename = args.input_dir / 'COSMOS' /  args.drv / f'cosmos2020_objects_in_{thisfield}.fits'
                 table_cosmos_thisfield.write(outfilename, overwrite=True)
                 print(f'Saved subset table as {outfilename}')
             else:
@@ -593,7 +593,7 @@ def split_COSMOSWebb_table_by_par(args, filename=None):
     table_cosmos.rename_column('ID_SE++', 'ID')
     cosmos_coords = SkyCoord(table_cosmos['RA_DETEC'], table_cosmos['DEC_DETEC'], unit='deg')
 
-    field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par*') + '/')]
+    field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / args.drv / 'Par*') + '/')]
     field_list += [f'Par{item:03d}' for item in passage_fields_in_cosmos]
     field_list = list(np.unique(field_list))
     field_list.sort(key=natural_keys)
@@ -601,7 +601,7 @@ def split_COSMOSWebb_table_by_par(args, filename=None):
     for index, thisfield in enumerate(field_list):
         print(f'Starting {index+1} of {len(field_list)} fields..')
         # -------determining path to photometric catalog------
-        product_dir = args.input_dir / thisfield / 'Products'
+        product_dir = args.input_dir / args.drv / thisfield / 'Products'
         catalog_file = product_dir / f'{thisfield}_photcat.fits'
 
         if os.path.exists(catalog_file):
@@ -622,7 +622,7 @@ def split_COSMOSWebb_table_by_par(args, filename=None):
 
                 table_cosmos_thisfield = join(table_cosmos, table_crossmatch, keys='ID')
 
-                outfilename = args.input_dir / 'COSMOS' / f'cosmoswebb_objects_in_{thisfield}.fits'
+                outfilename = args.input_dir / 'COSMOS' /  args.drv / f'cosmoswebb_objects_in_{thisfield}.fits'
                 table_cosmos_thisfield.write(outfilename, overwrite=True)
                 print(f'Saved subset table as {outfilename}')
             else:

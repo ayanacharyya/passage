@@ -503,7 +503,7 @@ def get_crossmatch_with_cosmos(df, args):
     df_cosmos = pd.DataFrame()
 
     for index, thisfield in enumerate(fields):
-        filename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
+        filename = args.input_dir / 'COSMOS' /  args.drv / f'cosmos2020_objects_in_{thisfield}.fits'
         if os.path.exists(filename):
             print(f'{index+1} of {len(fields)} fields: Reading COSMOS subset table from {filename}')
             df_cosmos_thisfield = read_COSMOS2020_catalog(filename=filename)
