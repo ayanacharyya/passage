@@ -22,7 +22,7 @@ start_time = datetime.now()
 
 # -------------------------------------global dictionaries-------------------------------------------------------------------------------
 bounds_dict.update({'log_mass_bgp': (6.5, 10.5)})
-run_labels_dict = {'Par028_including_nircam':'COSMOS+PASSAGE+COSMOS-Webb', 'Par028_all_st_bands':'Only ACS+NIRISS+NIRCAM+MIRI', 'Par052_including_nircam':'COSMOS+PASSAGE+COSMOS-Webb', 'Par052_all_st_bands':'Only ACS+NIRISS+NIRCAM+MIRI', 'all_st_bands':'Only ACS+NIRISS+NIRCAM+MIRI', 'all_ground_based':'Only CFHT+UVISTA+HSC+SC', 'all_space_based':'Only GALEX+IRAC+ACS+NIRISS+NIRCAM+MIRI', 'including_nircam':'All+COSMOS Webb filters', 'narrow_z': 'All good filters', 'narrow_z_narrow_mass': 'All good filters', 'only_st_bands': 'Only ACS+NIRISS', 'increased_flux_err':' 30% more flux err'}
+run_labels_dict = {'Par028_including_nircam':'COSMOS+PASSAGE+COSMOS-Webb', 'Par028_all_st_bands':'ACS+NIRISS+NIRCAM+MIRI', 'Par052_including_nircam':'COSMOS+PASSAGE+COSMOS-Webb', 'Par052_all_st_bands':'ACS+NIRISS+NIRCAM+MIRI', 'all_st_bands':'ACS+NIRISS+NIRCAM+MIRI', 'all_ground_based':'CFHT+UVISTA+HSC+SC', 'all_space_based':'GALEX+IRAC+ACS+NIRISS+NIRCAM+MIRI', 'including_nircam':'COSMOS+PASSAGE+COSMOS Webb', 'narrow_z': 'COSMOS+PASSAGE', 'narrow_z_narrow_mass': 'All good filters', 'only_st_bands': 'ACS+NIRISS', 'increased_flux_err':' 30% more flux err'}
 
 # ----------------------------------------------------------------------------
 def display_file_in_ax(filename, ax):
@@ -61,14 +61,14 @@ if __name__ == "__main__":
         if args.do_all_obj: args.id_arr = all_ids
         else: args.id_arr = args.id
 
-        output_dir = args.output_dir / 'pipes/plots/comparisons/'
+        output_dir = args.output_dir / f'pipes/plots/comparisons_{",".join(runs)}/'
         output_dir.mkdir(parents=True, exist_ok=True)
 
         for index, args.id in enumerate(args.id_arr):
             print(f'\nCommencing ID {args.id} which is {index+1} of {len(args.id_arr)}..')
             # -------compare individual SED fits------------------
-            fig, axes = plt.subplots(len(runs), 2, figsize=(14, 5))
-            fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99, hspace=0.1, wspace=0.1)
+            fig, axes = plt.subplots(len(runs), 2, figsize=(12, 1 + 2 * len(runs)))
+            fig.subplots_adjust(left=0.04, right=0.99, bottom=0.01, top=0.99, hspace=0.02, wspace=0.02)
             figname = output_dir / f'allpar_venn_{plot_conditions_text}_{args.id}_SED_SFH_comp_{runs[0]}_vs_{runs[1]}.png'
 
             plot_paths = [args.output_dir / 'pipes/plots' / item for item in runs]
@@ -80,6 +80,7 @@ if __name__ == "__main__":
 
                 posterior_file = h5py.File(posterior_paths[index] / f'{args.id}.h5', 'r')
                 axes[index][1].text(0.9, 0.8, f'log M* = {posterior_file["median"][4]: .02f}', c='k', fontsize=args.fontsize, ha='right', va='top', transform=axes[index][1].transAxes)
+                fig.text(0.02, 0.5 / len(runs) + (1 - (index + 1) / len(runs)), f'{run_labels_dict[runs[index]] if runs[index] in run_labels_dict else runs[index]}', c='k', fontsize=args.fontsize/1.3, rotation=90, ha='center', va='center')
 
             if len(args.id_arr) > 20: plt.close()
             # --------for talk plots--------------
