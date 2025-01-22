@@ -69,7 +69,7 @@ if __name__ == "__main__":
             # -------compare individual SED fits------------------
             fig, axes = plt.subplots(len(runs), 2, figsize=(12, 1 + 2 * len(runs)))
             fig.subplots_adjust(left=0.04, right=0.99, bottom=0.01, top=0.99, hspace=0.02, wspace=0.02)
-            figname = output_dir / f'allpar_venn_{plot_conditions_text}_{args.id}_SED_SFH_comp_{runs[0]}_vs_{runs[1]}.png'
+            figname = output_dir / f'allpar_{args.drv}_{args.id}_SED_SFH_comp_{",".join(runs)}.png'
 
             plot_paths = [args.output_dir / 'pipes/plots' / item for item in runs]
             posterior_paths = [args.output_dir / 'pipes/posterior' / item for item in runs]
