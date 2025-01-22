@@ -26,6 +26,7 @@ import drizzlepac
 import subprocess
 import itertools
 import h5py
+import io
 
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -59,7 +60,6 @@ import matplotlib
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 import matplotlib.image as mpimg
-from PIL import Image
 from matplotlib import colors as mplcolors
 from matplotlib import colormaps as mplcolormaps
 from matplotlib import cm as mpl_cm
@@ -90,6 +90,9 @@ from datashader import transfer_functions as dstf
 
 from uncertainties import unumpy as unp
 from uncertainties import ufloat
+
+from PIL import Image
+import fitz
 
 import warnings
 warnings.filterwarnings("ignore")

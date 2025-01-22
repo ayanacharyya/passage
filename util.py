@@ -46,7 +46,7 @@ def parse_args():
 
     parser.add_argument('--field', metavar='field', type=str, action='store', default='Par3', help='Which passage field? Default is Par50')
     parser.add_argument('--do_only_fields', metavar='do_only_fields', type=str, action='store', default=None, help='Which passage field? Default is Par50')
-    parser.add_argument('--id', metavar='id', type=str, action='store', default='100', help='Object ID. Default is 100')
+    parser.add_argument('--id', metavar='id', type=str, action='store', default=None, help='Object ID. Default is None')
 
     # ------- args added for make_spectra_from_beam.py ------------------------------
     parser.add_argument('--include_photometry', dest='include_photometry', action='store_true', default=False, help='Include photometry while computing fit parameters? Default is no.')

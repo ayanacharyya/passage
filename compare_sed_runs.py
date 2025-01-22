@@ -15,14 +15,34 @@
 from header import *
 from util import *
 import h5py
-from PIL import Image
-from make_passage_plots import bounds_dict, label_dict, colormap_dict
+from make_passage_plots import bounds_dict, label_dict
 
 start_time = datetime.now()
 
 # -------------------------------------global dictionaries-------------------------------------------------------------------------------
 bounds_dict.update({'log_mass_bgp': (6.5, 10.5)})
 run_labels_dict = {'Par028_including_nircam':'COSMOS+PASSAGE+COSMOS-Webb', 'Par028_all_st_bands':'Only ACS+NIRISS+NIRCAM+MIRI', 'Par052_including_nircam':'COSMOS+PASSAGE+COSMOS-Webb', 'Par052_all_st_bands':'Only ACS+NIRISS+NIRCAM+MIRI', 'all_st_bands':'Only ACS+NIRISS+NIRCAM+MIRI', 'all_ground_based':'Only CFHT+UVISTA+HSC+SC', 'all_space_based':'Only GALEX+IRAC+ACS+NIRISS+NIRCAM+MIRI', 'including_nircam':'All+COSMOS Webb filters', 'narrow_z': 'All good filters', 'narrow_z_narrow_mass': 'All good filters', 'only_st_bands': 'Only ACS+NIRISS', 'increased_flux_err':' 30% more flux err'}
+
+# ----------------------------------------------------------------------------
+def display_file_in_ax(filename, ax):
+    '''
+    Loads the given filename and displays it in the given axis handle
+    Returns axis handle
+    '''
+    pdf_file = fitz.open(filename)
+    rgb = pdf_file[0].get_pixmap()
+    pil_image = Image.open(io.BytesIO(rgb.tobytes()))
+    ax.imshow(pil_image.convert('RGB'), origin='upper')
+
+    # sfh = mpimg.imread(filename)
+    # ax.imshow(sfh, origin='upper')
+
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    return ax
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -35,27 +55,23 @@ if __name__ == "__main__":
     runs = args.run.split(',')
 
     # --------------compare individual object properties---------------------
-    if True:
+    if args.id is not None:
         args.id_arr = args.id
         for args.id in args.id_arr:
             # -------compare individual SED fits------------------
             fig, axes = plt.subplots(len(runs), 2, figsize=(14, 5))
-            fig.subplots_adjust(left=0.1, right=0.98, bottom=0.1, top=0.95, hspace=0.1, wspace=0.1)
+            fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99, hspace=0.1, wspace=0.1)
             figname = args.output_dir / 'plots' / f'allpar_venn_{plot_conditions_text}_{args.id}_SED_SFH_comp_{runs[0]}_vs_{runs[1]}.png'
 
             plot_paths = [args.output_dir / 'pipes/plots' / item for item in runs]
             posterior_paths = [args.output_dir / 'pipes/posterior' / item for item in runs]
 
             for index in range(len(runs)):
-                pdf_file = fitz.open(file)
-                sed = mpimg.imread(plot_paths[index] / f'{args.id}_fit_log_x.pdf')
-                axes[index][0].imshow(sed, origin='upper')
-
-                sfh = mpimg.imread(plot_paths[index] / f'{args.id}_corner.pdf')
-                axes[index][0].imshow(sfh, origin='upper')
+                axes[index][0] = display_file_in_ax(plot_paths[index] / f'{args.id}_fit_log_x.pdf', axes[index][0])
+                axes[index][1] = display_file_in_ax(plot_paths[index] / f'{args.id}_sfh.pdf', axes[index][1])
 
                 posterior_file = h5py.File(posterior_paths[index] / f'{args.id}.h5', 'r')
-                print(list(posterior_file.keys())) #
+                axes[index][1].text(0.9, 0.8, f'log M = {posterior_file["median"][4]: .02f}', c='k', fontsize=args.fontsize, ha='right', va='top', transform=axes[index][1].transAxes)
 
     # --------------compare population properties---------------------
     else:
