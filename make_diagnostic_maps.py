@@ -28,6 +28,8 @@
              run make_diagnostic_maps.py --field Par28 --id 1457 --plot_AGN_frac --only_seg --vorbin --voronoi_snr 3
 
              run make_diagnostic_maps.py --field Par28 --id 1332,1500,1565,1692,1697,192,68,754 --plot_slope_vs_mass --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5
+             run make_diagnostic_maps.py --field Par28 --id 1332,1500,1565,1692,1697,192,68,754 --plot_metallicity --plot_radial_profile --plot_ion --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5
+             run make_diagnostic_maps.py --field Par28 --id 192 --plot_metallicity --ignore_combined --plot_radial_profile --plot_ion --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -573,15 +575,6 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     line_map = line_map * factor
     line_map_err = line_map_err * factor
 
-    # -------------pixel offset----------------
-    if not args.do_not_correct_pixel:
-        ndelta_xpix, ndelta_ypix = -2, 0
-        print(f'Correcting emission lines for pixel offset by {ndelta_xpix} on x and {ndelta_ypix} on y')
-        line_map = np.roll(line_map, ndelta_xpix, axis=1)
-        line_map_err = np.roll(line_map_err, ndelta_xpix, axis=1)
-        line_map = np.roll(line_map, ndelta_ypix, axis=0)
-        line_map_err = np.roll(line_map_err, ndelta_ypix, axis=0)
-
     line_map = trim_image(line_map, args)
     line_map_err = trim_image(line_map_err, args)
 
@@ -1093,8 +1086,19 @@ def get_Z_O3S2(full_hdu, args):
 
     return logOH_map, logOH_int
 
+# ----------------------------------------------------------------------------------------------------
+def get_nearest(value, array):
+    '''
+    Finds the nearest neighbour to an item in a given list and returns that element of the list
+    '''
+    diffs = np.abs(np.array(array) - value)
+    min_diff_index = np.where(diffs == np.min(diffs))[0][0]
+    nearest_item = array[min_diff_index]
+
+    return nearest_item
+
 # --------------------------------------------------------------------------------------------------------------------
-def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux):
+def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux, branch='low'):
     '''
     Calculates and returns the R23 metallicity given observed line fluxes
     Conversion factor is from Kewley+2002
@@ -1108,7 +1112,8 @@ def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux):
     else:
         net_mask = False
 
-    k = [-44.7026, 10.8052, -0.640113]  # k0-2 parameters for q=8e7 from Table 3 of KD02 last row for q=8e7
+    OH_coeff_dict = {5e6:[-27.0004, 6.03910, -0.327006], 1e7:[-31.2133, 7.15810, -0.399343], 2e7:[-36.0239, 8.44804, -0.483762], 4e7:[-40.9994, 9.78396, -0.571551], 8e7:[-44.7026, 10.8052, -0.640113], 1.5e8:[-46.1589, 11.2557, -0.672731], 3e8:[-45.6075, 11.2074, -0.674460]} # k0-2 parameters for all q from Table 3 of KD02 last row
+    q_coeff = [0.0843640, 0.739315, 7.57817] # coeffciients from 3rd column of Table 2 of KD02
 
     if hasattr(Hbeta_flux, "__len__"): # if it is an array
         # --------computing the ratio and appropriate errors------------
@@ -1123,26 +1128,75 @@ def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux):
         R23 = unp.log10(ratio.data)
         R23 = np.ma.masked_where(new_mask | ratio.mask, R23)
 
-        # --------computing the polynomial and appropriate errors------------
-        p = k[1] ** 2 - 4 * k[2] * (k[0] - R23)
-        mask = p < 0
-        p[mask] = 0 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        log_OH = (-k[1] + unp.sqrt(p.data))/(2 * k[2])
-        log_OH = np.ma.masked_where(mask | R23.mask | net_mask, log_OH)
+        logOH_Z94 = np.poly1d([-0.333, -0.207, -0.202, -0.33, 9.625])(R23)  # Eq 8 of KD02
+
+        new_mask2 = OII3727_flux == 0
+        OII3727_flux[new_mask2] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        ratio2 = OIII5007_flux / OII3727_flux
+
+        new_mask2 = ratio2 <= 0
+        ratio2[new_mask2] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        y = unp.log10(ratio2)
+        y = np.ma.masked_where(new_mask2, y)
+        logOH_M91 = 12 + np.poly1d([0.602, 0.767, -4.944])(R23) + y * np.poly1d([-0.331, 0.332, 0.29])(R23)  # Eq 9 of KD02
+
+        logOH_avg = np.mean([logOH_Z94, logOH_M91], axis=0)
+        logOH_R23 = np.ones(np.shape(Hbeta_flux)) * ufloat(np.nan, np.nan)
+
+        for i in range(np.shape(Hbeta_flux)[0]):
+            for j in range(np.shape(Hbeta_flux)[1]):
+                if args.ignore_combined_method or logOH_avg[i][j] < 8.5:
+                    # --------computing the polynomial and appropriate errors------------
+                    q = 10 ** np.poly1d(q_coeff)(y[i][j])  # coeffciients from 3rd column of Table 2 of KD02
+                    if np.isnan(unp.nominal_values(q)):
+                        logOH_R23[i][j] = ufloat(np.nan, np.nan)
+                        continue
+                    nearest_q = get_nearest(unp.nominal_values(q), list(OH_coeff_dict.keys()))
+                    k = OH_coeff_dict[nearest_q]
+                    p = k[1] ** 2 - 4 * k[2] * (k[0] - R23[i][j])
+                    if p >= 0:
+                        if branch == 'low': logOH_R23[i][j] = (-k[1] + unp.sqrt(p))/(2 * k[2])
+                        elif branch == 'high': logOH_R23[i][j] = (-k[1] - unp.sqrt(p))/(2 * k[2])
+                        #print(f'Deb1141: i={i}, j={j}, range=({np.shape(Hbeta_flux)}), logOH_Z94={logOH_Z94[i][j]}, logOH_M91={logOH_M91[i][j]}, and the avg={logOH_avg[i][j]} which is < 8.5, so computing logOH_R23={logOH_R23[i][j]} instead (using q={q:.1e}, which is closest to branch {nearest_q:.1e}).')
+                    else:
+                        logOH_R23[i][j] = ufloat(np.nan, np.nan)
+                        continue
+                else:
+                    #print(f'Deb1145: i={i}, j={j}, range=({np.shape(Hbeta_flux)}), logOH_Z94={logOH_Z94[i][j]}, logOH_M91={logOH_M91[i][j]}, and the avg={logOH_avg[i][j]} which is > 8.5, so using this as logOH_R23.')
+                    logOH_R23[i][j] = logOH_avg[i][j]
+
+        logOH_R23 = np.ma.masked_where(new_mask | R23.mask | net_mask, logOH_R23)
 
     else: # if it is scalar
-        try:
-            ratio = (OII3727_flux + OIII5007_flux) / Hbeta_flux # in case 'Hbeta_flux' happens to be 0
-            R23 = unp.log10(ratio)
-            p = k[1] ** 2 - 4 * k[2] * (k[0] - R23)
-            log_OH = (-k[1] + unp.sqrt(p)) / (2 * k[2])
-        except:
-            log_OH = ufloat(np.nan, np.nan)
+        ratio = (OII3727_flux + OIII5007_flux) / Hbeta_flux
+        R23 = unp.log10(ratio)
+        logOH_Z94 = np.poly1d([-0.333, -0.207, -0.202, -0.33, 9.625])(R23) # Eq 8 of KD02
 
-    return log_OH
+        ratio = OIII5007_flux / OII3727_flux
+        y = unp.log10(ratio)
+        logOH_M91 = 12 + np.poly1d([0.602, 0.767, -4.944])(R23) + y * np.poly1d([-0.331, 0.332, 0.29])(R23) # Eq 9 of KD02
+
+        logOH_avg = np.mean([logOH_Z94, logOH_M91])
+
+        if args.ignore_combined_method or logOH_avg < 8.5:
+            q = 10 ** np.poly1d(q_coeff)(y) # coeffciients from 3rd column of Table 2 of KD02
+            nearest_q = get_nearest(unp.nominal_values(q), list(OH_coeff_dict.keys()))
+            k = OH_coeff_dict[nearest_q]
+            p = k[1] ** 2 - 4 * k[2] * (k[0] - R23)
+            if p >= 0:
+                if branch == 'low': logOH_R23 = (-k[1] + unp.sqrt(p)) / (2 * k[2])
+                elif branch == 'high': logOH_R23 = (-k[1] - unp.sqrt(p)) / (2 * k[2])
+                print(f'Based on the integrated fluxes, logOH_Z94={logOH_Z94}, logOH_M91={logOH_M91}, and the avg={logOH_avg} which is < 8.5, so computing logOH_R23={logOH_R23} instead.')
+            else:
+                logOH_R23 = ufloat(np.nan, np.nan)
+        else:
+            print(f'Based on the integrated fluxes, logOH_Z94={logOH_Z94}, logOH_M91={logOH_M91}, and the avg={logOH_avg} which is > 8.5, so using this as logOH_R23.')
+            logOH_R23 = logOH_avg
+
+    return logOH_R23
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_Z_R23(full_hdu, args):
+def get_Z_R23(full_hdu, args, branch='low'):
     '''
     Computes and returns the spatially resolved as well as intregrated R23 metallicity from a given HDU
     '''
@@ -1158,8 +1212,8 @@ def get_Z_R23(full_hdu, args):
         OIII5007_map = np.ma.masked_where(OIII5007_map.mask, OIII5007_map.data / factor)
         OIII5007_int = OIII5007_int / factor
 
-    logOH_map = compute_Z_R23(OII3727_map, OIII5007_map, Hbeta_map)
-    logOH_int = compute_Z_R23(OII3727_int, OIII5007_int, Hbeta_int)
+    logOH_map = compute_Z_R23(OII3727_map, OIII5007_map, Hbeta_map, branch=branch)
+    logOH_int = compute_Z_R23(OII3727_int, OIII5007_int, Hbeta_int, branch=branch)
 
     return logOH_map, logOH_int
 
@@ -1174,6 +1228,85 @@ def plot_Z_R23_map(full_hdu, ax, args, radprof_ax=None):
     ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, logOH_map, logOH_radfit, logOH_int
+
+# --------------------------------------------------------------------------------------------------------------------
+def compute_q_O32(OII3727_flux, OIII5007_flux):
+    '''
+    Calculates and returns the O32 ionisation parameter given observed line fluxes
+    Conversion factor is from Kewley+2002
+    '''
+    # -----handling masks separately because uncertainty package cannot handle masks---------
+    if np.ma.isMaskedArray(OIII5007_flux):
+        net_mask = OII3727_flux.mask | OIII5007_flux.mask
+        OIII5007_flux = OIII5007_flux.data
+        OII3727_flux = OII3727_flux.data
+    else:
+        net_mask = False
+
+    k = [0.0300472, -0.914212, 10.0581, -36.7948]  # k3-0 parameters from 3rd column of Table 2 of KD02
+
+    if hasattr(OII3727_flux, "__len__"): # if it is an array
+        # --------computing the ratio and appropriate errors------------
+        new_mask = OII3727_flux == 0
+        OII3727_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+
+        ratio = (OIII5007_flux / OII3727_flux)
+        ratio = np.ma.masked_where(new_mask, ratio)
+
+        # --------computing the log of the ratio and appropriate errors------------
+        new_mask = ratio <= 0
+        ratio[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        O32 = unp.log10(ratio.data)
+        O32 = np.ma.masked_where(new_mask | ratio.mask, O32)
+
+        # --------computing the polynomial and appropriate errors------------
+        logq = np.ones(np.shape(OII3727_flux)) * ufloat(np.nan, np.nan)
+        for i in range(np.shape(OII3727_flux)[0]):
+            for j in range(np.shape(OII3727_flux)[1]):
+                coeff = np.hstack((k[:3], [k[3] - unp.nominal_values(O32[i][j])]))
+                try:
+                    roots = np.roots(coeff)
+                    logq[i][j] = ufloat([item.real for item in roots if item.imag == 0][0], 0)
+                except:
+                    logq[i][j] = ufloat(np.nan, np.nan)
+        logq = np.ma.masked_where(O32.mask | net_mask, np.reshape(logq, np.shape(O32)))
+
+    else: # if it is scalar
+        try:
+            ratio = (OIII5007_flux / OII3727_flux)
+            O32 = unp.log10(ratio)
+            coeff = np.hstack((k[:3], [k[3] - unp.nominal_values(O32)]))
+            roots = np.roots(coeff)
+            logq = ufloat([item.real for item in roots if item.imag == 0][0], 0)
+        except:
+            logq = ufloat(np.nan, np.nan)
+
+    return logq
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_q_O32(full_hdu, args):
+    '''
+    Computes and returns the spatially resolved as well as intregrated O32 ionisation parameter from a given HDU
+    '''
+    OII3727_map, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
+    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+
+    logq_map = compute_q_O32(OII3727_map, OIII5007_map)
+    logq_int = compute_q_O32(OII3727_int, OIII5007_int)
+
+    return logq_map, logq_int
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_q_O32_map(full_hdu, ax, args, radprof_ax=None):
+    '''
+    Plots the O32 iojisation parameter map (and the emission line maps that go into it) in the given axes
+    Returns the axes handles and the 2D metallicity map just produced
+    '''
+    lim, label = [6, 9], 'log(q) (O32)'
+    logq_map, logq_int = get_q_O32(full_hdu, args)
+    ax, logq_radfit = plot_2D_map(logq_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+
+    return ax, logq_map, logq_radfit, logq_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_this(data, ax):
@@ -1239,6 +1372,15 @@ def get_direct_image_per_filter(full_hdu, filter, target_header, args, plot_test
     drizzled_image_filename = glob.glob(str(args.input_dir / args.drv / args.field / f'Products/{args.field}*{filter.lower()}_drz_sci.fits'))[0]
     direct_map = get_cutout(drizzled_image_filename, pos, size, target_header, args, plot_test_axes=plot_test_axes)
     direct_map_wht = get_cutout(drizzled_image_filename.replace('sci', 'wht'), pos, size, target_header, args)
+
+    # -------------pixel offset----------------
+    if not args.do_not_correct_pixel:
+        ndelta_xpix, ndelta_ypix = 2, 0
+        print(f'Correcting emission lines for pixel offset by {ndelta_xpix} on x and {ndelta_ypix} on y')
+        direct_map = np.roll(direct_map, ndelta_xpix, axis=1)
+        direct_map_wht = np.roll(direct_map_wht, ndelta_xpix, axis=1)
+        direct_map = np.roll(direct_map, ndelta_ypix, axis=0)
+        direct_map_wht = np.roll(direct_map_wht, ndelta_ypix, axis=0)
 
     # ---------computing uncertainty-------------
     direct_map_err = 1 / np.sqrt(direct_map_wht)
@@ -1373,6 +1515,7 @@ def plot_starburst_map(full_hdu, args):
     if args.plot_radial_profiles:
         radprof_axes = extra_axes[0:, :].flatten()
         extra_axes = extra_axes[1:, :]
+
     fig.subplots_adjust(left=fig_size_dict[nrows][2], right=fig_size_dict[nrows][3], bottom=fig_size_dict[nrows][4], top=fig_size_dict[nrows][5], wspace=fig_size_dict[nrows][6], hspace=fig_size_dict[nrows][7])
 
     # ---------getting the Ha map-------------
@@ -1380,7 +1523,7 @@ def plot_starburst_map(full_hdu, args):
 
     # ---------getting the direct image-------------
     ext = 5
-    filter = 'F115W'
+    filter = 'F150W'
     target_header = full_hdu[ext].header
     direct_map = get_direct_image_per_filter(full_hdu, filter, target_header, args)
 
@@ -1401,7 +1544,7 @@ def plot_starburst_map(full_hdu, args):
     starburst_radfit = []
     for index, ax in enumerate(axes):
         map_err = np.ma.masked_where(maps[index].mask, unp.std_devs(maps[index].data))
-        ax, radprof_fit = plot_2D_map(maps[index], ax, args, label=labels[index], cmap='viridis', vmin=lims[index][0], vmax=lims[index][1], radprof_ax=radprof_axes[index], vorbin_ax=vorbin_axes[index] if args.plot_vorbin else None, snr_ax=snr_axes[index] if args.plot_snr else None, image_err=map_err if args.plot_snr else None)
+        ax, radprof_fit = plot_2D_map(maps[index], ax, args, label=labels[index], cmap='viridis', vmin=lims[index][0], vmax=lims[index][1], radprof_ax=radprof_axes[index] if args.plot_radial_profiles else None, vorbin_ax=vorbin_axes[index] if args.plot_vorbin else None, snr_ax=snr_axes[index] if args.plot_snr else None, image_err=map_err if args.plot_snr else None)
         starburst_radfit.append(radprof_fit)
 
     return fig, ratio_map, starburst_radfit
@@ -1414,29 +1557,35 @@ def plot_metallicity_map(full_hdu, args):
     '''
     ncols = 2
     if args.plot_radial_profiles: ncols += 1
+    if args.plot_ionisation_parameter: ncols += 1
 
-    fig_size_dict = {2: [10, 4, 0.05, 0.97, 0.15, 0.9, 0.2, 0.], 3: [14, 4, 0.05, 0.97, 0.15, 0.9, 0.2, 0.]} # figsize_w, figsize_h, l, r, b, t, ws, hs
+    fig_size_dict = {2: [10, 4, 0.05, 0.97, 0.15, 0.9, 0.2, 0.], 3: [14, 4, 0.05, 0.97, 0.15, 0.9, 0.2, 0.], 4: [14, 3.5, 0.06, 0.99, 0.15, 0.95, 0.25, 0.]} # figsize_w, figsize_h, l, b, r, t, ws, hs
 
     fig, axes = plt.subplots(1, ncols, figsize=(fig_size_dict[ncols][0], fig_size_dict[ncols][1]))
+    if ncols > 3:
+        ip_ax = axes[0]
+        axes = axes[1:]
     if ncols > 2:
-        radprof_ax = axes[2]
-        axes = axes[:2]
+        radprof_ax = axes[-1]
+        axes = axes[:-1]
     else:
         radprof_ax = None
     fig.subplots_adjust(left=fig_size_dict[ncols][2], right=fig_size_dict[ncols][3], bottom=fig_size_dict[ncols][4], top=fig_size_dict[ncols][5], wspace=fig_size_dict[ncols][6], hspace=fig_size_dict[ncols][7])
 
     if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
         # --------deriving the metallicity map-------------
-        logOH_map, logOH_int = get_Z_R23(full_hdu, args)
+        logOH_map, logOH_int = get_Z_R23(full_hdu, args, branch=args.Zbranch)
         #logOH_map, logOH_int = get_Z_O3S2(full_hdu, args)
+        if args.plot_ionisation_parameter: logq_map, logq_int = get_q_O32(full_hdu, args)
 
         # ---------plotting-------------
-        lim, label = [7.3, 8.3], 'log(O/H) (R23)'
-        axes[0], logOH_radfit = plot_2D_map(logOH_map, axes[0], args, takelog=False, label=r'%s$_{\rm int}$ = %.1f $\pm$ %.1f' % (label, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+        lim, label = [7.5, 9.0], 'log(O/H) (R23)'
+        axes[0], logOH_radfit = plot_2D_map(logOH_map, axes[0], args, takelog=False, label=r'%s$_{\rm int}$ = %.1f $\pm$ %.1f' % (label, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1])
 
         logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
         logOH_map_snr = np.ma.masked_where(logOH_map.mask, unp.nominal_values(10 ** logOH_map.data)) / np.ma.masked_where(logOH_map.mask, unp.std_devs(10 ** logOH_map.data))
-        axes[1], _ = plot_2D_map(logOH_map_snr, axes[1], args, takelog=False, label=r'%s SNR' % (label), cmap='cividis', vmin=0, vmax=6)
+        axes[1], _ = plot_2D_map(logOH_map_snr, axes[1], args, takelog=False, hide_yaxis=True, label=r'%s SNR' % (label), cmap='cividis', vmin=0, vmax=6)
+        if args.plot_ionisation_parameter: ip_ax, _ = plot_2D_map(logq_map, ip_ax, args, takelog=False, hide_yaxis=False, label=r'log q$_{\rm int}$ = %.1f $\pm$ %.1f' % (logq_int.n, logq_int.s), cmap='viridis', vmin=6.5, vmax=8.5)
 
     else:
         print(f'Not all lines out of OIII, OII and Hb are available, so cannot compute R23 metallicity')
@@ -1460,6 +1609,15 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis'):
     Hbeta_map, Hbeta_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
     SII_map, SII_wave, SII_int, _ = get_emission_line_map('SII', full_hdu, args)
     Halpha_map, Halpha_wave, Halpha_int, _ = get_emission_line_map('Ha', full_hdu, args)
+
+    # ----------deblending flux--------------------
+    if not args.do_not_correct_flux:
+        # special treatment for SII 6717 line, in order to account for and ADD the SII 6731 component back
+        ratio_6717_to_6731 = 1. # from grizli source code
+        factor = ratio_6717_to_6731 / (1 + ratio_6717_to_6731)
+        SII_map = np.ma.masked_where(SII_map.mask, SII_map.data / factor)
+        SII_int = SII_int / factor
+        print(f'Re-correcting SII to include the 6731 component, for computing BPT, by factor of {factor:.3f}')
 
     def func(x):
         return 1.3 + 0.72 / (x - 0.32)  # Eq 6 of K01
@@ -1546,7 +1704,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis'):
 
         ax_indiv.set_xlim(-2, 0.3)
         ax_indiv.set_ylim(-1, 2)
-        ax_indiv.set_xlabel(f'log (SII 6717/Halpha)')
+        ax_indiv.set_xlabel(f'log (SII 6717+31/Halpha)')
         ax_indiv.set_ylabel(f'log (OIII 5007/Hbeta)')
 
         # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------

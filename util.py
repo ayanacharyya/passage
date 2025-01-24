@@ -121,6 +121,9 @@ def parse_args():
     parser.add_argument('--plot_AGN_frac', dest='plot_AGN_frac', action='store_true', default=False, help='Plot AGN fraction 2D map (based on BPT diagram)? Default is no.')
     parser.add_argument('--diverging_cmap', metavar='diverging_cmap', type=str, action='store', default='cork', help='Which diverging colormap to use (out of managua, vanimo, lisbon, berlin)? Default is cork')
     parser.add_argument('--do_not_correct_pixel', dest='do_not_correct_pixel', action='store_true', default=False, help='Skip the step where it corrects for pixel offset in the emission lines compared to direct images? Default is no.')
+    parser.add_argument('--Zbranch', metavar='Zbranch', type=str, action='store', default='low', help='Which R23 branch to be used (choose between high/low)? Default is low')
+    parser.add_argument('--plot_ionisation_parameter', dest='plot_ionisation_parameter', action='store_true', default=False, help='Plot the plot_ionisation_parameter map along with metallicity? Default is no.')
+    parser.add_argument('--ignore_combined_method', dest='ignore_combined_method', action='store_true', default=False, help='Ignore the combined method (S6 of KD02) while computing R23 metallicity and rely solely on R23? Default is no.')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
