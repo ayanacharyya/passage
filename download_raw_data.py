@@ -82,6 +82,8 @@ def download_from_mast(args, prop_id='1571'):
     cond = (subqueryList['calib_level'] == 1) & (subqueryList['productType'] == 'SCIENCE') & (subqueryList['productSubGroupDescription'] == 'UNCAL')
     uncalList = subqueryList[cond]
     uncalList['obs_id_num'] = pd.Series(uncalList['obs_id']).map(lambda x: int(x.split('_')[1][1:]) if 'niriss' in x else int(x.split('_')[0][7:-3]))
+    uncalList = uncalList[np.unique(uncalList["obs_id"], return_index=True)[1]]
+    print(f'Deb86: len = {len(uncalList)}') ##
 
     # --------trim MAST query---------------
     cond = np.in1d(uncalList['obs_id_num'], obs_ids)
@@ -89,10 +91,10 @@ def download_from_mast(args, prop_id='1571'):
 
     # --------modify MAST query, to download only the rate files---------------
     ratefile_list = []
-    for index, url in enumerate(uncalList['dataURL']):
+    for index, url in enumerate(uncalList['dataURI']):
         new_url = url.replace('_rateints', '_rate').replace('_cal', '_rate')
         ratefile_list.append(new_url)
-    uncalList['dataURL'] = ratefile_list
+    uncalList['dataURI'] = ratefile_list
 
     # --------download from MAST---------------
     print(f"About to download the following {len(uncalList['obs_id'])} rate files..", uncalList['obs_id'])
