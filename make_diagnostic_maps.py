@@ -1308,7 +1308,7 @@ def plot_q_O32_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [7, 8], 'log(q) (O32)'
     logq_map, logq_int = get_q_O32(full_hdu, args)
-    ax, logq_radfit = plot_2D_map(logq_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logq_int.n), cmap='cividis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, logq_radfit = plot_2D_map(logq_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logq_int.n), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, logq_map, logq_radfit, logq_int
 
