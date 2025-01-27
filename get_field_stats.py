@@ -181,7 +181,7 @@ def plot_venn(df, args):
     fig = ax.figure
     fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
     fig.text(0.99, 0.99, f'Total {n_fields} fields: Par{args.field_text}\nTotal {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes)
-    figname = args.output_dir / 'plots' / f'Par{args.field_text}_venn_diagram_{",".join(args.plot_conditions)}.png'
+    figname = args.output_dir / 'plots' / f'Par{args.field_text}_venn_diagram_{args.plot_conditions_text}.png'
 
     # --------for talk plots--------------
     if args.fortalk:
@@ -560,15 +560,18 @@ if __name__ == "__main__":
     lines_to_consider = args.line_list # ['OII', 'OIII'] # OR
     if args.do_all_fields:
         available_fields = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.output_dir / 'Par*') + '/')]
+        available_fields = [item for item in available_fields if len(item) <= 6]
         available_fields.sort(key=natural_keys)
+        fields_text = 'allpar'
     else:
         available_fields = args.field_arr
+        fields_text = ','.join(args.field_arr)
 
-    df_stats_filename = args.output_dir / 'catalogs' / f'all_fields_diag_results.txt'
-    df_visual_filename = args.output_dir / 'catalogs' / f'all_fields_visual_inspection_results.txt'
-    plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
-    plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
-    df_outfilename = args.output_dir / 'catalogs' / f'allpar_{args.drv}_venn_{plot_conditions_text}_df.txt'
+    df_stats_filename = args.output_dir / 'catalogs' / f'{fields_text}_diag_results.txt'
+    df_visual_filename = args.output_dir / 'catalogs' / f'{fields_text}_visual_inspection_results.txt'
+    args.plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
+    args.plot_conditions_text = args.plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
+    df_outfilename = args.output_dir / 'catalogs' / f'{fields_text}_{args.drv}_venn_{args.plot_conditions_text}_df.txt'
 
     # -------------------------------------------------------------------
     if not os.path.exists(df_outfilename) or args.clobber_venn_df:

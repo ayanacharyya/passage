@@ -3,9 +3,9 @@
     Notes: Combine extracted 1D and 2D spectra and diagnostic maps of same object based on a given list of objects (IDs and fields) from the intersection of Venn diagram (produced by get_field_stats.py
     Author : Ayan
     Created: 26-07-24
-    Example: run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --only_seg --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --SNR_thresh 10
-             run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --only_seg --line_list OIII,Ha --plot_conditions EW,mass,PA --EW_thresh 300
-             run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --only_seg --line_list OIII,Ha --plot_conditions SNR,mass,PA,a_image --SNR_thresh 10 --a_thresh 2.4
+    Example: run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --only_seg --do_all_fields --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --SNR_thresh 10
+             run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --only_seg --do_all_fields --line_list OIII,Ha --plot_conditions EW,mass,PA --EW_thresh 300
+             run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --only_seg --do_all_fields --line_list OIII,Ha --plot_conditions SNR,mass,PA,a_image --SNR_thresh 10 --a_thresh 2.4
 '''
 
 from header import *
@@ -25,12 +25,13 @@ if __name__ == "__main__":
     pixscale_text = '' if args.pixscale == 0.04 else f'_{args.pixscale}arcsec_pix'
     vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
     description_text = f'all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}'
+    fields_text = 'allpar' if args.do_all_fields else ','.join(args.field_arr)
 
     plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
     plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
     description_text2 = f'diagnostics_and_extractions_{plot_conditions_text}'
 
-    df_int_filename = args.output_dir / 'catalogs' / f'allpar_venn_{plot_conditions_text}_df.txt'
+    df_int_filename = args.output_dir / 'catalogs' / f'{fields_text}_{args.drv}_venn_{plot_conditions_text}_df.txt'
     df_int = pd.read_csv(df_int_filename)
     df_int = df_int.sort_values(by=['field', 'objid']).reset_index(drop=True)
 
