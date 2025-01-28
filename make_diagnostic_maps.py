@@ -1056,7 +1056,7 @@ def compute_Z_O3S2(OIII5007_flux, Hbeta_flux, SII6717_flux, Halpha_flux):
         try:
             ratio = (OIII5007_flux / Hbeta_flux) / (SII6717_flux / Halpha_flux)
             O3S2 = unp.log10(ratio)
-            solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(O3S2)]])) if item.imag == 0][0]
+            solution = np.min([item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(O3S2)]])) if item.imag == 0])
             log_OH = ufloat(solution + 8.69, 0.)  # see Table 1 caption in Curti+19
         except:
             log_OH = ufloat(np.nan, np.nan)
