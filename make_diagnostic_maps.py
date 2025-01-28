@@ -31,7 +31,7 @@
              run make_diagnostic_maps.py --field Par28 --id 1332,1500,1565,1692,1697,192,68,754 --plot_metallicity --plot_radial_profile --plot_ion --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5
              run make_diagnostic_maps.py --field Par28 --id 192 --plot_metallicity --ignore_combined --plot_radial_profile --plot_ion --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5
 
-             run make_diagnostic_maps.py --field Par28 --id 1303,1934,2734,2867,300,2903,2906 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel
+             run make_diagnostic_maps.py --field Par28 --id 1303,1934,2734,2867,300,2903,2906 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --keep
 
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
@@ -1044,16 +1044,19 @@ def compute_Z_O3S2(OIII5007_flux, Hbeta_flux, SII6717_flux, Halpha_flux):
         # --------computing the polynomial and appropriate errors------------
         log_OH = []
         for this_O3S2 in O3S2.data.flatten():
-            solution = [item.real for item in np.roots(np.hstack([k[::-1], -1 * unp.nominal_values(this_O3S2)])) if item.imag == 0][0]
-            this_log_OH = solution + 8.69 # see Table 1 caption in Curti+19
-            log_OH.append(ufloat(this_log_OH, 0.))
+            try:
+                solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_O3S2)]])) if item.imag == 0]
+                this_log_OH = np.min(solution) + 8.69  # see Table 1 caption in Curti+19
+                log_OH.append(ufloat(this_log_OH, 0.))
+            except:
+                log_OH.append(ufloat(np.nan, np.nan))
         log_OH = np.ma.masked_where(O3S2.mask | net_mask, np.reshape(log_OH, np.shape(O3S2)))
 
     else: # if it is scalar
         try:
             ratio = (OIII5007_flux / Hbeta_flux) / (SII6717_flux / Halpha_flux)
             O3S2 = unp.log10(ratio)
-            solution = [item.real for item in np.roots(np.hstack([k[::-1], -1 * unp.nominal_values(O3S2)])) if item.imag == 0][0]
+            solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(O3S2)]])) if item.imag == 0][0]
             log_OH = ufloat(solution + 8.69, 0.)  # see Table 1 caption in Curti+19
         except:
             log_OH = ufloat(np.nan, np.nan)
@@ -1089,6 +1092,18 @@ def get_Z_O3S2(full_hdu, args):
     logOH_int = compute_Z_O3S2(OIII5007_int, Hbeta_int, SII6717_int, Halpha_int)
 
     return logOH_map, logOH_int
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_Z_O3S2_map(full_hdu, ax, args, radprof_ax=None):
+    '''
+    Plots the O3S2 metallicity map (and the emission line maps that go into it) in the given axes
+    Returns the axes handles and the 2D metallicity map just produced
+    '''
+    lim, label = [7, 9], 'Z (O3S2)'
+    logOH_map, logOH_int = get_Z_O3S2(full_hdu, args)
+    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+
+    return ax, logOH_map, logOH_radfit, logOH_int
 
 # ----------------------------------------------------------------------------------------------------
 def get_nearest(value, array):
@@ -1590,8 +1605,8 @@ def plot_metallicity_map(full_hdu, args):
 
     if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
         # --------deriving the metallicity map-------------
-        logOH_map, logOH_int = get_Z_R23(full_hdu, args, branch=args.Zbranch)
-        #logOH_map, logOH_int = get_Z_O3S2(full_hdu, args)
+        if args.use_O3S2: logOH_map, logOH_int = get_Z_O3S2(full_hdu, args)
+        else: logOH_map, logOH_int = get_Z_R23(full_hdu, args, branch=args.Zbranch)
         if args.plot_ionisation_parameter: logq_map, logq_int = get_q_O32(full_hdu, args)
 
         # ---------plotting-------------
@@ -2029,7 +2044,7 @@ if __name__ == "__main__":
                 #     if 'OIII-4363' in args.available_lines:
                 #         try: ax4, logOH_Te_map, logOH_Te_radfit, logOH_Te_int = plot_Z_Te_map(full_hdu, ax4, args, radprof_ax=rax4)
                 #         except: pass
-                #     try: ax5, logOH_R23_map, logOH_R23_radfit, logOH_R23_int = plot_Z_R23_map(full_hdu, ax5, args, radprof_ax=rax5)
+                #     try: ax5, logOH_map, logOH_radfit, logOH_int = plot_Z_R23_map(full_hdu, ax5, args, radprof_ax=rax5)
                 #     except: pass
                 # else:
                 #     fig.delaxes(ax4)
@@ -2055,8 +2070,10 @@ if __name__ == "__main__":
                         fig.delaxes(rax2)
 
                 # ---------------metallicity map---------------
-                if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
-                    ax3, logOH_R23_map, logOH_R23_radfit, logOH_R23_int = plot_Z_R23_map(full_hdu, ax3, args, radprof_ax=rax3)
+                if args.use_O3S2 and all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
+                    ax3, logOH_map, logOH_radfit, logOH_int = plot_Z_O3S2_map(full_hdu, ax3, args, radprof_ax=rax3)
+                elif not args.use_O3S2 and all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
+                    ax3, logOH_map, logOH_radfit, logOH_int = plot_Z_R23_map(full_hdu, ax3, args, radprof_ax=rax3)
                 else:
                     fig.delaxes(ax4)
                     if args.plot_radial_profiles:
