@@ -6,6 +6,7 @@
     Example: run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --only_seg --do_all_fields --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --SNR_thresh 10
              run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --only_seg --do_all_fields --line_list OIII,Ha --plot_conditions EW,mass,PA --EW_thresh 300
              run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --only_seg --do_all_fields --line_list OIII,Ha --plot_conditions SNR,mass,PA,a_image --SNR_thresh 10 --a_thresh 2.4
+             run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --only_seg --drv 0.5 --field Par028 --vorbin --voronoi_line Ha --voronoi_snr 5 --do_not_correct_pixel --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --clobber
 '''
 
 from header import *
@@ -99,16 +100,18 @@ if __name__ == "__main__":
         if args.clobber or (not os.path.exists(diag_img_dir / diag_figname) and not os.path.exists(alternate_path / diag_figname)):
             print('Could not diagnostic maps image, so..')
 
-            command = ['python', 'make_diagnostic_maps.py', '--field', f'{args.field}', '--id', f'{args.id}']
+            command = ['python', 'make_diagnostic_maps.py', '--field', f'{args.field}', '--id', f'{args.id}', '--drv', f'{args.drv}', '--plot_AGN_frac']
             if args.plot_radial_profiles: command += ['--plot_radial_profiles']
             if args.only_seg: command += ['--only_seg']
             if args.snr_cut is not None: command += ['--snr_cut', f'{args.snr_cut}']
+            if args.do_not_correct_pixel: command += ['--do_not_correct_pixel']
+            if args.do_not_correct_flux: command += ['--do_not_correct_flux']
             if args.vorbin:
                 command += ['--vorbin']
                 command += ['--voronoi_line', f'{args.voronoi_line}']
                 command += ['--voronoi_snr', f'{args.voronoi_snr}']
 
-            print(f'Trying to run following command:\n{" ".join(command)}..')
+            print(f'Trying to run following command:\n{" ".join(command)}')
             dummy = subprocess.run(command)
 
         try:
