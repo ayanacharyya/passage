@@ -1017,7 +1017,7 @@ def compute_Z_O3O2(OIII5007_flux, OII3727_flux):
     else:
         net_mask = False
 
-    k = [-0.691, -2.944, -1.308] # c0-4 parameters from Table 2 of Curti+19 3rd row (O3O2)
+    k = [-0.691, -2.944, -1.308] # c0-2 parameters from Table 2 of Curti+19 3rd row (O3O2)
 
     if hasattr(OII3727_flux, "__len__"): # if it is an array
         # --------computing the ratio and appropriate errors------------
@@ -1035,11 +1035,21 @@ def compute_Z_O3O2(OIII5007_flux, OII3727_flux):
 
         # --------computing the polynomial and appropriate errors------------
         log_OH = []
+        if args.debug_Zdiag:
+            fig, ax = plt.subplots(1, 2, figsize=(6, 8), sharey=True)
+            ax[0].set_xlabel('Solution[0]')
+            ax[1].set_xlabel('log(O/H)+12 = min(solution) + 8.69')
+            ax[0].set_ylabel('O3O2')
+            ax[0].set_ylim(-1.5, 1.5)
+
         for this_O3O2 in O3O2.data.flatten():
             try:
                 solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_O3O2)]])) if item.imag == 0]
-                this_log_OH = np.min(solution) + 8.69  # see Table 1 caption in Curti+19
+                this_log_OH = np.max(solution) + 8.69  # see Table 1 caption in Curti+19
                 log_OH.append(ufloat(this_log_OH, 0.))
+                if args.debug_Zdiag:
+                    ax[0].scatter(solution[0], unp.nominal_values(this_O3O2), lw=0, s=50)
+                    ax[1].scatter(this_log_OH, unp.nominal_values(this_O3O2), lw=0, s=50)
             except:
                 log_OH.append(ufloat(np.nan, np.nan))
         log_OH = np.ma.masked_where(O3O2.mask | net_mask, np.reshape(log_OH, np.shape(O3O2)))
@@ -1063,17 +1073,8 @@ def get_Z_O3O2(full_hdu, args):
     OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
     OII3727_map, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
 
-    if not args.do_not_correct_flux:
-        # special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back
-        ratio_5007_to_4959 = 2.98  # from grizli source code
-        factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
-        print(f'Re-correcting OIII to include the 4959 component, for computing O3S2 metallicity, by factor of {factor:.3f}')
-        OIII5007_map = np.ma.masked_where(OIII5007_map.mask, OIII5007_map.data / factor)
-        OIII5007_int = OIII5007_int / factor
-
-
-    logOH_map = compute_Z_O3S2(OIII5007_map, OII3727_map)
-    logOH_int = compute_Z_O3S2(OIII5007_int, OII3727_int)
+    logOH_map = compute_Z_O3O2(OIII5007_map, OII3727_map)
+    logOH_int = compute_Z_O3O2(OIII5007_int, OII3727_int)
 
     return logOH_map, logOH_int
 
@@ -1129,11 +1130,21 @@ def compute_Z_O3S2(OIII5007_flux, Hbeta_flux, SII6717_flux, Halpha_flux):
 
         # --------computing the polynomial and appropriate errors------------
         log_OH = []
+        if args.debug_Zdiag:
+            fig, ax = plt.subplots(1, 2, figsize=(6, 8), sharey=True)
+            ax[0].set_xlabel('Solution[0]')
+            ax[1].set_xlabel('log(O/H)+12 = min(solution) + 8.69')
+            ax[0].set_ylabel('O3S2')
+            ax[0].set_ylim(-0.5, 2.5)
+
         for this_O3S2 in O3S2.data.flatten():
             try:
                 solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_O3S2)]])) if item.imag == 0]
                 this_log_OH = np.min(solution) + 8.69  # see Table 1 caption in Curti+19
                 log_OH.append(ufloat(this_log_OH, 0.))
+                if args.debug_Zdiag:
+                    ax[0].scatter(this_log_OH, unp.nominal_values(this_O3S2), lw=0, s=50)
+                    ax[1].scatter(solution[0], unp.nominal_values(this_O3S2), lw=0, s=50)
             except:
                 log_OH.append(ufloat(np.nan, np.nan))
         log_OH = np.ma.masked_where(O3S2.mask | net_mask, np.reshape(log_OH, np.shape(O3S2)))
@@ -1160,13 +1171,6 @@ def get_Z_O3S2(full_hdu, args):
     Halpha_map, line_wave, Halpha_int, _ = get_emission_line_map('Ha', full_hdu, args)
 
     if not args.do_not_correct_flux:
-        # special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back
-        ratio_5007_to_4959 = 2.98  # from grizli source code
-        factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
-        print(f'Re-correcting OIII to include the 4959 component, for computing O3S2 metallicity, by factor of {factor:.3f}')
-        OIII5007_map = np.ma.masked_where(OIII5007_map.mask, OIII5007_map.data / factor)
-        OIII5007_int = OIII5007_int / factor
-
         # special treatment for SII 6717 line, in order to account for and ADD the SII 6731 component back
         ratio_6717_to_6731 = 1.  # from grizli source code
         factor = ratio_6717_to_6731 / (1 + ratio_6717_to_6731)
@@ -1691,13 +1695,19 @@ def plot_metallicity_map(full_hdu, args):
 
     if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
         # --------deriving the metallicity map-------------
-        if args.use_O3S2: logOH_map, logOH_int = get_Z_O3S2(full_hdu, args)
-        elif args.use_O3O2:  logOH_map, logOH_int = get_Z_O3O2(full_hdu, args)
-        else: logOH_map, logOH_int = get_Z_R23(full_hdu, args, branch=args.Zbranch)
+        if args.use_O3S2:
+            logOH_map, logOH_int = get_Z_O3S2(full_hdu, args)
+            diag = 'O3S2'
+        elif args.use_O3O2:
+            logOH_map, logOH_int = get_Z_O3O2(full_hdu, args)
+            diag = 'O3O2'
+        else:
+            logOH_map, logOH_int = get_Z_R23(full_hdu, args, branch=args.Zbranch)
+            diag = 'R23'
         if args.plot_ionisation_parameter: logq_map, logq_int = get_q_O32(full_hdu, args)
 
         # ---------plotting-------------
-        lim, label = [7.5, 9.0], 'log(O/H) (R23)'
+        lim, label = [7.5, 9.0], f'log(O/H) ({diag})'
         axes[0], logOH_radfit = plot_2D_map(logOH_map, axes[0], args, takelog=False, label=r'%s$_{\rm int}$ = %.1f $\pm$ %.1f' % (label, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1])
 
         logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
