@@ -25,8 +25,11 @@
              run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --plot_BPT --colorcol distance_from_K01 --run narrow_z_narrow_mass
              run make_passage_plots.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --xcol log_mass_bgp --ycol log_SFR_int --colorcol distance_from_K01 --run narrow_z_narrow_mass
 
-             run make_passage_plots.py  --do_field Par028 --xcol log_mass_bgp --ycol log_SFR_int --colorcol redshift --run Par028_including_nircam
-             run make_passage_plots.py  --do_field Par052 --xcol log_mass_bgp --ycol log_SFR_int --colorcol redshift --run Par052_including_nircam
+             run make_passage_plots.py  --do_field Par028 --plot_conditions all_match --xcol log_mass_bgp --ycol log_SFR_int --colorcol redshift --run Par028_including_nircam
+             run make_passage_plots.py  --do_field Par052 --plot_conditions all_match --xcol log_mass_bgp --ycol log_SFR_int --colorcol redshift --run Par052_including_nircam
+
+             run make_passage_plots.py  --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --xcol log_mass_bgp --ycol log_SFR_int --colorcol redshift --run including_nircam --use_only_good
+
 '''
 
 from header import *
@@ -345,10 +348,17 @@ if __name__ == "__main__":
             args.field_set_plot_conditions_text = f'allpar_{args.drv}_venn_{plot_conditions_text}'
             if len(args.run) > 0 and args.run[0] != '_': args.run = '_' + args.run
             df_infilename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df_withSED{args.run}.csv'
-        else:
+        elif args.plot_conditions == 'all_match':
             args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
             args.field_set_plot_conditions_text = f'{args.field}_{args.drv}_allmatch'
             df_infilename = args.output_dir / args.field / f'{args.field}_all_diag_results_withSED_{args.run}.csv'
+        else:
+            args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
+            plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
+            plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
+            args.field_set_plot_conditions_text = f'{args.field}_{args.drv}_venn_{plot_conditions_text}'
+            if len(args.run) > 0 and args.run[0] != '_': args.run = '_' + args.run
+            df_infilename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df_withSED{args.run}.csv'
 
         if os.path.exists(df_infilename):
             print(f'Reading in main df from {df_infilename}')
@@ -366,6 +376,9 @@ if __name__ == "__main__":
                     sys.exit(f'{df_infilename} does not exist')
 
         df = pd.read_csv(df_infilename)
+        if args.use_only_good and args.drv == 'v0.5' and set(args.plot_conditions) == set(['SNR']) and set(args.line_list) == set(['OIII', 'Ha', 'OII', 'Hb', 'SII']):
+            df = df[df['objid'].isin([1303,1934,2734,2867,300,2903])].reset_index(drop=True) # only choosing the pre-determined good galaxies
+            print(f'Using only the pre-determined good galaxies, and there are {len(df_int)} of them..')
 
         # -------combing with metallicity dataframe if it exists----------------
         logOHgrad_filename = args.output_dir / 'catalogs' / f'logOHgrad_df_snr{args.snr_cut}_onlyseg_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}.txt'

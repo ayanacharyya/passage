@@ -35,6 +35,9 @@ if __name__ == "__main__":
     df_int_filename = args.output_dir / 'catalogs' / f'{fields_text}_{args.drv}_venn_{plot_conditions_text}_df.txt'
     df_int = pd.read_csv(df_int_filename)
     df_int = df_int.sort_values(by=['field', 'objid']).reset_index(drop=True)
+    if args.use_only_good and args.drv == 'v0.5' and set(args.plot_conditions) == set(['SNR']) and set(args.line_list) == set(['OIII', 'Ha', 'OII', 'Hb', 'SII']):
+        df_int = df_int[df_int['objid'].isin([1303, 1934, 2734, 2867, 300, 2903])].reset_index(drop=True)  # only choosing the pre-determined good galaxies
+        print(f'Using only the pre-determined good galaxies, and there are {len(df_int)} of them..')
 
     output_dir = args.output_dir / f'{description_text2}'
     output_dir.mkdir(parents=True, exist_ok=True)

@@ -31,8 +31,11 @@
              run compute_stellar_masses.py --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --include_cosmoswebb --use_only_bands acs,niriss,nircam,miri --fit_sed --run all_st_bands --plot_restframe
              run compute_stellar_masses.py --line_list OIII,Ha --plot_conditions EW,mass,PA --include_cosmoswebb --use_only_bands acs,niriss,nircam,miri --fit_sed --run all_st_bands --plot_restframe
 
-             run compute_stellar_masses.py --do_field Par028 --fit_sed --include_cosmoswebb --run Par028_including_nircam --plot_restframe --ncpus 2
-             run compute_stellar_masses.py --do_field Par052 --fit_sed --include_cosmoswebb --run Par052_including_nircam --plot_restframe --ncpus 2
+             run compute_stellar_masses.py --do_field Par028 --plot_conditions all_match --fit_sed --include_cosmoswebb --run Par028_including_nircam --plot_restframe --ncpus 2
+             run compute_stellar_masses.py --do_field Par052 --plot_conditions all_match --fit_sed --include_cosmoswebb --run Par052_including_nircam --plot_restframe --ncpus 2
+
+             run compute_stellar_masses.py --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --fit_sed --include_cosmoswebb --run include_nircam --plot_restframe --ncpus 2 --use_only_good
+
 '''
 from header import *
 from util import *
@@ -769,10 +772,16 @@ if __name__ == "__main__":
         plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
         args.field_set_plot_conditions_text = f'allpar_{args.drv}_venn_{plot_conditions_text}'
         df_int_filename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df.txt'
-    else:
+    elif args.plot_conditions == 'all_match':
         args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
         args.field_set_plot_conditions_text = f'{args.field}_{args.drv}_allmatch'
         df_int_filename = args.output_dir / args.field / f'{args.field}_all_diag_results.csv'
+    else:
+        args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
+        plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
+        plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
+        args.field_set_plot_conditions_text = f'{args.field}_{args.drv}_venn_{plot_conditions_text}'
+        df_int_filename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df.txt'
 
     photcat_filename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_passage_cosmos_fluxes{args.cosmos_webb_text}.csv'
 
@@ -786,6 +795,9 @@ if __name__ == "__main__":
         else:
             sys.exit(f'{df_int_filename} does not exist')
     df_int = pd.read_csv(df_int_filename)
+    if args.use_only_good and args.drv == 'v0.5' and set(args.plot_conditions) == set(['SNR']) and set(args.line_list) == set(['OIII', 'Ha', 'OII', 'Hb', 'SII']):
+        df_int = df_int[df_int['objid'].isin([1303, 1934, 2734, 2867, 300, 2903])].reset_index(drop=True)  # only choosing the pre-determined good galaxies
+        print(f'Using only the pre-determined good galaxies, and there are {len(df_int)} of them..')
 
     df_fluxes = get_flux_catalog(photcat_filename, df_int, args)
     df_fluxes = df_fluxes.sort_values(by='objid')

@@ -1004,6 +1004,92 @@ def plot_Z_Te_map(full_hdu, ax, args, radprof_ax=None):
     return ax, logOH_map, logOH_radfit, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
+def compute_Z_O3O2(OIII5007_flux, OII3727_flux):
+    '''
+    Calculates and returns the O3O2 metallicity given observed line fluxes
+    Conversion factor is from Curti+2019
+    '''
+    # -----handling masks separately because uncertainty package cannot handle masks---------
+    if np.ma.isMaskedArray(OIII5007_flux):
+        net_mask = OII3727_flux.mask | OIII5007_flux.mask
+        OIII5007_flux = OIII5007_flux.data
+        OII3727_flux = OII3727_flux.data
+    else:
+        net_mask = False
+
+    k = [-0.691, -2.944, -1.308] # c0-4 parameters from Table 2 of Curti+19 3rd row (O3O2)
+
+    if hasattr(OII3727_flux, "__len__"): # if it is an array
+        # --------computing the ratio and appropriate errors------------
+        new_mask = OII3727_flux == 0
+        OII3727_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+
+        ratio = OIII5007_flux / OII3727_flux
+        ratio = np.ma.masked_where(new_mask, ratio)
+
+        # --------computing the log of the ratio and appropriate errors------------
+        new_mask = ratio <= 0
+        ratio[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        O3O2 = unp.log10(ratio.data)
+        O3O2 = np.ma.masked_where(new_mask | ratio.mask, O3O2)
+
+        # --------computing the polynomial and appropriate errors------------
+        log_OH = []
+        for this_O3O2 in O3O2.data.flatten():
+            try:
+                solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_O3O2)]])) if item.imag == 0]
+                this_log_OH = np.min(solution) + 8.69  # see Table 1 caption in Curti+19
+                log_OH.append(ufloat(this_log_OH, 0.))
+            except:
+                log_OH.append(ufloat(np.nan, np.nan))
+        log_OH = np.ma.masked_where(O3O2.mask | net_mask, np.reshape(log_OH, np.shape(O3O2)))
+
+    else: # if it is scalar
+        try:
+            ratio = OIII5007_flux / OII3727_flux
+            O3O2 = unp.log10(ratio)
+            solution = np.min([item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(O3O2)]])) if item.imag == 0])
+            log_OH = ufloat(solution + 8.69, 0.)  # see Table 1 caption in Curti+19
+        except:
+            log_OH = ufloat(np.nan, np.nan)
+
+    return log_OH
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_Z_O3O2(full_hdu, args):
+    '''
+    Computes and returns the spatially resolved as well as intregrated O3S2 metallicity from a given HDU
+    '''
+    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    OII3727_map, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
+
+    if not args.do_not_correct_flux:
+        # special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back
+        ratio_5007_to_4959 = 2.98  # from grizli source code
+        factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
+        print(f'Re-correcting OIII to include the 4959 component, for computing O3S2 metallicity, by factor of {factor:.3f}')
+        OIII5007_map = np.ma.masked_where(OIII5007_map.mask, OIII5007_map.data / factor)
+        OIII5007_int = OIII5007_int / factor
+
+
+    logOH_map = compute_Z_O3S2(OIII5007_map, OII3727_map)
+    logOH_int = compute_Z_O3S2(OIII5007_int, OII3727_int)
+
+    return logOH_map, logOH_int
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_Z_O3O2_map(full_hdu, ax, args, radprof_ax=None):
+    '''
+    Plots the O3S2 metallicity map (and the emission line maps that go into it) in the given axes
+    Returns the axes handles and the 2D metallicity map just produced
+    '''
+    lim, label = [7, 9], 'Z (O3O2)'
+    logOH_map, logOH_int = get_Z_O3O2(full_hdu, args)
+    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+
+    return ax, logOH_map, logOH_radfit, logOH_int
+
+# --------------------------------------------------------------------------------------------------------------------
 def compute_Z_O3S2(OIII5007_flux, Hbeta_flux, SII6717_flux, Halpha_flux):
     '''
     Calculates and returns the O3S2 metallicity given observed line fluxes
@@ -1019,7 +1105,7 @@ def compute_Z_O3S2(OIII5007_flux, Hbeta_flux, SII6717_flux, Halpha_flux):
     else:
         net_mask = False
 
-    k = [0.191, -4.292, -2.538, 0.053, 0.332]  # c0-4 parameters from Table 2 of Curti+19 last row
+    k = [0.191, -4.292, -2.538, 0.053, 0.332] # c0-4 parameters from Table 2 of Curti+19 last row (O3S2)
 
     if hasattr(Hbeta_flux, "__len__"): # if it is an array
         # --------computing the ratio and appropriate errors------------
@@ -1606,6 +1692,7 @@ def plot_metallicity_map(full_hdu, args):
     if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
         # --------deriving the metallicity map-------------
         if args.use_O3S2: logOH_map, logOH_int = get_Z_O3S2(full_hdu, args)
+        elif args.use_O3O2:  logOH_map, logOH_int = get_Z_O3O2(full_hdu, args)
         else: logOH_map, logOH_int = get_Z_R23(full_hdu, args, branch=args.Zbranch)
         if args.plot_ionisation_parameter: logq_map, logq_int = get_q_O32(full_hdu, args)
 
@@ -2072,7 +2159,9 @@ if __name__ == "__main__":
                 # ---------------metallicity map---------------
                 if args.use_O3S2 and all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
                     ax3, logOH_map, logOH_radfit, logOH_int = plot_Z_O3S2_map(full_hdu, ax3, args, radprof_ax=rax3)
-                elif not args.use_O3S2 and all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
+                elif args.use_O3O2 and all([line in args.available_lines for line in ['OIII', 'OII']]):
+                    ax3, logOH_map, logOH_radfit, logOH_int = plot_Z_O3O2_map(full_hdu, ax3, args, radprof_ax=rax3)
+                elif not args.use_O3S2 and not args.use_O3O2 and all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
                     ax3, logOH_map, logOH_radfit, logOH_int = plot_Z_R23_map(full_hdu, ax3, args, radprof_ax=rax3)
                 else:
                     fig.delaxes(ax4)

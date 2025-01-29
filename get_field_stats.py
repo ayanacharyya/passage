@@ -17,6 +17,8 @@
              run get_field_stats.py --line_list Ha --do_all_fields --plot_sunburst
              run get_field_stats.py --line_list Ha --do_all_fields --plot_conditions mass --plot_columns --xcol redshift --ycol lp_zBEST --colorcol lp_mass
              run get_field_stats.py --line_list Ha --do_all_fields --plot_conditions mass --plot_columns --xcol redshift --ycol ez_z_phot --colorcol ez_mass
+
+             run get_field_stats.py --field Par028 --clobber_venn --clobber --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2
 '''
 from header import *
 from util import *
