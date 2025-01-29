@@ -110,6 +110,8 @@ if __name__ == "__main__":
             if args.do_not_correct_pixel: command += ['--do_not_correct_pixel']
             if args.do_not_correct_flux: command += ['--do_not_correct_flux']
             if args.use_O3S2: command += ['--use_O3S2']
+            elif args.use_O3O2: command += ['--use_O3S2']
+            elif args.ignore_combined: command += ['--ignore_combined']
             if args.vorbin:
                 command += ['--vorbin']
                 command += ['--voronoi_line', f'{args.voronoi_line}']
