@@ -1431,8 +1431,8 @@ def plot_this(data, ax):
 # --------------------------------------------------------------------------------------------------------------------
 def get_cutout(filename, pos, size, target_header, args, plot_test_axes=None):
     '''
-    Return a cutout from a given the filename of a fits image, around a given position within a given extent
-    Optionally trims the cutout as per the segmentation map, and/or Voronoi binned
+    Return a cutout from a given filename of a fits image, around a given position within a given extent
+    Optionally trims the cutout as per the segmentation map, and/or Voronoi bins it
     Returns the 2D cutout as a 2D array
     '''
     data = fits.open(filename)
