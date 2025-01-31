@@ -448,9 +448,12 @@ def plot_filter_cutouts(df_fluxes, args):
             thisfilename = thisfilename.replace('COSMOS', '').replace('_030mas_077_sci', '').replace('original', '').replace('psf', '').replace('v1', '').replace('v2', '').replace('v3', '').replace('v5', '').replace('_go2_sci_10', '').replace('img', '').replace('mosaic_Shrink10', '').replace('vla', '').replace('lg_sin_10', '').replace('msmf', '').replace(df_fluxes['field'].values[0], '').replace('drz_sci', '').replace('.', '').replace('_', '').replace('-', '')
 
             data = fits.open(image_dir / thisfile)
-            image = data[0].data
-            header = data[0].header
-            if args.plot_cutout_errors: image_error = get_flux_error(image_dir / thisfile, np.shape(image))
+            sci_ext = 1 if 'COSMOS-Web' in thisfile else 0
+            image = data[sci_ext].data
+            header = data[sci_ext].header
+            if args.plot_cutout_errors:
+                if 'COSMOS-Web' in thisfile: image_error = data[2].data
+                else: image_error = get_flux_error(image_dir / thisfile, np.shape(image))
 
             if 'CTYPE3' in header: # for radio images
                 print(f'Modifying header because {thisfilename} is in radio data format..')
