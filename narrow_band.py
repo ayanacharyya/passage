@@ -47,7 +47,7 @@ if __name__ == '__main__':
     narrowband_map_contsub = narrowband_map - cont_mean_map * (px_end - px_start) # Multiplying the mean continuum by delta_pix gives the total continuum within the wavelength window
 
     # Make the plots
-    print(f'Collapsed 3D cube of shape {np.shape(mxdf_cube_data)} from pixels {px_start} ({wavelength_start} A) to {px_end} ({wavelength_end} A) into a shape of {np.shape(narrowband_map)} and {npix_cont} pixels wide subtract continuum from either side')
+    print(f'Collapsed 3D cube of shape {np.shape(mxdf_cube_data)} from pixels {px_start} ({wavelength_start} A) to {px_end} ({wavelength_end} A) into a shape of {np.shape(narrowband_map)} and subtracted continuum from a {npix_cont}-pixels wide window on either side')
     fig = plt.figure(figsize=(8,6))
     plt.subplot(projection=wcs)
 
