@@ -159,8 +159,7 @@ if __name__ == "__main__":
             else:
                 for ind, thisfile in enumerate(zipped_files):
                     print(f'Unzipping {ind + 1} of {len(zipped_files)} zipped files..')
-                    shutil.unpack_archive(thisfile, products_path)
-                    os.remove(thisfile) #remove zipped files after unzipping
+                    unzip_and_delete(thisfile, products_path)
 
             # ------------rename the files within the downloaded folders------------------
             subfolders = glob.glob(str(products_path) + '/*/')

@@ -911,6 +911,51 @@ def get_custom_cmap(cmap_name, cmap_path=None):
 
     return mycmap_quant
 
+# --------------------------------------------------------------------------------------------------------------------
+def unzip_and_delete(zip_file, destination_path):
+    '''
+    Unzips given zip file to given destination path and removes the zip file
+    '''
+    print(f'Unpacking {zip_file} in to {destination_path}..')
+    shutil.unpack_archive(zip_file, destination_path)
+    os.remove(zip_file)  # remove zipped files after unzipping
+
+# --------------------------------------------------------------------------------------------------------------------
+def move_field_after_download(field, args=None):
+    '''
+    Unzips and moves the reduced data from Box from Downloads folder to appropriate location by making the right dorectories
+    '''
+    start_time = datetime.now()
+    origin_dir = HOME / 'Downloads'
+
+    if 'Par' in str(field): field = f'Par{int(field.split("Par")[1]):03d}'
+    else: field = f'Par{field:03d}'
+
+    if args is None: destination_dir = Path('/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/v0.5_new/data')
+    else: destination_dir = args.input_dir / 'v0.5_new/data'
+    Path(destination_dir / 'linelist').mkdir(exist_ok=True, parents=True)
+
+    unzip_and_delete(origin_dir / f'{field}.zip', destination_dir)
+
+    Path(destination_dir / field / 'DATA/DIRECT_GRISM').mkdir(exist_ok=True, parents=True)
+    unzip_and_delete(destination_dir / field / f'{field}_spec1D.tar.gz', destination_dir / field)
+    unzip_and_delete(destination_dir / field / f'{field}_spec2D.tar.gz', destination_dir / field)
+
+    cat_files = glob.glob(str(destination_dir / field / '*cat.fits'))
+    for this_cat_file in cat_files:
+        print(f'Moving {os.path.split(this_cat_file)[-1]}..')
+        shutil.move(this_cat_file, destination_dir / field / 'DATA/DIRECT_GRISM')
+
+    fits_files = glob.glob(str(destination_dir / field / '*.fits'))
+    for this_fits_file in fits_files:
+        print(f'Moving {os.path.split(this_fits_file)[-1]}..')
+        shutil.move(this_fits_file, destination_dir / field / 'DATA')
+
+    filename = f'{field}lines.dat'
+    print(f'Moving {filename}..')
+    shutil.move(destination_dir / field / filename, destination_dir / 'linelist')
+
+    print(f'Completed moving {field} in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
 
 # --------------------------------------------------------------------------------------------------
 args = parse_args()
