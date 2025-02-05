@@ -70,6 +70,9 @@ def parse_args():
     parser.add_argument('--bg_image_dir', metavar='bg_image_dir', type=str, action='store', default=None, help='Which folder to be used for looking for the background image?')
     parser.add_argument('--plot_zcosmos', dest='plot_zcosmos', action='store_true', default=False, help='Overplot the (thousands of) zCOSMOS targets? Default is no.')
     parser.add_argument('--plot_cosmos2020', dest='plot_cosmos2020', action='store_true', default=False, help='Overplot the (millions of) COSMOS2020 targets? Default is no.')
+    parser.add_argument('--only_passage_regions', dest='only_passage_regions', action='store_true', default=False, help='Overplot ONLY the PASSAGE Par regions? Default is no.')
+    parser.add_argument('--fg_image_dir', metavar='fg_image_dir', type=str, action='store', default=None, help='Which folder to be used for looking for the foreground image?')
+    parser.add_argument('--fg_file', metavar='fg_file', type=str, action='store', default=None, help='Which file to be used for plotting the foreground images?')
 
     # ------- args added for make_spectra_from_beams.py ------------------------------
     parser.add_argument('--skip_sep', dest='skip_sep', action='store_true', default=False, help='Skip the Source Extraction Pipeline? Default is no.')

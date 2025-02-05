@@ -8,6 +8,7 @@
              run plot_footprints.py --bg COSMOS --plot_zcosmos
              run plot_footprints.py --bg_image_dir /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/COSMOS/imaging_orig/ --bg_file ACS_814_030mas_077_sci.fits
              run plot_footprints.py --fortalk
+             run plot_footprints.py --fg_file f444w --only_passage_regions
 '''
 
 from header import *
@@ -35,7 +36,6 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, df=None):
 
         if 'color' in sky_regions[0].visual and not args.fortalk: color = sky_regions[0].visual['color']
         else: color = col_arr[index]
-
 
         for index2, sky_region in enumerate(sky_regions):
             if type(sky_region) == regions.shapes.text.TextSkyRegion: # label if it is text
@@ -100,13 +100,15 @@ def plot_background(filename, args):
     Returns fig handle
     '''
     cmap = 'Greys_r' if args.fortalk else 'Greys'
-    fig, ax = plt.subplots(figsize=(8, 6))
-    fig.subplots_adjust(right=0.99, top=0.95, bottom=0.1, left=0.01)
 
     print(f'Reading in background image file {filename}')
     bg_img_hdu = fits.open(filename)
-    data = np.log10(bg_img_hdu[0].data)
-    header = bg_img_hdu[0].header
+    sci_ext = 1 if 'COSMOS-Web' in str(filename) else 0
+    data = np.log10(bg_img_hdu[sci_ext].data)
+    header = bg_img_hdu[sci_ext].header
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    fig.subplots_adjust(right=0.99, top=0.95, bottom=0.1, left=0.01)
 
     ax.imshow(data, origin='lower', cmap=cmap, vmin=-4, vmax=-3) # full, relevant range of data, for COSMOS field, is roughly (-6,-1)
 
@@ -127,6 +129,41 @@ def plot_background(filename, args):
 
     return fig, bg_img_hdu
 
+# -------------------------------------------------------------------------------------------------------
+def overplot_skyregion_from_fits(filename, bg_img_hdu, ax, ext=0, color='green', label=None):
+    '''
+    Overplots the sky region corresponding to a given fits filename, on a given background hdu, on a given axis handle
+    Returns axis handle
+    '''
+    target_wcs = pywcs.WCS(bg_img_hdu[0].header)
+    filename = Path(filename)
+    hdul = fits.open(filename)
+    source_wcs = pywcs.WCS(hdul[ext].header)
+
+    region_file = filename.parent / Path(filename.stem + '.reg')
+    source_wcs.footprint_to_file(region_file, color=color, width=2)
+
+    sky_region = Regions.read(region_file, format='ds9')[0]
+    color = sky_region.visual['facecolor']
+    color = color.replace(',', '') # remove any weird commas
+    pixel_region = sky_region.to_pixel(target_wcs)
+    pixel_region.plot(ax=ax, color=color)
+    ax.text(pixel_region.vertices.x[0], pixel_region.vertices.y[0], filename.stem if label is None else label, color=color)
+
+    return ax
+
+# -------------------------------------------------------------------------------------------------------
+def overplot_data_from_fits(filename, bg_img_hdu, ax, ext=0, cmap='Greens'):
+    '''
+    Overplots the data from a given fits filename, on a given background hdu, on a given axis handle
+    Returns axis handle
+    '''
+    foreground_hdu = fits.open(filename)[ext]
+    foreground_data, footprint = reproject_interp(foreground_hdu, bg_img_hdu[0].header)
+    ax.imshow(np.log10(foreground_data), cmap=cmap)
+
+    return ax
+
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
@@ -138,26 +175,37 @@ if __name__ == "__main__":
     if args.bg_image_dir is None: args.bg_image_dir = args.input_dir / 'footprints/survey_images'
     else: args.bg_image_dir = Path(args.bg_image_dir)
 
+    if args.fg_image_dir is None: args.fg_image_dir = args.input_dir / 'COSMOS/imaging'
+    else: args.fg_image_dir = Path(args.fg_image_dir)
+
     if args.bg_file is None:
         if args.bg == 'COSMOS': bg_filename = args.bg_image_dir / 'COSMOS-HST-ACS_mosaic_Shrink100.fits' # if field is COSMOS, by default use this background image
         else: bg_filename = list(args.bg_image_dir.glob('*%s*.fits' %args.bg))[0] # for other fields, look for available background image files
     else:
         bg_filename = args.bg_image_dir / args.bg_file
 
-    reg_filenames = list(reg_files_dir.glob('*%s*.reg' %args.bg))
+    reg_filenames = [] if args.only_passage_regions else list(reg_files_dir.glob('*%s*.reg' %args.bg))
     reg_filenames += list(reg_files_dir.glob('*PASSAGE*.reg'))
     if len(reg_filenames) == 0: sys.exit(f'No {args.bg} reg file in {reg_files_dir}')
 
     # ------plotting the background------------
     fig, bg_img_hdu = plot_background(bg_filename, args)
+    fig, sky_regions = plot_footprints(reg_filenames, bg_img_hdu, fig, args, df=df if 'df' in locals() else None)
+
+    # ------overplotting COSMOS-Web mosaics-----------------
+    if args.fg_file is not None:
+        fg_files = args.fg_file.split(',')
+        for index, thisfile in enumerate(fg_files):
+            print(f'Overplotting foreground {thisfile} which is {index + 1} of {len(fg_files)}..')
+            cosmos_web_mosaic_filename = args.fg_image_dir / f'mosaic_nircam_{thisfile}_COSMOS-Web_60mas_v0_5_i2d.fits'
+            ax = overplot_skyregion_from_fits(cosmos_web_mosaic_filename, bg_img_hdu, fig.axes[0], ext=1, color='magenta', label=thisfile)
+            ax = overplot_data_from_fits(cosmos_web_mosaic_filename, bg_img_hdu, fig.axes[0], ext=1, cmap='Greens')
 
     # ------plotting the footprints---------
     if args.plot_zcosmos or args.plot_cosmos2020:
         if args.plot_zcosmos: df = read_zCOSMOS_catalog(args=args)
         elif args.plot_cosmos2020: df = read_COSMOS2020_catalog(args=args)
         fig = plot_skycoord_from_df(df, fig, bg_img_hdu, color='aqua', alpha=0.3, size=1)
-
-    fig, sky_regions = plot_footprints(reg_filenames, bg_img_hdu, fig, args, df=df if 'df' in locals() else None)
 
     # ------saving figure---------
     if args.fortalk:
