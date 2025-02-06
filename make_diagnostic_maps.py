@@ -32,6 +32,9 @@
              run make_diagnostic_maps.py --field Par28 --id 192 --plot_metallicity --ignore_combined --plot_radial_profile --plot_ion --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5
 
              run make_diagnostic_maps.py --field Par28 --id 1303,1934,2734,2867,300,2903,2906 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --keep
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --mask_agn --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --keep
+
+             run make_diagnostic_maps.py --field glass-a2744 --id 2928,5184 --plot_radial_profile --plot_AGN_frac --only_seg --vorbin --voronoi_line OIII --voronoi_snr 10 --drv 0.5 --do_not_correct_pixel --use_O3O2
 
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
@@ -992,18 +995,6 @@ def get_Z_Te(full_hdu, args):
     return logOH_map, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_Z_Te_map(full_hdu, ax, args, radprof_ax=None):
-    '''
-    Plots the T_e-based metallicity map (and the emission line maps that go into it) in the given axes
-    Returns the axes handles and the 2D metallicity map just produced
-    '''
-    lim, label = [6, 9], 'Z (Te)'
-    logOH_map, logOH_int = get_Z_Te(full_hdu, args)
-    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='Greens', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
-
-    return ax, logOH_map, logOH_radfit, logOH_int
-
-# --------------------------------------------------------------------------------------------------------------------
 def compute_Z_O3O2(OIII5007_flux, OII3727_flux):
     '''
     Calculates and returns the O3O2 metallicity given observed line fluxes
@@ -1077,18 +1068,6 @@ def get_Z_O3O2(full_hdu, args):
     logOH_int = compute_Z_O3O2(OIII5007_int, OII3727_int)
 
     return logOH_map, logOH_int
-
-# --------------------------------------------------------------------------------------------------------------------
-def plot_Z_O3O2_map(full_hdu, ax, args, radprof_ax=None):
-    '''
-    Plots the O3S2 metallicity map (and the emission line maps that go into it) in the given axes
-    Returns the axes handles and the 2D metallicity map just produced
-    '''
-    lim, label = [7, 9], 'Z (O3O2)'
-    logOH_map, logOH_int = get_Z_O3O2(full_hdu, args)
-    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
-
-    return ax, logOH_map, logOH_radfit, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def compute_Z_O3S2(OIII5007_flux, Hbeta_flux, SII6717_flux, Halpha_flux):
@@ -1182,18 +1161,6 @@ def get_Z_O3S2(full_hdu, args):
     logOH_int = compute_Z_O3S2(OIII5007_int, Hbeta_int, SII6717_int, Halpha_int)
 
     return logOH_map, logOH_int
-
-# --------------------------------------------------------------------------------------------------------------------
-def plot_Z_O3S2_map(full_hdu, ax, args, radprof_ax=None):
-    '''
-    Plots the O3S2 metallicity map (and the emission line maps that go into it) in the given axes
-    Returns the axes handles and the 2D metallicity map just produced
-    '''
-    lim, label = [7, 9], 'Z (O3S2)'
-    logOH_map, logOH_int = get_Z_O3S2(full_hdu, args)
-    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
-
-    return ax, logOH_map, logOH_radfit, logOH_int
 
 # ----------------------------------------------------------------------------------------------------
 def get_nearest(value, array):
@@ -1327,14 +1294,47 @@ def get_Z_R23(full_hdu, args, branch='low'):
     return logOH_map, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_Z_R23_map(full_hdu, ax, args, radprof_ax=None):
+def get_Z(full_hdu, args):
     '''
-    Plots the R23 metallicity map (and the emission line maps that go into it) in the given axes
+    Computes and returns the spatially resolved as well as intregrated metallicity from a given HDU
+    '''
+    if args.use_O3S2 and all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
+        logOH_map, logOH_int = get_Z_O3S2(full_hdu, args)
+        label = 'Z (O3S2)'
+    elif args.use_O3O2 and all([line in args.available_lines for line in ['OIII', 'OII']]):
+        logOH_map, logOH_int = get_Z_O3O2(full_hdu, args)
+        label = 'Z (O3O2)'
+    elif args.use_Te and all([line in args.available_lines for line in ['OIII', 'OIII-4363', 'OII', 'Hb']]):
+        logOH_map, logOH_int = get_Z_Te(full_hdu, args)
+        label = 'Z (Te)'
+    elif all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
+        logOH_map, logOH_int = get_Z_R23(full_hdu, args)
+        label = 'Z (R23)'
+    else:
+        print(f'Could not apply any of the metallicity diagnostics, so returning NaN metallicities')
+        logOH_map, logOH_int, label = None, np.nan, ''
+
+    if logOH_map is not None and args.mask_agn: logOH_map = np.ma.masked_where((args.distance_from_K01_map > 0) | logOH_map.mask, logOH_map)
+
+    return logOH_map, logOH_int, label
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_Z_map(full_hdu, ax, args, radprof_ax=None):
+    '''
+    Plots the metallicity map in the given axes
     Returns the axes handles and the 2D metallicity map just produced
     '''
-    lim, label = [7, 9], 'Z (R23)'
-    logOH_map, logOH_int = get_Z_R23(full_hdu, args)
-    ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    logOH_map, logOH_int, label = get_Z(full_hdu, args)
+
+    if logOH_map is not None:
+        lim = [7, 9]
+        ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    else:
+        fig = ax.figure()
+        fig.delaxes(ax)
+        if args.plot_radial_profiles:
+            fig.delaxes(radprof_ax)
+        logOH_radfit = np.nan
 
     return ax, logOH_map, logOH_radfit, logOH_int
 
@@ -1671,7 +1671,7 @@ def plot_starburst_figure(full_hdu, args):
     return fig, starburst_map, starburst_radfit
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_metallicity_map(full_hdu, args):
+def plot_metallicity_fig(full_hdu, args):
     '''
     Plots the metallicity map, and optionally radial profile, in a new figure
     Returns the figure handle and the metallicity map just produced
@@ -1695,19 +1695,11 @@ def plot_metallicity_map(full_hdu, args):
 
     if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
         # --------deriving the metallicity map-------------
-        if args.use_O3S2:
-            logOH_map, logOH_int = get_Z_O3S2(full_hdu, args)
-            diag = 'O3S2'
-        elif args.use_O3O2:
-            logOH_map, logOH_int = get_Z_O3O2(full_hdu, args)
-            diag = 'O3O2'
-        else:
-            logOH_map, logOH_int = get_Z_R23(full_hdu, args, branch=args.Zbranch)
-            diag = 'R23'
+        logOH_map, logOH_int, label = get_Z(full_hdu, args)
         if args.plot_ionisation_parameter: logq_map, logq_int = get_q_O32(full_hdu, args)
 
         # ---------plotting-------------
-        lim, label = [7.5, 9.0], f'log(O/H) ({diag})'
+        lim = [7.5, 9.0]
         axes[0], logOH_radfit = plot_2D_map(logOH_map, axes[0], args, takelog=False, label=r'%s$_{\rm int}$ = %.1f $\pm$ %.1f' % (label, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1])
 
         logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
@@ -1722,7 +1714,7 @@ def plot_metallicity_map(full_hdu, args):
     return fig, logOH_map, logOH_radfit
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None):
+def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False):
     '''
     Plots spatially resolved BPT diagram based on fluxes from grizli, on an existing axis
     Then overplots theoretical lines
@@ -1750,25 +1742,26 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None):
     def func(x):
         return 1.3 + 0.72 / (x - 0.32)  # Eq 6 of K01
 
-    try:
-        # -----------integrated-----------------------
-        color = mpl_cm.get_cmap(cmap)(0.5)
+    if not hide_plot:
+        try:
+            # -----------integrated-----------------------
+            color = mpl_cm.get_cmap(cmap)(0.5)
 
-        y_ratio = unp.log10(OIII_int / Hbeta_int)
-        x_ratio = unp.log10(SII_int / Halpha_int)
+            y_ratio = unp.log10(OIII_int / Hbeta_int)
+            x_ratio = unp.log10(SII_int / Halpha_int)
 
-        p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
-        ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c=color, fmt='none', lw=2)
+            p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
+            ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c=color, fmt='none', lw=2)
 
-        if args.plot_separately:
-            p = ax_indiv.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
-            ax_indiv.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c=color, fmt='none', lw=2)
+            if args.plot_separately:
+                p = ax_indiv.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
+                ax_indiv.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c=color, fmt='none', lw=2)
 
-    except ValueError:
-        print(f'Galaxy {args.id} in {args.field} has a negative integrated flux in one of the following lines, hence skipping this.')
-        print(f'OIII = {OIII_int}\nHb = {Hbeta_int}\nSII = {SII_int}\nHa = {Halpha_int}\n')
-        scatter_plot_handle = None
-        pass
+        except ValueError:
+            print(f'Galaxy {args.id} in {args.field} has a negative integrated flux in one of the following lines, hence skipping this.')
+            print(f'OIII = {OIII_int}\nHb = {Hbeta_int}\nSII = {SII_int}\nHa = {Halpha_int}\n')
+            scatter_plot_handle = None
+            pass
 
     try:
         # -----------spatially_resolved-----------------------
@@ -1795,73 +1788,76 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None):
         distance_from_K01_map = sign_map * get_distance_from_Kewley2001(unp.nominal_values(x_ratio.data), unp.nominal_values(y_ratio.data), args, x_num='SII')
         distance_from_K01_map = np.ma.masked_where(net_mask, distance_from_K01_map)
 
-        x_ratio = np.ma.compressed(np.ma.masked_where(net_mask, x_ratio))
-        y_ratio = np.ma.compressed(np.ma.masked_where(net_mask, y_ratio))
-        distance_map = np.ma.compressed(np.ma.masked_where(net_mask, distance_map))
-        distance_from_K01_arr = np.ma.compressed(distance_from_K01_map)
-        dist_lim = max(np.abs(np.max(distance_from_K01_arr)), np.abs(np.min(distance_from_K01_arr)))
+        if not hide_plot:
+            x_ratio = np.ma.compressed(np.ma.masked_where(net_mask, x_ratio))
+            y_ratio = np.ma.compressed(np.ma.masked_where(net_mask, y_ratio))
+            distance_map = np.ma.compressed(np.ma.masked_where(net_mask, distance_map))
+            distance_from_K01_arr = np.ma.compressed(distance_from_K01_map)
+            dist_lim = max(np.abs(np.max(distance_from_K01_arr)), np.abs(np.min(distance_from_K01_arr)))
 
-        df = pd.DataFrame({'log_sii/ha': unp.nominal_values(x_ratio).flatten(), 'log_sii/ha_err': unp.std_devs(x_ratio).flatten(), 'log_oiii/hb': unp.nominal_values(y_ratio).flatten(), 'log_oiii/hb_err':  unp.std_devs(y_ratio).flatten(), 'distance': distance_map.flatten(), 'distance_from_K01': distance_from_K01_arr.flatten()})
-        df = df.sort_values(by='distance')
-        df = df.drop_duplicates().reset_index(drop=True)
+            df = pd.DataFrame({'log_sii/ha': unp.nominal_values(x_ratio).flatten(), 'log_sii/ha_err': unp.std_devs(x_ratio).flatten(), 'log_oiii/hb': unp.nominal_values(y_ratio).flatten(), 'log_oiii/hb_err':  unp.std_devs(y_ratio).flatten(), 'distance': distance_map.flatten(), 'distance_from_K01': distance_from_K01_arr.flatten()})
+            df = df.sort_values(by='distance')
+            df = df.drop_duplicates().reset_index(drop=True)
 
-        scatter_plot_handle = ax.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_K01' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_K01' else None)
-        ax.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
+            scatter_plot_handle = ax.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_K01' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_K01' else None)
+            ax.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
 
-        if args.plot_AGN_frac and not args.plot_separately:
-            if ax_inset is None: ax_inset = ax.inset_axes([0.55, 0.75, 0.3, 0.3])
-            plot_2D_map(distance_from_K01_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, hide_yaxis=False)
+            if args.plot_AGN_frac and not args.plot_separately:
+                if ax_inset is None: ax_inset = ax.inset_axes([0.55, 0.75, 0.3, 0.3])
+                plot_2D_map(distance_from_K01_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, hide_yaxis=False)
 
-        if args.plot_separately:
-            scatter_plot_handle_indiv = ax_indiv.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_K01' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_K01' else None)
-            ax_indiv.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
+            if args.plot_separately:
+                scatter_plot_handle_indiv = ax_indiv.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_K01' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_K01' else None)
+                ax_indiv.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
 
-            if args.plot_AGN_frac:
-                if ax_inset is None: ax_inset = ax_indiv.inset_axes([0.55, 0.75, 0.3, 0.3])
-                plot_2D_map(distance_from_K01_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim)
+                if args.plot_AGN_frac:
+                    if ax_inset is None: ax_inset = ax_indiv.inset_axes([0.55, 0.75, 0.3, 0.3])
+                    plot_2D_map(distance_from_K01_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim)
 
     except ValueError:
         print(f'Galaxy {args.id} in {args.field} has some negative spatially resolved fluxes, hence skipping this object.')
         scatter_plot_handle = None
+        distance_from_K01_map = None
         pass
 
-    if args.plot_separately:
+    if not hide_plot:
+        if args.plot_separately:
+            # ---------annotate axes-------
+            cbar = plt.colorbar(scatter_plot_handle_indiv)
+            cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from K01' if args.colorcol == 'distance_from_K01' else '')
+
+            ax_indiv.set_xlim(-2, 0.3)
+            ax_indiv.set_ylim(-1, 2)
+            ax_indiv.set_xlabel(f'log (SII 6717+31/Halpha)')
+            ax_indiv.set_ylabel(f'log (OIII 5007/Hbeta)')
+
+            # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
+            x = np.linspace(ax_indiv.get_xlim()[0], ax_indiv.get_xlim()[1], 100)
+            y = func(x)  # Eq 6 of K01
+            ax_indiv.plot(x, y, c='w' if args.fortalk else 'k', ls='dashed', lw=2, label='Kewley+2001')
+            plt.legend()
+            fig_indiv.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
+            fig_indiv.text(0.15, 0.9, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+
+            # -----------save figure----------------
+            figname = fig_dir / f'{args.field}_{args.id:05d}_BPT{snr_text}{only_seg_text}{vorbin_text}.png'
+            fig_indiv.savefig(figname, transparent=args.fortalk)
+            print(f'Saved figure at {figname}')
+            plt.show(block=False)
+
         # ---------annotate axes-------
-        cbar = plt.colorbar(scatter_plot_handle_indiv)
+        cbar = plt.colorbar(scatter_plot_handle)
         cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from K01' if args.colorcol == 'distance_from_K01' else '')
 
-        ax_indiv.set_xlim(-2, 0.3)
-        ax_indiv.set_ylim(-1, 2)
-        ax_indiv.set_xlabel(f'log (SII 6717+31/Halpha)')
-        ax_indiv.set_ylabel(f'log (OIII 5007/Hbeta)')
+        ax.set_xlim(-2, 0.3)
+        ax.set_ylim(-1, 2)
+        ax.set_xlabel(f'log (SII 6717/Halpha)')
+        ax.set_ylabel(f'log (OIII 5007/Hbeta)')
 
         # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
-        x = np.linspace(ax_indiv.get_xlim()[0], ax_indiv.get_xlim()[1], 100)
-        y = func(x)  # Eq 6 of K01
-        ax_indiv.plot(x, y, c='w' if args.fortalk else 'k', ls='dashed', lw=2, label='Kewley+2001')
-        plt.legend()
-        fig_indiv.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
-        fig_indiv.text(0.15, 0.9, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-
-        # -----------save figure----------------
-        figname = fig_dir / f'{args.field}_{args.id:05d}_BPT{snr_text}{only_seg_text}{vorbin_text}.png'
-        fig_indiv.savefig(figname, transparent=args.fortalk)
-        print(f'Saved figure at {figname}')
-        plt.show(block=False)
-
-    # ---------annotate axes-------
-    cbar = plt.colorbar(scatter_plot_handle)
-    cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from K01' if args.colorcol == 'distance_from_K01' else '')
-
-    ax.set_xlim(-2, 0.3)
-    ax.set_ylim(-1, 2)
-    ax.set_xlabel(f'log (SII 6717/Halpha)')
-    ax.set_ylabel(f'log (OIII 5007/Hbeta)')
-
-    # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
-    x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
-    y = 1.3 + 0.72 / (x - 0.32)  # Eq 6 of K01
-    ax.plot(x, y, c='w' if args.fortalk else 'k', ls='dashed', lw=2, label='Kewley+2001')
+        x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
+        y = 1.3 + 0.72 / (x - 0.32)  # Eq 6 of K01
+        ax.plot(x, y, c='w' if args.fortalk else 'k', ls='dashed', lw=2, label='Kewley+2001')
 
     return ax, distance_from_K01_map
 
@@ -1906,11 +1902,11 @@ if __name__ == "__main__":
 
         # ---------prep the catalog file--------------------
         catalog_file = product_dir / f'{args.field}_photcat.fits'
-        if not os.path.exists(catalog_file):
+        if os.path.exists(catalog_file):
+            catalog = GTable.read(catalog_file)
+        elif args.do_all_obj:
             print(f'photcat file for {args.field} does not exist, please download from gdrive or run data reduction. Until then, skipping this field.')
             continue
-
-        catalog = GTable.read(catalog_file)
 
         # --------determine which objects to loop over----------
         if args.do_all_obj:
@@ -2066,7 +2062,7 @@ if __name__ == "__main__":
 
             # ---------plotting spatially resolved BPT-----------------------------
             elif args.plot_BPT:
-                ax, distance_from_K01_map = plot_BPT(full_hdu, ax, args, cmap=args.diverging_cmap if args.colorcol == 'distance_from_K01' else cmap_arr[index])
+                ax, args.distance_from_K01_map = plot_BPT(full_hdu, ax, args, cmap=args.diverging_cmap if args.colorcol == 'distance_from_K01' else cmap_arr[index])
 
             # ---------initialising the starburst figure------------------------------
             elif args.plot_starburst:
@@ -2084,7 +2080,8 @@ if __name__ == "__main__":
 
             # ---------initialising the metallicity figure------------------------------
             elif args.plot_metallicity:
-                fig, logOH_map, logOH_radfit = plot_metallicity_map(full_hdu, args)
+                if args.mask_agn: _, args.distance_from_K01_map = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_K01 map, without actually plotting the BPT diagram
+                fig, logOH_map, logOH_radfit = plot_metallicity_fig(full_hdu, args)
                 df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s]
 
                 # ---------decorating and saving the figure------------------------------
@@ -2152,8 +2149,9 @@ if __name__ == "__main__":
 
                 # ---------------BPT map------------------
                 if all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
-                    ax1, BPT_map = plot_BPT(full_hdu, rax1, args, cmap='viridis', ax_inset=ax1)
+                    ax1, args.distance_from_K01_map = plot_BPT(full_hdu, rax1, args, cmap='viridis', ax_inset=ax1)
                 else:
+                    args.distance_from_K01_map = None
                     fig.delaxes(ax1)
                     if args.plot_radial_profiles:
                         fig.delaxes(rax1)
@@ -2167,16 +2165,7 @@ if __name__ == "__main__":
                         fig.delaxes(rax2)
 
                 # ---------------metallicity map---------------
-                if args.use_O3S2 and all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
-                    ax3, logOH_map, logOH_radfit, logOH_int = plot_Z_O3S2_map(full_hdu, ax3, args, radprof_ax=rax3)
-                elif args.use_O3O2 and all([line in args.available_lines for line in ['OIII', 'OII']]):
-                    ax3, logOH_map, logOH_radfit, logOH_int = plot_Z_O3O2_map(full_hdu, ax3, args, radprof_ax=rax3)
-                elif not args.use_O3S2 and not args.use_O3O2 and all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
-                    ax3, logOH_map, logOH_radfit, logOH_int = plot_Z_R23_map(full_hdu, ax3, args, radprof_ax=rax3)
-                else:
-                    fig.delaxes(ax4)
-                    if args.plot_radial_profiles:
-                        fig.delaxes(rax4)
+                ax3, logOH_map, logOH_radfit, logOH_int = plot_Z_map(full_hdu, ax3, args, radprof_ax=rax3)
 
                 # ---------------SFR map------------------
                 if 'Ha' in args.available_lines:
