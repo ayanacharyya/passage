@@ -130,7 +130,9 @@ def parse_args():
     parser.add_argument('--ignore_combined_method', dest='ignore_combined_method', action='store_true', default=False, help='Ignore the combined method (S6 of KD02) while computing R23 metallicity and rely solely on R23? Default is no.')
     parser.add_argument('--use_O3S2', dest='use_O3S2', action='store_true', default=False, help='Use the Curti et al 2019 O3S2 metallicity diagnostic instead of R23? Default is no.')
     parser.add_argument('--use_O3O2', dest='use_O3O2', action='store_true', default=False, help='Use the Curti et al 2019 O3O2 metallicity diagnostic instead of R23? Default is no.')
+    parser.add_argument('--use_Te', dest='use_Te', action='store_true', default=False, help='Use the Te metallicity diagnostic instead of R23? Default is no.')
     parser.add_argument('--debug_Zdiag', dest='debug_Zdiag', action='store_true', default=False, help='Make additional plots to debug the metallicity diagnostic implementation? Default is no.')
+    parser.add_argument('--mask_agn', dest='mask_agn', action='store_true', default=False, help='Mask out the AGN-dominated pixels from all metallicity estimates? Default is no.')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
@@ -207,8 +209,11 @@ def parse_args():
     args.code_dir = Path(args.code_dir)
 
     if args.filters is None:
-        if 'available_filters_for_field_dict' not in locals(): available_filters_for_field_dict = get_passage_filter_dict(args)
-        args.filters = available_filters_for_field_dict[args.field]
+        if 'glass' in args.field:
+            args.filters = ['F115W', 'F150W', 'F200W']
+        else:
+            if 'available_filters_for_field_dict' not in locals(): available_filters_for_field_dict = get_passage_filter_dict(args)
+            args.filters = available_filters_for_field_dict[args.field]
     else:
         args.filters = args.filters.split(',')
 

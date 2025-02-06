@@ -8,7 +8,8 @@
              run plot_footprints.py --bg COSMOS --plot_zcosmos
              run plot_footprints.py --bg_image_dir /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/COSMOS/imaging_orig/ --bg_file ACS_814_030mas_077_sci.fits
              run plot_footprints.py --fortalk
-             run plot_footprints.py --fg_file f444w --only_passage_regions
+             run plot_footprints.py --fg_file mosaic_nircam_f115w_COSMOS-Web_60mas*_v0_5_i2d.fits
+             run plot_footprints.py --fg_file mosaic_miri_f770w_COSMOS-Web_60mas_A*_v0_5_i2d.fits
 '''
 
 from header import *
@@ -44,7 +45,7 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, df=None):
             else: # otherwise plot it
                 # plotting the region
                 pixel_region = sky_region.to_pixel(wcs_header)
-                pixel_region.plot(ax=ax, lw=2, color=color)
+                pixel_region.plot(ax=ax, lw=2 if args.fg_file is None else 1, color=color)
 
                 # labeling the region
                 if type(sky_region) == regions.shapes.rectangle.RectangleSkyRegion:
@@ -141,7 +142,7 @@ def overplot_skyregion_from_fits(filename, bg_img_hdu, ax, ext=0, color='green',
     source_wcs = pywcs.WCS(hdul[ext].header)
 
     region_file = filename.parent / Path(filename.stem + '.reg')
-    source_wcs.footprint_to_file(region_file, color=color, width=2)
+    source_wcs.footprint_to_file(region_file, color=color, width=1)
 
     sky_region = Regions.read(region_file, format='ds9')[0]
     color = sky_region.visual['facecolor']
@@ -160,7 +161,8 @@ def overplot_data_from_fits(filename, bg_img_hdu, ax, ext=0, cmap='Greens'):
     '''
     foreground_hdu = fits.open(filename)[ext]
     foreground_data, footprint = reproject_interp(foreground_hdu, bg_img_hdu[0].header)
-    ax.imshow(np.log10(foreground_data), cmap=cmap)
+    data_to_plot = np.log10(foreground_data)
+    ax.imshow(data_to_plot, cmap=cmap)
 
     return ax
 
@@ -184,8 +186,12 @@ if __name__ == "__main__":
     else:
         bg_filename = args.bg_image_dir / args.bg_file
 
-    reg_filenames = [] if args.only_passage_regions else list(reg_files_dir.glob('*%s*.reg' %args.bg))
+    if args.only_passage_regions: reg_filenames = []
+    elif 'miri' in args.fg_file: reg_filenames = list(reg_files_dir.glob('*%s*MIRI*.reg' %args.bg))
+    elif 'nircam' in args.fg_file: reg_filenames = list(reg_files_dir.glob('*%s*NIRCam*.reg' %args.bg))
+    else: reg_filenames = list(reg_files_dir.glob('*%s*.reg' %args.bg))
     reg_filenames += list(reg_files_dir.glob('*PASSAGE*.reg'))
+
     if len(reg_filenames) == 0: sys.exit(f'No {args.bg} reg file in {reg_files_dir}')
 
     # ------plotting the background------------
@@ -194,12 +200,12 @@ if __name__ == "__main__":
 
     # ------overplotting COSMOS-Web mosaics-----------------
     if args.fg_file is not None:
-        fg_files = args.fg_file.split(',')
-        for index, thisfile in enumerate(fg_files):
+        fg_files = glob.glob(str(args.fg_image_dir) + '/' + str(args.fg_file))
+        for index, fg_filename in enumerate(fg_files):
+            thisfile = Path(fg_filename).stem
             print(f'Overplotting foreground {thisfile} which is {index + 1} of {len(fg_files)}..')
-            cosmos_web_mosaic_filename = args.fg_image_dir / f'mosaic_nircam_{thisfile}_COSMOS-Web_60mas_v0_5_i2d.fits'
-            ax = overplot_skyregion_from_fits(cosmos_web_mosaic_filename, bg_img_hdu, fig.axes[0], ext=1, color='magenta', label=thisfile)
-            ax = overplot_data_from_fits(cosmos_web_mosaic_filename, bg_img_hdu, fig.axes[0], ext=1, cmap='Greens')
+            ax = overplot_skyregion_from_fits(fg_filename, bg_img_hdu, fig.axes[0], ext=1, color='magenta', label=thisfile)
+            ax = overplot_data_from_fits(fg_filename, bg_img_hdu, fig.axes[0], ext=1, cmap='Greens' if 'nircam' in args.fg_file else 'Reds')
 
     # ------plotting the footprints---------
     if args.plot_zcosmos or args.plot_cosmos2020:
