@@ -490,6 +490,24 @@ def read_visual_df(args):
     return df
 
 # ----------------------------------------------------------------------------------------------------------
+def get_crossmatch(df1, df2, sep_threshold=1., df1_idcol='id', df2_idcol='id'):
+    '''
+    Determines crossmatch between two dataframes df1 and df2
+    df1 and df2 should have df1_idcol, and df2_idcol respectively, and they each have columns: ra, dec
+    sep_threshold is in arcseconds
+    Returns cross matched dataframe with IDs from both dataframes
+    '''
+    df1_coords = SkyCoord(df1['ra'], df1['dec'], unit='deg')
+    df2_coords = SkyCoord(df2['ra'], df2['dec'], unit='deg')
+    nearest_id_in_df2, sep_from_nearest_id_in_df2, _ = df1_coords.match_to_catalog_sky(df2_coords)
+
+    df_crossmatch = pd.DataFrame({'df1_id': df1[df1_idcol].values, 'df2_id': df2[df2_idcol].iloc[nearest_id_in_df2].values, 'sep': sep_from_nearest_id_in_df2.arcsec})
+    df_crossmatch = df_crossmatch[df_crossmatch['sep'] < sep_threshold]  # separation within XX arcsecond
+    df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='df2_id', keep='first').reset_index(drop=True)  # to avoid multiple df1 objects being linked to the same df2 object
+
+    return df_crossmatch
+
+# ----------------------------------------------------------------------------------------------------------
 def get_crossmatch_with_cosmos(df, args):
     '''
     Determines crossmatch of a given dataframe with COSMOS2020 catalog
@@ -517,13 +535,8 @@ def get_crossmatch_with_cosmos(df, args):
     # -------cross-matching RA/DEC of both catalogs------
     if len(df_cosmos) > 0:
         print(f'\nDoing cross-matching between PASSAGE and COSMOS catalogs..')
-        passage_coords = SkyCoord(df['ra'], df['dec'], unit='deg')
-        cosmos_coords = SkyCoord(df_cosmos['ra'], df_cosmos['dec'], unit='deg')
-        nearest_id_in_cosmos, sep_from_nearest_id_in_cosmos, _ = passage_coords.match_to_catalog_sky(cosmos_coords)
-
-        df_crossmatch = pd.DataFrame({'passage_id': df['par_obj'].values, 'cosmos_id': df_cosmos['id'].iloc[nearest_id_in_cosmos].values, 'sep': sep_from_nearest_id_in_cosmos.arcsec})
-        df_crossmatch = df_crossmatch[df_crossmatch['sep'] < 1.]  # separation within 1 arcsecond
-        df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='cosmos_id', keep='first').reset_index(drop=True)  # to avoid multiple PASSAGE objects being linked to the same COSMOS object
+        df_crossmatch = get_crossmatch(df, df_cosmos, sep_threshold=1.0, df1_idcol='par_obj', df2_idcol='id')
+        df_crossmatch = df_crossmatch.rename(columns={'df1_id':'passage_id', 'df2_id':'cosmos_id'})
         df_crossmatch = pd.merge(df_crossmatch[['passage_id', 'cosmos_id']], df_cosmos, left_on='cosmos_id', right_on='id', how='inner').drop(['id', 'ra', 'dec'], axis=1)
 
         try: df_crossmatch_subset = df_crossmatch[['passage_id', 'cosmos_id', 'ez_z_phot', 'lp_MK', 'lp_zBEST']]
