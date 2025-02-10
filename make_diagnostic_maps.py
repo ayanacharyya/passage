@@ -33,6 +33,7 @@
 
              run make_diagnostic_maps.py --field Par28 --id 1303,1934,2734,2867,300,2903,2906 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --keep
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --mask_agn --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --keep
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --plot_circle_at_arcsec 0.5
 
              run make_diagnostic_maps.py --field glass-a2744 --id 2928,5184 --plot_radial_profile --plot_AGN_frac --only_seg --vorbin --voronoi_line OIII --voronoi_snr 10 --drv 0.5 --do_not_correct_pixel --use_O3O2
 
@@ -99,6 +100,9 @@ def plot_direct_image(full_hdu, ax, args, hide_xaxis=False, hide_yaxis=False):
 
     if args.only_seg:
         ax.contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=0.5)
+
+    if args.plot_circle_at_arcsec is not None:
+        ax.add_patch(plt.Circle((0, 0), args.plot_circle_at_arcsec, color='r', fill=False, lw=0.5)) # additional circle for debugging purpose
 
     if hide_xaxis:
         ax.set_xticklabels([])
@@ -427,13 +431,15 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
         cbar.ax.tick_params(labelsize=args.fontsize)
 
     if args.plot_radial_profiles and radprof_ax is not None:
-        radius_pix = args.radius_max * cosmo.arcsec_per_kpc_proper(args.z).value # arcsec
-        circle = plt.Circle((0, 0), radius_pix, color='k', fill=False, lw=0.5)
-        ax.add_patch(circle)
+        radius_pix = args.radius_max * cosmo.arcsec_per_kpc_proper(args.z).value # converting args.radius_max (in kpc) to arcsec
+        if radius_pix <= args.arcsec_limit:
+            circle = plt.Circle((0, 0), radius_pix, color='k', fill=False, lw=0.5)
+            ax.add_patch(circle)
         radprof_ax, radprof_fit = plot_radial_profile(image, radprof_ax, args, label=label.split(r'$_{\rm int}')[0], ymin=vmin, ymax=vmax, image_err=image_err)
     else:
         radprof_fit = [np.nan, np.nan] # dummy values for when the fit was not performed
 
+    if args.plot_circle_at_arcsec is not None: ax.add_patch(plt.Circle((0, 0), args.plot_circle_at_arcsec, color='r', fill=False, lw=0.5)) # additional circle for debugging purpose
     ax.contour(args.segmentation_map != args.id, levels=0, colors='w' if args.fortalk else 'k', extent=args.extent, linewidths=0.5) # demarcating the segmentation map zone
 
     if args.vorbin and args.plot_vorbin and vorbin_ax is not None:

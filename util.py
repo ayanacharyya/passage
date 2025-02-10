@@ -133,6 +133,7 @@ def parse_args():
     parser.add_argument('--use_Te', dest='use_Te', action='store_true', default=False, help='Use the Te metallicity diagnostic instead of R23? Default is no.')
     parser.add_argument('--debug_Zdiag', dest='debug_Zdiag', action='store_true', default=False, help='Make additional plots to debug the metallicity diagnostic implementation? Default is no.')
     parser.add_argument('--mask_agn', dest='mask_agn', action='store_true', default=False, help='Mask out the AGN-dominated pixels from all metallicity estimates? Default is no.')
+    parser.add_argument('--plot_circle_at_arcsec', metavar='plot_circle_at_arcsec', type=float, action='store', default=None, help='Radius in arcseconds of a circle to be plotted on every 2D map; default is None')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
