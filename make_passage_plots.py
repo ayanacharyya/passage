@@ -28,8 +28,8 @@
              run make_passage_plots.py  --do_field Par028 --plot_conditions all_match --xcol log_mass_bgp --ycol log_SFR_int --colorcol redshift --run Par028_including_nircam
              run make_passage_plots.py  --do_field Par052 --plot_conditions all_match --xcol log_mass_bgp --ycol log_SFR_int --colorcol redshift --run Par052_including_nircam
 
-             run make_passage_plots.py  --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --xcol log_mass_bgp --ycol log_SFR_int --colorcol redshift --run including_nircam --use_only_good
-
+             run make_passage_plots.py --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --xcol log_mass_bgp --ycol log_SFR_int --colorcol redshift --run including_nircam --use_only_good
+             run make_passage_plots.py --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --xcol redshift --ycol logOH_slope --foggie_comp
 '''
 
 from header import *
@@ -382,7 +382,7 @@ if __name__ == "__main__":
 
         # -------combing with metallicity dataframe if it exists----------------
         logOHgrad_filename = args.output_dir / 'catalogs' / f'logOHgrad_df_snr{args.snr_cut}_onlyseg_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}.txt'
-        if os.path.exists(logOHgrad_filename) and args.do_field is None:
+        if os.path.exists(logOHgrad_filename):# and args.do_field is None:
             print(f'Reading in and merging logOH gradient df: {logOHgrad_filename}')
             df_logOHgrad = pd.read_csv(logOHgrad_filename)
             df_logOHgrad = df_logOHgrad.drop_duplicates(subset=['field', 'objid'], keep='last')
@@ -404,7 +404,9 @@ if __name__ == "__main__":
             if df['SFR_int'].dtype == object: # accompanied by uncertainty in the same column
                 counter = 0
                 for index, item in enumerate(df['SFR_int']):
-                    if 'e' in item:
+                    if type(item) != str and np.isnan(item):
+                        quant = [np.nan, np.nan]
+                    elif 'e' in item:
                         pow = float(item[item.find('e')+1:])
                         base = np.array(item[1:item.find('e')-1].split('+/-')).astype(np.float64)
                         quant = base * 10 ** pow
@@ -426,7 +428,9 @@ if __name__ == "__main__":
             for thiscol in [item for item in df.columns if 'logOH' in item and 'int' in item]:
                 if df[thiscol].dtype == object: # accompanied by uncertainty in the same column
                     for index, item in enumerate(df[thiscol]):
-                        if 'e' in item:
+                        if type(item) != str and np.isnan(item):
+                            quant = [np.nan, np.nan]
+                        elif 'e' in item:
                             pow = float(item[item.find('e') + 1:])
                             base = np.array(item[1:item.find('e') - 1].split('+/-')).astype(np.float64)
                             quant = base * 10 ** pow

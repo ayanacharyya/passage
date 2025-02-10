@@ -1498,7 +1498,7 @@ def get_direct_image_per_filter(full_hdu, filter, target_header, args, plot_test
         direct_map_wht = np.roll(direct_map_wht, ndelta_ypix, axis=0)
 
     # ---------computing uncertainty-------------
-    direct_map_err = 1 / np.sqrt(direct_map_wht)
+    direct_map_err = 0.1 * direct_map # 1 / np.sqrt(direct_map_wht)
     direct_map = unp.uarray(direct_map, direct_map_err)
 
     return direct_map
@@ -1602,7 +1602,7 @@ def plot_direct_images_all_filters(full_hdu, args):
     return fig
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_starburst_map(full_hdu, axes, args, radprof_axes=None, vorbin_Axes=None, snr_axes=None):
+def plot_starburst_map(full_hdu, axes, args, radprof_axes=None, vorbin_axes=None, snr_axes=None):
     '''
     Plots the Ha map, direct F115W map and their ratio (starbursty-ness map) in a given axis handle
     Returns the axis handle and the ratio map just produced
@@ -1672,7 +1672,7 @@ def plot_starburst_figure(full_hdu, args):
 
     fig.subplots_adjust(left=fig_size_dict[nrows][2], right=fig_size_dict[nrows][3], bottom=fig_size_dict[nrows][4], top=fig_size_dict[nrows][5], wspace=fig_size_dict[nrows][6], hspace=fig_size_dict[nrows][7])
 
-    axes, starburst_map, starburst_radfit = plot_starburst_map(full_hdu, axes, args, radprof_axes=radprof_axes, vorbin_axes=vorbin_axes, snr_axes=snr_axes)
+    axes, starburst_map, starburst_radfit = plot_starburst_map(full_hdu, axes, args, radprof_axes=radprof_axes if 'radprof_axes' in locals() else None, vorbin_axes=vorbin_axes if 'vorbin_axes' in locals() else None, snr_axes=snr_axes if 'snr_axes' in locals() else None)
 
     return fig, starburst_map, starburst_radfit
 
@@ -1720,7 +1720,7 @@ def plot_metallicity_fig(full_hdu, args):
     return fig, logOH_map, logOH_radfit
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False):
+def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False, index=0):
     '''
     Plots spatially resolved BPT diagram based on fluxes from grizli, on an existing axis
     Then overplots theoretical lines
@@ -1851,19 +1851,20 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False)
             print(f'Saved figure at {figname}')
             plt.show(block=False)
 
-        # ---------annotate axes-------
-        cbar = plt.colorbar(scatter_plot_handle)
-        cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from K01' if args.colorcol == 'distance_from_K01' else '')
+        if index == 0:
+            # ---------annotate axes-------
+            cbar = plt.colorbar(scatter_plot_handle)
+            cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from K01' if args.colorcol == 'distance_from_K01' else '')
 
-        ax.set_xlim(-2, 0.3)
-        ax.set_ylim(-1, 2)
-        ax.set_xlabel(f'log (SII 6717/Halpha)')
-        ax.set_ylabel(f'log (OIII 5007/Hbeta)')
+            ax.set_xlim(-2, 0.3)
+            ax.set_ylim(-1, 2)
+            ax.set_xlabel(f'log (SII 6717/Halpha)')
+            ax.set_ylabel(f'log (OIII 5007/Hbeta)')
 
-        # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
-        x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
-        y = 1.3 + 0.72 / (x - 0.32)  # Eq 6 of K01
-        ax.plot(x, y, c='w' if args.fortalk else 'k', ls='dashed', lw=2, label='Kewley+2001')
+            # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
+            x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
+            y = 1.3 + 0.72 / (x - 0.32)  # Eq 6 of K01
+            ax.plot(x, y, c='w' if args.fortalk else 'k', ls='dashed', lw=2, label='Kewley+2001')
 
     return ax, distance_from_K01_map
 
@@ -2068,11 +2069,11 @@ if __name__ == "__main__":
 
             # ---------plotting spatially resolved BPT-----------------------------
             elif args.plot_BPT:
-                ax, args.distance_from_K01_map = plot_BPT(full_hdu, ax, args, cmap=args.diverging_cmap if args.colorcol == 'distance_from_K01' else cmap_arr[index])
+                ax, args.distance_from_K01_map = plot_BPT(full_hdu, ax, args, cmap=args.diverging_cmap if args.colorcol == 'distance_from_K01' else cmap_arr[index], index=index)
 
             # ---------initialising the starburst figure------------------------------
             elif args.plot_starburst:
-                fig, ratio_map, starburst_radfit = plot_starburst_map(full_hdu, args)
+                fig, ratio_map, starburst_radfit = plot_starburst_figure(full_hdu, args)
 
                 # ---------decorating and saving the figure------------------------------
                 fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
