@@ -24,8 +24,9 @@ def df_to_region(df, outfilename, shape='box', label='', label_ra=150.47, label_
 
     with open(outfilename, 'w') as f:
         f.write('fk5\n'
-                'global color=' + color + '\n'
-                f'text {label_ra} {label_dec} {{{label}}}\n')
+                'global color=' + color + '\n')
+        if label_ra is not None and label_ra != '':
+            f.write(f'text {label_ra} {label_dec} {{{label}}}\n')
 
     df['shape'] = shape
 
