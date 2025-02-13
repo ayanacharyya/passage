@@ -1720,6 +1720,33 @@ def plot_metallicity_fig(full_hdu, args):
     return fig, logOH_map, logOH_radfit
 
 # --------------------------------------------------------------------------------------------------------------------
+def AGN_func(x, method='K01'):
+    '''
+    Equation for AGN demarcation line on R3-S2 BPT, from different literature sources
+    '''
+    if method == 'K01': # Eq 6 of Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)
+        y = 1.3 + 0.72 / (x - 0.32)
+    elif method == 'S24': # Eq 2 of Schultz+2024 (https://arxiv.org/abs/2311.18731), parameters from Table 3 for S2
+        y = np.piecewise(x, [x >= -0.92, x < -0.92], [lambda x: (0.78 / (x - 0.34)) + 1.36, lambda x: -0.91 - 1.79 * x])
+    else:
+        sys.exit('Choose either K01 or S24 as the method for overplotting AGN demarcation lines')
+    return y
+
+# --------------------------------------------------------------------------------------------------------------------
+def overplot_AGN_line_on_BPT(ax, method='K01', color='k'):
+    '''
+    Overplots a given AGN demarcation line on R3 vs S2 ratio BPT, on an existing axis
+    Returns axis handle
+    '''
+    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024'}
+    x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
+    y = AGN_func(x, method=method)
+    ax.plot(x, y, c=color, ls='dashed', lw=2, label=label_dict[method])
+    ax.legend()
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False, index=0):
     '''
     Plots spatially resolved BPT diagram based on fluxes from grizli, on an existing axis
@@ -1744,9 +1771,6 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
         SII_map = np.ma.masked_where(SII_map.mask, SII_map.data / factor)
         SII_int = SII_int / factor
         print(f'Re-correcting SII to include the 6731 component, for computing BPT, by factor of {factor:.3f}')
-
-    def func(x):
-        return 1.3 + 0.72 / (x - 0.32)  # Eq 6 of K01
 
     if not hide_plot:
         try:
@@ -1789,7 +1813,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
 
         net_mask = y_ratio.mask | x_ratio.mask
 
-        sign_map = (unp.nominal_values(y_ratio.data) > func(unp.nominal_values(x_ratio.data))).astype(int)
+        sign_map = (unp.nominal_values(y_ratio.data) > AGN_func(unp.nominal_values(x_ratio.data), method='K01')).astype(int)
         sign_map[sign_map == 0] = -1
         distance_from_K01_map = sign_map * get_distance_from_Kewley2001(unp.nominal_values(x_ratio.data), unp.nominal_values(y_ratio.data), args, x_num='SII')
         distance_from_K01_map = np.ma.masked_where(net_mask, distance_from_K01_map)
@@ -1806,10 +1830,10 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
             df = df.drop_duplicates().reset_index(drop=True)
 
             scatter_plot_handle = ax.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_K01' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_K01' else None)
-            ax.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
+            ax.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.5 if args.fortalk else 0.5, zorder=-10)
 
-            if args.plot_AGN_frac and not args.plot_separately:
-                if ax_inset is None: ax_inset = ax.inset_axes([0.55, 0.75, 0.3, 0.3])
+            if args.plot_AGN_frac and not args.plot_separately and len(args.id_arr) == 1:
+                if ax_inset is None: ax_inset = ax.inset_axes([0.05, 0.1, 0.3, 0.3])
                 plot_2D_map(distance_from_K01_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, hide_yaxis=False)
 
             if args.plot_separately:
@@ -1837,11 +1861,9 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
             ax_indiv.set_xlabel(f'log (SII 6717+31/Halpha)')
             ax_indiv.set_ylabel(f'log (OIII 5007/Hbeta)')
 
-            # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
-            x = np.linspace(ax_indiv.get_xlim()[0], ax_indiv.get_xlim()[1], 100)
-            y = func(x)  # Eq 6 of K01
-            ax_indiv.plot(x, y, c='w' if args.fortalk else 'k', ls='dashed', lw=2, label='Kewley+2001')
-            plt.legend()
+            # ---------adding literature AGN demarcation lines----------
+            ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='K01', color='w' if args.fortalk else 'k')
+            ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='S24', color='y' if args.fortalk else 'brown')
             fig_indiv.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
             fig_indiv.text(0.15, 0.9, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
 
@@ -1861,10 +1883,9 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
             ax.set_xlabel(f'log (SII 6717/Halpha)')
             ax.set_ylabel(f'log (OIII 5007/Hbeta)')
 
-            # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
-            x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
-            y = 1.3 + 0.72 / (x - 0.32)  # Eq 6 of K01
-            ax.plot(x, y, c='w' if args.fortalk else 'k', ls='dashed', lw=2, label='Kewley+2001')
+            # ---------adding literature AGN demarcation lines----------
+            ax = overplot_AGN_line_on_BPT(ax, method='K01', color='w' if args.fortalk else 'k')
+            ax = overplot_AGN_line_on_BPT(ax, method='S24', color='y' if args.fortalk else 'brown')
 
     return ax, distance_from_K01_map
 

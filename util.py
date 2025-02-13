@@ -931,41 +931,48 @@ def unzip_and_delete(zip_file, destination_path):
     os.remove(zip_file)  # remove zipped files after unzipping
 
 # --------------------------------------------------------------------------------------------------------------------
-def move_field_after_download(field, args=None):
+def move_field_after_download(field_arr, args=None):
     '''
     Unzips and moves the reduced data from Box from Downloads folder to appropriate location by making the right dorectories
     '''
-    start_time = datetime.now()
     origin_dir = HOME / 'Downloads'
+    field_arr = np.atleast_1d(field_arr)
 
-    if 'Par' in str(field): field = f'Par{int(field.split("Par")[1]):03d}'
-    else: field = f'Par{field:03d}'
+    for index, field in enumerate(field_arr):
+        start_time = datetime.now()
+        if 'Par' in str(field): field = f'Par{int(field.split("Par")[1]):03d}'
+        else: field = f'Par{field:03d}'
+        print(f'Starting field {field} which is {index + 1} out of {len(field_arr)}..')
 
-    if args is None: destination_dir = Path('/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/v0.5_new/data')
-    else: destination_dir = args.input_dir / 'v0.5_new/data'
-    Path(destination_dir / 'linelist').mkdir(exist_ok=True, parents=True)
+        try:
+            if args is None: destination_dir = Path('/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/v0.5/data')
+            else: destination_dir = args.input_dir / 'v0.5/data'
+            Path(destination_dir / 'linelist').mkdir(exist_ok=True, parents=True)
 
-    unzip_and_delete(origin_dir / f'{field}.zip', destination_dir)
+            unzip_and_delete(origin_dir / f'{field}.zip', destination_dir)
 
-    Path(destination_dir / field / 'DATA/DIRECT_GRISM').mkdir(exist_ok=True, parents=True)
-    unzip_and_delete(destination_dir / field / f'{field}_spec1D.tar.gz', destination_dir / field)
-    unzip_and_delete(destination_dir / field / f'{field}_spec2D.tar.gz', destination_dir / field)
+            Path(destination_dir / field / 'DATA/DIRECT_GRISM').mkdir(exist_ok=True, parents=True)
+            unzip_and_delete(destination_dir / field / f'{field}_spec1D.tar.gz', destination_dir / field)
+            unzip_and_delete(destination_dir / field / f'{field}_spec2D.tar.gz', destination_dir / field)
 
-    cat_files = glob.glob(str(destination_dir / field / '*cat.fits'))
-    for this_cat_file in cat_files:
-        print(f'Moving {os.path.split(this_cat_file)[-1]}..')
-        shutil.move(this_cat_file, destination_dir / field / 'DATA/DIRECT_GRISM')
+            cat_files = glob.glob(str(destination_dir / field / '*cat.fits'))
+            for this_cat_file in cat_files:
+                print(f'Moving {os.path.split(this_cat_file)[-1]}..')
+                shutil.move(this_cat_file, destination_dir / field / 'DATA/DIRECT_GRISM')
 
-    fits_files = glob.glob(str(destination_dir / field / '*.fits'))
-    for this_fits_file in fits_files:
-        print(f'Moving {os.path.split(this_fits_file)[-1]}..')
-        shutil.move(this_fits_file, destination_dir / field / 'DATA')
+            fits_files = glob.glob(str(destination_dir / field / '*.fits'))
+            for this_fits_file in fits_files:
+                print(f'Moving {os.path.split(this_fits_file)[-1]}..')
+                shutil.move(this_fits_file, destination_dir / field / 'DATA')
 
-    filename = f'{field}lines.dat'
-    print(f'Moving {filename}..')
-    shutil.move(destination_dir / field / filename, destination_dir / 'linelist')
+            filename = f'{field}lines.dat'
+            print(f'Moving {filename}..')
+            shutil.move(destination_dir / field / filename, destination_dir / 'linelist')
+        except Exception as e:
+            print(f'Probably skipping {field} due to following error: {e}')
+            continue
 
-    print(f'Completed moving {field} in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
+        print(f'Completed moving {field} in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
 
 # --------------------------------------------------------------------------------------------------
 args = parse_args()
