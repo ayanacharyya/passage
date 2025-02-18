@@ -394,7 +394,8 @@ def plot_filter_cutouts(df_fluxes, args):
     cmap = 'viridis'
     image_dir = args.input_dir / 'COSMOS' / 'imaging'
     unc_files = ['rms', 'unc', 'skybg', 'wht', '522', '524', '526', '533', '536'] # removing any files that are actually uncertainty/weight maps
-    files_to_not_plot = unc_files + ['xmm', '-int', '30mas', '_A'] # removing x-ray and galex because of their extremely poor spatial res
+    files_to_not_plot = unc_files + ['xmm', '-int', '30mas'] # removing x-ray and galex because of their extremely poor spatial res
+    files_to_not_plot += ['_A', '_B1', '_B2', '_B3', '_B4', '_B5', '_B6', '_B8', '_B9' '_B10'] # only the B7 tile of COSMOS Web corresponds to Par28, so, ignoring all other A & B tiles
 
     if args.fontsize == 10: args.fontsize = 15
     cutout_size = 2 * args.arcsec_limit # in arcsec

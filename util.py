@@ -131,6 +131,7 @@ def parse_args():
     parser.add_argument('--use_O3S2', dest='use_O3S2', action='store_true', default=False, help='Use the Curti et al 2019 O3S2 metallicity diagnostic instead of R23? Default is no.')
     parser.add_argument('--use_O3O2', dest='use_O3O2', action='store_true', default=False, help='Use the Curti et al 2019 O3O2 metallicity diagnostic instead of R23? Default is no.')
     parser.add_argument('--use_Te', dest='use_Te', action='store_true', default=False, help='Use the Te metallicity diagnostic instead of R23? Default is no.')
+    parser.add_argument('--use_P25', dest='use_P25', action='store_true', default=False, help='Use the Peluso+2025 metallicity calibration for SF/AGN separately, instead of R23? Default is no.')
     parser.add_argument('--debug_Zdiag', dest='debug_Zdiag', action='store_true', default=False, help='Make additional plots to debug the metallicity diagnostic implementation? Default is no.')
     parser.add_argument('--mask_agn', dest='mask_agn', action='store_true', default=False, help='Mask out the AGN-dominated pixels from all metallicity estimates? Default is no.')
     parser.add_argument('--plot_circle_at_arcsec', metavar='plot_circle_at_arcsec', type=float, action='store', default=None, help='Radius in arcseconds of a circle to be plotted on every 2D map; default is None')
@@ -695,40 +696,47 @@ def setup_plots_for_talks():
     plt.rcParams['grid.linewidth'] = 0.3
 
 # ------------------------------------------------------------------------------------------------------
-def get_files_in_url(url, ext='fits'):
+def get_files_in_url(url, ext='fits', auth=None):
     '''
     Function to get list of fits files in a given URL
     Returns list of urls of the files
     From https://stackoverflow.com/questions/11023530/python-to-list-http-files-and-directories
     '''
-    page = requests.get(url).text
+    if auth is None: page = requests.get(url).text
+    else: page = requests.get(url, auth=auth).text
     soup = BeautifulSoup(page, 'html.parser')
     url_list = [url + '/' + node.get('href') for node in soup.find_all('a') if node.get('href').endswith(ext)]
 
     return url_list
 
 # ------------------------------------------------------------------------------------------------------
-def download_files_from_url(url, outdir, ext='fits', match_strings=['']):
+def download_files_from_url(url, outdir, ext='fits', match_strings=[''], auth=None):
     '''
     Function to download all fits files that contain <amch_string> in the filename from a given URL
     Saves the downloaded files in outdir
     '''
     start_time = datetime.now()
     outdir = Path(outdir)
-    url_list = get_files_in_url(url, ext=ext)
+    url_list = get_files_in_url(url, ext=ext, auth=auth)
     len_orig = len(url_list)
     for match_string in match_strings: url_list = [item for item in url_list if match_string in item]
     print(f'Found {len(url_list)} matching files out of {len_orig} at URL {url}')
 
     for index, this_url in enumerate(url_list):
         target_file = os.path.split(this_url)[-1]
-        if os.path.isfile(outdir / target_file):
+        if os.path.isfile(outdir / target_file) or os.path.isfile(outdir / Path(target_file).stem):
             print(f'Skipping file {target_file} ({index + 1} of {len(url_list)}) because it already exists at target location')
         else:
             start_time2 = datetime.now()
             print(f'Downloading file {target_file} which is {index + 1} of {len(url_list)}..')
-            urlretrieve(this_url, outdir / target_file)
+            if auth is None: response = requests.get(this_url)
+            else: response = requests.get(this_url, auth=auth)
+            with open(outdir / target_file, 'wb') as file: file.write(response.content)
+            if target_file.endswith('.gz'):
+                print(f'Unzipping downloaded file..')
+                unzip_and_delete(outdir / target_file, outdir)
             print(f'Completed this download in {timedelta(seconds=(datetime.now() - start_time2).seconds)}')
+
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
 
@@ -926,8 +934,14 @@ def unzip_and_delete(zip_file, destination_path):
     '''
     Unzips given zip file to given destination path and removes the zip file
     '''
+    zip_file = Path(zip_file)
     print(f'Unpacking {zip_file} in to {destination_path}..')
-    shutil.unpack_archive(zip_file, destination_path)
+    if zip_file.suffix == '.gz':
+        with gzip.open(zip_file, 'rb') as gz_file:
+            with open(zip_file.parent / zip_file.stem, 'wb') as out_file:
+                shutil.copyfileobj(gz_file, out_file)
+    else:
+        shutil.unpack_archive(zip_file, destination_path)
     os.remove(zip_file)  # remove zipped files after unzipping
 
 # --------------------------------------------------------------------------------------------------------------------

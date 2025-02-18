@@ -55,6 +55,7 @@ from mastquery import utils as mastutils
 from mastquery import query
 from astroquery.mast import Observations
 import plotly.express as px
+import gzip
 
 import matplotlib
 from matplotlib import pyplot as plt

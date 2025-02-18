@@ -141,7 +141,9 @@ def overplot_skyregion_from_fits(filename, bg_img_hdu, ax, ext=0, color='green',
     hdul = fits.open(filename)
     source_wcs = pywcs.WCS(hdul[ext].header)
 
-    region_file = filename.parent / Path(filename.stem + '.reg')
+    region_dir = filename.parent / 'regions'
+    region_dir.mkdir(parents=True, exist_ok=True)
+    region_file = region_dir / Path(filename.stem + '.reg')
     source_wcs.footprint_to_file(region_file, color=color, width=1)
 
     sky_region = Regions.read(region_file, format='ds9')[0]
@@ -204,8 +206,8 @@ if __name__ == "__main__":
         for index, fg_filename in enumerate(fg_files):
             thisfile = Path(fg_filename).stem
             print(f'Overplotting foreground {thisfile} which is {index + 1} of {len(fg_files)}..')
-            ax = overplot_skyregion_from_fits(fg_filename, bg_img_hdu, fig.axes[0], ext=1, color='magenta', label=thisfile)
-            ax = overplot_data_from_fits(fg_filename, bg_img_hdu, fig.axes[0], ext=1, cmap='Greens' if 'nircam' in args.fg_file else 'Reds')
+            ax = overplot_skyregion_from_fits(fg_filename, bg_img_hdu, fig.axes[0], ext=0, color='magenta', label=thisfile)
+            ax = overplot_data_from_fits(fg_filename, bg_img_hdu, fig.axes[0], ext=0, cmap='Greens' if 'nircam' in args.fg_file else 'Reds')
 
     # ------plotting the footprints---------
     if args.plot_zcosmos or args.plot_cosmos2020:
