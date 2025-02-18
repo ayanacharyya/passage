@@ -399,7 +399,13 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
         image = unp.nominal_values(image_log)
         image_err = unp.std_devs(image_log)
 
-    p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
+    if args.plot_metallicity and args.use_P25:
+        image_sfr = np.ma.masked_where(args.distance_from_K01_map > 0, image)
+        image_agn = np.ma.masked_where(args.distance_from_K01_map < 0, image)
+        p = ax.imshow(image_agn, cmap='pink', origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
+        p = ax.imshow(image_sfr, cmap='summer', origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
+    else:
+        p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
 
     ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[1] * 0.88, label, c='k', fontsize=args.fontsize, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
     ax.scatter(0, 0, marker='x', s=10, c='grey')
@@ -1168,6 +1174,125 @@ def get_Z_O3S2(full_hdu, args):
 
     return logOH_map, logOH_int
 
+# --------------------------------------------------------------------------------------------------------------------
+def compute_Z_P25_SFR(O3S2, N2S2):
+    '''
+    Calculates and returns the SFR metallicity given observed O3S2 and N2S2 line ratios
+    Conversion factor is from Eq 1 of Peluso+2025
+    '''
+    return 8.78 + 0.97 * N2S2 - 0.11 * O3S2 - 0.39 * N2S2 ** 2 + 0.09 * N2S2 * O3S2 + 0.02 * O3S2 ** 2
+
+# --------------------------------------------------------------------------------------------------------------------
+def compute_Z_P25_AGN(O3S2, N2S2):
+    '''
+    Calculates and returns the AGN metallicity given observed O3S2 and N2S2 line ratios
+    Conversion factor is from Eq 2 of Peluso+2025
+    '''
+    return 8.85 + 1.10 * N2S2 - 0.04 * O3S2
+
+# --------------------------------------------------------------------------------------------------------------------
+def compute_Z_P25_Comp(O3S2, N2S2):
+    '''
+    Calculates and returns the Composite region metallicity given observed O3S2 and N2S2 line ratios
+    Conversion factor is from Eq 3 of Peluso+2025
+    '''
+    return 8.83 + 1.07 * N2S2 + 0.10 * O3S2
+
+# --------------------------------------------------------------------------------------------------------------------
+def compute_Z_P25(OIII5007_flux, NII6584_flux, SII6717_flux, AGN_map):
+    '''
+    Calculates and returns the SF/AGN metallicity given observed line fluxes
+    Conversion factor is from Peluso+2025
+    '''
+    # -----handling masks separately because uncertainty package cannot handle masks---------
+    if np.ma.isMaskedArray(OIII5007_flux):
+        net_mask = SII6717_flux.mask | OIII5007_flux.mask | NII6584_flux.mask
+        OIII5007_flux = OIII5007_flux.data
+        SII6717_flux = SII6717_flux.data
+        NII6584_flux = NII6584_flux.data
+    else:
+        net_mask = False
+
+    if hasattr(SII6717_flux, "__len__"): # if it is an array
+        # --------computing the ratio and appropriate errors------------
+        new_mask = SII6717_flux == 0
+        SII6717_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+
+        # --------computing the log of the ratio and appropriate errors------------
+        ratio = (OIII5007_flux / SII6717_flux)
+        new_mask = ratio <= 0
+        ratio[new_mask] = np.nan # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        O3S2 = unp.log10(ratio.data)
+        O3S2 = np.ma.masked_where(new_mask, O3S2)
+
+        # --------computing the log of the ratio and appropriate errors------------
+        ratio = (NII6584_flux / SII6717_flux)
+        new_mask = ratio <= 0
+        ratio[new_mask] = np.nan # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        N2S2 = unp.log10(ratio.data)
+        N2S2 = np.ma.masked_where(new_mask, N2S2)
+
+        # --------computing the polynomial and appropriate errors------------
+        log_OH = []
+        if args.debug_Zdiag:
+            fig, ax = plt.subplots(2, 1, figsize=(6, 8), sharex=True)
+            ax[0].set_ylabel('O3S2')
+            ax[1].set_ylabel('N2S2')
+            ax[1].set_xlabel('log(O/H)+12')
+            ax[0].set_xlim(7.5, 9.5)
+
+        O3S2_flat = O3S2.data.flatten()
+        N2S2_flat = N2S2.data.flatten()
+        AGN_map_flat = AGN_map.flatten()
+        for index in range(len(O3S2_flat)):
+            try:
+                if AGN_map_flat[index] > 0: this_log_OH = compute_Z_P25_AGN(O3S2_flat[index], N2S2_flat[index])
+                else: this_log_OH = compute_Z_P25_SFR(O3S2_flat[index], N2S2_flat[index])
+                #print(f'Deb1245: index={index}, this_log_OH = {this_log_OH}, this_O3S2={O3S2_flat[index]}, this_N2S2={N2S2_flat[index]}')  ##
+                log_OH.append(this_log_OH)
+                if args.debug_Zdiag:
+                    ax[0].scatter(unp.nominal_values(this_log_OH), unp.nominal_values(O3S2_flat[index]), lw=0, s=50, c='r' if AGN_map_flat[index] > 0 else 'b')
+                    ax[0].errorbar(unp.nominal_values(this_log_OH), unp.nominal_values(O3S2_flat[index]), xerr=unp.std_devs(this_log_OH), yerr=unp.std_devs(O3S2_flat[index]), fmt='none', lw=0.5, c='r' if AGN_map_flat[index] > 0 else 'b')
+                    ax[1].scatter(unp.nominal_values(this_log_OH), unp.nominal_values(N2S2_flat[index]), lw=0, s=50, c='r' if AGN_map_flat[index] > 0 else 'b')
+                    ax[1].errorbar(unp.nominal_values(this_log_OH), unp.nominal_values(N2S2_flat[index]), xerr=unp.std_devs(this_log_OH), yerr=unp.std_devs(N2S2_flat[index]), fmt='none', lw=0.5, c='r' if AGN_map_flat[index] > 0 else 'b')
+            except:
+                log_OH.append(ufloat(np.nan, np.nan))
+        log_OH = np.ma.masked_where(O3S2.mask | N2S2.mask, np.reshape(log_OH, np.shape(O3S2)))
+
+    else: # if it is scalar
+        try:
+            O3S2 = unp.log10(OIII5007_flux / SII6717_flux)
+            N2S2 = unp.log10(NII6584_flux / SII6717_flux)
+            if AGN_map > 0: log_OH = compute_Z_P25_AGN(O3S2, N2S2)
+            else: log_OH = compute_Z_P25_SFR(O3S2, N2S2)
+        except:
+            log_OH = ufloat(np.nan, np.nan)
+
+    return log_OH
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_Z_P25(full_hdu, args, branch='low'):
+    '''
+    Computes and returns the spatially resolved as well as intregrated Peluso+2025 metallicity from a given HDU
+    '''
+    SII6717_map, line_wave, SII6717_int, _ = get_emission_line_map('SII', full_hdu, args)
+    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    Halpha_map, line_wave, Halpha_int, _ = get_emission_line_map('Ha', full_hdu, args)
+
+    if not args.do_not_correct_flux:
+        # special treatment for H-alpha line, in order to account for NII 6584 component
+        factor = 0.823  # from grizli source code
+    else:
+        factor = 1.
+
+    NII6584_map = np.ma.masked_where(Halpha_map.mask, Halpha_map.data * (1 - 0.823) / factor)
+    NII6584_int = Halpha_int * (1 - 0.823) / factor
+
+    logOH_map = compute_Z_P25(OIII5007_map, NII6584_map, SII6717_map, args.distance_from_K01_map)
+    logOH_int = compute_Z_P25(OIII5007_int, NII6584_int, SII6717_int, args.distance_from_K01_int)
+
+    return logOH_map, logOH_int
+
 # ----------------------------------------------------------------------------------------------------
 def get_nearest(value, array):
     '''
@@ -1313,6 +1438,9 @@ def get_Z(full_hdu, args):
     elif args.use_Te and all([line in args.available_lines for line in ['OIII', 'OIII-4363', 'OII', 'Hb']]):
         logOH_map, logOH_int = get_Z_Te(full_hdu, args)
         label = 'Z (Te)'
+    elif args.use_P25 and all([line in args.available_lines for line in ['OIII', 'Ha', 'SII']]):
+        logOH_map, logOH_int = get_Z_P25(full_hdu, args)
+        label = 'Z (P25)'
     elif all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
         logOH_map, logOH_int = get_Z_R23(full_hdu, args)
         label = 'Z (R23)'
@@ -1705,7 +1833,7 @@ def plot_metallicity_fig(full_hdu, args):
         if args.plot_ionisation_parameter: logq_map, logq_int = get_q_O32(full_hdu, args)
 
         # ---------plotting-------------
-        lim = [7.5, 9.0]
+        lim = [7.5, 9.2]
         axes[0], logOH_radfit = plot_2D_map(logOH_map, axes[0], args, takelog=False, label=r'%s$_{\rm int}$ = %.1f $\pm$ %.1f' % (label, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1])
 
         logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
@@ -1772,14 +1900,18 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
         SII_int = SII_int / factor
         print(f'Re-correcting SII to include the 6731 component, for computing BPT, by factor of {factor:.3f}')
 
-    if not hide_plot:
-        try:
-            # -----------integrated-----------------------
-            color = mpl_cm.get_cmap(cmap)(0.5)
+    try:
+        # -----------integrated-----------------------
+        color = mpl_cm.get_cmap(cmap)(0.5)
 
-            y_ratio = unp.log10(OIII_int / Hbeta_int)
-            x_ratio = unp.log10(SII_int / Halpha_int)
+        y_ratio = unp.log10(OIII_int / Hbeta_int)
+        x_ratio = unp.log10(SII_int / Halpha_int)
 
+        sign = (unp.nominal_values(y_ratio) > AGN_func(unp.nominal_values(x_ratio), method='K01')).astype(int)
+        if sign == 0: sign = -1
+        distance_from_K01_int = sign * get_distance_from_Kewley2001(unp.nominal_values(x_ratio),unp.nominal_values(y_ratio), args, x_num='SII')
+
+        if not hide_plot:
             p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
             ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c=color, fmt='none', lw=2)
 
@@ -1787,11 +1919,11 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
                 p = ax_indiv.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
                 ax_indiv.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c=color, fmt='none', lw=2)
 
-        except ValueError:
-            print(f'Galaxy {args.id} in {args.field} has a negative integrated flux in one of the following lines, hence skipping this.')
-            print(f'OIII = {OIII_int}\nHb = {Hbeta_int}\nSII = {SII_int}\nHa = {Halpha_int}\n')
-            scatter_plot_handle = None
-            pass
+    except ValueError:
+        print(f'Galaxy {args.id} in {args.field} has a negative integrated flux in one of the following lines, hence skipping this.')
+        print(f'OIII = {OIII_int}\nHb = {Hbeta_int}\nSII = {SII_int}\nHa = {Halpha_int}\n')
+        scatter_plot_handle = None
+        pass
 
     try:
         # -----------spatially_resolved-----------------------
@@ -1887,7 +2019,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
             ax = overplot_AGN_line_on_BPT(ax, method='K01', color='w' if args.fortalk else 'k')
             ax = overplot_AGN_line_on_BPT(ax, method='S24', color='y' if args.fortalk else 'brown')
 
-    return ax, distance_from_K01_map
+    return ax, distance_from_K01_map, distance_from_K01_int
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -2090,7 +2222,7 @@ if __name__ == "__main__":
 
             # ---------plotting spatially resolved BPT-----------------------------
             elif args.plot_BPT:
-                ax, args.distance_from_K01_map = plot_BPT(full_hdu, ax, args, cmap=args.diverging_cmap if args.colorcol == 'distance_from_K01' else cmap_arr[index], index=index)
+                ax, args.distance_from_K01_map, args.distance_from_K01_int = plot_BPT(full_hdu, ax, args, cmap=args.diverging_cmap if args.colorcol == 'distance_from_K01' else cmap_arr[index], index=index)
 
             # ---------initialising the starburst figure------------------------------
             elif args.plot_starburst:
@@ -2108,7 +2240,7 @@ if __name__ == "__main__":
 
             # ---------initialising the metallicity figure------------------------------
             elif args.plot_metallicity:
-                if args.mask_agn: _, args.distance_from_K01_map = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_K01 map, without actually plotting the BPT diagram
+                if args.mask_agn or args.use_P25: _, args.distance_from_K01_map, args.distance_from_K01_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_K01 map, without actually plotting the BPT diagram
                 fig, logOH_map, logOH_radfit = plot_metallicity_fig(full_hdu, args)
                 df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s]
 
@@ -2177,7 +2309,7 @@ if __name__ == "__main__":
 
                 # ---------------BPT map------------------
                 if all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
-                    ax1, args.distance_from_K01_map = plot_BPT(full_hdu, rax1, args, cmap='viridis', ax_inset=ax1)
+                    ax1, args.distance_from_K01_map, args.distance_from_K01_int = plot_BPT(full_hdu, rax1, args, cmap='viridis', ax_inset=ax1)
                 else:
                     args.distance_from_K01_map = None
                     fig.delaxes(ax1)
