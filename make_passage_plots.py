@@ -30,6 +30,8 @@
 
              run make_passage_plots.py --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --xcol log_mass_bgp --ycol log_SFR_int --colorcol redshift --run including_nircam --use_only_good
              run make_passage_plots.py --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --xcol redshift --ycol logOH_slope --foggie_comp
+
+             run make_passage_plots.py --do_field Par028 --drv 0.5 --SNR_thresh 3 --plot_full_BPT --colorcol sn_Hb --log_colorcol
 '''
 
 from header import *
@@ -266,6 +268,71 @@ def plot_BPT(df, ax, args):
     return ax, df
 
 # --------------------------------------------------------------------------------------------------------------------
+def plot_BPT_from_speccat(speccat_file, args, ax):
+    '''
+    Plots BPT diagram based on integrated fluxes from grizli
+    Then overplots theoretical lines
+    Returns axis handle
+    '''
+    tab = Table.read(speccat_file)
+    columns = ['id', 'flux_Ha', 'err_Ha', 'sn_Ha', 'flux_OIII', 'err_OIII', 'sn_OIII', 'flux_SII', 'err_SII', 'sn_SII', 'flux_Hb', 'err_Hb', 'sn_Hb']
+    df = tab[columns].to_pandas()
+
+    if args.colorcol in tab.columns:
+        df[args.colorcol] = tab[[args.colorcol]].to_pandas()[args.colorcol]
+    else:
+        photcat_file = speccat_file.parent / f'{args.do_field}_photcat.fits'
+        if photcat_file.is_file():
+            tab = Table.read(photcat_file)
+            if args.colorcol in tab.columns:
+                print(f'{args.colorcol} not available in speccat, so obtaining it from photcat')
+                dfp = tab[['id', args.colorcol]].to_pandas()
+                df  = pd.merge(df, dfp, on='id', how='inner')
+            else:
+                print(f'{args.colorcol} not available in either speccat or photcat')
+
+    df = df[(df['sn_Ha'] > args.SNR_thresh) & (df['sn_Hb'] > args.SNR_thresh) & (df['sn_OIII'] > args.SNR_thresh) & (df['sn_SII'] > args.SNR_thresh)]
+
+    OIII_factor = 2.98 / (1 + 2.98)
+    df['flux_OIII'] *= OIII_factor
+    df['err_OIII'] *= OIII_factor
+
+    Ha_factor = 0.823
+    df['flux_Ha'] *= Ha_factor
+    df['err_Ha'] *= Ha_factor
+
+    df['O3Hb'] = np.log10(df['flux_OIII'] / df['flux_Hb'])
+    df['S2Ha'] = np.log10(df['flux_SII'] / df['flux_Ha'])
+
+    colorcol =  np.log10(df[args.colorcol]) if args.log_colorcol else df[args.colorcol]
+    p = ax.scatter(df['S2Ha'], df['O3Hb'], c=colorcol, s=50, lw=0)
+    cbar = plt.colorbar(p)
+
+    # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
+    x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
+    y_K01 = 1.3 + 0.72 / (x - 0.32) # Eq 6 of K01
+    y_S24 = np.piecewise(x, [x >= -0.92, x < -0.92], [lambda x: (0.78 / (x - 0.34)) + 1.36, lambda x: -0.91 - 1.79 * x])
+    ax.plot(x, y_K01, c='k', ls='dashed', lw=2, label='Kewley+2001')
+    ax.plot(x, y_S24, c='brown', ls='dashed', lw=2, label='Schultz+2024')
+    plt.legend()
+
+    # ---------annotate axes and save figure-------
+    if args.fontsize == 10: args.fontsize = 15
+    ax.set_xlim(-1.5, 0.25)
+    ax.set_ylim(-1, 1.5)
+
+    ax.set_xlabel(f'log (SII/Ha)', fontsize=args.fontsize)
+    ax.set_ylabel(f'log (OIII/Hb)', fontsize=args.fontsize)
+
+    colorby_text = f'log({args.colorcol})' if args.log_colorcol else args.colorcol
+    cbar.set_label(colorby_text, fontsize=args.fontsize)
+
+    plt.title(f'{args.do_field}', fontsize=args.fontsize)
+    plt.tight_layout()
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_flux_vs_mag(ax, args):
     '''
     Plots line flux vs magnitude based on integrated fluxes from grizli
@@ -363,8 +430,16 @@ if __name__ == "__main__":
         fig, ax = plt.subplots(1, figsize=(8, 6))
         fig.subplots_adjust(left=0.1, right=0.98, bottom=0.1, top=0.95)
 
+    # ---------BPT for for full sample------
+    if args.plot_full_BPT:
+        if args.colorcol == 'ez_z_phot': args.colorcol = 'redshift'
+        speccat_file = args.input_dir / f'{args.drv}/{args.do_field}/Products/{args.do_field}_speccat.fits'
+        ax = plot_BPT_from_speccat(speccat_file, args, ax)
+        colorby_text = f'log_{args.colorcol}' if args.log_colorcol else args.colorcol
+        figname = speccat_file.parent / f'{args.do_field}_BPT_colorby_{colorby_text}.png'
+
     # ---------flux vs mag for full sample------
-    if args.plot_flux_vs_mag:
+    elif args.plot_flux_vs_mag:
         figname = args.output_dir / 'plots' / f'allpar_flux_vs_mag.png'
         ax = plot_flux_vs_mag(ax, args)
 

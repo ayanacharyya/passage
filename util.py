@@ -164,6 +164,8 @@ def parse_args():
     parser.add_argument('--plot_flux_vs_mag', dest='plot_flux_vs_mag', action='store_true', default=False, help='Plot line flux vs mag for each object? Default is no.')
     parser.add_argument('--foggie_comp', dest='foggie_comp', action='store_true', default=False, help='Plot Zgrad vs redshift to exact same limits as the FOGGIE plot, for comparison? Default is no.')
     parser.add_argument('--use_only_good', dest='use_only_good', action='store_true', default=False, help='Use only the pre-determined good galaxies? Default is no.')
+    parser.add_argument('--plot_full_BPT', dest='plot_full_BPT', action='store_true', default=False, help='Plot BPT for the full speccat of a given PASSAGE field? Default is no.')
+    parser.add_argument('--log_colorcol', dest='log_colorcol', action='store_true', default=False, help='Take log of the quantity before color coding? Default is no.')
 
     # ------- args added for compute_stellar_mass.py ------------------------------
     parser.add_argument('--plot_transmission', dest='plot_transmission', action='store_true', default=False, help='Plot transmission curves for all filters? Default is no.')
