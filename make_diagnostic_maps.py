@@ -374,7 +374,7 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     return ax, linefit
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, radprof_ax=None, vorbin_ax=None, snr_ax=None, image_err=None):
+def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, radprof_ax=None, vorbin_ax=None, snr_ax=None, image_err=None, metallicity_multi_color=False):
     '''
     Plots the emission map for a given line in the given axis
     Returns the axis handle
@@ -399,11 +399,11 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
         image = unp.nominal_values(image_log)
         image_err = unp.std_devs(image_log)
 
-    if args.plot_metallicity and args.use_P25:
+    if metallicity_multi_color:
         image_sfr = np.ma.masked_where(args.distance_from_K01_map > 0, image)
         image_agn = np.ma.masked_where(args.distance_from_K01_map < 0, image)
         p = ax.imshow(image_agn, cmap='pink', origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
-        p = ax.imshow(image_sfr, cmap='summer', origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
+        p = ax.imshow(image_sfr, cmap='cool', origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
     else:
         p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
 
@@ -1462,7 +1462,7 @@ def plot_Z_map(full_hdu, ax, args, radprof_ax=None):
 
     if logOH_map is not None:
         lim = [7, 9]
-        ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+        ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.use_P25)
     else:
         fig = ax.figure()
         fig.delaxes(ax)
@@ -1834,7 +1834,7 @@ def plot_metallicity_fig(full_hdu, args):
 
         # ---------plotting-------------
         lim = [7.5, 9.2]
-        axes[0], logOH_radfit = plot_2D_map(logOH_map, axes[0], args, takelog=False, label=r'%s$_{\rm int}$ = %.1f $\pm$ %.1f' % (label, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1])
+        axes[0], logOH_radfit = plot_2D_map(logOH_map, axes[0], args, takelog=False, label=r'%s$_{\rm int}$ = %.1f $\pm$ %.1f' % (label, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.use_P25)
 
         logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
         logOH_map_snr = np.ma.masked_where(logOH_map.mask, unp.nominal_values(10 ** logOH_map.data)) / np.ma.masked_where(logOH_map.mask, unp.std_devs(10 ** logOH_map.data))
