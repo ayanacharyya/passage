@@ -309,7 +309,7 @@ def trim_image(image, args):
     return image
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_xaxis=False, hide_yaxis=False, image_err=None):
+def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_xaxis=False, hide_yaxis=False, image_err=None, metallicity_multi_color=False):
     '''
     Plots the average radial profile for a given 2D map in the given axis
     Returns the axis handle
@@ -325,6 +325,7 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     xcol, ycol = 'radius', 'data'
     df = pd.DataFrame({xcol: np.ma.compressed(distance_map), ycol: np.ma.compressed(image)})
     if image_err is not None: df[ycol + '_err'] = np.ma.compressed(image_err)
+    if metallicity_multi_color: df['agn_fl'] = np.ma.compressed(np.ma.masked_where(image.mask, args.distance_from_K01_map.data))
     if len(df[df[ycol + '_err'] > 0]) == 0: image_err = None
     df = df[df[xcol] <= args.radius_max]
     df = df.sort_values(by=xcol)
@@ -334,10 +335,11 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     df_vorbinned[xcol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[xcol]['mean']
     df_vorbinned[ycol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[ycol]
     if image_err is not None: df_vorbinned[ycol+ '_err'] = df.groupby([ycol], as_index=False).agg([(np.mean)])[ycol+ '_err']
+    if metallicity_multi_color: df_vorbinned['agn_fl'] = df.groupby([ycol], as_index=False).agg([(np.mean)])['agn_fl']
     df = df_vorbinned
 
     # -------proceeding with plotting--------
-    ax.scatter(df[xcol], df[ycol], c='grey', s=20 if args.vorbin else 1, alpha=1 if args.vorbin else 0.2)
+    ax.scatter(df[xcol], df[ycol], c=df['agn_fl'] if metallicity_multi_color else 'grey', cmap=args.diverging_cmap if metallicity_multi_color else None, s=20 if args.vorbin else 1, alpha=1 if args.vorbin else 0.2)
     if image_err is not None: ax.errorbar(df[xcol], df[ycol], yerr=df[ycol + '_err'], c='grey', fmt='none', lw=2 if args.vorbin else 0.5, alpha=0.2 if args.vorbin else 0.1)
 
     ax.set_xlim(0, args.radius_max) # kpc
@@ -441,7 +443,7 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
         if radius_pix <= args.arcsec_limit:
             circle = plt.Circle((0, 0), radius_pix, color='k', fill=False, lw=0.5)
             ax.add_patch(circle)
-        radprof_ax, radprof_fit = plot_radial_profile(image, radprof_ax, args, label=label.split(r'$_{\rm int}')[0], ymin=vmin, ymax=vmax, image_err=image_err)
+        radprof_ax, radprof_fit = plot_radial_profile(image, radprof_ax, args, label=label.split(r'$_{\rm int}')[0], ymin=vmin, ymax=vmax, image_err=image_err, metallicity_multi_color=metallicity_multi_color)
     else:
         radprof_fit = [np.nan, np.nan] # dummy values for when the fit was not performed
 
