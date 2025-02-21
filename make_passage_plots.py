@@ -283,13 +283,15 @@ def plot_BPT_from_speccat(speccat_file, args, ax):
     else:
         photcat_file = speccat_file.parent / f'{args.do_field}_photcat.fits'
         if photcat_file.is_file():
-            tab = Table.read(photcat_file)
-            if args.colorcol in tab.columns:
+            tab2 = Table.read(photcat_file)
+            if args.colorcol in tab2.columns:
                 print(f'{args.colorcol} not available in speccat, so obtaining it from photcat')
-                dfp = tab[['id', args.colorcol]].to_pandas()
+                dfp = tab2[['id', args.colorcol]].to_pandas()
                 df  = pd.merge(df, dfp, on='id', how='inner')
             else:
                 print(f'{args.colorcol} not available in either speccat or photcat')
+                print(f'\nspeccat columns =', tab.columns)
+                print(f'\nphotcat columns =', tab2.columns)
 
     df = df[(df['sn_Ha'] > args.SNR_thresh) & (df['sn_Hb'] > args.SNR_thresh) & (df['sn_OIII'] > args.SNR_thresh) & (df['sn_SII'] > args.SNR_thresh)]
 
@@ -297,15 +299,18 @@ def plot_BPT_from_speccat(speccat_file, args, ax):
     df['flux_OIII'] *= OIII_factor
     df['err_OIII'] *= OIII_factor
 
-    Ha_factor = 0.823
+    Ha_factor = 0.823 # choose between 0.823, 0.754, 0.695
     df['flux_Ha'] *= Ha_factor
     df['err_Ha'] *= Ha_factor
 
     df['O3Hb'] = np.log10(df['flux_OIII'] / df['flux_Hb'])
     df['S2Ha'] = np.log10(df['flux_SII'] / df['flux_Ha'])
 
-    colorcol =  np.log10(df[args.colorcol]) if args.log_colorcol else df[args.colorcol]
-    p = ax.scatter(df['S2Ha'], df['O3Hb'], c=colorcol, s=50, lw=0)
+    colorcol = np.log10(df[args.colorcol]) if args.log_colorcol else df[args.colorcol]
+    vmin = np.percentile(colorcol[np.isfinite(colorcol)], 5.)
+    vmax = np.percentile(colorcol[np.isfinite(colorcol)], 95.)
+
+    p = ax.scatter(df['S2Ha'], df['O3Hb'], c=colorcol, s=50, lw=0, cmap='cividis', vmin=vmin, vmax=vmax)
     cbar = plt.colorbar(p)
 
     # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
@@ -330,7 +335,7 @@ def plot_BPT_from_speccat(speccat_file, args, ax):
     plt.title(f'{args.do_field}', fontsize=args.fontsize)
     plt.tight_layout()
 
-    return ax
+    return df, ax
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_flux_vs_mag(ax, args):
@@ -434,7 +439,7 @@ if __name__ == "__main__":
     if args.plot_full_BPT:
         if args.colorcol == 'ez_z_phot': args.colorcol = 'redshift'
         speccat_file = args.input_dir / f'{args.drv}/{args.do_field}/Products/{args.do_field}_speccat.fits'
-        ax = plot_BPT_from_speccat(speccat_file, args, ax)
+        df, ax = plot_BPT_from_speccat(speccat_file, args, ax)
         colorby_text = f'log_{args.colorcol}' if args.log_colorcol else args.colorcol
         figname = speccat_file.parent / f'{args.do_field}_BPT_colorby_{colorby_text}.png'
 
