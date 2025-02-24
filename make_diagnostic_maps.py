@@ -91,12 +91,12 @@ def plot_direct_image(full_hdu, ax, args, hide_xaxis=False, hide_yaxis=False):
         ax.set_ylim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
 
         textcolor = mpl_cm.get_cmap(cmap_arr[index])(0.9)
-        ax.text(ax.get_xlim()[0] * 0.9, ax.get_ylim()[1] * 0.7 - index * 0.1, filt, c=textcolor, fontsize=args.fontsize / 1.5, ha='left', va='top')
+        ax.text(ax.get_xlim()[0] * 0.9, ax.get_ylim()[1] * 0.7 - index * 0.1, filt, c=textcolor, fontsize=args.fontsize, ha='left', va='top')
 
     ax.text(ax.get_xlim()[0] * 0.9, ax.get_ylim()[1] * 0.95, f'z={args.z:.2f}', c='k', fontsize=args.fontsize, ha='left', va='top')
     ax.text(ax.get_xlim()[1] * 0.95, ax.get_ylim()[0] * 0.95, f'Mag={args.mag:.1f}', c='k', fontsize=args.fontsize, ha='right', va='bottom')
     ax.scatter(0, 0, marker='x', s=10, c='grey')
-    ax = annotate_PAs(args.pa_arr, ax, fontsize=args.fontsize/1.5)
+    ax = annotate_PAs(args.pa_arr, ax, fontsize=args.fontsize)
     #cbar = plt.colorbar(p)
 
     if args.only_seg:
@@ -214,7 +214,7 @@ def plot_1d_spectra(od_hdu, ax, args):
         ax.text(float(filters[0][1:-1]) * 1e2 * 0.85 / (1 + args.z), ax.get_ylim()[1] * 0.98 - (index + 1) * 0.1 * np.diff(ax.get_ylim())[0], filter, c=col_arr[index], fontsize=args.fontsize, ha='left', va='top')
 
     ax.set_xlabel(r'Rest-frame wavelength ($\AA$)', fontsize=args.fontsize)
-    ax.set_ylabel(r'f$_{\lambda}$ ' + '(%.0e ' % norm_factor + r'ergs/s/cm$^2$/A)', fontsize=args.fontsize/1.2)
+    ax.set_ylabel(r'f$_{\lambda}$ ' + '(%.0e ' % norm_factor + r'ergs/s/cm$^2$/A)', fontsize=args.fontsize)
     ax.set_ylim(0, args.flam_max) # flam_max should be in units of 1e-19 ergs/s/cm^2/A
 
     # ---observed wavelength axis-------
@@ -462,31 +462,34 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
             image = unp.nominal_values(quant)
             image_err = unp.std_devs(quant)
         snr_map = image / image_err
-        _, _ = plot_2D_map(snr_map, snr_ax, args, takelog=False, label=label.split(r'$_{\rm int}')[0] + ' SNR', cmap='cividis', vmin=0, vmax=6, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+        _, _ = plot_2D_map(snr_map, snr_ax, args, takelog=False, label=label.split(r'$_{\rm int}')[0] + ' SNR', cmap='cividis', vmin=0, vmax=8, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
 
     return ax, radprof_fit
 
 # --------------------------------------------------------------------------------------------------------------------
-def bin_2D(map, bin_IDs, map_err=None):
+def bin_2D(map, bin_IDs, map_err=None, debug_vorbin=False):
     '''
     Bin a given 2D map by given bin_IDs
     Returns the binned 2D map (of same shape as input map)
     '''
     binned_map = np.zeros(np.shape(map))
-    for id in np.unique(np.ma.compressed(bin_IDs)):
+    if map_err is not None: binned_map_err = np.zeros(np.shape(map_err))
+
+    unique_IDs = np.unique(np.ma.compressed(bin_IDs))
+    for id in unique_IDs:
         candidates = map[bin_IDs == id]
         candidates_wo_nan = np.ma.compressed(candidates)
-        # print(f'Deb445: data, {id}, {len(candidates)}, {np.nanmean(candidates) if len(candidates_wo_nan) > 0 else np.nan}, {len(candidates_wo_nan)}, {np.mean(candidates_wo_nan)}')  ##
-        if len(candidates_wo_nan) > 0: binned_map[bin_IDs == id] = np.mean(candidates_wo_nan)
+        binned_data = np.mean(candidates_wo_nan)
+        if debug_vorbin: print(f'Deb445: val: id {int(id)} out of {len(unique_IDs)}, ntotal_pix = {len(candidates)}, ngood_pix = {len(candidates_wo_nan)}, assigned val = {binned_data:.2e}')  ##
+        if len(candidates_wo_nan) > 0: binned_map[bin_IDs == id] = binned_data
         else: binned_map[bin_IDs == id] = np.nan
 
-    if map_err is not None:
-        binned_map_err = np.zeros(np.shape(map_err))
-        for id in np.unique(np.ma.compressed(bin_IDs)):
+        if map_err is not None:
             candidates = map_err[bin_IDs == id]
             candidates_wo_nan = np.ma.compressed(candidates)
-            # print(f'Deb457: err, {id}, {len(candidates)}, {len(candidates_wo_nan)}, {np.sqrt(np.sum(candidates_wo_nan ** 2)) / len(candidates_wo_nan)}')  ##
-            binned_map_err[bin_IDs == id] = np.sqrt(np.sum(candidates_wo_nan ** 2)) / len(candidates_wo_nan) # this is the appropriate error propagation for mean() operation (which the flux is undergoing above)
+            binned_err = np.sqrt(np.sum(candidates_wo_nan ** 2)) / len(candidates_wo_nan)
+            if debug_vorbin: print(f'Deb457: err: id {int(id)} out of {len(unique_IDs)}, ntotal_pix = {len(candidates)}, ngood_pix = {len(candidates_wo_nan)}, assigned err = {binned_err:.2e}, snr = {binned_data / binned_err : .2f}')  ##
+            binned_map_err[bin_IDs == id] = binned_err # this is the appropriate error propagation for mean() operation (which the flux is undergoing above)
 
     if map_err is None: return binned_map
     else: return binned_map, binned_map_err
@@ -542,7 +545,7 @@ def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
     x_coords_array = np.ma.compressed(x_coords_grid_masked)
     y_coords_array = np.ma.compressed(y_coords_grid_masked)
 
-    binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords_array, y_coords_array, map_array, map_err_array, snr_thresh, plot=False, quiet=quiet, cvt=False, wvt=True)
+    binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords_array, y_coords_array, map_array, map_err_array, snr_thresh, plot=plot, quiet=quiet, cvt=True, wvt=True)
 
     interp = NearestNDInterpolator(list(zip(x_coords_array, y_coords_array)), binIDs)
     binID_map = interp(x_coords_grid, y_coords_grid)
@@ -551,11 +554,12 @@ def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
     if args is not None and args.debug_vorbin:
         plot_2D_map(binID_map, axes[3], args, takelog=False, label='resultant bin IDs', cmap=cmap, hide_yaxis=True)
 
-        map, map_err = bin_2D(map, binID_map, map_err=map_err)
-        plot_2D_map(map, axes[4], args, takelog=False, label=f'binned {args.voronoi_line} map', cmap=cmap, hide_yaxis=False)
+        map, map_err = bin_2D(map, binID_map, map_err=map_err, debug_vorbin=args.debug_vorbin)
+        plot_2D_map(map, axes[4], args, takelog=False, label=f'binned {args.voronoi_line} map', cmap=cmap, hide_yaxis=True)
         plot_2D_map(map_err, axes[5], args, takelog=False, label=f'binned {args.voronoi_line} err', cmap=cmap, hide_yaxis=True)
         plot_2D_map(map / map_err, axes[6], args, takelog=False, label='binned SNR', cmap=cmap, hide_yaxis=True)
         plt.show(block=False)
+        #sys.exit(f'Exiting here because of --debug_vorbin mode; if you want to run the full code as usual then remove the --debug_vorbin option and re-run')
 
     return binID_map
 
@@ -568,6 +572,37 @@ def cut_by_segment(map, args):
     cut_map = np.ma.masked_where(args.segmentation_map != args.id, map)
 
     return cut_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_emission_line_int(line, full_hdu, args, dered=True):
+    '''
+    Retrieve the integrated flux for a given emission line from the HDU
+    Returns the 2D line image
+    '''
+    line_index = np.where(args.available_lines == line)[0][0]
+    ext = 5 + 2 * args.ndfilt + 4 * line_index
+    line_wave = full_hdu[ext].header['RESTWAVE'] # in Angstrom
+
+    line_int = full_hdu[0].header[f'FLUX{line_index + 1:03d}'] # ergs/s/cm^2
+    line_int_err = full_hdu[0].header[f'ERR{line_index + 1:03d}'] # ergs/s/cm^2
+
+    # ----------deblending flux--------------------
+    factor = 1.
+    if not args.do_not_correct_flux:
+        if line == 'OIII': # special treatment for OIII 5007 line, in order to account for and remove the OIII 4959 component
+            ratio_5007_to_4959 = 2.98 # from grizli source code
+            factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
+            print(f'Correcting OIII for 4959 component, by factor of {factor:.3f}')
+        elif line == 'Ha': # special treatment for Ha line, in order to account for and remove the NII component
+            factor = 0.823 # from James et al. 2023?
+            print(f'Correcting Ha for NII component, by factor of {factor:.3f}')
+
+    line_int = line_int * factor
+    line_int_err = line_int_err * factor
+    line_int = ufloat(line_int, line_int_err)
+    if dered: line_int = get_dereddened_flux(line_int, line_wave, args.EB_V)
+
+    return line_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
@@ -609,6 +644,12 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
         line_map = np.ma.masked_where(mask, line_map)
         line_map_err = np.ma.masked_where(mask, line_map_err)
 
+    # -----------getting the dereddened flux value-----------------
+    if dered:
+        line_map_quant = get_dereddened_flux(unp.uarray(line_map, line_map_err), line_wave, args.EB_V)
+        line_map = unp.nominal_values(line_map_quant)
+        line_map_err = unp.std_devs(line_map_quant)
+
     if args.vorbin and not for_vorbin:
         if args.voronoi_line is None: # No reference emission line specified, so Voronoi IDs need to be computed now
             bin_IDs = get_voronoi_bin_IDs(line_map, line_map_err, args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin)
@@ -620,8 +661,8 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
             fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.1, wspace=0.5)
             cmap = 'viridis'
             fig.text(0.05, 0.8, f'{args.field}: ID {args.id}: line {line}', fontsize=args.fontsize, c='k', ha='left', va='top')
-            plot_2D_map(np.log10(line_map), axes[0], args, takelog=False, label='map', cmap=cmap, hide_yaxis=True)
-            plot_2D_map(np.log10(line_map_err), axes[1], args, takelog=False, label='map err', cmap=cmap, hide_yaxis=True)
+            plot_2D_map(line_map, axes[0], args, takelog=False, label='map', cmap=cmap, hide_yaxis=True)
+            plot_2D_map(line_map_err, axes[1], args, takelog=False, label='map err', cmap=cmap, hide_yaxis=True)
             snr = line_map / line_map_err
             combined_cmap = make_combined_cmap(cmap, 'Grays', np.min(snr), np.max(snr), args.snr_cut)
             plot_2D_map(snr, axes[2], args, takelog=False, label='snr', cmap=combined_cmap, hide_yaxis=True)
@@ -630,8 +671,8 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
         line_map, line_map_err = bin_2D(line_map, bin_IDs, map_err=line_map_err)
 
         if args.debug_vorbin:
-            plot_2D_map(np.log10(line_map), axes[4], args, takelog=False, label='binned map', cmap=cmap, hide_yaxis=True)
-            plot_2D_map(np.log10(line_map_err), axes[5], args, takelog=False, label='binned map err', cmap=cmap, hide_yaxis=True)
+            plot_2D_map(line_map, axes[4], args, takelog=False, label='binned map', cmap=cmap, hide_yaxis=True)
+            plot_2D_map(line_map_err, axes[5], args, takelog=False, label='binned map err', cmap=cmap, hide_yaxis=True)
             snr = line_map / line_map_err
             combined_cmap = make_combined_cmap(cmap, 'Grays', np.nanmin(snr), np.nanmax(snr), args.snr_cut)
             plot_2D_map(snr, axes[6], args, takelog=False, label='binned snr', cmap=combined_cmap, hide_yaxis=True)
@@ -644,22 +685,13 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     print(f'Summed up {line} flux for object {args.id} is {line_sum/1e-17: .3f} x 10^-17 ergs/s/cm^2.')
 
     # -----------getting the integrated flux value from grizli-----------------
-    line_int = full_hdu[0].header[f'FLUX{line_index + 1:03d}'] # ergs/s/cm^2
-    line_int_err = full_hdu[0].header[f'ERR{line_index + 1:03d}'] # ergs/s/cm^2
-    line_int = line_int * factor
-    line_int_err = line_int_err * factor
-    line_int = ufloat(line_int, line_int_err)
+    line_int = get_emission_line_int(line, full_hdu, args, dered=True)
 
     # -----------getting the integrated EW value-----------------
     line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
     line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}'] # rest-frame EW
     line_ew_err = full_hdu[2].header[f'EWHW_{line_index_in_cov:03d}'] # rest-frame EW uncertainty
     line_ew = ufloat(line_ew, line_ew_err)
-
-    # -----------getting the dereddened flux value-----------------
-    if dered:
-        line_map = get_dereddened_flux(line_map, line_wave, args.EB_V)
-        line_int = get_dereddened_flux(line_int, line_wave, args.EB_V)
 
     if not np.ma.isMaskedArray(line_map): line_map = np.ma.masked_where(False, line_map)
 
@@ -825,7 +857,7 @@ def compute_EB_V(Ha_flux, Hb_flux,verbose=False):
     return EB_V
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_EB_V(full_hdu, args, verbose=False):
+def get_EB_V_map(full_hdu, args, verbose=False):
     '''
     Computes and returns the spatially resolved as well as integrated dust extinction map from a given HDU
     Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
@@ -838,6 +870,19 @@ def get_EB_V(full_hdu, args, verbose=False):
     EB_V_int = compute_EB_V(Ha_int, Hb_int, verbose=verbose)
 
     return EB_V_map, EB_V_int
+
+# -------------------------------------------------------------------------------------------------------------------
+def get_EB_V_int(full_hdu, args, verbose=False):
+    '''
+    Computes and returns the integrated dust extinction value from a given HDU
+    Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
+    '''
+    Ha_int = get_emission_line_int('Ha', full_hdu, args, dered=False)
+    Hb_int = get_emission_line_int('Hb', full_hdu, args, dered=False)
+
+    EB_V_int = compute_EB_V(Ha_int, Hb_int, verbose=verbose)
+
+    return EB_V_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_EB_V_map(full_hdu, ax, args, radprof_ax=None):
@@ -1796,7 +1841,7 @@ def plot_starburst_map(full_hdu, axes, args, radprof_axes=None, vorbin_axes=None
     starburst_radfit = []
     for index, ax in enumerate(np.atleast_1d(axes)):
         map_err = np.ma.masked_where(maps_dict[sequence_to_plot[index]].mask, unp.std_devs(maps_dict[sequence_to_plot[index]].data))
-        ax, radprof_fit = plot_2D_map(maps_dict[sequence_to_plot[index]], ax, args, label=labels_dict[sequence_to_plot[index]], cmap='viridis', vmin=lims_dict[sequence_to_plot[index]][0], vmax=lims_dict[sequence_to_plot[index]][1], radprof_ax=np.atleast_1d(radprof_axes)[index] if args.plot_radial_profiles else None, vorbin_ax=np.atleast_1d(vorbin_axes)[index] if args.plot_vorbin else None, snr_ax=np.atleast_1d(snr_axes)[index] if args.plot_snr else None, image_err=map_err if args.plot_snr else None, hide_yaxis=True)
+        ax, radprof_fit = plot_2D_map(maps_dict[sequence_to_plot[index]], ax, args, takelog=True, label=labels_dict[sequence_to_plot[index]], cmap='viridis', vmin=lims_dict[sequence_to_plot[index]][0], vmax=lims_dict[sequence_to_plot[index]][1], radprof_ax=np.atleast_1d(radprof_axes)[index] if args.plot_radial_profiles else None, vorbin_ax=np.atleast_1d(vorbin_axes)[index] if args.plot_vorbin else None, snr_ax=np.atleast_1d(snr_axes)[index] if args.plot_snr else None, image_err=map_err if args.plot_snr else None, hide_yaxis=True)
         starburst_radfit.append(radprof_fit)
 
     return axes, ratio_map, starburst_radfit
@@ -1894,7 +1939,7 @@ def AGN_func(x, method='K01'):
     return y
 
 # --------------------------------------------------------------------------------------------------------------------
-def overplot_AGN_line_on_BPT(ax, method='K01', color='k'):
+def overplot_AGN_line_on_BPT(ax, method='K01', color='k', fontsize=10):
     '''
     Overplots a given AGN demarcation line on R3 vs S2 ratio BPT, on an existing axis
     Returns axis handle
@@ -1903,7 +1948,7 @@ def overplot_AGN_line_on_BPT(ax, method='K01', color='k'):
     x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
     y = AGN_func(x, method=method)
     ax.plot(x, y, c=color, ls='dashed', lw=2, label=label_dict[method])
-    ax.legend()
+    ax.legend(fontsize=fontsize)
 
     return ax
 
@@ -1936,11 +1981,11 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
         distance_from_K01_int = sign * get_distance_from_Kewley2001(unp.nominal_values(x_ratio),unp.nominal_values(y_ratio), args, x_num='SII')
 
         if not hide_plot:
-            p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
+            p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200 / args.fig_scale_factor, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
             ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c=color, fmt='none', lw=2)
 
             if args.plot_separately:
-                p = ax_indiv.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
+                p = ax_indiv.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200 / args.fig_scale_factor, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
                 ax_indiv.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c=color, fmt='none', lw=2)
 
     except ValueError:
@@ -1985,15 +2030,15 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
             df = df.sort_values(by='distance')
             df = df.drop_duplicates().reset_index(drop=True)
 
-            scatter_plot_handle = ax.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_K01' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_K01' else None)
+            scatter_plot_handle = ax.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_K01' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_K01' else None)
             ax.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.5 if args.fortalk else 0.5, zorder=-10)
 
-            if args.plot_AGN_frac and not args.plot_separately and len(args.id_arr) == 1:
+            if args.plot_AGN_frac and not args.plot_separately and not (len(args.id_arr) > 1 and args.plot_BPT):
                 if ax_inset is None: ax_inset = ax.inset_axes([0.05, 0.1, 0.3, 0.3])
                 plot_2D_map(distance_from_K01_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, hide_yaxis=False)
 
             if args.plot_separately:
-                scatter_plot_handle_indiv = ax_indiv.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_K01' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_K01' else None)
+                scatter_plot_handle_indiv = ax_indiv.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_K01' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_K01' else None)
                 ax_indiv.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
 
                 if args.plot_AGN_frac:
@@ -2011,15 +2056,17 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
             # ---------annotate axes-------
             cbar = plt.colorbar(scatter_plot_handle_indiv)
             cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from K01' if args.colorcol == 'distance_from_K01' else '')
+            cbar.ax.tick_params(labelsize=args.fontsize)
 
             ax_indiv.set_xlim(-2, 0.3)
             ax_indiv.set_ylim(-1, 2)
-            ax_indiv.set_xlabel(f'log (SII 6717+31/Halpha)')
-            ax_indiv.set_ylabel(f'log (OIII 5007/Hbeta)')
+            ax_indiv.set_xlabel(f'log (SII 6717+31/Halpha)', fontsize=args.fontsize)
+            ax_indiv.set_ylabel(f'log (OIII 5007/Hbeta)', fontsize=args.fontsize)
+            ax_indiv.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
             # ---------adding literature AGN demarcation lines----------
-            ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='K01', color='w' if args.fortalk else 'k')
-            ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='S24', color='y' if args.fortalk else 'brown')
+            ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='K01', color='w' if args.fortalk else 'k', fontsize=args.fontsize)
+            ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='S24', color='y' if args.fortalk else 'brown', fontsize=args.fontsize)
             fig_indiv.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
             fig_indiv.text(0.15, 0.9, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
 
@@ -2032,16 +2079,18 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
         if index == 0:
             # ---------annotate axes-------
             cbar = plt.colorbar(scatter_plot_handle)
-            cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from K01' if args.colorcol == 'distance_from_K01' else '')
+            cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from K01' if args.colorcol == 'distance_from_K01' else '', fontsize=args.fontsize)
+            cbar.ax.tick_params(labelsize=args.fontsize)
 
             ax.set_xlim(-2, 0.3)
             ax.set_ylim(-1, 2)
-            ax.set_xlabel(f'log (SII 6717+31/Halpha)')
-            ax.set_ylabel(f'log (OIII 5007/Hbeta)')
+            ax.set_xlabel(f'log (SII 6717+31/Halpha)', fontsize=args.fontsize)
+            ax.set_ylabel(f'log (OIII 5007/Hbeta)', fontsize=args.fontsize)
+            ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
             # ---------adding literature AGN demarcation lines----------
-            ax = overplot_AGN_line_on_BPT(ax, method='K01', color='w' if args.fortalk else 'k')
-            ax = overplot_AGN_line_on_BPT(ax, method='S24', color='y' if args.fortalk else 'brown')
+            ax = overplot_AGN_line_on_BPT(ax, method='K01', color='w' if args.fortalk else 'k', fontsize=args.fontsize)
+            ax = overplot_AGN_line_on_BPT(ax, method='S24', color='y' if args.fortalk else 'brown', fontsize=args.fontsize)
 
     return ax, distance_from_K01_map, distance_from_K01_int
 
@@ -2049,6 +2098,8 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
+    args.fig_scale_factor = 1.0 if args.plot_direct_filters or args.plot_BPT or args.plot_starburst or args.plot_metallicity else 1.6
+    args.fontsize /= args.fig_scale_factor
     if args.plot_slope_vs_mass: args.plot_starburst, args.plot_radial_profiles = True, True
     if args.colorcol == 'ez_z_phot': args.colorcol = 'distance'
     args.diverging_cmap = get_custom_cmap(args.diverging_cmap)
@@ -2213,6 +2264,11 @@ if __name__ == "__main__":
             segmentation_map = full_hdu['SEG'].data
             args.segmentation_map = trim_image(segmentation_map, args)
 
+            # ---------------dust value---------------
+            if all([line in args.available_lines for line in ['Ha', 'Hb']]) and not args.test_cutout:
+                try: args.EB_V = get_EB_V_int(full_hdu, args, verbose=True)
+                except: args.EB_V = 0.
+
             # ---------------voronoi binning stuff---------------
             if args.vorbin and args.voronoi_line is not None:
                 line_map, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True)
@@ -2229,11 +2285,6 @@ if __name__ == "__main__":
                 args.radius_max = np.max(distance_map)
             else:
                 args.radius_max = np.nan
-
-            # ---------------dust value---------------
-            if all([line in args.available_lines for line in ['Ha', 'Hb']]) and not args.test_cutout:
-                try: _, args.EB_V = get_EB_V(full_hdu, args, verbose=True)
-                except: args.EB_V = 0.
 
             # ---------initialising the starburst figure------------------------------
             if args.test_cutout or args.plot_direct_filters:
@@ -2279,7 +2330,9 @@ if __name__ == "__main__":
                 if args.plot_ratio_maps: nrow += 1
                 if args.plot_radial_profiles: nrow += 1
                 ncol = len(all_lines_to_plot)
-                fig = plt.figure(figsize=(13/1., 12/1.) if args.plot_radial_profiles else (13, 6), layout='constrained')
+                figsize = (13, 12) if nrow == 6 else (13, 10) if nrow == 5 else (13, 9) if nrow == 4 else (13, 6)
+                figsize = (figsize[0] / args.fig_scale_factor, figsize[1] / args.fig_scale_factor)
+                fig = plt.figure(figsize=figsize, layout='constrained')
 
                 axis_dirimg = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 0), colspan=1)
                 axis_1dspec = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 1), colspan=ncol - 1)
@@ -2309,12 +2362,12 @@ if __name__ == "__main__":
 
                 # -----------------emission line maps---------------
                 for ind, line in enumerate(all_lines_to_plot):
-                    if line in args.available_lines: ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False, snr_ax=ax_em_lines_snr[ind] if args.plot_snr else None)
+                    if line in args.available_lines: ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu_r', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False, snr_ax=ax_em_lines_snr[ind] if args.plot_snr else None)
                     else: fig.delaxes(ax_em_lines[ind])
 
                 # -----------------emission line ratio maps---------------
                 if args.plot_ratio_maps:
-                    cmap_ratio = 'RdPu'
+                    cmap_ratio = 'RdPu_r'
                     # -----------------emission line ratio maps: O3Hb---------------
                     if all([line in args.available_lines for line in ['OIII', 'Hb']]):
                         ax_o3hb = plot_line_ratio_map('OIII', 'Hb', full_hdu, ax_o3hb, args, cmap=cmap_ratio, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=False, hide_cbar=False)
@@ -2427,7 +2480,7 @@ if __name__ == "__main__":
                     try: mplcyberpunk.make_scatter_glow()
                     except: pass
 
-                fig.savefig(figname, transparent=args.fortalk)
+                fig.savefig(figname, transparent=args.fortalk, dpi=200)
                 print(f'Saved figure at {figname}')
                 if args.hide: plt.close('all')
                 else: plt.show(block=False)
