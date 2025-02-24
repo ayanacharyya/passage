@@ -57,7 +57,7 @@ if __name__ == "__main__":
 
     # --------------compare individual object properties---------------------
     if args.id is not None or args.do_all_obj:
-        all_ids = [int(os.path.split(item)[-1][:-3]) for item in glob.glob(str(args.output_dir / f'pipes/posterior/{runs[0]}/*.h5'))]
+        all_ids = np.sort([int(os.path.split(item)[-1][:-3]) for item in glob.glob(str(args.output_dir / f'pipes/posterior/{runs[0]}/*.h5'))])
         if args.do_all_obj: args.id_arr = all_ids
         else: args.id_arr = args.id
 

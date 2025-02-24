@@ -34,6 +34,7 @@
              run make_diagnostic_maps.py --field Par28 --id 1303,1934,2734,2867,300,2903,2906 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --keep
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --mask_agn --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --keep
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --plot_circle_at_arcsec 0.5
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_snr --plot_ratio_maps --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --plot_circle_at_arcsec 0.5
 
              run make_diagnostic_maps.py --field glass-a2744 --id 2928,5184 --plot_radial_profile --plot_AGN_frac --only_seg --vorbin --voronoi_line OIII --voronoi_snr 10 --drv 0.5 --do_not_correct_pixel --use_O3O2
 
@@ -456,9 +457,12 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
         _, _ = plot_2D_map(vorbin_IDs, vorbin_ax, args, takelog=False, label=label + ' vorbin', cmap='rainbow')
 
     if args.plot_snr and image_err is not None and snr_ax is not None:
-        if takelog: image = 10 ** image # undoing the log step that was done initially
+        if takelog:
+            quant = 10 ** unp.uarray(image.data, image_err.data) # undoing the log step that was done initially
+            image = unp.nominal_values(quant)
+            image_err = unp.std_devs(quant)
         snr_map = image / image_err
-        _, _ = plot_2D_map(snr_map, snr_ax, args, takelog=False, label=label + ' SNR', cmap='rainbow')
+        _, _ = plot_2D_map(snr_map, snr_ax, args, takelog=False, label=label.split(r'$_{\rm int}')[0] + ' SNR', cmap='cividis', vmin=0, vmax=6, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
 
     return ax, radprof_fit
 
@@ -585,10 +589,6 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
             ratio_5007_to_4959 = 2.98 # from grizli source code
             factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
             print(f'Correcting OIII for 4959 component, by factor of {factor:.3f}')
-        elif line == 'SII': # special treatment for SII 6717 line, in order to account for and remove the SII 6731 component
-            ratio_6717_to_6731 = 1. # from grizli source code
-            factor = ratio_6717_to_6731 / (1 + ratio_6717_to_6731)
-            print(f'Correcting SII for 6731 component, by factor of {factor:.3f}')
         elif line == 'Ha': # special treatment for Ha line, in order to account for and remove the NII component
             factor = 0.823 # from James et al. 2023?
             print(f'Correcting Ha for NII component, by factor of {factor:.3f}')
@@ -666,15 +666,54 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     return line_map, line_wave, line_int, line_ew
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False):
+def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, snr_ax=None):
     '''
     Plots the emission map for a given line in the given axis
     Returns the axes handle
     '''
 
-    line_map, line_wave, line_int, line_ew = get_emission_line_map(line, full_hdu, args, dered=False)
-    ax, _ = plot_2D_map(line_map, ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int.n), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+    line_map, line_wave, line_int, line_ew = get_emission_line_map(line, full_hdu, args, dered=True)
+    ax, _ = plot_2D_map(line_map, ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int.n), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, snr_ax=snr_ax)
     ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[0] * 0.88, f'EW = {line_ew:.1f}', c='k', fontsize=args.fontsize, ha='left', va='bottom', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_line_ratio_map(line_num, line_den, full_hdu, ax, args, cmap='cividis', vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False):
+    '''
+    Plots the emission line ratio map for a given pair of lines in the given axis
+    Returns the axes handle
+    '''
+
+    num_map, _, num_int, _ = get_emission_line_map('Ha' if line_num == 'NII' else line_num, full_hdu, args, dered=True)
+    den_map, _, den_int, _ = get_emission_line_map('Ha' if line_den == 'NII' else line_den, full_hdu, args, dered=True)
+
+    # ----------deblending flux--------------------
+    if not args.do_not_correct_flux:
+        # special treatment for H-alpha line, in order to account for NII 6584 component
+        # factor = factor by which Ha+NII complex was originally corrected to get Ha; need to divide Ha map by this factor to get back the Ha+NII complex
+        factor = 0.823  # from grizli source code
+    else:
+        factor = 1.
+
+    if line_num == 'NII': # converting original Ha map to NII map by simple scaling
+        num_map = np.ma.masked_where(num_map.mask, num_map.data * (1 - 0.823) / factor)
+        num_int = num_int * (1 - 0.823) / factor
+
+    if line_den == 'NII': # converting original Ha map to NII map by simple scaling
+        den_map = np.ma.masked_where(den_map.mask, den_map.data * (1 - 0.823) / factor)
+        den_int = den_int * (1 - 0.823) / factor
+
+    bad_mask = (num_map.data < 0) | (den_map.data <= 0) | (~np.isfinite(unp.nominal_values(num_map.data))) | (~np.isfinite(unp.nominal_values(den_map.data)))
+    num_map[bad_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+    den_map[bad_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+    ratio_map = unp.log10(num_map.data / den_map.data)
+    ratio_map = np.ma.masked_where(bad_mask | num_map.mask | den_map.mask, ratio_map)
+
+    try: ratio_int = unp.log10(num_int / den_int)
+    except: ratio_int = ufloat(np.nan, np.nan)
+
+    ax, _ = plot_2D_map(ratio_map, ax, args, takelog=False, label=r'%s/%s$_{\rm int}$ = %.1f$\pm$%.1f' % (line_num, line_den, unp.nominal_values(ratio_int), unp.std_devs(ratio_int)), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
 
     return ax
 
@@ -1162,14 +1201,6 @@ def get_Z_O3S2(full_hdu, args):
     Hbeta_map, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
     SII6717_map, line_wave, SII6717_int, _ = get_emission_line_map('SII', full_hdu, args)
     Halpha_map, line_wave, Halpha_int, _ = get_emission_line_map('Ha', full_hdu, args)
-
-    if not args.do_not_correct_flux:
-        # special treatment for SII 6717 line, in order to account for and ADD the SII 6731 component back
-        ratio_6717_to_6731 = 1.  # from grizli source code
-        factor = ratio_6717_to_6731 / (1 + ratio_6717_to_6731)
-        print(f'Re-correcting SII to include 6731 component, for computing O3S2 metallicity, by factor of {factor:.3f}')
-        SII6717_map = np.ma.masked_where(SII6717_map.mask, SII6717_map.data / factor)
-        SII6717_int = SII6717_int / factor
 
     logOH_map = compute_Z_O3S2(OIII5007_map, Hbeta_map, SII6717_map, Halpha_map)
     logOH_int = compute_Z_O3S2(OIII5007_int, Hbeta_int, SII6717_int, Halpha_int)
@@ -1893,15 +1924,6 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
     SII_map, SII_wave, SII_int, _ = get_emission_line_map('SII', full_hdu, args)
     Halpha_map, Halpha_wave, Halpha_int, _ = get_emission_line_map('Ha', full_hdu, args)
 
-    # ----------deblending flux--------------------
-    if not args.do_not_correct_flux:
-        # special treatment for SII 6717 line, in order to account for and ADD the SII 6731 component back
-        ratio_6717_to_6731 = 1. # from grizli source code
-        factor = ratio_6717_to_6731 / (1 + ratio_6717_to_6731)
-        SII_map = np.ma.masked_where(SII_map.mask, SII_map.data / factor)
-        SII_int = SII_int / factor
-        print(f'Re-correcting SII to include the 6731 component, for computing BPT, by factor of {factor:.3f}')
-
     try:
         # -----------integrated-----------------------
         color = mpl_cm.get_cmap(cmap)(0.5)
@@ -2014,7 +2036,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
 
             ax.set_xlim(-2, 0.3)
             ax.set_ylim(-1, 2)
-            ax.set_xlabel(f'log (SII 6717/Halpha)')
+            ax.set_xlabel(f'log (SII 6717+31/Halpha)')
             ax.set_ylabel(f'log (OIII 5007/Hbeta)')
 
             # ---------adding literature AGN demarcation lines----------
@@ -2252,16 +2274,30 @@ if __name__ == "__main__":
 
             # ---------initialising the full figure------------------------------
             else:
-                nrow, ncol = 4 if args.plot_radial_profiles else 3, len(all_lines_to_plot)
-                fig = plt.figure(figsize=(13/1., 9/1.) if args.plot_radial_profiles else (13, 6), layout='constrained')
+                nrow = 3
+                if args.plot_snr: nrow += 1
+                if args.plot_ratio_maps: nrow += 1
+                if args.plot_radial_profiles: nrow += 1
+                ncol = len(all_lines_to_plot)
+                fig = plt.figure(figsize=(13/1., 12/1.) if args.plot_radial_profiles else (13, 6), layout='constrained')
 
                 axis_dirimg = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 0), colspan=1)
                 axis_1dspec = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 1), colspan=ncol - 1)
-                ax_em_lines = [plt.subplot2grid(shape=(nrow, ncol), loc=(1, item), colspan=1) for item in np.arange(ncol)]  # H alpha, H beta, OII, OIII-4363, OIII
-                ax_derived_quant_arr = [plt.subplot2grid(shape=(nrow, ncol), loc=(2, item), colspan=1) for item in np.arange(ncol)]  # SFR, E(B-V), Te, Z (Te), Z (R23)
+                row_loc = 1
+                ax_em_lines = [plt.subplot2grid(shape=(nrow, ncol), loc=(row_loc, item), colspan=1) for item in np.arange(ncol)]  # OII, H beta, OIII, H alpha, SII
+                if args.plot_snr:
+                    row_loc += 1
+                    ax_em_lines_snr = [plt.subplot2grid(shape=(nrow, ncol), loc=(row_loc, item), colspan=1) for item in np.arange(ncol)]  # OII, H beta, OIII, H alpha, SII SNRs
+                if args.plot_ratio_maps:
+                    row_loc += 1
+                    ax_ratio_maps = [plt.subplot2grid(shape=(nrow, ncol), loc=(row_loc, item), colspan=1) for item in np.arange(ncol)]  # O3Hb, S2Ha, O3S2, N2S2, O3O2 ratios
+                    ax_o3hb, ax_s2ha, ax_o3s2, ax_n2s2, ax_o3o2 = ax_ratio_maps[0], ax_ratio_maps[1], ax_ratio_maps[2], ax_ratio_maps[3], ax_ratio_maps[4]
+                row_loc += 1
+                ax_derived_quant_arr = [plt.subplot2grid(shape=(nrow, ncol), loc=(row_loc, item), colspan=1) for item in np.arange(ncol)] # AGN, log(q), Z, SFR, Ha/F115W
                 ax1, ax2, ax3, ax4, ax5 = ax_derived_quant_arr[0], ax_derived_quant_arr[1], ax_derived_quant_arr[2], ax_derived_quant_arr[3], ax_derived_quant_arr[4]
                 if args.plot_radial_profiles:
-                    ax_radprof_arr = [plt.subplot2grid(shape=(nrow, ncol), loc=(3, item), colspan=1) for item in np.arange(ncol)]  # SFR, E(B-V), Te, Z (Te), Z (R23)
+                    row_loc += 1
+                    ax_radprof_arr = [plt.subplot2grid(shape=(nrow, ncol), loc=(row_loc, item), colspan=1) for item in np.arange(ncol)] # BPT, log(q), Z, SFR, Ha/F115W
                     rax1, rax2, rax3, rax4, rax5 = ax_radprof_arr[0], ax_radprof_arr[1], ax_radprof_arr[2], ax_radprof_arr[3], ax_radprof_arr[4]
                 else:
                     [rax1, rax2, rax3, rax4, rax5] = np.tile(None, ncol)
@@ -2273,8 +2309,41 @@ if __name__ == "__main__":
 
                 # -----------------emission line maps---------------
                 for ind, line in enumerate(all_lines_to_plot):
-                    if line in args.available_lines: ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False)
+                    if line in args.available_lines: ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False, snr_ax=ax_em_lines_snr[ind] if args.plot_snr else None)
                     else: fig.delaxes(ax_em_lines[ind])
+
+                # -----------------emission line ratio maps---------------
+                if args.plot_ratio_maps:
+                    cmap_ratio = 'RdPu'
+                    # -----------------emission line ratio maps: O3Hb---------------
+                    if all([line in args.available_lines for line in ['OIII', 'Hb']]):
+                        ax_o3hb = plot_line_ratio_map('OIII', 'Hb', full_hdu, ax_o3hb, args, cmap=cmap_ratio, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=False, hide_cbar=False)
+                    else:
+                        fig.delaxes(ax_o3hb)
+
+                    # -----------------emission line ratio maps: S2Ha---------------
+                    if all([line in args.available_lines for line in ['SII', 'Ha']]):
+                        ax_s2ha = plot_line_ratio_map('SII', 'Ha', full_hdu, ax_s2ha, args, cmap=cmap_ratio, vmin=-1.5, vmax=0.5, hide_xaxis=True, hide_yaxis=True, hide_cbar=False)
+                    else:
+                        fig.delaxes(ax_s2ha)
+
+                    # -----------------emission line ratio maps: O3S2---------------
+                    if all([line in args.available_lines for line in ['OIII', 'SII']]):
+                        ax_o3s2 = plot_line_ratio_map('OIII', 'SII', full_hdu, ax_o3s2, args, cmap=cmap_ratio, vmin=-0.5, vmax=1.5, hide_xaxis=True, hide_yaxis=True, hide_cbar=False)
+                    else:
+                        fig.delaxes(ax_o3s2)
+
+                    # -----------------emission line ratio maps: N2S2---------------
+                    if all([line in args.available_lines for line in ['Ha', 'SII']]):
+                        ax_n2s2 = plot_line_ratio_map('NII', 'SII', full_hdu, ax_n2s2, args, cmap=cmap_ratio, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=True, hide_cbar=False)
+                    else:
+                        fig.delaxes(ax_n2s2)
+
+                    # -----------------emission line ratio maps: O3O2---------------
+                    if all([line in args.available_lines for line in ['OIII', 'OII']]):
+                        ax_o3o2 = plot_line_ratio_map('OIII', 'OII', full_hdu, ax_o3o2, args, cmap=cmap_ratio, vmin=-0.5, vmax=0.5, hide_xaxis=True, hide_yaxis=True, hide_cbar=False)
+                    else:
+                        fig.delaxes(ax_o3o2)
 
                 # # ---------------dust map---------------
                 # if all([line in args.available_lines for line in ['Ha', 'Hb']]):
