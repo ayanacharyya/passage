@@ -35,6 +35,7 @@
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --mask_agn --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --keep
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --plot_circle_at_arcsec 0.5
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_snr --plot_ratio_maps --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --plot_circle_at_arcsec 0.5
+             run make_diagnostic_maps.py --field Par28 --id 2867 --plot_BPT --plot_AGN_frac --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.25 --colorcol distance_from_AGN_line --use_H21
 
              run make_diagnostic_maps.py --field glass-a2744 --id 2928,5184 --plot_radial_profile --plot_AGN_frac --only_seg --vorbin --voronoi_line OIII --voronoi_snr 10 --drv 0.5 --do_not_correct_pixel --use_O3O2
 
@@ -326,7 +327,7 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     xcol, ycol = 'radius', 'data'
     df = pd.DataFrame({xcol: np.ma.compressed(distance_map), ycol: np.ma.compressed(image)})
     if image_err is not None: df[ycol + '_err'] = np.ma.compressed(image_err)
-    if metallicity_multi_color: df['agn_fl'] = np.ma.compressed(np.ma.masked_where(image.mask, args.distance_from_K01_map.data))
+    if metallicity_multi_color: df['agn_fl'] = np.ma.compressed(np.ma.masked_where(image.mask, args.distance_from_AGN_line_map.data))
     if len(df[df[ycol + '_err'] > 0]) == 0: image_err = None
     df = df[df[xcol] <= args.radius_max]
     df = df.sort_values(by=xcol)
@@ -403,8 +404,8 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
         image_err = unp.std_devs(image_log)
 
     if metallicity_multi_color:
-        image_sfr = np.ma.masked_where(args.distance_from_K01_map > 0, image)
-        image_agn = np.ma.masked_where(args.distance_from_K01_map < 0, image)
+        image_sfr = np.ma.masked_where(args.distance_from_AGN_line_map > 0, image)
+        image_agn = np.ma.masked_where(args.distance_from_AGN_line_map < 0, image)
         p = ax.imshow(image_agn, cmap='pink', origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
         p = ax.imshow(image_sfr, cmap='cool', origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
     else:
@@ -545,7 +546,7 @@ def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
     x_coords_array = np.ma.compressed(x_coords_grid_masked)
     y_coords_array = np.ma.compressed(y_coords_grid_masked)
 
-    binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords_array, y_coords_array, map_array, map_err_array, snr_thresh, plot=plot, quiet=quiet, cvt=True, wvt=True)
+    binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords_array, y_coords_array, map_array, map_err_array, snr_thresh, plot=plot, quiet=quiet, cvt=False, wvt=True)
 
     interp = NearestNDInterpolator(list(zip(x_coords_array, y_coords_array)), binIDs)
     binID_map = interp(x_coords_grid, y_coords_grid)
@@ -1366,8 +1367,8 @@ def get_Z_P25(full_hdu, args, branch='low'):
     NII6584_map = np.ma.masked_where(Halpha_map.mask, Halpha_map.data * (1 - 0.823) / factor)
     NII6584_int = Halpha_int * (1 - 0.823) / factor
 
-    logOH_map = compute_Z_P25(OIII5007_map, NII6584_map, SII6717_map, args.distance_from_K01_map)
-    logOH_int = compute_Z_P25(OIII5007_int, NII6584_int, SII6717_int, args.distance_from_K01_int)
+    logOH_map = compute_Z_P25(OIII5007_map, NII6584_map, SII6717_map, args.distance_from_AGN_line_map)
+    logOH_int = compute_Z_P25(OIII5007_int, NII6584_int, SII6717_int, args.distance_from_AGN_line_int)
 
     return logOH_map, logOH_int
 
@@ -1526,7 +1527,7 @@ def get_Z(full_hdu, args):
         print(f'Could not apply any of the metallicity diagnostics, so returning NaN metallicities')
         logOH_map, logOH_int, label = None, np.nan, ''
 
-    if logOH_map is not None and args.mask_agn: logOH_map = np.ma.masked_where((args.distance_from_K01_map > 0) | logOH_map.mask, logOH_map)
+    if logOH_map is not None and args.mask_agn: logOH_map = np.ma.masked_where((args.distance_from_AGN_line_map > 0) | logOH_map.mask, logOH_map)
 
     return logOH_map, logOH_int, label
 
@@ -1934,6 +1935,8 @@ def AGN_func(x, method='K01'):
         y = 1.3 + 0.72 / (x - 0.32)
     elif method == 'S24': # Eq 2 of Schultz+2024 (https://arxiv.org/abs/2311.18731), parameters from Table 3 for S2
         y = np.piecewise(x, [x >= -0.92, x < -0.92], [lambda x: (0.78 / (x - 0.34)) + 1.36, lambda x: -0.91 - 1.79 * x])
+    elif method == 'H21':
+        y = np.piecewise(x, [x < -0.14, x >= -0.14], [lambda x: 1.27 + (0.28 / (x + 0.14)), lambda x: -np.inf]) # Eq 2 of Henry+2021 (https://iopscience.iop.org/article/10.3847/1538-4357/ac1105/pdf)
     else:
         sys.exit('Choose either K01 or S24 as the method for overplotting AGN demarcation lines')
     return y
@@ -1944,7 +1947,7 @@ def overplot_AGN_line_on_BPT(ax, method='K01', color='k', fontsize=10):
     Overplots a given AGN demarcation line on R3 vs S2 ratio BPT, on an existing axis
     Returns axis handle
     '''
-    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024'}
+    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021'}
     x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
     y = AGN_func(x, method=method)
     ax.plot(x, y, c=color, ls='dashed', lw=2, label=label_dict[method])
@@ -1969,6 +1972,12 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
     SII_map, SII_wave, SII_int, _ = get_emission_line_map('SII', full_hdu, args)
     Halpha_map, Halpha_wave, Halpha_int, _ = get_emission_line_map('Ha', full_hdu, args)
 
+    if not args.do_not_correct_flux and args.use_H21: # special treatment for H-alpha line, in order to add the NII 6584 component back
+        factor = 0.823  # from grizli source code
+        print(f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
+        Halpha_map = np.ma.masked_where(Halpha_map.mask, Halpha_map.data / factor)
+        Halpha_int = Halpha_int / factor
+
     try:
         # -----------integrated-----------------------
         color = mpl_cm.get_cmap(cmap)(0.5)
@@ -1976,9 +1985,9 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
         y_ratio = unp.log10(OIII_int / Hbeta_int)
         x_ratio = unp.log10(SII_int / Halpha_int)
 
-        sign = (unp.nominal_values(y_ratio) > AGN_func(unp.nominal_values(x_ratio), method='K01')).astype(int)
+        sign = (unp.nominal_values(y_ratio) > AGN_func(unp.nominal_values(x_ratio), method='H21' if args.use_H21 else 'K01')).astype(int)
         if sign == 0: sign = -1
-        distance_from_K01_int = sign * get_distance_from_Kewley2001(unp.nominal_values(x_ratio),unp.nominal_values(y_ratio), args, x_num='SII')
+        distance_from_AGN_line_int = sign * get_distance_from_line(unp.nominal_values(x_ratio),unp.nominal_values(y_ratio), AGN_func, method='H21' if args.use_H21 else 'K01')
 
         if not hide_plot:
             p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200 / args.fig_scale_factor, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
@@ -2014,59 +2023,64 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
 
         net_mask = y_ratio.mask | x_ratio.mask
 
-        sign_map = (unp.nominal_values(y_ratio.data) > AGN_func(unp.nominal_values(x_ratio.data), method='K01')).astype(int)
+        sign_map = (unp.nominal_values(y_ratio.data) > AGN_func(unp.nominal_values(x_ratio.data), method='H21' if args.use_H21 else 'K01')).astype(int)
         sign_map[sign_map == 0] = -1
-        distance_from_K01_map = sign_map * get_distance_from_Kewley2001(unp.nominal_values(x_ratio.data), unp.nominal_values(y_ratio.data), args, x_num='SII')
-        distance_from_K01_map = np.ma.masked_where(net_mask, distance_from_K01_map)
+        distance_from_AGN_line_map = sign_map * get_distance_from_line(unp.nominal_values(x_ratio.data), unp.nominal_values(y_ratio.data), AGN_func, method='H21' if args.use_H21 else 'K01')
+        distance_from_AGN_line_map = np.ma.masked_where(net_mask, distance_from_AGN_line_map)
 
         if not hide_plot:
             x_ratio = np.ma.compressed(np.ma.masked_where(net_mask, x_ratio))
             y_ratio = np.ma.compressed(np.ma.masked_where(net_mask, y_ratio))
             distance_map = np.ma.compressed(np.ma.masked_where(net_mask, distance_map))
-            distance_from_K01_arr = np.ma.compressed(distance_from_K01_map)
-            dist_lim = max(np.abs(np.max(distance_from_K01_arr)), np.abs(np.min(distance_from_K01_arr)))
+            distance_from_AGN_line_arr = np.ma.compressed(distance_from_AGN_line_map)
+            dist_lim = max(np.abs(np.max(distance_from_AGN_line_arr)), np.abs(np.min(distance_from_AGN_line_arr)))
 
-            df = pd.DataFrame({'log_sii/ha': unp.nominal_values(x_ratio).flatten(), 'log_sii/ha_err': unp.std_devs(x_ratio).flatten(), 'log_oiii/hb': unp.nominal_values(y_ratio).flatten(), 'log_oiii/hb_err':  unp.std_devs(y_ratio).flatten(), 'distance': distance_map.flatten(), 'distance_from_K01': distance_from_K01_arr.flatten()})
+            df = pd.DataFrame({'log_sii/ha': unp.nominal_values(x_ratio).flatten(), 'log_sii/ha_err': unp.std_devs(x_ratio).flatten(), 'log_oiii/hb': unp.nominal_values(y_ratio).flatten(), 'log_oiii/hb_err':  unp.std_devs(y_ratio).flatten(), 'distance': distance_map.flatten(), 'distance_from_AGN_line': distance_from_AGN_line_arr.flatten()})
             df = df.sort_values(by='distance')
             df = df.drop_duplicates().reset_index(drop=True)
 
-            scatter_plot_handle = ax.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_K01' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_K01' else None)
+            scatter_plot_handle = ax.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_AGN_line' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_AGN_line' else None)
             ax.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.5 if args.fortalk else 0.5, zorder=-10)
 
             if args.plot_AGN_frac and not args.plot_separately and not (len(args.id_arr) > 1 and args.plot_BPT):
                 if ax_inset is None: ax_inset = ax.inset_axes([0.05, 0.1, 0.3, 0.3])
-                plot_2D_map(distance_from_K01_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, hide_yaxis=False)
+                plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, hide_yaxis=False)
 
             if args.plot_separately:
-                scatter_plot_handle_indiv = ax_indiv.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_K01' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_K01' else None)
+                scatter_plot_handle_indiv = ax_indiv.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_AGN_line' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_AGN_line' else None)
                 ax_indiv.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
 
                 if args.plot_AGN_frac:
                     if ax_inset is None: ax_inset = ax_indiv.inset_axes([0.55, 0.75, 0.3, 0.3])
-                    plot_2D_map(distance_from_K01_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim)
+                    plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim)
 
     except ValueError:
         print(f'Galaxy {args.id} in {args.field} has some negative spatially resolved fluxes, hence skipping this object.')
         scatter_plot_handle = None
-        distance_from_K01_map = None
+        distance_from_AGN_line_map = None
         pass
 
     if not hide_plot:
+        AGN_diag_label = 'H21' if args.use_H21 else 'K01'
         if args.plot_separately:
             # ---------annotate axes-------
             cbar = plt.colorbar(scatter_plot_handle_indiv)
-            cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from K01' if args.colorcol == 'distance_from_K01' else '')
+            cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from ' + AGN_diag_label if args.colorcol == 'distance_from_AGN_line' else '')
             cbar.ax.tick_params(labelsize=args.fontsize)
 
             ax_indiv.set_xlim(-2, 0.3)
             ax_indiv.set_ylim(-1, 2)
-            ax_indiv.set_xlabel(f'log (SII 6717+31/Halpha)', fontsize=args.fontsize)
+            ax_indiv.set_xlabel(f'log (SII 6717+31/NII + Halpha)' if args.use_H21 else f'log (SII 6717+31/Halpha)', fontsize=args.fontsize)
             ax_indiv.set_ylabel(f'log (OIII 5007/Hbeta)', fontsize=args.fontsize)
             ax_indiv.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
             # ---------adding literature AGN demarcation lines----------
-            ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='K01', color='w' if args.fortalk else 'k', fontsize=args.fontsize)
-            ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='S24', color='y' if args.fortalk else 'brown', fontsize=args.fontsize)
+            if args.use_H21:
+                ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='H21', color='w' if args.fortalk else 'darkgreen', fontsize=args.fontsize)
+            else:
+                ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='K01', color='w' if args.fortalk else 'k', fontsize=args.fontsize)
+                ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='S24', color='y' if args.fortalk else 'brown', fontsize=args.fontsize)
+
             fig_indiv.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
             fig_indiv.text(0.15, 0.9, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
 
@@ -2079,20 +2093,23 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
         if index == 0:
             # ---------annotate axes-------
             cbar = plt.colorbar(scatter_plot_handle)
-            cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from K01' if args.colorcol == 'distance_from_K01' else '', fontsize=args.fontsize)
+            cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from ' + AGN_diag_label if args.colorcol == 'distance_from_AGN_line' else '', fontsize=args.fontsize)
             cbar.ax.tick_params(labelsize=args.fontsize)
 
             ax.set_xlim(-2, 0.3)
             ax.set_ylim(-1, 2)
-            ax.set_xlabel(f'log (SII 6717+31/Halpha)', fontsize=args.fontsize)
+            ax.set_xlabel(f'log (SII 6717+31/NII + Halpha)' if args.use_H21 else f'log (SII 6717+31/Halpha)', fontsize=args.fontsize)
             ax.set_ylabel(f'log (OIII 5007/Hbeta)', fontsize=args.fontsize)
             ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
             # ---------adding literature AGN demarcation lines----------
-            ax = overplot_AGN_line_on_BPT(ax, method='K01', color='w' if args.fortalk else 'k', fontsize=args.fontsize)
-            ax = overplot_AGN_line_on_BPT(ax, method='S24', color='y' if args.fortalk else 'brown', fontsize=args.fontsize)
+            if args.use_H21:
+                ax = overplot_AGN_line_on_BPT(ax, method='H21', color='w' if args.fortalk else 'darkgreen', fontsize=args.fontsize)
+            else:
+                ax = overplot_AGN_line_on_BPT(ax, method='K01', color='w' if args.fortalk else 'k', fontsize=args.fontsize)
+                ax = overplot_AGN_line_on_BPT(ax, method='S24', color='y' if args.fortalk else 'brown', fontsize=args.fontsize)
 
-    return ax, distance_from_K01_map, distance_from_K01_int
+    return ax, distance_from_AGN_line_map, distance_from_AGN_line_int
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -2297,7 +2314,7 @@ if __name__ == "__main__":
 
             # ---------plotting spatially resolved BPT-----------------------------
             elif args.plot_BPT:
-                ax, args.distance_from_K01_map, args.distance_from_K01_int = plot_BPT(full_hdu, ax, args, cmap=args.diverging_cmap if args.colorcol == 'distance_from_K01' else cmap_arr[index], index=index)
+                ax, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, ax, args, cmap=args.diverging_cmap if args.colorcol == 'distance_from_AGN_line' else cmap_arr[index], index=index)
 
             # ---------initialising the starburst figure------------------------------
             elif args.plot_starburst:
@@ -2315,7 +2332,7 @@ if __name__ == "__main__":
 
             # ---------initialising the metallicity figure------------------------------
             elif args.plot_metallicity:
-                if args.mask_agn or args.use_P25: _, args.distance_from_K01_map, args.distance_from_K01_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_K01 map, without actually plotting the BPT diagram
+                if args.mask_agn or args.use_P25: _, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_AGN_line map, without actually plotting the BPT diagram
                 fig, logOH_map, logOH_radfit = plot_metallicity_fig(full_hdu, args)
                 df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s]
 
@@ -2433,9 +2450,9 @@ if __name__ == "__main__":
 
                 # ---------------BPT map------------------
                 if all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
-                    ax1, args.distance_from_K01_map, args.distance_from_K01_int = plot_BPT(full_hdu, rax1, args, cmap='viridis', ax_inset=ax1)
+                    ax1, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, rax1, args, cmap='viridis', ax_inset=ax1)
                 else:
-                    args.distance_from_K01_map = None
+                    args.distance_from_AGN_line_map = None
                     fig.delaxes(ax1)
                     if args.plot_radial_profiles:
                         fig.delaxes(rax1)

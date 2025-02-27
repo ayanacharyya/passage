@@ -136,6 +136,7 @@ def parse_args():
     parser.add_argument('--mask_agn', dest='mask_agn', action='store_true', default=False, help='Mask out the AGN-dominated pixels from all metallicity estimates? Default is no.')
     parser.add_argument('--plot_circle_at_arcsec', metavar='plot_circle_at_arcsec', type=float, action='store', default=None, help='Radius in arcseconds of a circle to be plotted on every 2D map; default is None')
     parser.add_argument('--plot_ratio_maps', dest='plot_ratio_maps', action='store_true', default=False, help='Plot the line ratio maps for a given 2D plot? Default is no.')
+    parser.add_argument('--use_H21', dest='use_H21', action='store_true', default=False, help='Use the Henry+2021 AGN-SF diagram, instead of K01? Default is no.')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
@@ -808,18 +809,14 @@ def min_distance(x, y, P, precision=5):
     return glob_min_idxs, d
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_distance_from_Kewley2001(xdata, ydata, args, x_num='SII'):
+def get_distance_from_line(xdata, ydata, func, method='K01'):
     '''
-    Computes distance of each object in the given xdata and ydata (line ratios) arrays, from the Kewley+2011 AGN-SF line
+    Computes distance of each object in the given xdata and ydata (line ratios) arrays, from a given line func(x)
     Returns the distance as an array
     '''
     print(f'Computing distance form Kewley+2001 line on the BPT diagram..')
-    x = np.linspace(-2, 0, 100)
-
-    if x_num == 'NII':
-        y = 1.19 + 0.61 / (x - 0.47) # Eq 5 of K01
-    elif x_num == 'SII':
-        y = 1.3 + 0.72 / (x - 0.32) # Eq 6 of K01
+    x = np.linspace(-2, 1, 100)
+    y = func(x)
 
     min_dist_arr = []
     for P in zip(xdata.flatten(), ydata.flatten()):
