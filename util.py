@@ -128,6 +128,7 @@ def parse_args():
     parser.add_argument('--Zbranch', metavar='Zbranch', type=str, action='store', default='low', help='Which R23 branch to be used (choose between high/low)? Default is low')
     parser.add_argument('--plot_ionisation_parameter', dest='plot_ionisation_parameter', action='store_true', default=False, help='Plot the plot_ionisation_parameter map along with metallicity? Default is no.')
     parser.add_argument('--ignore_combined_method', dest='ignore_combined_method', action='store_true', default=False, help='Ignore the combined method (S6 of KD02) while computing R23 metallicity and rely solely on R23? Default is no.')
+    parser.add_argument('--use_R3', dest='use_R3', action='store_true', default=False, help='Use the Curti et al 2019 R3 metallicity diagnostic instead of R23? Default is no.')
     parser.add_argument('--use_O3S2', dest='use_O3S2', action='store_true', default=False, help='Use the Curti et al 2019 O3S2 metallicity diagnostic instead of R23? Default is no.')
     parser.add_argument('--use_O3O2', dest='use_O3O2', action='store_true', default=False, help='Use the Curti et al 2019 O3O2 metallicity diagnostic instead of R23? Default is no.')
     parser.add_argument('--use_Te', dest='use_Te', action='store_true', default=False, help='Use the Te metallicity diagnostic instead of R23? Default is no.')
@@ -137,6 +138,7 @@ def parse_args():
     parser.add_argument('--plot_circle_at_arcsec', metavar='plot_circle_at_arcsec', type=float, action='store', default=None, help='Radius in arcseconds of a circle to be plotted on every 2D map; default is None')
     parser.add_argument('--plot_ratio_maps', dest='plot_ratio_maps', action='store_true', default=False, help='Plot the line ratio maps for a given 2D plot? Default is no.')
     parser.add_argument('--use_H21', dest='use_H21', action='store_true', default=False, help='Use the Henry+2021 AGN-SF diagram, instead of K01? Default is no.')
+    parser.add_argument('--no_text_on_plot', dest='no_text_on_plot', action='store_true', default=False, help='Skip putting text annotations on plot2D? Default is no.')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
@@ -168,6 +170,8 @@ def parse_args():
     parser.add_argument('--use_only_good', dest='use_only_good', action='store_true', default=False, help='Use only the pre-determined good galaxies? Default is no.')
     parser.add_argument('--plot_full_BPT', dest='plot_full_BPT', action='store_true', default=False, help='Plot BPT for the full speccat of a given PASSAGE field? Default is no.')
     parser.add_argument('--log_colorcol', dest='log_colorcol', action='store_true', default=False, help='Take log of the quantity before color coding? Default is no.')
+    parser.add_argument('--plot_mass_excitation', dest='plot_mass_excitation', action='store_true', default=False, help='Plot mass-excitation diagram for the sample? Default is no.')
+    parser.add_argument('--plot_full_mass_excitation', dest='plot_full_mass_excitation', action='store_true', default=False, help='Plot mass-excitation diagram for the full speccat of a given PASSAGE field? Default is no.')
 
     # ------- args added for compute_stellar_mass.py ------------------------------
     parser.add_argument('--plot_transmission', dest='plot_transmission', action='store_true', default=False, help='Plot transmission curves for all filters? Default is no.')

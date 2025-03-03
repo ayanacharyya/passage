@@ -395,6 +395,7 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
     if cmap is None: cmap = 'cividis'
     print(f'Plotting 2D map of {label}..')
 
+    orig_mask = image.mask
     if takelog:
         new_mask = image <= 0
         image[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
@@ -411,7 +412,7 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
     else:
         p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
 
-    if args.arcsec_limit >= 1: ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[1] * 0.88, label, c='k', fontsize=args.fontsize, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+    if not args.no_text_on_plot: ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[1] * 0.88, label, c='k', fontsize=args.fontsize if args.arcsec_limit >= 1 else args.fontsize/1.5, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
     ax.scatter(0, 0, marker='x', s=10, c='grey')
 
     if hide_xaxis:
@@ -463,7 +464,8 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
             image = unp.nominal_values(quant)
             image_err = unp.std_devs(quant)
         snr_map = image / image_err
-        _, _ = plot_2D_map(snr_map, snr_ax, args, takelog=False, label=label.split(r'$_{\rm int}')[0] + ' SNR', cmap='cividis', vmin=0, vmax=8, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+        snr_map = np.ma.masked_where(orig_mask, snr_map)
+        _, _ = plot_2D_map(snr_map, snr_ax, args, takelog=False, label=label.split(r'$_{\rm int}')[0] + ' SNR', cmap='cividis', vmin=0, vmax=2 if '/' in label else 8, hide_xaxis=hide_xaxis, hide_yaxis=True, hide_cbar=hide_cbar)
 
     return ax, radprof_fit
 
@@ -699,20 +701,20 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     return line_map, line_wave, line_int, line_ew
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, snr_ax=None):
+def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, snr_ax=None, radprof_ax=None):
     '''
     Plots the emission map for a given line in the given axis
     Returns the axes handle
     '''
 
     line_map, line_wave, line_int, line_ew = get_emission_line_map(line, full_hdu, args, dered=True)
-    ax, _ = plot_2D_map(line_map, ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int.n), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, snr_ax=snr_ax)
-    if args.arcsec_limit >= 1: ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[0] * 0.88, f'EW = {line_ew:.1f}', c='k', fontsize=args.fontsize, ha='left', va='bottom', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+    ax, _ = plot_2D_map(line_map, ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int.n), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, snr_ax=snr_ax, radprof_ax=radprof_ax)
+    if args.arcsec_limit >= 1 and not args.no_text_on_plot: ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[0] * 0.88, f'EW = {line_ew:.1f}', c='k', fontsize=args.fontsize, ha='left', va='bottom', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
 
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_line_ratio_map(line_num, line_den, full_hdu, ax, args, cmap='cividis', vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False):
+def plot_line_ratio_map(line_num, line_den, full_hdu, ax, args, cmap='cividis', vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, snr_ax=None, radprof_ax=None):
     '''
     Plots the emission line ratio map for a given pair of lines in the given axis
     Returns the axes handle
@@ -746,7 +748,7 @@ def plot_line_ratio_map(line_num, line_den, full_hdu, ax, args, cmap='cividis', 
     try: ratio_int = unp.log10(num_int / den_int)
     except: ratio_int = ufloat(np.nan, np.nan)
 
-    ax, _ = plot_2D_map(ratio_map, ax, args, takelog=False, label=r'%s/%s$_{\rm int}$ = %.1f$\pm$%.1f' % (line_num, line_den, unp.nominal_values(ratio_int), unp.std_devs(ratio_int)), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+    ax, _ = plot_2D_map(ratio_map, ax, args, takelog=False, label=r'%s/%s$_{\rm int}$ = %.1f$\pm$%.1f' % (line_num, line_den, unp.nominal_values(ratio_int), unp.std_devs(ratio_int)), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, snr_ax=snr_ax, radprof_ax=radprof_ax)
 
     return ax
 
@@ -932,14 +934,14 @@ def get_SFR(full_hdu, args):
     return SFR_map, SFR_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_SFR_map(full_hdu, ax, args, radprof_ax=None):
+def plot_SFR_map(full_hdu, ax, args, radprof_ax=None, snr_ax=None):
     '''
     Plots the SFR map (and the emission line maps that go into it) in the given axes
     Returns the axes handles and the 2D SFR density map just produced
     '''
     lim, label = [-3, -1], 'SFR'
     SFR_map, SFR_int = get_SFR(full_hdu, args)
-    ax, SFR_radfit = plot_2D_map(SFR_map, ax, args, label=r'log %s$_{\rm int}$ = %.1f' % (label, SFR_int.n), cmap='viridis', radprof_ax=radprof_ax, vmin=lim[0], vmax=lim[1], hide_yaxis=True)
+    ax, SFR_radfit = plot_2D_map(SFR_map, ax, args, label=r'log %s$_{\rm int}$ = %.1f' % (label, SFR_int.n), cmap='viridis', radprof_ax=radprof_ax, snr_ax=snr_ax, vmin=lim[0], vmax=lim[1], hide_yaxis=True, hide_xaxis=True)
 
     return ax, SFR_map, SFR_radfit, SFR_int
 
@@ -1504,6 +1506,89 @@ def get_Z_R23(full_hdu, args, branch='low'):
     return logOH_map, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
+def compute_Z_R3(OIII5007_flux, Hbeta_flux):
+    '''
+    Calculates and returns the R3 metallicity given observed line fluxes
+    Conversion factor is from Curti+2019
+    '''
+    # -----handling masks separately because uncertainty package cannot handle masks---------
+    if np.ma.isMaskedArray(OIII5007_flux):
+        net_mask = Hbeta_flux.mask | OIII5007_flux.mask
+        OIII5007_flux = OIII5007_flux.data
+        Hbeta_flux = Hbeta_flux.data
+    else:
+        net_mask = False
+
+    k = [-0.277, -3.549, -3.593, -0.981] # c0-3 parameters from Table 2 of Curti+19 2nd row (R3)
+
+    if hasattr(Hbeta_flux, "__len__"): # if it is an array
+        # --------computing the ratio and appropriate errors------------
+        new_mask = Hbeta_flux == 0
+        Hbeta_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+
+        ratio = OIII5007_flux / Hbeta_flux
+        ratio = np.ma.masked_where(new_mask, ratio)
+
+        # --------computing the log of the ratio and appropriate errors------------
+        new_mask = ratio <= 0
+        ratio[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        R3 = unp.log10(ratio.data)
+        R3 = np.ma.masked_where(new_mask | ratio.mask, R3)
+
+        # --------computing the polynomial and appropriate errors------------
+        log_OH = []
+        if args.debug_Zdiag:
+            fig, ax = plt.subplots(1, 2, figsize=(6, 8), sharey=True)
+            ax[0].set_xlabel('Solution[0]')
+            ax[1].set_xlabel('log(O/H)+12 = min(solution) + 8.69')
+            ax[0].set_ylabel('O3O2')
+            ax[0].set_ylim(-1.5, 1.5)
+
+        for this_R3 in R3.data.flatten():
+            try:
+                solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_R3)]])) if item.imag == 0]
+                this_log_OH = np.max(solution) + 8.69  # see Table 1 caption in Curti+19
+                log_OH.append(ufloat(this_log_OH, 0.))
+                if args.debug_Zdiag:
+                    ax[0].scatter(solution[0], unp.nominal_values(this_R3), lw=0, s=50)
+                    ax[1].scatter(this_log_OH, unp.nominal_values(this_R3), lw=0, s=50)
+            except:
+                log_OH.append(ufloat(np.nan, np.nan))
+        log_OH = np.ma.masked_where(R3.mask | net_mask, np.reshape(log_OH, np.shape(R3)))
+
+    else: # if it is scalar
+        try:
+            ratio = OIII5007_flux / Hbeta_flux
+            R3 = unp.log10(ratio)
+            solution = np.min([item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(R3)]])) if item.imag == 0])
+            log_OH = ufloat(solution + 8.69, 0.)  # see Table 1 caption in Curti+19
+        except:
+            log_OH = ufloat(np.nan, np.nan)
+
+    return log_OH
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_Z_R3(full_hdu, args, branch='low'):
+    '''
+    Computes and returns the spatially resolved as well as intregrated R3 metallicity from a given HDU
+    '''
+    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    Hbeta_map, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
+
+    if not args.do_not_correct_flux:
+        # special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back
+        ratio_5007_to_4959 = 2.98  # from grizli source code
+        factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
+        print(f'Re-correcting OIII to include the 4959 component, for computing R23 metallicity, by factor of {factor:.3f}')
+        OIII5007_map = np.ma.masked_where(OIII5007_map.mask, OIII5007_map.data / factor)
+        OIII5007_int = OIII5007_int / factor
+
+    logOH_map = compute_Z_R3(OIII5007_map, Hbeta_map)
+    logOH_int = compute_Z_R3(OIII5007_int, Hbeta_int)
+
+    return logOH_map, logOH_int
+
+# --------------------------------------------------------------------------------------------------------------------
 def get_Z(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated metallicity from a given HDU
@@ -1520,6 +1605,9 @@ def get_Z(full_hdu, args):
     elif args.use_P25 and all([line in args.available_lines for line in ['OIII', 'Ha', 'SII']]):
         logOH_map, logOH_int = get_Z_P25(full_hdu, args)
         label = 'Z (P25)'
+    elif args.use_R3 and all([line in args.available_lines for line in ['OIII', 'Hb']]):
+        logOH_map, logOH_int = get_Z_R3(full_hdu, args)
+        label = 'Z (R3)'
     elif all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
         logOH_map, logOH_int = get_Z_R23(full_hdu, args)
         label = 'Z (R23)'
@@ -1532,7 +1620,7 @@ def get_Z(full_hdu, args):
     return logOH_map, logOH_int, label
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_Z_map(full_hdu, ax, args, radprof_ax=None):
+def plot_Z_map(full_hdu, ax, args, radprof_ax=None, snr_ax=None):
     '''
     Plots the metallicity map in the given axes
     Returns the axes handles and the 2D metallicity map just produced
@@ -1541,12 +1629,12 @@ def plot_Z_map(full_hdu, ax, args, radprof_ax=None):
 
     if logOH_map is not None:
         lim = [7, 9]
-        ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.use_P25)
+        ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='viridis', radprof_ax=radprof_ax, snr_ax=snr_ax, hide_yaxis=True, hide_xaxis=True, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.use_P25)
     else:
         fig = ax.figure()
         fig.delaxes(ax)
-        if args.plot_radial_profiles:
-            fig.delaxes(radprof_ax)
+        if args.plot_radial_profiles: fig.delaxes(radprof_ax)
+        if args.plot_snr: fig.delaxes(snr_ax)
         logOH_radfit = np.nan
 
     return ax, logOH_map, logOH_radfit, logOH_int
@@ -1619,14 +1707,14 @@ def get_q_O32(full_hdu, args):
     return logq_map, logq_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_q_O32_map(full_hdu, ax, args, radprof_ax=None):
+def plot_q_O32_map(full_hdu, ax, args, radprof_ax=None, snr_ax=None):
     '''
     Plots the O32 iojisation parameter map (and the emission line maps that go into it) in the given axes
     Returns the axes handles and the 2D metallicity map just produced
     '''
     lim, label = [7, 8], 'log(q) (O32)'
     logq_map, logq_int = get_q_O32(full_hdu, args)
-    ax, logq_radfit = plot_2D_map(logq_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logq_int.n), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
+    ax, logq_radfit = plot_2D_map(logq_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logq_int.n), cmap='viridis', radprof_ax=radprof_ax, snr_ax=snr_ax, hide_yaxis=True, hide_xaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, logq_map, logq_radfit, logq_int
 
@@ -1705,7 +1793,7 @@ def get_direct_image_per_filter(full_hdu, filter, target_header, args, plot_test
         direct_map_wht = np.roll(direct_map_wht, ndelta_ypix, axis=0)
 
     # ---------computing uncertainty-------------
-    direct_map_err = 0.1 * direct_map # 1 / np.sqrt(direct_map_wht)
+    direct_map_err = 0.1 * np.abs(direct_map) # 1 / np.sqrt(direct_map_wht)
     direct_map = unp.uarray(direct_map, direct_map_err)
 
     return direct_map
@@ -1842,7 +1930,7 @@ def plot_starburst_map(full_hdu, axes, args, radprof_axes=None, vorbin_axes=None
     starburst_radfit = []
     for index, ax in enumerate(np.atleast_1d(axes)):
         map_err = np.ma.masked_where(maps_dict[sequence_to_plot[index]].mask, unp.std_devs(maps_dict[sequence_to_plot[index]].data))
-        ax, radprof_fit = plot_2D_map(maps_dict[sequence_to_plot[index]], ax, args, takelog=True, label=labels_dict[sequence_to_plot[index]], cmap='viridis', vmin=lims_dict[sequence_to_plot[index]][0], vmax=lims_dict[sequence_to_plot[index]][1], radprof_ax=np.atleast_1d(radprof_axes)[index] if args.plot_radial_profiles else None, vorbin_ax=np.atleast_1d(vorbin_axes)[index] if args.plot_vorbin else None, snr_ax=np.atleast_1d(snr_axes)[index] if args.plot_snr else None, image_err=map_err if args.plot_snr else None, hide_yaxis=True)
+        ax, radprof_fit = plot_2D_map(maps_dict[sequence_to_plot[index]], ax, args, takelog=True, label=labels_dict[sequence_to_plot[index]], cmap='viridis', vmin=lims_dict[sequence_to_plot[index]][0], vmax=lims_dict[sequence_to_plot[index]][1], radprof_ax=np.atleast_1d(radprof_axes)[index] if args.plot_radial_profiles else None, vorbin_ax=np.atleast_1d(vorbin_axes)[index] if args.plot_vorbin else None, snr_ax=np.atleast_1d(snr_axes)[index] if args.plot_snr else None, image_err=map_err if args.plot_snr else None, hide_yaxis=True, hide_xaxis=False)
         starburst_radfit.append(radprof_fit)
 
     return axes, ratio_map, starburst_radfit
@@ -2044,7 +2132,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
 
             if args.plot_AGN_frac and not args.plot_separately and not (len(args.id_arr) > 1 and args.plot_BPT):
                 if ax_inset is None: ax_inset = ax.inset_axes([0.05, 0.1, 0.3, 0.3])
-                plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, hide_yaxis=False)
+                plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, hide_yaxis=not args.plot_BPT, hide_xaxis=not args.plot_BPT)
 
             if args.plot_separately:
                 scatter_plot_handle_indiv = ax_indiv.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_AGN_line' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_AGN_line' else None)
@@ -2342,35 +2430,58 @@ if __name__ == "__main__":
 
             # ---------initialising the full figure------------------------------
             else:
-                nrow = 3
-                if args.plot_snr: nrow += 1
-                if args.plot_ratio_maps: nrow += 1
-                if args.plot_radial_profiles: nrow += 1
-                ncol = len(all_lines_to_plot)
-                figsize = (13, 12) if nrow == 6 else (13, 10) if nrow == 5 else (13, 9) if nrow == 4 else (13, 6)
+                nrow = len(all_lines_to_plot) + 1
+                nquant_col = 2
+                if args.plot_ratio_maps: nquant_col += 1
+                ncol = nquant_col
+                if args.plot_snr: ncol += nquant_col
+                if args.plot_radial_profiles: ncol += nquant_col
+
+                figsize = (18, 12) if ncol == 9 else (13, 12) if ncol == 6 else (10, 2) if ncol == 3 else (6, 2)
                 figsize = (figsize[0] / args.fig_scale_factor, figsize[1] / args.fig_scale_factor)
                 fig = plt.figure(figsize=figsize, layout='constrained')
 
                 axis_dirimg = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 0), colspan=1)
                 axis_1dspec = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 1), colspan=ncol - 1)
-                row_loc = 1
-                ax_em_lines = [plt.subplot2grid(shape=(nrow, ncol), loc=(row_loc, item), colspan=1) for item in np.arange(ncol)]  # OII, H beta, OIII, H alpha, SII
+                col_loc = 0
+
+                # ---------setting up emission line map axes----------------
+                ax_em_lines = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # OII, H beta, OIII, H alpha, SII maps
                 if args.plot_snr:
-                    row_loc += 1
-                    ax_em_lines_snr = [plt.subplot2grid(shape=(nrow, ncol), loc=(row_loc, item), colspan=1) for item in np.arange(ncol)]  # OII, H beta, OIII, H alpha, SII SNRs
-                if args.plot_ratio_maps:
-                    row_loc += 1
-                    ax_ratio_maps = [plt.subplot2grid(shape=(nrow, ncol), loc=(row_loc, item), colspan=1) for item in np.arange(ncol)]  # O3Hb, S2Ha, O3S2, N2S2, O3O2 ratios
-                    ax_o3hb, ax_s2ha, ax_o3s2, ax_n2s2, ax_o3o2 = ax_ratio_maps[0], ax_ratio_maps[1], ax_ratio_maps[2], ax_ratio_maps[3], ax_ratio_maps[4]
-                row_loc += 1
-                ax_derived_quant_arr = [plt.subplot2grid(shape=(nrow, ncol), loc=(row_loc, item), colspan=1) for item in np.arange(ncol)] # AGN, log(q), Z, SFR, Ha/F115W
-                ax1, ax2, ax3, ax4, ax5 = ax_derived_quant_arr[0], ax_derived_quant_arr[1], ax_derived_quant_arr[2], ax_derived_quant_arr[3], ax_derived_quant_arr[4]
+                    col_loc += 1
+                    ax_em_lines_snr = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # OII, H beta, OIII, H alpha, SII SNRs
                 if args.plot_radial_profiles:
-                    row_loc += 1
-                    ax_radprof_arr = [plt.subplot2grid(shape=(nrow, ncol), loc=(row_loc, item), colspan=1) for item in np.arange(ncol)] # BPT, log(q), Z, SFR, Ha/F115W
-                    rax1, rax2, rax3, rax4, rax5 = ax_radprof_arr[0], ax_radprof_arr[1], ax_radprof_arr[2], ax_radprof_arr[3], ax_radprof_arr[4]
-                else:
-                    [rax1, rax2, rax3, rax4, rax5] = np.tile(None, ncol)
+                    col_loc += 1
+                    ax_em_lines_radprof = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # OII, H beta, OIII, H alpha, SII radial profiles
+
+                # ---------setting up line ratio map axes----------------
+                if args.plot_ratio_maps:
+                    col_loc += 1
+                    ax_ratio_maps = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # O3Hb, S2Ha, O3S2, N2S2, O3O2 ratio maps
+                    ax_o3hb, ax_s2ha, ax_o3s2, ax_n2s2, ax_o3o2 = ax_ratio_maps
+
+                    if args.plot_snr:
+                        col_loc += 1
+                        ax_ratio_maps_snr = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # O3Hb, S2Ha, O3S2, N2S2, O3O2 ratio SNRs
+                        ax_o3hb_snr, ax_s2ha_snr, ax_o3s2_snr, ax_n2s2_snr, ax_o3o2_snr = ax_ratio_maps_snr
+                    if args.plot_radial_profiles:
+                        col_loc += 1
+                        ax_ratio_maps_radprof = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # O3Hb, S2Ha, O3S2, N2S2, O3O2 ratio radial profiles
+                        ax_o3hb_radprof, ax_s2ha_radprof, ax_o3s2_radprof, ax_n2s2_radprof, ax_o3o2_radprof = ax_ratio_maps_radprof
+
+                # ---------setting up measured quantity axes----------------
+                col_loc += 1
+                ax_quant = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # BPT, log(q), Z, SFR, Ha/F115W maps
+                ax1, ax2, ax3, ax4, ax5 = ax_quant
+                if args.plot_snr:
+                    col_loc += 1
+                    ax_quant_snr = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # BPT, log(q), Z, SFR, Ha/F115W SNRs
+                    ax1_snr, ax2_snr, ax3_snr, ax4_snr, ax5_snr = ax_quant_snr
+                if args.plot_radial_profiles:
+                    col_loc += 1
+                    ax_quant_radprof = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)]  # BPT, log(q), Z, SFR, Ha/F115W radial profiles
+                    ax1_radprof, ax2_radprof, ax3_radprof, ax4_radprof, ax5_radprof = ax_quant_radprof
+
                 # ---------direct imaging------------------------------
                 axis_dirimg = plot_direct_image(full_hdu, axis_dirimg, args)
 
@@ -2379,7 +2490,7 @@ if __name__ == "__main__":
 
                 # -----------------emission line maps---------------
                 for ind, line in enumerate(all_lines_to_plot):
-                    if line in args.available_lines: ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu_r', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=ind > 0, hide_cbar=False, snr_ax=ax_em_lines_snr[ind] if args.plot_snr else None)
+                    if line in args.available_lines: ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu_r', vmin=-20, vmax=-18, hide_yaxis=False, hide_xaxis=ind < nrow - 2, hide_cbar=False, snr_ax=ax_em_lines_snr[ind] if args.plot_snr else None, radprof_ax=ax_em_lines_radprof[ind] if args.plot_radial_profiles else None)
                     else: fig.delaxes(ax_em_lines[ind])
 
                 # -----------------emission line ratio maps---------------
@@ -2387,33 +2498,43 @@ if __name__ == "__main__":
                     cmap_ratio = 'RdPu_r'
                     # -----------------emission line ratio maps: O3Hb---------------
                     if all([line in args.available_lines for line in ['OIII', 'Hb']]):
-                        ax_o3hb = plot_line_ratio_map('OIII', 'Hb', full_hdu, ax_o3hb, args, cmap=cmap_ratio, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=False, hide_cbar=False)
+                        ax_o3hb = plot_line_ratio_map('OIII', 'Hb', full_hdu, ax_o3hb, args, cmap=cmap_ratio, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=True, hide_cbar=False, snr_ax=ax_o3hb_snr if args.plot_snr else None, radprof_ax=ax_o3hb_radprof if args.plot_radial_profiles else None)
                     else:
                         fig.delaxes(ax_o3hb)
+                        if args.plot_snr: fig.delaxes(ax_o3hb_snr)
+                        if args.plot_radial_profiles: fig.delaxes(ax_o3hb_radprof)
 
                     # -----------------emission line ratio maps: S2Ha---------------
                     if all([line in args.available_lines for line in ['SII', 'Ha']]):
-                        ax_s2ha = plot_line_ratio_map('SII', 'Ha', full_hdu, ax_s2ha, args, cmap=cmap_ratio, vmin=-1.5, vmax=0.5, hide_xaxis=True, hide_yaxis=True, hide_cbar=False)
+                        ax_s2ha = plot_line_ratio_map('SII', 'Ha', full_hdu, ax_s2ha, args, cmap=cmap_ratio, vmin=-1.5, vmax=0.5, hide_xaxis=True, hide_yaxis=True, hide_cbar=False, snr_ax=ax_s2ha_snr if args.plot_snr else None, radprof_ax=ax_s2ha_radprof if args.plot_radial_profiles else None)
                     else:
                         fig.delaxes(ax_s2ha)
+                        if args.plot_snr: fig.delaxes(ax_s2ha_snr)
+                        if args.plot_radial_profiles: fig.delaxes(ax_s2ha_radprof)
 
                     # -----------------emission line ratio maps: O3S2---------------
                     if all([line in args.available_lines for line in ['OIII', 'SII']]):
-                        ax_o3s2 = plot_line_ratio_map('OIII', 'SII', full_hdu, ax_o3s2, args, cmap=cmap_ratio, vmin=-0.5, vmax=1.5, hide_xaxis=True, hide_yaxis=True, hide_cbar=False)
+                        ax_o3s2 = plot_line_ratio_map('OIII', 'SII', full_hdu, ax_o3s2, args, cmap=cmap_ratio, vmin=-0.5, vmax=1.5, hide_xaxis=True, hide_yaxis=True, hide_cbar=False, snr_ax=ax_o3s2_snr if args.plot_snr else None, radprof_ax=ax_o3s2_radprof if args.plot_radial_profiles else None)
                     else:
                         fig.delaxes(ax_o3s2)
+                        if args.plot_snr: fig.delaxes(ax_o3s2_snr)
+                        if args.plot_radial_profiles: fig.delaxes(ax_o3s2_radprof)
 
                     # -----------------emission line ratio maps: N2S2---------------
                     if all([line in args.available_lines for line in ['Ha', 'SII']]):
-                        ax_n2s2 = plot_line_ratio_map('NII', 'SII', full_hdu, ax_n2s2, args, cmap=cmap_ratio, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=True, hide_cbar=False)
+                        ax_n2s2 = plot_line_ratio_map('NII', 'SII', full_hdu, ax_n2s2, args, cmap=cmap_ratio, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=True, hide_cbar=False, snr_ax=ax_n2s2_snr if args.plot_snr else None, radprof_ax=ax_n2s2_radprof if args.plot_radial_profiles else None)
                     else:
                         fig.delaxes(ax_n2s2)
+                        if args.plot_snr: fig.delaxes(ax_n2s2_snr)
+                        if args.plot_radial_profiles: fig.delaxes(ax_n2s2_radprof)
 
                     # -----------------emission line ratio maps: O3O2---------------
                     if all([line in args.available_lines for line in ['OIII', 'OII']]):
-                        ax_o3o2 = plot_line_ratio_map('OIII', 'OII', full_hdu, ax_o3o2, args, cmap=cmap_ratio, vmin=-0.5, vmax=0.5, hide_xaxis=True, hide_yaxis=True, hide_cbar=False)
+                        ax_o3o2 = plot_line_ratio_map('OIII', 'OII', full_hdu, ax_o3o2, args, cmap=cmap_ratio, vmin=-0.5, vmax=0.5, hide_xaxis=False, hide_yaxis=True, hide_cbar=False, snr_ax=ax_o3o2_snr if args.plot_snr else None, radprof_ax=ax_o3o2_radprof if args.plot_radial_profiles else None)
                     else:
                         fig.delaxes(ax_o3o2)
+                        if args.plot_snr: fig.delaxes(ax_o3o2_snr)
+                        if args.plot_radial_profiles: fig.delaxes(ax_o3o2_radprof)
 
                 # # ---------------dust map---------------
                 # if all([line in args.available_lines for line in ['Ha', 'Hb']]):
@@ -2450,38 +2571,39 @@ if __name__ == "__main__":
 
                 # ---------------BPT map------------------
                 if all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
-                    ax1, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, rax1, args, cmap='viridis', ax_inset=ax1)
+                    ax1, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, ax1_radprof, args, cmap='viridis', ax_inset=ax1)
                 else:
                     args.distance_from_AGN_line_map = None
                     fig.delaxes(ax1)
-                    if args.plot_radial_profiles:
-                        fig.delaxes(rax1)
+                    if args.plot_radial_profiles: fig.delaxes(ax1_radprof)
+                if args.plot_snr: fig.delaxes(ax1_snr)
 
                 # ---------------logq map------------------
                 if all([line in args.available_lines for line in ['OIII', 'OII']]):
-                    ax2, logq_map, logq_radfit, logq_int = plot_q_O32_map(full_hdu, ax2, args, radprof_ax=rax2)
+                    ax2, logq_map, logq_radfit, logq_int = plot_q_O32_map(full_hdu, ax2, args, radprof_ax=ax2_radprof if args.plot_radial_profiles else None, snr_ax=ax2_snr if args.plot_snr else None)
                 else:
                     fig.delaxes(ax2)
-                    if args.plot_radial_profiles:
-                        fig.delaxes(rax2)
+                    if args.plot_radial_profiles: fig.delaxes(ax2_radprof)
+                    if args.plot_snr: fig.delaxes(ax2_snr)
 
                 # ---------------metallicity map---------------
-                ax3, logOH_map, logOH_radfit, logOH_int = plot_Z_map(full_hdu, ax3, args, radprof_ax=rax3)
+                ax3, logOH_map, logOH_radfit, logOH_int = plot_Z_map(full_hdu, ax3, args, radprof_ax=ax3_radprof if args.plot_radial_profiles else None, snr_ax=ax3_snr if args.plot_snr else None)
 
                 # ---------------SFR map------------------
                 if 'Ha' in args.available_lines:
-                    ax4, SFR_map, SFR_radfit, SFR_int = plot_SFR_map(full_hdu, ax4, args, radprof_ax=rax4)
+                    ax4, SFR_map, SFR_radfit, SFR_int = plot_SFR_map(full_hdu, ax4, args, radprof_ax=ax4_radprof if args.plot_radial_profiles else None, snr_ax=ax4_snr if args.plot_snr else None)
                 else:
                     fig.delaxes(ax4)
-                    if args.plot_radial_profiles: fig.delaxes(rax4)
+                    if args.plot_radial_profiles: fig.delaxes(ax4_radprof)
+                    if args.plot_snr: fig.delaxes(ax4_snr)
 
                 # ---------------F115W/Ha map------------------
                 if 'Ha' in args.available_lines:
-                    ax5, SB_map, SB_radfit = plot_starburst_map(full_hdu, ax5, args, radprof_axes=rax5)
+                    ax5, SB_map, SB_radfit = plot_starburst_map(full_hdu, ax5, args, radprof_axes=ax5_radprof if args.plot_radial_profiles else None, snr_axes=ax5_snr if args.plot_snr else None)
                 else:
                     fig.delaxes(ax5)
-                    if args.plot_radial_profiles:
-                        fig.delaxes(rax5)
+                    if args.plot_radial_profiles: fig.delaxes(ax5_radprof)
+                    if args.plot_snr: fig.delaxes(ax5_snr)
 
                 # ---------decorating and saving the figure------------------------------
                 fig.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.95)
@@ -2545,10 +2667,10 @@ if __name__ == "__main__":
 
                 basic_data = [args.field, f'{args.id:05d}{pixscale_text}', full_hdu[0].header['RA'], full_hdu[0].header['DEC'], args.z]
                 flag_data = [args.radius_max, args.snr_cut if args.snr_cut is not None else np.nan, args.only_seg, args.vorbin, args.voronoi_snr if args.vorbin else np.nan, args.voronoi_line if args.vorbin else np.nan]
+                df = pd.concat([df, this_df])
                 this_row = np.hstack([basic_data, flag_data, line_properties, measured_quants])
                 this_df = pd.DataFrame(dict(map(lambda i, j: (i, [j]), cols_in_df, this_row)))
                 this_df = this_df.replace('N/A', np.nan)
-                df = pd.concat([df, this_df])
 
                 if not os.path.isfile(outfilename) or (args.clobber and index == 0):
                     this_df.to_csv(outfilename, index=None, header='column_names')

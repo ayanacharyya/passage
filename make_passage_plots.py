@@ -32,6 +32,8 @@
              run make_passage_plots.py --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --xcol redshift --ycol logOH_slope --foggie_comp
 
              run make_passage_plots.py --do_field Par028 --drv 0.5 --SNR_thresh 3 --plot_full_BPT --colorcol sn_Hb --log_colorcol
+
+             run make_passage_plots.py --do_field Par028 --drv 0.5 --plot_conditions SNR,mass --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --plot_mass_excitation --colorcol redshift
 '''
 
 from header import *
@@ -156,121 +158,110 @@ def get_integrated_line_flux(line, full_hdu, args, dered=True):
     return line_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_BPT(df, ax, args):
+def plot_mass_excitation(df, ax, args, mass_col='lp_mass'):
     '''
-    Plots BPT diagram based on integrated fluxes from grizli
+    Plots mass-excitation diagram based on integrated fluxes from grizli read in from the df provided,
     Then overplots theoretical lines
     Returns axis handle
     '''
     print(f'Plotting integrated BPT diagram..')
-    objid_arr = (df['field'].astype(str) + '-' + df['objid'].astype(str)).values  # making a unique combination of field and object id
-    df['distance_from_K01'] = np.ones(len(df)) * np.nan
 
-    x_lim, y_lim = [-2, 0], [-0.5, 1.5]
-    y_num, y_den = 'OIII', 'Hb'
-    x_num, x_den = 'SII', 'Ha'
-    skip_count = 0
+    df = df[(df['Hb_SNR'] > args.SNR_thresh) & (df['OIII_SNR'] > args.SNR_thresh)]
 
-    if ('distance' in args.colorcol and 'K01' in args.colorcol) or args.colorcol == 'distance_from_K01':
-        cmap = 'BrBG'
-        cmin, cmax = -0.8, 0.8
-    else:
-        cmap = 'rainbow'
-        cmin, cmax = 0, 6
-    scalarMap = mpl_cm.ScalarMappable(norm=mplcolors.Normalize(vmin=cmin, vmax=cmax), cmap=plt.get_cmap(cmap))
+    OIII_factor = 2.98 / (1 + 2.98)
+    df['OIII_int'] *= OIII_factor
+    df['OIII_int_u'] *= OIII_factor
 
-    # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
-    x = np.linspace(x_lim[0], x_lim[1], 100)
-    if y_num == 'OIII' and y_den == 'Hb' and x_num == 'NII' and x_den == 'Ha':
-        def func(x): return 1.19 + 0.61 / (x - 0.47) # Eq 5 of K01
-    elif y_num == 'OIII' and y_den == 'Hb' and x_num == 'SII' and x_den == 'Ha':
-        def func(x): return 1.3 + 0.72 / (x - 0.32) # Eq 6 of K01
-    y = func(x)
+    df['O3Hb'] = np.log10(df['OIII_int'] / df['Hb_int'])
 
-    ax.plot(x, y, c='khaki' if args.fortalk else 'brown', ls='dashed', lw=2, label='Kewley+2001')
-    plt.legend()
+    colorcol = np.log10(df[args.colorcol]) if args.log_colorcol else df[args.colorcol]
+    vmin = np.percentile(colorcol[np.isfinite(colorcol)], 5.)
+    vmax = np.percentile(colorcol[np.isfinite(colorcol)], 95.)
 
-    # --------looping through the objects-----------------
-    for index, objid in enumerate(objid_arr):
-        print(f'Doing galaxy {index + 1} of {len(objid_arr)}..')
-        args.field = objid.split('-')[0]
-        args.id = int(objid.split('-')[1])
-
-        full_fits_file = args.output_dir / args.field / f'{args.id:05d}' / f'{args.field}_{args.id:05d}.full.fits'
-        if not os.path.exists(full_fits_file): # if the fits files are actually maps.fits
-            full_fits_file = args.input_dir / f'{args.field}/Products/maps/{args.field}_{args.id:05d}.maps.fits'
-        full_hdu = fits.open(full_fits_file)
-
-        args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
-        args.ndfilt = full_hdu[0].header['NDFILT']
-
-        try:
-            Halpha = get_integrated_line_flux('Ha', full_hdu, args, dered=False)
-            Hbeta = get_integrated_line_flux('Hb', full_hdu, args, dered=False)
-            args.EB_V = compute_EB_V(Halpha, Hbeta)
-        except:
-            args.EB_V = ufloat(np.nan, np.nan)
-
-        try:
-            y_num_flux = get_integrated_line_flux(y_num, full_hdu, args)
-            y_den_flux = get_integrated_line_flux(y_den, full_hdu, args)
-            x_num_flux = get_integrated_line_flux(x_num, full_hdu, args)
-            x_den_flux = get_integrated_line_flux(x_den, full_hdu, args)
-            z = full_hdu[0].header['REDSHIFT']
-        except IndexError as e:
-            skip_count += 1
-            print(f'Skipping {index + 1}: ID {objid} due to {e}')
-            continue
-
-        try:
-            y_ratio = unp.log10(y_num_flux / y_den_flux)
-            x_ratio = unp.log10(x_num_flux / x_den_flux)
-
-            # -------to plot minimum distances to the K01 line-----------
-            min_idxs, distances = min_distance(x, y, (unp.nominal_values(x_ratio), unp.nominal_values(y_ratio)))
-            if len(min_idxs) > 0:
-                sign = 1 if unp.nominal_values(y_ratio) > func(unp.nominal_values(x_ratio)) else -1
-                min_dist = sign * distances[min_idxs[0]]
-                df.at[index, 'distance_from_K01'] = min_dist
-
-            if ('distance' in args.colorcol and 'K01' in args.colorcol) or args.colorcol == 'distance_from_K01':
-                if len(min_idxs) > 0:
-                    color = scalarMap.to_rgba(min_dist)
-                    #ax.plot([unp.nominal_values(x_ratio), x[min_idxs[0]]], [unp.nominal_values(y_ratio), y[min_idxs[0]]], lw=1, linestyle='dotted', c=color)
-                else:
-                    color = np.nan
-            else:
-                color = scalarMap.to_rgba(z)
-
-            p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=100, lw=1, edgecolor='k')
-            ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c='gray', fmt='none', lw=1)
-
-        except ValueError:
-            skip_count += 1
-            print(f'Galaxy {args.id} in {args.field} has a negative flux in one of the following, hence skipping this.')
-            print(f'{y_num} = {y_num_flux}\n{y_den} = {y_den_flux}\n{x_num} = {x_num_flux}\n{x_den} = {x_den_flux}\n')
-            pass
+    p = ax.scatter(df[mass_col], df['O3Hb'], c=colorcol, s=50, lw=0, cmap='cividis', vmin=vmin, vmax=vmax)
+    cbar = plt.colorbar(p)
 
     # ---------annotate axes and save figure-------
     if args.fontsize == 10: args.fontsize = 15
-    cax, kw = matplotlib.colorbar.make_axes_gridspec(ax, orientation='vertical', pad=0.01, fraction=0.1, shrink=1, aspect=35)
-    cbar = plt.colorbar(scalarMap, cax=cax,  orientation='vertical')
-    cbar.set_label('Redshift' if args.colorcol == 'ez_z_phot' else label_dict[args.colorcol] if args.colorcol in label_dict else args.colorcol, fontsize=args.fontsize)
+    ax.set_xlim(6.5, 11.5)
+    ax.set_ylim(-1, 1.5)
 
-    ax.set_xlim(x_lim)
-    ax.set_ylim(y_lim)
+    ax.set_xlabel(f'log (M*/Msun)', fontsize=args.fontsize)
+    ax.set_ylabel(f'log (OIII/Hb)', fontsize=args.fontsize)
 
-    ax.set_xlabel(f'log ({x_num}/{x_den})', fontsize=args.fontsize)
-    ax.set_ylabel(f'log ({y_num}/{y_den})', fontsize=args.fontsize)
+    colorby_text = f'log({args.colorcol})' if args.log_colorcol else args.colorcol
+    cbar.set_label(colorby_text, fontsize=args.fontsize)
 
-    print(f'Eventually managed to plot {len(objid_arr) - skip_count} out of {len(objid_arr)} galaxies.')
+    plt.title(f'{args.do_field}', fontsize=args.fontsize)
+    plt.tight_layout()
+
+    # ---------adding literature lines from Juneau+2014 (https://iopscience.iop.org/article/10.1088/0004-637X/788/1/88/pdf)----------
+    x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
+    y_up = np.piecewise(x, [x <= 10, x > 10], [lambda x: (0.375 / (x - 10.5)) + 1.14, lambda x: np.poly1d([410.24, -109.333, 9.71731, -0.288244][::-1])(x)]) # J14 eq 1
+    y_lo = np.piecewise(x, [x <= 9.6, x > 9.6], [lambda x: (0.375 / (x - 10.5)) + 1.14, lambda x: np.poly1d([352.066, -93.8249, 8.32651, -0.246416][::-1])(x)]) # J14 eq 2
+    ax.plot(x, y_up, c='k', ls='dashed', lw=2, label='Juneau+2014')
+    ax.plot(x, y_lo, c='brown', ls='dashed', lw=2)
+    plt.legend()
 
     return ax, df
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_BPT_from_speccat(speccat_file, args, ax):
+def plot_BPT(df, ax, args):
     '''
-    Plots BPT diagram based on integrated fluxes from grizli
+    Plots BPT diagram based on integrated fluxes from grizli read in from the df provided,
+    Then overplots theoretical lines
+    Returns axis handle
+    '''
+    print(f'Plotting integrated BPT diagram..')
+
+    df = df[(df['Ha_SNR'] > args.SNR_thresh) & (df['Hb_SNR'] > args.SNR_thresh) & (df['OIII_SNR'] > args.SNR_thresh) & (df['SII_SNR'] > args.SNR_thresh)]
+
+    OIII_factor = 2.98 / (1 + 2.98)
+    df['OIII_int'] *= OIII_factor
+    df['OIII_int_u'] *= OIII_factor
+
+    Ha_factor = 0.823  # choose between 0.823, 0.754, 0.695
+    df['Ha_int'] *= Ha_factor
+    df['Ha_int_u'] *= Ha_factor
+
+    df['O3Hb'] = np.log10(df['OIII_int'] / df['Hb_int'])
+    df['S2Ha'] = np.log10(df['SII_int'] / df['Ha_int'])
+
+    colorcol = np.log10(df[args.colorcol]) if args.log_colorcol else df[args.colorcol]
+    vmin = np.percentile(colorcol[np.isfinite(colorcol)], 5.)
+    vmax = np.percentile(colorcol[np.isfinite(colorcol)], 95.)
+
+    p = ax.scatter(df['S2Ha'], df['O3Hb'], c=colorcol, s=50, lw=0, cmap='cividis', vmin=vmin, vmax=vmax)
+    cbar = plt.colorbar(p)
+
+    # ---------annotate axes and save figure-------
+    if args.fontsize == 10: args.fontsize = 15
+    ax.set_xlim(-1.5, 0.25)
+    ax.set_ylim(-1, 1.5)
+
+    ax.set_xlabel(f'log (SII/Ha)', fontsize=args.fontsize)
+    ax.set_ylabel(f'log (OIII/Hb)', fontsize=args.fontsize)
+
+    colorby_text = f'log({args.colorcol})' if args.log_colorcol else args.colorcol
+    cbar.set_label(colorby_text, fontsize=args.fontsize)
+
+    plt.title(f'{args.do_field}', fontsize=args.fontsize)
+    plt.tight_layout()
+
+    # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
+    x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
+    y_K01 = 1.3 + 0.72 / (x - 0.32)  # Eq 6 of K01
+    y_S24 = np.piecewise(x, [x >= -0.92, x < -0.92], [lambda x: (0.78 / (x - 0.34)) + 1.36, lambda x: -0.91 - 1.79 * x])
+    ax.plot(x, y_K01, c='k', ls='dashed', lw=2, label='Kewley+2001')
+    ax.plot(x, y_S24, c='brown', ls='dashed', lw=2, label='Schultz+2024')
+    plt.legend()
+
+    return ax, df
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_BPT_from_speccat(speccat_file, args, ax, mass_col='lp_mass'):
+    '''
+    Plots BPT diagram based on integrated fluxes from grizli, read in from the spec cat file
     Then overplots theoretical lines
     Returns axis handle
     '''
@@ -293,47 +284,12 @@ def plot_BPT_from_speccat(speccat_file, args, ax):
                 print(f'\nspeccat columns =', tab.columns)
                 print(f'\nphotcat columns =', tab2.columns)
 
-    df = df[(df['sn_Ha'] > args.SNR_thresh) & (df['sn_Hb'] > args.SNR_thresh) & (df['sn_OIII'] > args.SNR_thresh) & (df['sn_SII'] > args.SNR_thresh)]
+    columns_new = ['id', 'Ha_int', 'Ha_int_u', 'Ha_SNR', 'OIII_int', 'OIII_int_u', 'OIII_SNR', 'SII_int', 'SII_int_u', 'SII_SNR', 'Hb_int', 'Hb_int_u', 'Hb_SNR']
+    df = df.rename(columns={columns[index]:columns_new[index] for index in range(len(columns))})
+    if args.colorcol in columns: args.colorcol = dict(zip(columns, columns_new))[args.colorcol]
 
-    OIII_factor = 2.98 / (1 + 2.98)
-    df['flux_OIII'] *= OIII_factor
-    df['err_OIII'] *= OIII_factor
-
-    Ha_factor = 0.823 # choose between 0.823, 0.754, 0.695
-    df['flux_Ha'] *= Ha_factor
-    df['err_Ha'] *= Ha_factor
-
-    df['O3Hb'] = np.log10(df['flux_OIII'] / df['flux_Hb'])
-    df['S2Ha'] = np.log10(df['flux_SII'] / df['flux_Ha'])
-
-    colorcol = np.log10(df[args.colorcol]) if args.log_colorcol else df[args.colorcol]
-    vmin = np.percentile(colorcol[np.isfinite(colorcol)], 5.)
-    vmax = np.percentile(colorcol[np.isfinite(colorcol)], 95.)
-
-    p = ax.scatter(df['S2Ha'], df['O3Hb'], c=colorcol, s=50, lw=0, cmap='cividis', vmin=vmin, vmax=vmax)
-    cbar = plt.colorbar(p)
-
-    # ---------adding literature lines from Kewley+2001 (https://iopscience.iop.org/article/10.1086/321545)----------
-    x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
-    y_K01 = 1.3 + 0.72 / (x - 0.32) # Eq 6 of K01
-    y_S24 = np.piecewise(x, [x >= -0.92, x < -0.92], [lambda x: (0.78 / (x - 0.34)) + 1.36, lambda x: -0.91 - 1.79 * x])
-    ax.plot(x, y_K01, c='k', ls='dashed', lw=2, label='Kewley+2001')
-    ax.plot(x, y_S24, c='brown', ls='dashed', lw=2, label='Schultz+2024')
-    plt.legend()
-
-    # ---------annotate axes and save figure-------
-    if args.fontsize == 10: args.fontsize = 15
-    ax.set_xlim(-1.5, 0.25)
-    ax.set_ylim(-1, 1.5)
-
-    ax.set_xlabel(f'log (SII/Ha)', fontsize=args.fontsize)
-    ax.set_ylabel(f'log (OIII/Hb)', fontsize=args.fontsize)
-
-    colorby_text = f'log({args.colorcol})' if args.log_colorcol else args.colorcol
-    cbar.set_label(colorby_text, fontsize=args.fontsize)
-
-    plt.title(f'{args.do_field}', fontsize=args.fontsize)
-    plt.tight_layout()
+    if args.plot_full_BPT: ax, df = plot_BPT(df, ax, args)
+    elif args.plot_full_mass_excitation: ax, df = plot_mass_excitation(df, ax, args, mass_col=mass_col)
 
     return df, ax
 
@@ -436,12 +392,19 @@ if __name__ == "__main__":
         fig.subplots_adjust(left=0.1, right=0.98, bottom=0.1, top=0.95)
 
     # ---------BPT for for full sample------
+    speccat_file = args.input_dir / f'{args.drv}/{args.do_field}/Products/{args.do_field}_speccat.fits'
     if args.plot_full_BPT:
         if args.colorcol == 'ez_z_phot': args.colorcol = 'redshift'
-        speccat_file = args.input_dir / f'{args.drv}/{args.do_field}/Products/{args.do_field}_speccat.fits'
         df, ax = plot_BPT_from_speccat(speccat_file, args, ax)
         colorby_text = f'log_{args.colorcol}' if args.log_colorcol else args.colorcol
         figname = speccat_file.parent / f'{args.do_field}_BPT_colorby_{colorby_text}.png'
+
+    # ---------mass-excitation diagram for for full sample------
+    elif args.plot_full_mass_excitation:
+        if args.colorcol == 'ez_z_phot': args.colorcol = 'redshift'
+        df, ax = plot_BPT_from_speccat(speccat_file, args, ax)
+        colorby_text = f'log_{args.colorcol}' if args.log_colorcol else args.colorcol
+        figname = speccat_file.parent / f'{args.do_field}_mass_excitation_colorby_{colorby_text}.png'
 
     # ---------flux vs mag for full sample------
     elif args.plot_flux_vs_mag:
@@ -496,8 +459,14 @@ if __name__ == "__main__":
             df_logOHgrad = df_logOHgrad.drop_duplicates(subset=['field', 'objid'], keep='last')
             df = pd.merge(df, df_logOHgrad, on=['field', 'objid'], how='outer')
 
-        # -------making the dsired plots----------------
-        if args.plot_BPT:
+        # -------making the mass excitation plot----------------
+        if args.plot_mass_excitation:
+            colorby_text = f'_colorby_z' if args.colorcol == 'ez_z_phot' else f'_colorby_{args.colorcol}'
+            figname = args.output_dir / 'plots' / f'{args.field_set_plot_conditions_text}_run_{args.run}_mass_excitation{colorby_text}.png'
+            ax, df = plot_mass_excitation(df, ax, args, mass_col='lp_mass')
+
+        # -------making the BPT plot----------------
+        elif args.plot_BPT:
             colorby_text = f'_colorby_z' if args.colorcol == 'ez_z_phot' else f'_colorby_{args.colorcol}'
             figname = args.output_dir / 'plots' / f'{args.field_set_plot_conditions_text}_run_{args.run}_BPT{colorby_text}.png'
             ax, df = plot_BPT(df, ax, args)
@@ -507,6 +476,7 @@ if __name__ == "__main__":
                 df.to_csv(df_infilename, index=None)
                 print(f'\nAdded distance_from_K01 column to df and saved in {df_infilename}.')
 
+        # -------making the desired plots----------------
         else:
             figname = args.output_dir / 'plots' / f'{args.field_set_plot_conditions_text}_run_{args.run}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
             if df['SFR_int'].dtype == object: # accompanied by uncertainty in the same column
