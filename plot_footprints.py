@@ -8,8 +8,9 @@
              run plot_footprints.py --bg COSMOS --plot_zcosmos
              run plot_footprints.py --bg_image_dir /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/COSMOS/imaging_orig/ --bg_file ACS_814_030mas_077_sci.fits
              run plot_footprints.py --fortalk
-             run plot_footprints.py --fg_file mosaic_nircam_f115w_COSMOS-Web_60mas*_v0_5_i2d.fits
+             run plot_footprints.py bg_filename
              run plot_footprints.py --fg_file mosaic_miri_f770w_COSMOS-Web_60mas_A*_v0_5_i2d.fits
+             run plot_footprints.py --bg_image_dir /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/COSMOS/imaging/ --bg_file mosaic_nircam_f444w_COSMOS-Web_60mas_B7_v0_8_sci.fits --only_passage_regions --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --use_only_good
 '''
 
 from header import *
@@ -81,17 +82,19 @@ def plot_skycoord_from_df(df, fig, bg_img_hdu, color='aqua', alpha=0.3, size=1):
 
     wcs_header = pywcs.WCS(bg_img_hdu[0].header)
     ax=fig.gca()
-    #'''
-    # use this option for a quicker plot, but not with scale-able scatter points
-    ra_coords, dec_coords = sky_coords.to_pixel(wcs_header)
-    ax.scatter(ra_coords, dec_coords, color=color, s=size, alpha=alpha, zorder=-1)
-    '''
-    # use this option for a slower plot, but with scale-able scatter points
-    pix_coords = np.transpose(sky_coords.to_pixel(wcs_header))
-    for index in range(len(table)):
-        circle = plt.Circle(xy=pix_coords[index], radius=1, color=color, alpha=alpha)
-        ax.add_patch(circle)
-    '''
+
+    if len(df) < 20:
+        # use this option for a slower plot, but with scale-able scatter points
+        pix_coords = np.transpose(sky_coords.to_pixel(wcs_header))
+        for index in range(len(df)):
+            circle = plt.Circle(xy=pix_coords[index], radius=1, color=color, alpha=alpha)
+            ax.add_patch(circle)
+            if 'objid' in df: ax.text(pix_coords[index][0], pix_coords[index][1], df['objid'].values[index], color=color, fontsize=15)
+    else:
+        # use this option for a quicker plot, but not with scale-able scatter points
+        ra_coords, dec_coords = sky_coords.to_pixel(wcs_header)
+        ax.scatter(ra_coords, dec_coords, color=color, s=size, alpha=alpha, zorder=-1)
+
     return fig
 
 # -------------------------------------------------------------------------------------------------------
@@ -104,7 +107,7 @@ def plot_background(filename, args):
 
     print(f'Reading in background image file {filename}')
     bg_img_hdu = fits.open(filename)
-    sci_ext = 1 if 'COSMOS-Web' in str(filename) else 0
+    sci_ext = 0 if 'COSMOS-Web' in str(filename) else 0
     data = np.log10(bg_img_hdu[sci_ext].data)
     header = bg_img_hdu[sci_ext].header
 
@@ -127,6 +130,9 @@ def plot_background(filename, args):
 
     ax.set_xlabel('RA (deg)', fontsize=args.fontsize)
     ax.set_ylabel('Dec (deg)', fontsize=args.fontsize)
+
+    #ax.set_xlim(np.array([150.18, 150.26]) * ra_per_pix + ra_offset)  ##
+    #ax.set_ylim(np.array([2.37, 2.41]) * ra_per_pix + ra_offset)  ##
 
     return fig, bg_img_hdu
 
@@ -189,8 +195,8 @@ if __name__ == "__main__":
         bg_filename = args.bg_image_dir / args.bg_file
 
     if args.only_passage_regions: reg_filenames = []
-    elif 'miri' in args.fg_file: reg_filenames = list(reg_files_dir.glob('*%s*MIRI*.reg' %args.bg))
-    elif 'nircam' in args.fg_file: reg_filenames = list(reg_files_dir.glob('*%s*NIRCam*.reg' %args.bg))
+    elif args.fg_file is not None and 'miri' in args.fg_file: reg_filenames = list(reg_files_dir.glob('*%s*MIRI*.reg' %args.bg))
+    elif args.fg_file is not None and 'nircam' in args.fg_file: reg_filenames = list(reg_files_dir.glob('*%s*NIRCam*.reg' %args.bg))
     else: reg_filenames = list(reg_files_dir.glob('*%s*.reg' %args.bg))
     reg_filenames += list(reg_files_dir.glob('*PASSAGE*.reg'))
 
@@ -214,6 +220,46 @@ if __name__ == "__main__":
         if args.plot_zcosmos: df = read_zCOSMOS_catalog(args=args)
         elif args.plot_cosmos2020: df = read_COSMOS2020_catalog(args=args)
         fig = plot_skycoord_from_df(df, fig, bg_img_hdu, color='aqua', alpha=0.3, size=1)
+
+    # -------reading in dataframe produced by get_field_stats.py or by compute_stellar_masses.py----------------
+    if args.do_field is not None:
+        if args.plot_conditions == 'all_match':
+            args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
+            args.field_set_plot_conditions_text = f'{args.field}_{args.drv}_allmatch'
+            df_infilename = args.output_dir / args.field / f'{args.field}_all_diag_results_withSED_{args.run}.csv'
+        else:
+            args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
+            plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
+            plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW',
+                                                                                                         f'EW>{args.EW_thresh}').replace(
+                'a_image', f'a>{args.a_thresh}')
+            args.field_set_plot_conditions_text = f'{args.field}_{args.drv}_venn_{plot_conditions_text}'
+            if len(args.run) > 0 and args.run[0] != '_': args.run = '_' + args.run
+            df_infilename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df_withSED{args.run}.csv'
+
+        if os.path.exists(df_infilename):
+            print(f'Reading in main df from {df_infilename}')
+        else:
+            print(f'Could not find {df_infilename},')
+            df_infilename = Path(str(df_infilename)[:str(df_infilename).find('withSED') - 1] + '.txt')
+            if os.path.exists(df_infilename):
+                print(f'Loading pre-SED df from {df_infilename} instead')
+            else:
+                print(f'Could not find {df_infilename},')
+                df_infilename = Path(str(df_infilename).replace(f'_{args.drv}', ''))
+                if os.path.exists(df_infilename):
+                    print(f'Loading df from {df_infilename} instead')
+                else:
+                    sys.exit(f'{df_infilename} does not exist')
+
+        df = pd.read_csv(df_infilename)
+        if args.use_only_good and args.drv == 'v0.5' and set(args.plot_conditions) == set(['SNR']) and set(args.line_list) == set(['OIII', 'Ha', 'OII', 'Hb', 'SII']):
+            df = df[df['objid'].isin([1303,1934,2734,2867,300,2903])].reset_index(drop=True) # only choosing the pre-determined good galaxies
+            print(f'Using only the pre-determined good galaxies, and there are {len(df)} of them..')
+
+        radius = 10 # arcsec
+        print(f'Trying to overplot {radius}" circles around {len(df)} objects..')
+        fig = plot_skycoord_from_df(df, fig, bg_img_hdu, color='red', alpha=1, size=radius)
 
     # ------saving figure---------
     if args.fortalk:

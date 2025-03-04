@@ -449,7 +449,7 @@ if __name__ == "__main__":
         df = pd.read_csv(df_infilename)
         if args.use_only_good and args.drv == 'v0.5' and set(args.plot_conditions) == set(['SNR']) and set(args.line_list) == set(['OIII', 'Ha', 'OII', 'Hb', 'SII']):
             df = df[df['objid'].isin([1303,1934,2734,2867,300,2903])].reset_index(drop=True) # only choosing the pre-determined good galaxies
-            print(f'Using only the pre-determined good galaxies, and there are {len(df_int)} of them..')
+            print(f'Using only the pre-determined good galaxies, and there are {len(df)} of them..')
 
         # -------combing with metallicity dataframe if it exists----------------
         logOHgrad_filename = args.output_dir / 'catalogs' / f'logOHgrad_df_snr{args.snr_cut}_onlyseg_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}.txt'

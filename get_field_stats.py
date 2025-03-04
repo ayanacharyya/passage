@@ -146,9 +146,11 @@ def plot_venn(df, args):
         condition = np.isfinite(df['lp_mass'])
         set_arr, label_arr = make_set(df, condition, 'mass available', set_arr, label_arr)
 
+    if 'lp_SFR' in df:
         condition = df['lp_SFR'] > args.log_SFR_thresh
         set_arr, label_arr = make_set(df, condition, f'log sfr > {args.log_SFR_thresh}', set_arr, label_arr)
 
+    if 'lp_sSFR' in df:
         condition = df['lp_sSFR'] > args.log_sSFR_thresh
         set_arr, label_arr = make_set(df, condition, f'log sSFR > {args.log_sSFR_thresh}', set_arr, label_arr)
 
@@ -524,9 +526,11 @@ def get_crossmatch_with_cosmos(df, args):
 
     for index, thisfield in enumerate(fields):
         filename = args.input_dir / 'COSMOS' /  args.drv / f'cosmos2020_objects_in_{thisfield}.fits'
+        #filename = args.input_dir / 'COSMOS' /  args.drv / f'cosmoswebb_objects_in_{thisfield}.fits'
         if os.path.exists(filename):
             print(f'{index+1} of {len(fields)} fields: Reading COSMOS subset table from {filename}')
-            df_cosmos_thisfield = read_COSMOS2020_catalog(filename=filename)
+            if 'cosmos2020' in str(filename): df_cosmos_thisfield = read_COSMOS2020_catalog(filename=filename)
+            elif 'cosmoswebb' in str(filename): df_cosmos_thisfield = read_COSMOSWebb_catalog(filename=filename)
             df_cosmos = pd.concat([df_cosmos, df_cosmos_thisfield])
         else:
             print(f'{index+1} of {len(fields)} fields: Could not find COSMOS subset table for {thisfield}, so skipping.')
@@ -539,19 +543,25 @@ def get_crossmatch_with_cosmos(df, args):
         df_crossmatch = df_crossmatch.rename(columns={'df1_id':'passage_id', 'df2_id':'cosmos_id'})
         df_crossmatch = pd.merge(df_crossmatch[['passage_id', 'cosmos_id']], df_cosmos, left_on='cosmos_id', right_on='id', how='inner').drop(['id', 'ra', 'dec'], axis=1)
 
-        try: df_crossmatch_subset = df_crossmatch[['passage_id', 'cosmos_id', 'ez_z_phot', 'lp_MK', 'lp_zBEST']]
-        except: df_crossmatch_subset = df_crossmatch[['passage_id', 'cosmos_id', 'ez_z_phot', 'lp_MK']]
+        df_crossmatch_subset = df_crossmatch[['passage_id', 'cosmos_id']]
+        extract_cols = ['ez_z_phot', 'lp_MK', 'lp_zBEST', 'LP_zfinal', 'LP_mass_minchi2']
+        for thiscol in extract_cols:
+            if thiscol in df_crossmatch: df_crossmatch_subset[thiscol] = df_crossmatch[thiscol]
+
         lp_quants = ['lp_SFR', 'lp_mass', 'lp_sSFR']
         ez_quants = ['ez_mass', 'ez_sfr', 'ez_ssfr']
 
         for quant in lp_quants:
-            df_crossmatch_subset[quant] = df_crossmatch[quant + '_med']
-            df_crossmatch_subset[quant + '_u'] = (df_crossmatch[quant + '_med_max68'] - df_crossmatch[quant + '_med_min68']) / 2
+            if quant + '_med' in df_crossmatch:
+                df_crossmatch_subset[quant] = df_crossmatch[quant + '_med']
+                df_crossmatch_subset[quant + '_u'] = (df_crossmatch[quant + '_med_max68'] - df_crossmatch[quant + '_med_min68']) / 2
 
         for quant in ez_quants:
-            df_crossmatch_subset[quant] = df_crossmatch[quant + '_p500']
-            df_crossmatch_subset[quant + '_u'] = (df_crossmatch[quant + '_p840'] - df_crossmatch[quant + '_p160']) / 2
+            if quant + '_p500' in df_crossmatch:
+                df_crossmatch_subset[quant] = df_crossmatch[quant + '_p500']
+                df_crossmatch_subset[quant + '_u'] = (df_crossmatch[quant + '_p840'] - df_crossmatch[quant + '_p160']) / 2
 
+        df_crossmatch_subset = df_crossmatch_subset.rename(columns={'LP_zfinal':'lp_zBEST', 'LP_mass_minchi2':'lp_mass'})
         print(f'\nFound a total of {len(df_crossmatch_subset)} matching objects')
         df = pd.merge(df, df_crossmatch_subset, left_on='par_obj', right_on='passage_id', how='outer').drop('passage_id', axis=1)
     else:
@@ -564,7 +574,6 @@ def get_crossmatch_with_cosmos(df, args):
 label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$', 'ez_mass': r'log M$_*$/M$_{\odot}$', 'lp_SFR': r'log SFR (M$_{\odot}$/yr)', 'ez_z_phot': 'Photo-z COSMOS2020 (EAZY)', 'lp_zBEST': 'Photo-z COSMOS2020 (Le Phare)', 'redshift': 'Spec-z (Grizli)', 'logOH_slope':r'log $\nabla$Z$_r$ (dex/kpc)'}
 bounds_dict = {'lp_mass': (6, 12), 'ez_mass': (6, 12), 'lp_SFR': (-3, 1), 'log_SFR_int': (-3, 1), 'ez_z_phot': (0, 6), 'lp_zBEST': (0, 6), 'redshift': (0, 6), 'logOH_slope': (-0.4, 0.1)}
 colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma')
-
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -657,7 +666,7 @@ if __name__ == "__main__":
         conditions_from_cosmos = ['mass', 'sfr', 'sSFR']
         if len(set(conditions_from_cosmos).intersection(set(args.plot_conditions))) > 0:
             df = get_crossmatch_with_cosmos(df, args)
-            df = df[df['ez_mass'] < 20] # masses cannot be over 10^20 Msun
+            if 'ez_mass' in df: df = df[df['ez_mass'] < 20] # masses cannot be over 10^20 Msun
 
         # ------------doing the photo-z vs spec-z comparison--------------------
         if args.plot_columns:
