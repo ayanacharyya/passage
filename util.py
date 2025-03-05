@@ -43,6 +43,7 @@ def parse_args():
     parser.add_argument('--forpaper', dest='forpaper', action='store_true', default=False, help='Format plots to paper quality? Default is no.')
     parser.add_argument('--fortalk', dest='fortalk', action='store_true', default=False, help='Format plots suitable for putting in talks? Default is no.')
     parser.add_argument('--drv', metavar='drv', type=str, action='store', default='v0.1', help='Which data reduction version? Default v0.1')
+    parser.add_argument('--fontsize', metavar='fontsize', type=int, action='store', default=10, help='fontsize of plot labels, etc.; default is 15')
 
     parser.add_argument('--field', metavar='field', type=str, action='store', default='Par3', help='Which passage field? Default is Par50')
     parser.add_argument('--do_only_fields', metavar='do_only_fields', type=str, action='store', default=None, help='Which passage field? Default is Par50')
@@ -57,7 +58,6 @@ def parse_args():
 
     # ------- args added for read_line_catalog.py ------------------------------
     parser.add_argument('--nbins', metavar='nbins', type=int, action='store', default=30, help='No. of bins for plotting the histogram. Default is 30')
-    parser.add_argument('--fontsize', metavar='fontsize', type=int, action='store', default=10, help='fontsize of plot labels, etc.; default is 15')
     parser.add_argument('--mag_lim', metavar='mag_lim', type=float, action='store', default=None, help='magnitude limit above which to search for targets; default is None')
 
     # ------- args added for make_region_files.py ------------------------------
