@@ -121,7 +121,7 @@ def plot_skycoord_from_df(df, fig, bg_img_hdu, color='aqua', alpha=0.3, size=1):
 def plot_background(filename, cmap='Greys', fontsize=15):
     '''
     Plots the background image for a given input filename
-    Returns fig handle
+    Returns fig handle, and the image HDU
     '''
 
     print(f'Reading in background image file {filename}')
