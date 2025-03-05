@@ -54,7 +54,7 @@ def parse_args():
     return args
 
 # -------------------------------------------------------------------------------------------------------
-def overplot_regions(region_files, bg_img_hdu, fig, args):
+def overplot_regions(region_files, bg_img_hdu, fig, fontsize=15):
     '''
     Overplots the footprint/s for a given region file and existing figure and header of the background file plotted on the figure
     Returns fig handle, and list of regions
@@ -77,18 +77,18 @@ def overplot_regions(region_files, bg_img_hdu, fig, args):
         for index2, sky_region in enumerate(sky_regions):
             if type(sky_region) == regions.shapes.text.TextSkyRegion: # label if it is text
                 label = sky_region.text
-                ax.text(ax.get_xlim()[0] + 0.1 * np.diff(ax.get_xlim())[0], ax.get_ylim()[1] * 0.98 - (index + 1) * 0.05 * np.diff(ax.get_ylim())[0], label, c=color, ha='left', va='top', fontsize=args.fontsize)
+                ax.text(ax.get_xlim()[0] + 0.1 * np.diff(ax.get_xlim())[0], ax.get_ylim()[1] * 0.98 - (index + 1) * 0.05 * np.diff(ax.get_ylim())[0], label, c=color, ha='left', va='top', fontsize=fontsize)
             else: # otherwise plot it
                 # plotting the region
                 pixel_region = sky_region.to_pixel(wcs_header)
-                pixel_region.plot(ax=ax, lw=2 if args.fg_file is None else 1, color=color)
+                pixel_region.plot(ax=ax, lw=1, color=color)
 
                 # labeling the region
                 if type(sky_region) == regions.shapes.rectangle.RectangleSkyRegion:
                     label_pixcoord_x = pixel_region.center.xy[0] + pixel_region.width/2 + pix_offset_forlabels
                     label_pixcoord_y = pixel_region.center.xy[1] + pixel_region.height/2 + pix_offset_forlabels
                     label_text = f'P{pixel_region.meta["text"]}'
-                    ax.text(label_pixcoord_x, label_pixcoord_y, label_text, c=color, ha='left', va='top', fontsize=args.fontsize/1.5)
+                    ax.text(label_pixcoord_x, label_pixcoord_y, label_text, c=color, ha='left', va='top', fontsize=fontsize/1.5)
 
     return fig, sky_regions
 
@@ -118,7 +118,7 @@ def plot_skycoord_from_df(df, fig, bg_img_hdu, color='aqua', alpha=0.3, size=1):
     return fig
 
 # -------------------------------------------------------------------------------------------------------
-def plot_background(filename, args, cmap='Greys'):
+def plot_background(filename, cmap='Greys', fontsize=15):
     '''
     Plots the background image for a given input filename
     Returns fig handle
@@ -144,11 +144,11 @@ def plot_background(filename, args, cmap='Greys'):
 
     ax.xaxis.set_major_locator(plt.MaxNLocator(5))
     ax.yaxis.set_major_locator(plt.MaxNLocator(5))
-    ax.set_xticklabels(['%.3F' % (item * ra_per_pix + ra_offset) for item in ax.get_xticks()], fontsize=args.fontsize)
-    ax.set_yticklabels(['%.3F' % (item * dec_per_pix + dec_offset) for item in ax.get_yticks()], fontsize=args.fontsize)
+    ax.set_xticklabels(['%.3F' % (item * ra_per_pix + ra_offset) for item in ax.get_xticks()], fontsize=fontsize)
+    ax.set_yticklabels(['%.3F' % (item * dec_per_pix + dec_offset) for item in ax.get_yticks()], fontsize=fontsize)
 
-    ax.set_xlabel('RA (deg)', fontsize=args.fontsize)
-    ax.set_ylabel('Dec (deg)', fontsize=args.fontsize)
+    ax.set_xlabel('RA (deg)', fontsize=fontsize)
+    ax.set_ylabel('Dec (deg)', fontsize=fontsize)
 
     return fig, bg_img_hdu
 
@@ -203,7 +203,7 @@ if __name__ == "__main__":
     bg_filename = args.bg_image_dir / args.bg_file
 
     # ------plotting the background------------
-    fig, bg_img_hdu = plot_background(bg_filename, args)
+    fig, bg_img_hdu = plot_background(bg_filename, cmap='Greys', fontsize=args.fontsize)
 
     # --------getting region file names-------------
     reg_filenames = list(args.reg_files_dir.glob('*PASSAGE*.reg'))
@@ -213,7 +213,7 @@ if __name__ == "__main__":
         else: reg_filenames += list(args.reg_files_dir.glob('*COSMOS*.reg'))
 
     # ------plotting the region files------------
-    if len(reg_filenames) > 0: fig, sky_regions = overplot_regions(reg_filenames, bg_img_hdu, fig, args)
+    if len(reg_filenames) > 0: fig, sky_regions = overplot_regions(reg_filenames, bg_img_hdu, fig, fontsize=args.fontsize)
 
     # ------overplotting data as foreground-----------------
     if args.fg_file is not None:
