@@ -18,7 +18,6 @@ from astropy import wcs as pywcs
 from astropy.io import fits
 import regions
 from regions import Regions
-from astropy.coordinates import SkyCoord
 import pandas as pd
 from reproject import reproject_interp
 
@@ -93,27 +92,19 @@ def overplot_regions(region_files, bg_img_hdu, fig, fontsize=15):
     return fig, sky_regions
 
 # -------------------------------------------------------------------------------------------------------
-def plot_skycoord_from_df(df, fig, bg_img_hdu, color='aqua', alpha=0.3, size=1):
+def plot_skycoord_from_df(df, ax, color='aqua', alpha=0.3, size=1, fontsize=15):
     '''
-    Plots the location of all RA/DEC from a given dataframe on an existing background image, given the header of the background image
+    Plots the location of all RA/DEC from a given dataframe on an existing background image, using a circle of radius=size in arcseconds,
+    given the header of the background image
     Returns fig handle
     '''
-    sky_coords = SkyCoord(df['ra'], df['dec'], unit='deg')
+    print(f'\nTrying to overplot {size}" circles around {len(df)} objects..')
+    size = size / 3600. #conveting from arcseconds to degrees
 
-    wcs_header = pywcs.WCS(bg_img_hdu[0].header)
-    ax=fig.gca()
-
-    if len(df) < 20:
-        # use this option for a slower plot, but with scale-able scatter points
-        pix_coords = np.transpose(sky_coords.to_pixel(wcs_header))
-        for index in range(len(df)):
-            circle = plt.Circle(xy=pix_coords[index], radius=1, color=color, alpha=alpha)
-            ax.add_patch(circle)
-            if 'objid' in df: ax.text(pix_coords[index][0], pix_coords[index][1], df['objid'].values[index], color=color, fontsize=15)
-    else:
-        # use this option for a quicker plot, but not with scale-able scatter points
-        ra_coords, dec_coords = sky_coords.to_pixel(wcs_header)
-        ax.scatter(ra_coords, dec_coords, color=color, s=size, alpha=alpha, zorder=-1)
+    for index, row in df.iterrows():
+        circle = plt.Circle(xy=(row['ra'], row['dec']), radius=size, color=color, alpha=alpha, transform=ax.get_transform('fk5'))
+        ax.add_patch(circle)
+        if len(df) < 20 and 'objid' in df: ax.text(row['ra'], row['dec'], row['objid'], color=color, fontsize=fontsize, transform=ax.get_transform('fk5'))
 
     return fig
 
@@ -130,25 +121,24 @@ def plot_background(filename, cmap='Greys', fontsize=15):
     data = np.log10(bg_img_hdu[sci_ext].data)
     header = bg_img_hdu[sci_ext].header
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig = plt.figure(figsize=(8, 6))
+    ax = fig.add_subplot(111, projection=pywcs.WCS(header))
     fig.subplots_adjust(right=0.99, top=0.95, bottom=0.1, left=0.01)
 
     ax.imshow(data, origin='lower', cmap=cmap, vmin=-4, vmax=-3) # full, relevant range of data, for COSMOS field, is roughly (-6,-1)
 
-    CDELT1 = 'CDELT1' if 'CDELT1' in header else 'CD1_1'
-    CDELT2 = 'CDELT2' if 'CDELT2' in header else 'CD2_2'
-    ra_offset = header['CRVAL1'] - header['CRPIX1'] * header[CDELT1]
-    ra_per_pix = header[CDELT1]
-    dec_offset = header['CRVAL2'] - header['CRPIX2'] * header[CDELT2]
-    dec_per_pix = header[CDELT2]
+    ax.coords['ra'].set_major_formatter('d.ddd')
+    ax.coords['dec'].set_major_formatter('d.ddd')
+    ax.coords['ra'].set_axislabel('RA', fontsize=fontsize)
+    ax.coords['dec'].set_axislabel('Dec', fontsize=fontsize)
 
-    ax.xaxis.set_major_locator(plt.MaxNLocator(5))
-    ax.yaxis.set_major_locator(plt.MaxNLocator(5))
-    ax.set_xticklabels(['%.3F' % (item * ra_per_pix + ra_offset) for item in ax.get_xticks()], fontsize=fontsize)
-    ax.set_yticklabels(['%.3F' % (item * dec_per_pix + dec_offset) for item in ax.get_yticks()], fontsize=fontsize)
+    ax.coords['ra'].set_ticks(number=5)
+    ax.coords['dec'].set_ticks(number=5)
 
-    ax.set_xlabel('RA (deg)', fontsize=fontsize)
-    ax.set_ylabel('Dec (deg)', fontsize=fontsize)
+    ax.coords['ra'].set_ticklabel(size=fontsize)
+    ax.coords['dec'].set_ticklabel(size=fontsize)
+
+    ax.coords.grid(color='k', alpha=0.5, linestyle='solid')
 
     return fig, bg_img_hdu
 
@@ -228,9 +218,7 @@ if __name__ == "__main__":
     # -------overplotting specific coordinates from a dataframe----------------
     if args.plot_objects_from_file is not None:
         df = pd.read_csv(args.plot_objects_from_file)
-        radius = 10 # arcsec
-        print(f'Trying to overplot {radius}" circles around {len(df)} objects..')
-        fig = plot_skycoord_from_df(df, fig, bg_img_hdu, color='red', alpha=1, size=radius)
+        fig = plot_skycoord_from_df(df, fig.axes[0], color='red', alpha=1, size=2, fontsize=args.fontsize)
 
     figname = args.bg_image_dir.parent / f'COSMOS_with_footprints.png'
     fig.savefig(figname)
