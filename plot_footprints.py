@@ -8,9 +8,9 @@
              run plot_footprints.py --bg COSMOS --plot_zcosmos
              run plot_footprints.py --bg_image_dir /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/COSMOS/imaging_orig/ --bg_file ACS_814_030mas_077_sci.fits
              run plot_footprints.py --fortalk
-             run plot_footprints.py bg_filename
              run plot_footprints.py --fg_file mosaic_miri_f770w_COSMOS-Web_60mas_A*_v0_5_i2d.fits
              run plot_footprints.py --bg_image_dir /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/COSMOS/imaging/ --bg_file mosaic_nircam_f444w_COSMOS-Web_60mas_B7_v0_8_sci.fits --only_passage_regions --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --use_only_good
+             run plot_footprints.py --fg_file mosaic_nircam_f444w_COSMOS-Web_60mas_B7_v0_8_sci.fits  --only_passage_regions --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --use_only_good --plot_cosmoswebb --plot_cosmos2020
 '''
 
 from header import *
@@ -62,10 +62,10 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, df=None):
                         n_sources = np.sum(contained_ids)
                         if n_sources > 0:
                             df_contained = df[contained_ids]
-                            fig = plot_skycoord_from_df(df_contained, fig, bg_img_hdu, color='red', alpha=1, size=10) # plotting contained objects in a different color
+                            fig = plot_skycoord_from_df(df_contained, ax, color='red', alpha=1, size=2, fontsize=args.fontsize) # plotting contained objects in a different color
 
-                            if args.plot_zcosmos: survey = 'zCOSMOS'
-                            elif args.plot_cosmos2020: survey = 'COSMOS2020'
+                            if args.plot_zcosmos_objects: survey = 'zCOSMOS'
+                            elif args.plot_cosmos2020_objects: survey = 'COSMOS2020'
                             print(f'Region {label_text} contains {n_sources} {survey} sources') #
                             ax.text(label_pixcoord_x + 40, label_pixcoord_y, f'({n_sources})', c=color, ha='left', va='top', fontsize=args.fontsize/1.5)
 
@@ -73,28 +73,27 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, df=None):
     return fig, sky_regions
 
 # -------------------------------------------------------------------------------------------------------
-def plot_skycoord_from_df(df, fig, bg_img_hdu, color='aqua', alpha=0.3, size=1):
+def plot_skycoord_from_df(df, ax, color='aqua', alpha=0.3, size=1, fontsize=15):
     '''
-    Plots the location of all RA/DEC from a given dataframe on an existing background image, given the header of the background image
+    Plots the location of all RA/DEC from a given dataframe on an existing background image, using a circle of radius=size in arcseconds,
+    given the header of the background image
     Returns fig handle
     '''
-    sky_coords = SkyCoord(df['ra'], df['dec'], unit='deg')
 
-    wcs_header = pywcs.WCS(bg_img_hdu[0].header)
-    ax=fig.gca()
+    print(f'\nTrying to overplot {size}" circles around {len(df)} objects..')
+    size = size / 3600. #conveting from arcseconds to degrees
 
-    if len(df) < 20:
-        # use this option for a slower plot, but with scale-able scatter points
-        pix_coords = np.transpose(sky_coords.to_pixel(wcs_header))
-        for index in range(len(df)):
-            circle = plt.Circle(xy=pix_coords[index], radius=1, color=color, alpha=alpha)
-            ax.add_patch(circle)
-            if 'objid' in df: ax.text(pix_coords[index][0], pix_coords[index][1], df['objid'].values[index], color=color, fontsize=15)
-    else:
-        # use this option for a quicker plot, but not with scale-able scatter points
-        ra_coords, dec_coords = sky_coords.to_pixel(wcs_header)
-        ax.scatter(ra_coords, dec_coords, color=color, s=size, alpha=alpha, zorder=-1)
+    # use this option for a slower plot, but with scale-able scatter points
+    for index, row in df.iterrows():
+        circle = plt.Circle(xy=(row['ra'], row['dec']), radius=size, color=color, alpha=alpha, transform=ax.get_transform('fk5'))
+        ax.add_patch(circle)
+        if len(df) < 20 and 'objid' in df: ax.text(row['ra'], row['dec'], row['objid'], color=color, fontsize=fontsize, transform=ax.get_transform('fk5'))
 
+    '''
+    # use this option for a quicker plot, but not with scale-able scatter points
+    ra_coords, dec_coords = sky_coords.to_pixel(wcs_header)
+    ax.scatter(df['ra'], df['dec'], color=color, s=size, alpha=alpha, zorder=-1, transform=ax.get_transform('fk5'))
+    '''
     return fig
 
 # -------------------------------------------------------------------------------------------------------
@@ -111,28 +110,27 @@ def plot_background(filename, args):
     data = np.log10(bg_img_hdu[sci_ext].data)
     header = bg_img_hdu[sci_ext].header
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig = plt.figure(figsize=(8, 6))
+    ax = fig.add_subplot(111, projection=pywcs.WCS(header))
     fig.subplots_adjust(right=0.99, top=0.95, bottom=0.1, left=0.01)
 
     ax.imshow(data, origin='lower', cmap=cmap, vmin=-4, vmax=-3) # full, relevant range of data, for COSMOS field, is roughly (-6,-1)
 
-    CDELT1 = 'CDELT1' if 'CDELT1' in header else 'CD1_1'
-    CDELT2 = 'CDELT2' if 'CDELT2' in header else 'CD2_2'
-    ra_offset = header['CRVAL1'] - header['CRPIX1'] * header[CDELT1]
-    ra_per_pix = header[CDELT1]
-    dec_offset = header['CRVAL2'] - header['CRPIX2'] * header[CDELT2]
-    dec_per_pix = header[CDELT2]
+    ax.coords['ra'].set_major_formatter('d.ddd')
+    ax.coords['dec'].set_major_formatter('d.ddd')
+    ax.coords['ra'].set_axislabel('RA', fontsize=args.fontsize)
+    ax.coords['dec'].set_axislabel('Dec', fontsize=args.fontsize)
 
-    ax.xaxis.set_major_locator(plt.MaxNLocator(5))
-    ax.yaxis.set_major_locator(plt.MaxNLocator(5))
-    ax.set_xticklabels(['%.3F' % (item * ra_per_pix + ra_offset) for item in ax.get_xticks()], fontsize=args.fontsize)
-    ax.set_yticklabels(['%.3F' % (item * dec_per_pix + dec_offset) for item in ax.get_yticks()], fontsize=args.fontsize)
+    ax.coords['ra'].set_ticks(number=5)
+    ax.coords['dec'].set_ticks(number=5)
 
-    ax.set_xlabel('RA (deg)', fontsize=args.fontsize)
-    ax.set_ylabel('Dec (deg)', fontsize=args.fontsize)
+    ax.coords['ra'].set_ticklabel(size=args.fontsize)
+    ax.coords['dec'].set_ticklabel(size=args.fontsize)
 
-    #ax.set_xlim(np.array([150.18, 150.26]) * ra_per_pix + ra_offset)  ##
-    #ax.set_ylim(np.array([2.37, 2.41]) * ra_per_pix + ra_offset)  ##
+    ax.coords.grid(color='k', alpha=0.5, linestyle='solid')
+
+    #ax.coords['ra'].set_limit(150.15, 150.05) ##
+    #ax.coords['dec'].set_limit(2.36, 2.45) ##
 
     return fig, bg_img_hdu
 
@@ -213,13 +211,7 @@ if __name__ == "__main__":
             thisfile = Path(fg_filename).stem
             print(f'Overplotting foreground {thisfile} which is {index + 1} of {len(fg_files)}..')
             ax = overplot_skyregion_from_fits(fg_filename, bg_img_hdu, fig.axes[0], ext=0, color='magenta', label=thisfile)
-            ax = overplot_data_from_fits(fg_filename, bg_img_hdu, fig.axes[0], ext=0, cmap='Greens' if 'nircam' in args.fg_file else 'Reds')
-
-    # ------plotting the footprints---------
-    if args.plot_zcosmos or args.plot_cosmos2020:
-        if args.plot_zcosmos: df = read_zCOSMOS_catalog(args=args)
-        elif args.plot_cosmos2020: df = read_COSMOS2020_catalog(args=args)
-        fig = plot_skycoord_from_df(df, fig, bg_img_hdu, color='aqua', alpha=0.3, size=1)
+            if args.plot_fg_data: ax = overplot_data_from_fits(fg_filename, bg_img_hdu, fig.axes[0], ext=0, cmap='Greens' if 'nircam' in args.fg_file else 'Reds')
 
     # -------reading in dataframe produced by get_field_stats.py or by compute_stellar_masses.py----------------
     if args.do_field is not None:
@@ -257,9 +249,26 @@ if __name__ == "__main__":
             df = df[df['objid'].isin([1303,1934,2734,2867,300,2903])].reset_index(drop=True) # only choosing the pre-determined good galaxies
             print(f'Using only the pre-determined good galaxies, and there are {len(df)} of them..')
 
-        radius = 10 # arcsec
-        print(f'Trying to overplot {radius}" circles around {len(df)} objects..')
-        fig = plot_skycoord_from_df(df, fig, bg_img_hdu, color='red', alpha=1, size=radius)
+        fig = plot_skycoord_from_df(df, fig.axes[0], color='red', alpha=1, size=1, fontsize=args.fontsize)
+
+    # ------getting sky region of interest-----------------
+    passage_reg_filename = list(reg_files_dir.glob('*PASSAGE*.reg'))[0]
+    sky_regions = Regions.read(passage_reg_filename, format='ds9')
+    Par28_sky_region = [item for item in sky_regions if 'text' in item.meta and item.meta['text'] == 28][0]
+
+    # ------plotting the circles and objects from a list of catalog---------
+    if args.plot_zcosmos_objects:
+        df = read_zCOSMOS_catalog(args=args)
+        df = df[Par28_sky_region.contains(SkyCoord(df['ra'], df['dec'], unit='deg'), pywcs.WCS(bg_img_hdu[0].header))]
+        fig = plot_skycoord_from_df(df, fig.axes[0], color='aqua', alpha=0.3, size=1, fontsize=args.fontsize)
+    elif args.plot_cosmos2020_objects:
+        df = read_COSMOS2020_catalog(args=args, filename=args.input_dir / 'COSMOS/COSMOS2020_CLASSIC_R1_v2.2_p3_subsetcolumns_nofluxes.fits')
+        df = df[Par28_sky_region.contains(SkyCoord(df['ra'], df['dec'], unit='deg'), pywcs.WCS(bg_img_hdu[0].header))]
+        fig = plot_skycoord_from_df(df, fig.axes[0], color='pink', alpha=0.8, size=1, fontsize=args.fontsize)
+    elif args.plot_cosmoswebb_objects:
+        df = read_COSMOSWebb_catalog(args=args, filename=args.input_dir / 'COSMOS/COSMOS_Web_for_Ayan_Dec24_nofluxes.fits')
+        df = df[Par28_sky_region.contains(SkyCoord(df['ra'], df['dec'], unit='deg'), pywcs.WCS(bg_img_hdu[0].header))]
+        fig = plot_skycoord_from_df(df, fig.axes[0], color='lightblue', alpha=0.8, size=1, fontsize=args.fontsize)
 
     # ------saving figure---------
     if args.fortalk:
@@ -269,7 +278,7 @@ if __name__ == "__main__":
         try: mplcyberpunk.make_scatter_glow()
         except: pass
 
-    zCOSMOS_text = '_with_zCOSMOS' if args.plot_zcosmos else '_with_COSMOS2020' if args.plot_cosmos2020 else ''
+    zCOSMOS_text = '_with_zCOSMOS' if args.plot_zcosmos_objects else '_with_COSMOS2020' if args.plot_cosmos2020_objects else '_with_COSMOSWebb' if args.plot_cosmoswebb_objects else ''
     figname = args.input_dir / 'footprints' / f'{args.bg}_with_footprints{zCOSMOS_text}.png'
     fig.savefig(figname, transparent=args.fortalk)
     print(f'Saved plot to {figname}')

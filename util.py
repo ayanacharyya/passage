@@ -68,11 +68,13 @@ def parse_args():
     parser.add_argument('--bg', metavar='bg', type=str, action='store', default='COSMOS', help='Which survey to be used to plot background? Default is COSMOS')
     parser.add_argument('--bg_file', metavar='bg_file', type=str, action='store', default=None, help='Which file to be used for plotting the background image?')
     parser.add_argument('--bg_image_dir', metavar='bg_image_dir', type=str, action='store', default=None, help='Which folder to be used for looking for the background image?')
-    parser.add_argument('--plot_zcosmos', dest='plot_zcosmos', action='store_true', default=False, help='Overplot the (thousands of) zCOSMOS targets? Default is no.')
-    parser.add_argument('--plot_cosmos2020', dest='plot_cosmos2020', action='store_true', default=False, help='Overplot the (millions of) COSMOS2020 targets? Default is no.')
+    parser.add_argument('--plot_zcosmos_objects', dest='plot_zcosmos_objects', action='store_true', default=False, help='Overplot the (thousands of) zCOSMOS targets? Default is no.')
+    parser.add_argument('--plot_cosmos2020_objects', dest='plot_cosmos2020_objects', action='store_true', default=False, help='Overplot the (millions of) COSMOS2020 targets? Default is no.')
+    parser.add_argument('--plot_cosmoswebb_objects', dest='plot_cosmoswebb_objects', action='store_true', default=False, help='Overplot the (millions of) COSMOSWebb targets? Default is no.')
     parser.add_argument('--only_passage_regions', dest='only_passage_regions', action='store_true', default=False, help='Overplot ONLY the PASSAGE Par regions? Default is no.')
     parser.add_argument('--fg_image_dir', metavar='fg_image_dir', type=str, action='store', default=None, help='Which folder to be used for looking for the foreground image?')
     parser.add_argument('--fg_file', metavar='fg_file', type=str, action='store', default=None, help='Which file to be used for plotting the foreground images?')
+    parser.add_argument('--plot_fg_data', dest='plot_fg_data', action='store_true', default=False, help='Overplot the data of the foreground file? Default is no.')
 
     # ------- args added for make_spectra_from_beams.py ------------------------------
     parser.add_argument('--skip_sep', dest='skip_sep', action='store_true', default=False, help='Skip the Source Extraction Pipeline? Default is no.')
