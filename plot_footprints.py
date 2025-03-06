@@ -11,6 +11,7 @@
              run plot_footprints.py --fg_file mosaic_miri_f770w_COSMOS-Web_60mas_A*_v0_5_i2d.fits
              run plot_footprints.py --bg_image_dir /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/COSMOS/imaging/ --bg_file mosaic_nircam_f444w_COSMOS-Web_60mas_B7_v0_8_sci.fits --only_passage_regions --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --use_only_good
              run plot_footprints.py --fg_file mosaic_nircam_f444w_COSMOS-Web_60mas_B7_v0_8_sci.fits  --only_passage_regions --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --use_only_good --plot_cosmoswebb --plot_cosmos2020
+             run plot_footprints.py --bg_image_dir /Users/acharyya/Work/astro/passage/passage_data/COSMOS/imaging/ --bg_file mosaic_nircam_f444w_COSMOS-Web_60mas_B7_v0_8_sci.fits --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --use_only_good --only_passage_regions --plot_cosmos2020_objects --plot_cosmoswebb_objects
 '''
 
 from header import *
@@ -85,14 +86,17 @@ def plot_skycoord_from_df(df, ax, color='aqua', alpha=0.3, size=1, fontsize=15):
 
     # use this option for a slower plot, but with scale-able scatter points
     for index, row in df.iterrows():
-        circle = plt.Circle(xy=(row['ra'], row['dec']), radius=size, color=color, alpha=alpha, transform=ax.get_transform('fk5'))
+        circle = plt.Circle(xy=(row['ra'], row['dec']), radius=size, color=color, alpha=alpha, fill=False, transform=ax.get_transform('fk5'))
         ax.add_patch(circle)
-        if len(df) < 20 and 'objid' in df: ax.text(row['ra'], row['dec'], row['objid'], color=color, fontsize=fontsize, transform=ax.get_transform('fk5'))
+        ax.scatter(row['ra'], row['dec'], color=color, marker='x', s=5, alpha=alpha, transform=ax.get_transform('fk5'))
+        if len(df) < 20:
+            if 'objid' in df: ax.text(row['ra'], row['dec'], row['objid'], color=color, fontsize=fontsize, transform=ax.get_transform('fk5'))
+            elif 'id' in df: ax.text(row['ra'] + size/5, row['dec'] + size/5, f'{row["id"]:.0f}', color=color, fontsize=fontsize/1.5, transform=ax.get_transform('fk5'))
 
     '''
     # use this option for a quicker plot, but not with scale-able scatter points
     ra_coords, dec_coords = sky_coords.to_pixel(wcs_header)
-    ax.scatter(df['ra'], df['dec'], color=color, s=size, alpha=alpha, zorder=-1, transform=ax.get_transform('fk5'))
+    ax.scatter(row['ra'], row['dec'], color=color, s=size, alpha=alpha, zorder=-1, transform=ax.get_transform('fk5'))
     '''
     return fig
 
@@ -249,7 +253,7 @@ if __name__ == "__main__":
             df = df[df['objid'].isin([1303,1934,2734,2867,300,2903])].reset_index(drop=True) # only choosing the pre-determined good galaxies
             print(f'Using only the pre-determined good galaxies, and there are {len(df)} of them..')
 
-        fig = plot_skycoord_from_df(df, fig.axes[0], color='red', alpha=1, size=1, fontsize=args.fontsize)
+        fig = plot_skycoord_from_df(df, fig.axes[0], color='red', alpha=1, size=2, fontsize=args.fontsize)
 
     # ------getting sky region of interest-----------------
     passage_reg_filename = list(reg_files_dir.glob('*PASSAGE*.reg'))[0]
@@ -257,20 +261,24 @@ if __name__ == "__main__":
     Par28_sky_region = [item for item in sky_regions if 'text' in item.meta and item.meta['text'] == 28][0]
 
     # ------plotting the circles and objects from a list of catalog---------
+    zCOSMOS_text = ''
     if args.plot_zcosmos_objects:
         df = read_zCOSMOS_catalog(args=args)
         df = df[Par28_sky_region.contains(SkyCoord(df['ra'], df['dec'], unit='deg'), pywcs.WCS(bg_img_hdu[0].header))]
-        fig = plot_skycoord_from_df(df, fig.axes[0], color='aqua', alpha=0.3, size=1, fontsize=args.fontsize)
-    elif args.plot_cosmos2020_objects:
+        fig = plot_skycoord_from_df(df, fig.axes[0], color='aqua', alpha=0.3, size=2, fontsize=args.fontsize)
+        zCOSMOS_text += '_with_zCOSMOS'
+    if args.plot_cosmos2020_objects:
         df = read_COSMOS2020_catalog(args=args, filename=args.input_dir / 'COSMOS/COSMOS2020_CLASSIC_R1_v2.2_p3_subsetcolumns_nofluxes.fits')
         df = df[Par28_sky_region.contains(SkyCoord(df['ra'], df['dec'], unit='deg'), pywcs.WCS(bg_img_hdu[0].header))]
-        fig = plot_skycoord_from_df(df, fig.axes[0], color='pink', alpha=0.8, size=1, fontsize=args.fontsize)
-    elif args.plot_cosmoswebb_objects:
+        fig = plot_skycoord_from_df(df, fig.axes[0], color='blue', alpha=1, size=1.5, fontsize=args.fontsize)
+        zCOSMOS_text += '_with_COSMOS2020'
+    if args.plot_cosmoswebb_objects:
         df = read_COSMOSWebb_catalog(args=args, filename=args.input_dir / 'COSMOS/COSMOS_Web_for_Ayan_Dec24_nofluxes.fits')
         df = df[Par28_sky_region.contains(SkyCoord(df['ra'], df['dec'], unit='deg'), pywcs.WCS(bg_img_hdu[0].header))]
-        fig = plot_skycoord_from_df(df, fig.axes[0], color='lightblue', alpha=0.8, size=1, fontsize=args.fontsize)
+        fig = plot_skycoord_from_df(df, fig.axes[0], color='forestgreen', alpha=1, size=1, fontsize=args.fontsize)
+        zCOSMOS_text += '_with_COSMOSWebb'
 
-    # ------saving figure---------
+        # ------saving figure---------
     if args.fortalk:
         mplcyberpunk.add_glow_effects()
         try: mplcyberpunk.make_lines_glow()
@@ -278,7 +286,6 @@ if __name__ == "__main__":
         try: mplcyberpunk.make_scatter_glow()
         except: pass
 
-    zCOSMOS_text = '_with_zCOSMOS' if args.plot_zcosmos_objects else '_with_COSMOS2020' if args.plot_cosmos2020_objects else '_with_COSMOSWebb' if args.plot_cosmoswebb_objects else ''
     figname = args.input_dir / 'footprints' / f'{args.bg}_with_footprints{zCOSMOS_text}.png'
     fig.savefig(figname, transparent=args.fortalk)
     print(f'Saved plot to {figname}')

@@ -487,7 +487,7 @@ def read_COSMOSWebb_catalog(args=None, filename=None, aperture=1.0):
     df  = table[single_index_columns].to_pandas()
     for thiscol in multi_index_columns: df[thiscol] = table[thiscol][:, aperture_dict[aperture]]
 
-    df = df.rename(columns={'ID':'id', 'RA_DETEC':'ra', 'DEC_DETEC':'dec'})
+    df = df.rename(columns={'ID_SE++':'id', 'RA_DETEC':'ra', 'DEC_DETEC':'dec'})
     print(f'Completed reading COSMOSWebb catalog in {timedelta(seconds=(datetime.now() - start_time2).seconds)}')
 
     return df
@@ -561,6 +561,24 @@ def make_COSMOS_subset_table(filename, args):
     table_sub.write(outfilename, overwrite=True)
     print(f'Saved subset table as {outfilename}')
 
+# ----------------------------------------------------------------------------------------------------------
+def get_crossmatch(df1, df2, sep_threshold=1., df1_idcol='id', df2_idcol='id'):
+    '''
+    Determines crossmatch between two dataframes df1 and df2
+    df1 and df2 should have df1_idcol, and df2_idcol respectively, and they each have columns: ra, dec
+    sep_threshold is in arcseconds
+    Returns cross matched dataframe with IDs from both dataframes
+    '''
+    df1_coords = SkyCoord(df1['ra'], df1['dec'], unit='deg')
+    df2_coords = SkyCoord(df2['ra'], df2['dec'], unit='deg')
+    nearest_id_in_df2, sep_from_nearest_id_in_df2, _ = df1_coords.match_to_catalog_sky(df2_coords)
+
+    df_crossmatch = pd.DataFrame({'df1_id': df1[df1_idcol].values, 'df2_id': df2[df2_idcol].iloc[nearest_id_in_df2].values, 'sep': sep_from_nearest_id_in_df2.arcsec})
+    df_crossmatch = df_crossmatch[df_crossmatch['sep'] < sep_threshold]  # separation within XX arcsecond
+    df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='df2_id', keep='first').reset_index(drop=True)  # to avoid multiple df1 objects being linked to the same df2 object
+
+    return df_crossmatch
+
 # -------------------------------------------------------------------------------------------------------
 def split_COSMOS_subset_table_by_par(args):
     '''
@@ -570,7 +588,9 @@ def split_COSMOS_subset_table_by_par(args):
     filename = Path(args.input_dir) / 'COSMOS' / 'COSMOS2020_CLASSIC_R1_v2.2_p3_subsetcolumns.fits'
     data = fits.open(filename)
     table_cosmos = Table(data[1].data)
-    cosmos_coords = SkyCoord(table_cosmos['ALPHA_J2000'], table_cosmos['DELTA_J2000'], unit='deg')
+
+    df_cosmos = table_cosmos.to_pandas()
+    df_cosmos = df_cosmos.rename(columns={'ALPHA_J2000':'ra', 'DELTA_J2000':'dec'})
 
     field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / args.drv / 'Par*') + '/')]
     field_list += [f'Par{item:03d}' for item in passage_fields_in_cosmos]
@@ -587,18 +607,14 @@ def split_COSMOS_subset_table_by_par(args):
             # -------reading in photometric catalog------
             catalog = GTable.read(catalog_file)
             df = catalog['id', 'ra', 'dec'].to_pandas()
+            df['passage_id'] = thisfield + '-' + df['id'].astype(str)  # making a unique combination of field and object id
 
             # -------cross-matching RA/DEC of both catalogs------
-            passage_coords = SkyCoord(df['ra'], df['dec'], unit='deg')
-            nearest_id_in_cosmos, sep_from_nearest_id_in_cosmos, _ = passage_coords.match_to_catalog_sky(cosmos_coords)
+            df_crossmatch = get_crossmatch(df, df_cosmos, sep_threshold=1.0, df1_idcol='passage_id', df2_idcol='id')
+            df_crossmatch = df_crossmatch.rename(columns={'df1_id': 'passage_id', 'df2_id': 'ID'})
 
-            df_crossmatch = pd.DataFrame({'passage_id': df['id'].values, 'ID': table_cosmos['ID'][nearest_id_in_cosmos].value.astype(np.int32), 'sep': sep_from_nearest_id_in_cosmos.arcsec})
-            df_crossmatch['passage_id'] = thisfield + '-' + df_crossmatch['passage_id'].astype(str)  # making a unique combination of field and object id
-            df_crossmatch = df_crossmatch[df_crossmatch['sep'] < 1.]  # separation within 1 arcsecond
             if len(df_crossmatch) > 0:
-                df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='ID', keep='first').reset_index(drop=True)  # to avoid multiple PASSAGE objects being linked to the same COSMOS object
                 table_crossmatch = Table.from_pandas(df_crossmatch)
-
                 table_cosmos_thisfield = join(table_cosmos, table_crossmatch, keys='ID')
 
                 outfilename = args.input_dir / 'COSMOS' /  args.drv / f'cosmos2020_objects_in_{thisfield}.fits'
@@ -618,15 +634,17 @@ def split_COSMOSWebb_table_by_par(args, filename=None):
     if filename is None: filename = Path(args.input_dir) / 'COSMOS' / 'COSMOS_Web_for_Ayan_Dec24.fits'
     data = fits.open(filename)
     table_cosmos = Table(data[1].data)
-    table_cosmos.remove_column('ID')
-    table_cosmos.rename_column('ID_SE++', 'ID')
-    cosmos_coords = SkyCoord(table_cosmos['RA_DETEC'], table_cosmos['DEC_DETEC'], unit='deg')
+
+    df_cosmos = table_cosmos[['ID_SE++', 'RA_DETEC', 'DEC_DETEC']].to_pandas() # using ID_SE++ instead of ID because it turns out that ID is not unique in the COSMOSWeb catalog
+    df_cosmos = df_cosmos.rename(columns={'RA_DETEC':'ra', 'DEC_DETEC':'dec'})
 
     field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / args.drv / 'Par*') + '/')]
     field_list += [f'Par{item:03d}' for item in passage_fields_in_cosmos]
     field_list = list(np.unique(field_list))
     field_list.sort(key=natural_keys)
 
+    # The following method is slower because it involves cross matching all COSMOS objects with..
+    # ..objects in ParXXX, but it leads to an accurate list of objects within ParXXX.
     for index, thisfield in enumerate(field_list):
         print(f'Starting {index+1} of {len(field_list)} fields..')
         # -------determining path to photometric catalog------
@@ -637,20 +655,15 @@ def split_COSMOSWebb_table_by_par(args, filename=None):
             # -------reading in photometric catalog------
             catalog = GTable.read(catalog_file)
             df = catalog['id', 'ra', 'dec'].to_pandas()
+            df['passage_id'] = thisfield + '-' + df['id'].astype(str)  # making a unique combination of field and object id
 
             # -------cross-matching RA/DEC of both catalogs------
-            passage_coords = SkyCoord(df['ra'], df['dec'], unit='deg')
-            nearest_id_in_cosmos, sep_from_nearest_id_in_cosmos, _ = passage_coords.match_to_catalog_sky(cosmos_coords)
+            df_crossmatch = get_crossmatch(df, df_cosmos, sep_threshold=1.0, df1_idcol='passage_id', df2_idcol='ID_SE++')
+            df_crossmatch = df_crossmatch.rename(columns={'df1_id': 'passage_id', 'df2_id': 'ID_SE++'})
 
-            df_crossmatch = pd.DataFrame({'passage_id': df['id'].values, 'ID': table_cosmos['ID'][nearest_id_in_cosmos].value.astype(np.int32), 'sep': sep_from_nearest_id_in_cosmos.arcsec})
-            df_crossmatch['passage_id'] = thisfield + '-' + df_crossmatch['passage_id'].astype(str)  # making a unique combination of field and object id
-            df_crossmatch = df_crossmatch[df_crossmatch['sep'] < 1.]  # separation within 1 arcsecond
             if len(df_crossmatch) > 0:
-                df_crossmatch = df_crossmatch.sort_values('sep').drop_duplicates(subset='ID', keep='first').reset_index(drop=True)  # to avoid multiple PASSAGE objects being linked to the same COSMOS object
                 table_crossmatch = Table.from_pandas(df_crossmatch)
-
-                table_cosmos_thisfield = join(table_cosmos, table_crossmatch, keys='ID')
-
+                table_cosmos_thisfield = join(table_cosmos, table_crossmatch, keys='ID_SE++')
                 outfilename = args.input_dir / 'COSMOS' /  args.drv / f'cosmoswebb_objects_in_{thisfield}.fits'
                 table_cosmos_thisfield.write(outfilename, overwrite=True)
                 print(f'Saved subset table as {outfilename}')
@@ -658,6 +671,40 @@ def split_COSMOSWebb_table_by_par(args, filename=None):
                 print(f'No overlapping objects found in field {thisfield}')
         else:
             print(f'{catalog_file} does not exist, so skipping {thisfield}.')
+
+    '''
+    # The following method is faster because it does not do cross matching, just takes all objects contained..
+    # ..within the region file corresponding to ParXXX, but since the region files are approximate..
+    # ..the resulting list of COSMOS objects "contained" within ParXXX is not accurate either.
+    for index, thisfield in enumerate(field_list):
+        print(f'Starting {index+1} of {len(field_list)} fields..')
+        # -------determining path to direct images------
+        product_dir = args.input_dir / args.drv / thisfield / 'Products'
+        image_files = glob.glob(str(product_dir) + f'/{thisfield}*clear*sci*.fits')
+
+        if len(image_files) > 0:
+            image_file = Path(image_files[0])
+            hdul = fits.open(image_file)
+            source_wcs = pywcs.WCS(hdul[0].header)
+
+            region_dir = image_file.parent.parent / 'Regions'
+            region_dir.mkdir(parents=True, exist_ok=True)
+            region_file = region_dir / Path(filename.stem + '.reg')
+            source_wcs.footprint_to_file(region_file, color='cyan', width=1)
+
+            sky_region = Regions.read(region_file, format='ds9')[0]
+            contained_ids = sky_region.contains(SkyCoord(df_cosmos['ra'], df_cosmos['dec'], unit='deg'), pywcs.WCS(hdul[0].header))
+            table_contained = table_cosmos[contained_ids]
+
+            if len(table_contained) > 0:
+                outfilename = args.input_dir / 'COSMOS' / args.drv / f'cosmoswebb_objects_in_{thisfield}.fits'
+                table_contained.write(outfilename, overwrite=True)
+                print(f'Saved subset table as {outfilename}')
+            else:
+                print(f'No overlapping objects found in field {thisfield}')
+        else:
+                print(f'No image file exists, so skipping {thisfield}.')
+    '''
 
 # -------------------------------------------------------------------------------------------------------
 def get_passage_filter_dict(args=None, filename=None):
