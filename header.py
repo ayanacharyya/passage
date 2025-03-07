@@ -27,6 +27,7 @@ import subprocess
 import itertools
 import h5py
 import io
+import colorsys
 
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -75,6 +76,8 @@ from astropy import wcs as pywcs
 from astropy.io import fits
 from astropy.cosmology import Planck18 as cosmo
 from astropy.cosmology import FlatLambdaCDM
+from astropy.convolution import convolve, Gaussian1DKernel, Box1DKernel
+
 
 # grizli stuff
 import grizli

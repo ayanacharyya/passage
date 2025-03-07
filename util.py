@@ -193,6 +193,13 @@ def parse_args():
     parser.add_argument('--include_cosmoswebb', dest='include_cosmoswebb', action='store_true', default=False, help='Include COSMOS Webb filters in the SED fitting? Default is no.')
     parser.add_argument('--do_field', metavar='do_field', type=str, action='store', default=None, help='To run SED fitting on all overlapping objects of a given PASSAGE field? Default is None, i.e., use all fields')
 
+    # ------- args added for make_toy_model.py ------------------------------
+    parser.add_argument('--res', metavar='res', type=str, action='store', default='0.2', help='Resolution element to convolve toy model by, as a fraction of the full radial extent; default is 0.2')
+    parser.add_argument('--num_line', metavar='num_line', type=str, action='store', default='sii', help='Which line to be used as the numerator? Default SII')
+    parser.add_argument('--den_line', metavar='den_line', type=str, action='store', default='ha', help='Which line to be used as the denominator? Default Ha')
+    parser.add_argument('--num_snr', metavar='num_snr', type=float, action='store', default=1e5, help='SNR with which to add noise for the numerator line profile; default is 1e5 i.e., basically no noise')
+    parser.add_argument('--den_snr', metavar='den_snr', type=float, action='store', default=1e5, help='SNR with which to add noise for the denominator line profile; default is 1e5 i.e., basically no noise')
+
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if 'v' not in args.drv: args.drv = 'v' + args.drv
@@ -230,6 +237,7 @@ def parse_args():
         args.filters = args.filters.split(',')
 
     args.plot_conditions = args.plot_conditions.split(',')
+    args.res = [float(item) for item in args.res.split(',')]
 
     if args.fortalk:
         print(f'Setting up plots for talks..')
@@ -1040,6 +1048,16 @@ def move_field_after_download(field_arr, args=None):
             continue
 
         print(f'Completed moving {field} in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
+
+# --------------------------------------------------------------------------------------------------
+def adjust_lightness(color, amount=0.5):
+    '''
+    Lightens (if amount > 1) or darkens (if amount < 1) matplitlib colors
+    Adapted from https://stackoverflow.com/questions/37765197/darken-or-lighten-a-color-in-matplotlib
+    '''
+    c = colorsys.rgb_to_hls(*mplcolors.to_rgb(color))
+    color = colorsys.hls_to_rgb(c[0], max(0.1, min(0.9, amount * c[1])), c[2])
+    return color
 
 # --------------------------------------------------------------------------------------------------
 args = parse_args()
