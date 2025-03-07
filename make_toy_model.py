@@ -3,8 +3,8 @@
     Notes: Makes a toy model of radial profile of emission line ratios and how they get affected by convolution and noise
     Author : Ayan
     Created: 07-03-25
-    Example: run make_toy_model.py --num_line sii --den_line ha --num_snr 5 --den_snr 2 --res 0.2,0.5
-             run make_toy_model.py --num_snr 5 --den_snr 2 --res 0.2
+    Example: run make_toy_model.py --drv 0.5 --num_line sii --den_line ha --num_snr 5 --den_snr 2 --res 0.2
+             run make_toy_model.py --drv 0.5 --num_snr 5 --den_snr 2 --res 0.1,0.2,0.5
 '''
 
 from header import *
@@ -16,7 +16,6 @@ start_time = datetime.now()
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
-    if '0.1' in args.drv: args.drv = 'v0.5'
 
     # ------model parameters-----------------------
     # assuming linear profile for lines in the linear scale, so essentially exponential profiles
