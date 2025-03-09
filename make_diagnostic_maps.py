@@ -2108,6 +2108,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
         Halpha_map[x_ratio_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
         x_ratio = unp.log10(SII_map.data / Halpha_map.data)
         x_ratio = np.ma.masked_where(x_ratio_mask | SII_map.mask | Halpha_map.mask, x_ratio)
+        #x_ratio = np.ma.masked_where(x_ratio_mask | SII_map.mask | Halpha_map.mask | (x_ratio.data > np.log10(0.29)), x_ratio) # using a SII/Ha based DIG cut-off from Petrodjojo+19
 
         net_mask = y_ratio.mask | x_ratio.mask
 
