@@ -40,6 +40,7 @@ from venn import venn, pseudovenn, generate_petal_labels, draw_venn, generate_co
 from reproject import reproject_interp, reproject_adaptive
 from scipy.stats import mode as sci_mode
 from scipy.interpolate import NearestNDInterpolator
+from scipy.ndimage import gaussian_filter1d
 
 import regions
 from regions import Regions
