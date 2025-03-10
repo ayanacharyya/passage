@@ -76,6 +76,10 @@ if __name__ == "__main__":
         if False:
             num_data = convolve(num_data, Gaussian1DKernel(npix_kernel))
             den_data = convolve(den_data, Gaussian1DKernel(npix_kernel))
+        elif True:
+            mode = 'nearest'
+            num_data = gaussian_filter1d(num_data, npix_kernel, mode=mode)
+            den_data = gaussian_filter1d(den_data, npix_kernel, mode=mode)
         else:
             mode = 'nearest'
             num_data = gaussian_filter1d(num_profile, npix_kernel, mode=mode)
