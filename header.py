@@ -61,6 +61,11 @@ import gzip
 
 import matplotlib
 from matplotlib import pyplot as plt
+plt.rcParams['ytick.direction'] = 'in'
+plt.rcParams['ytick.right'] = True
+plt.rcParams['xtick.direction'] = 'in'
+plt.rcParams['xtick.top'] = True
+
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 import matplotlib.image as mpimg
 from matplotlib import colors as mplcolors
