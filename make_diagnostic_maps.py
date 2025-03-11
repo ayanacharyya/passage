@@ -36,7 +36,8 @@
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --plot_circle_at_arcsec 0.5
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_snr --plot_ratio_maps --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --plot_circle_at_arcsec 0.5
              run make_diagnostic_maps.py --field Par28 --id 2867 --plot_BPT --plot_AGN_frac --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.25 --colorcol distance_from_AGN_line --use_H21
-
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --use_O2O3
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --use_variable_N2Ha
              run make_diagnostic_maps.py --field glass-a2744 --id 2928,5184 --plot_radial_profile --plot_AGN_frac --only_seg --vorbin --voronoi_line OIII --voronoi_snr 10 --drv 0.5 --do_not_correct_pixel --Zdiag O3O2
 
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
@@ -2051,8 +2052,12 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
     # -----------getting the fluxes------------------
     OIII_map, OIII_wave, OIII_int, _ = get_emission_line_map('OIII', full_hdu, args)
     Hbeta_map, Hbeta_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
-    SII_map, SII_wave, SII_int, _ = get_emission_line_map('SII', full_hdu, args)
-    Halpha_map, Halpha_wave, Halpha_int, _ = get_emission_line_map('Ha', full_hdu, args)
+    if args.use_O2O3:
+        SII_map, SII_wave, SII_int, _ = get_emission_line_map('OII', full_hdu, args)
+        Halpha_map, Halpha_wave, Halpha_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    else:
+        SII_map, SII_wave, SII_int, _ = get_emission_line_map('SII', full_hdu, args)
+        Halpha_map, Halpha_wave, Halpha_int, _ = get_emission_line_map('Ha', full_hdu, args)
 
     if not args.do_not_correct_flux and args.use_H21: # special treatment for H-alpha line, in order to add the NII 6584 component back
         factor = 0.823  # from grizli source code
@@ -2091,6 +2096,16 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
         distance_map = np.ma.masked_where(False, distance_map)
         if args.vorbin: distance_map = bin_2D(distance_map, args.voronoi_bin_IDs)
 
+        if args.use_variable_N2Ha:
+            if not args.do_not_correct_flux:  # special treatment for H-alpha line, in order to add the NII 6584 component back
+                factor = 0.823  # from grizli source code
+                print(f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
+                Halpha_map = np.ma.masked_where(Halpha_map.mask, Halpha_map.data / factor)
+
+            print(f'Correcting Ha for NII component, by factor varying with distance')
+            factor = 0.5 + 0.1 * distance_map # such that in the center (high Z), Ha/(NII + Ha) = 0.5 and at 4 kpc (low Z),  Ha/(NII + Ha) = 0.9
+            Halpha_map = np.ma.masked_where(Halpha_map.mask, Halpha_map.data * factor)
+
         y_ratio_mask = (OIII_map.data < 0) | (Hbeta_map.data <= 0) | (~np.isfinite(unp.nominal_values(OIII_map.data))) | (~np.isfinite(unp.nominal_values(Hbeta_map.data)))
         OIII_map[y_ratio_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
         Hbeta_map[y_ratio_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
@@ -2127,6 +2142,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
 
             if args.plot_AGN_frac and not args.plot_separately and not (len(args.id_arr) > 1 and args.plot_BPT):
                 if ax_inset is None: ax_inset = ax.inset_axes([0.05, 0.1, 0.3, 0.3])
+                # plot_2D_map(factor, ax_inset, args, takelog=False, label='Ha/(NII+Ha)', cmap=args.diverging_cmap, hide_yaxis=not args.plot_BPT, hide_xaxis=not args.plot_BPT)
                 plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, hide_yaxis=not args.plot_BPT, hide_xaxis=not args.plot_BPT)
 
             if args.plot_separately:
@@ -2151,18 +2167,19 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
             cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from ' + AGN_diag_label if args.colorcol == 'distance_from_AGN_line' else '')
             cbar.ax.tick_params(labelsize=args.fontsize)
 
-            ax_indiv.set_xlim(-2, 0.3)
+            ax_indiv.set_xlim(-2, 1. if args.use_O2O3 else 0.3)
             ax_indiv.set_ylim(-1, 2)
-            ax_indiv.set_xlabel(f'log (SII 6717+31/NII + Halpha)' if args.use_H21 else f'log (SII 6717+31/Halpha)', fontsize=args.fontsize)
+            ax_indiv.set_xlabel(f'log (SII 6717+31/NII + Halpha)' if args.use_H21 else f'log (OII 3727/OIII 5007)' if args.use_O2O3 else f'log (SII 6717+31/Halpha)', fontsize=args.fontsize)
             ax_indiv.set_ylabel(f'log (OIII 5007/Hbeta)', fontsize=args.fontsize)
             ax_indiv.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
             # ---------adding literature AGN demarcation lines----------
-            if args.use_H21:
-                ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='H21', color='w' if args.fortalk else 'darkgreen', fontsize=args.fontsize)
-            else:
-                ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='K01', color='w' if args.fortalk else 'k', fontsize=args.fontsize)
-                ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='S24', color='y' if args.fortalk else 'brown', fontsize=args.fontsize)
+            if not args.use_O2O3:
+                if args.use_H21:
+                    ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='H21', color='w' if args.fortalk else 'darkgreen', fontsize=args.fontsize)
+                else:
+                    ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='K01', color='w' if args.fortalk else 'k', fontsize=args.fontsize)
+                    ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='S24', color='y' if args.fortalk else 'brown', fontsize=args.fontsize)
 
             fig_indiv.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
             fig_indiv.text(0.15, 0.9, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
@@ -2179,18 +2196,19 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
             cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from ' + AGN_diag_label if args.colorcol == 'distance_from_AGN_line' else '', fontsize=args.fontsize)
             cbar.ax.tick_params(labelsize=args.fontsize)
 
-            ax.set_xlim(-2, 0.3)
+            ax.set_xlim(-2, 1. if args.use_O2O3 else 0.3)
             ax.set_ylim(-1, 2)
-            ax.set_xlabel(f'log (SII 6717+31/NII + Halpha)' if args.use_H21 else f'log (SII 6717+31/Halpha)', fontsize=args.fontsize)
+            ax.set_xlabel(f'log (SII 6717+31/NII + Halpha)' if args.use_H21 else f'log (OII 3727/OIII 5007)' if args.use_O2O3 else f'log (SII 6717+31/Halpha)', fontsize=args.fontsize)
             ax.set_ylabel(f'log (OIII 5007/Hbeta)', fontsize=args.fontsize)
             ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
             # ---------adding literature AGN demarcation lines----------
-            if args.use_H21:
-                ax = overplot_AGN_line_on_BPT(ax, method='H21', color='w' if args.fortalk else 'darkgreen', fontsize=args.fontsize)
-            else:
-                ax = overplot_AGN_line_on_BPT(ax, method='K01', color='w' if args.fortalk else 'k', fontsize=args.fontsize)
-                ax = overplot_AGN_line_on_BPT(ax, method='S24', color='y' if args.fortalk else 'brown', fontsize=args.fontsize)
+            if not args.use_O2O3:
+                if args.use_H21:
+                    ax = overplot_AGN_line_on_BPT(ax, method='H21', color='w' if args.fortalk else 'darkgreen', fontsize=args.fontsize)
+                else:
+                    ax = overplot_AGN_line_on_BPT(ax, method='K01', color='w' if args.fortalk else 'k', fontsize=args.fontsize)
+                    ax = overplot_AGN_line_on_BPT(ax, method='S24', color='y' if args.fortalk else 'brown', fontsize=args.fontsize)
 
     return ax, distance_from_AGN_line_map, distance_from_AGN_line_int
 
