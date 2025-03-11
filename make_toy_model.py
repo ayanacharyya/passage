@@ -19,7 +19,7 @@ if __name__ == "__main__":
 
     # ------model parameters-----------------------
     # assuming linear profile for lines in the linear scale, so essentially exponential profiles
-    line_model_dict = {'nii':{'name':'N II', 'slope':-0.3, 'intercept':-19.0}, 'sii':{'name':'S II', 'slope':-0.1, 'intercept':-19.0}, 'ha':{'name':'H alpha', 'slope':-0.3, 'intercept':-18.5}} # dict for storing each line's name, slope (dex/length), intercept (dex)
+    line_model_dict = {'nii':{'name':'N II', 'slope':-0.5, 'intercept':-19.0}, 'sii':{'name':'S II', 'slope':-0.05, 'intercept':-19.0}, 'ha':{'name':'H alpha', 'slope':-0.3, 'intercept':-18.5}} # dict for storing each line's name, slope (dex/length), intercept (dex)
     df_lines = pd.DataFrame(line_model_dict)
     num_color, den_color, ratio_color = 'salmon', 'cornflowerblue', 'sienna'
     xlim = 1
@@ -76,7 +76,7 @@ if __name__ == "__main__":
         if False:
             num_data = convolve(num_data, Gaussian1DKernel(npix_kernel))
             den_data = convolve(den_data, Gaussian1DKernel(npix_kernel))
-        elif True:
+        elif False:
             mode = 'nearest'
             num_data = gaussian_filter1d(num_data, npix_kernel, mode=mode)
             den_data = gaussian_filter1d(den_data, npix_kernel, mode=mode)

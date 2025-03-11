@@ -31,13 +31,13 @@
              run make_diagnostic_maps.py --field Par28 --id 1332,1500,1565,1692,1697,192,68,754 --plot_metallicity --plot_radial_profile --plot_ion --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5
              run make_diagnostic_maps.py --field Par28 --id 192 --plot_metallicity --ignore_combined --plot_radial_profile --plot_ion --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5
 
-             run make_diagnostic_maps.py --field Par28 --id 1303,1934,2734,2867,300,2903,2906 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --keep
-             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --mask_agn --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --keep
-             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --plot_circle_at_arcsec 0.5
-             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_snr --plot_ratio_maps --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --use_O3S2 --plot_circle_at_arcsec 0.5
+             run make_diagnostic_maps.py --field Par28 --id 1303,1934,2734,2867,300,2903,2906 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --keep
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --mask_agn --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --keep
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --plot_circle_at_arcsec 0.5
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_snr --plot_ratio_maps --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --plot_circle_at_arcsec 0.5
              run make_diagnostic_maps.py --field Par28 --id 2867 --plot_BPT --plot_AGN_frac --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.25 --colorcol distance_from_AGN_line --use_H21
 
-             run make_diagnostic_maps.py --field glass-a2744 --id 2928,5184 --plot_radial_profile --plot_AGN_frac --only_seg --vorbin --voronoi_line OIII --voronoi_snr 10 --drv 0.5 --do_not_correct_pixel --use_O3O2
+             run make_diagnostic_maps.py --field glass-a2744 --id 2928,5184 --plot_radial_profile --plot_AGN_frac --only_seg --vorbin --voronoi_line OIII --voronoi_snr 10 --drv 0.5 --do_not_correct_pixel --Zdiag O3O2
 
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
@@ -1593,31 +1593,25 @@ def get_Z(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated metallicity from a given HDU
     '''
-    if args.use_O3S2 and all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
+    if args.Zdiag == 'O3S2' and all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
         logOH_map, logOH_int = get_Z_O3S2(full_hdu, args)
-        label = 'Z (O3S2)'
-    elif args.use_O3O2 and all([line in args.available_lines for line in ['OIII', 'OII']]):
+    elif args.Zdiag == 'O3O2' and all([line in args.available_lines for line in ['OIII', 'OII']]):
         logOH_map, logOH_int = get_Z_O3O2(full_hdu, args)
-        label = 'Z (O3O2)'
-    elif args.use_Te and all([line in args.available_lines for line in ['OIII', 'OIII-4363', 'OII', 'Hb']]):
+    elif args.Zdiag == 'Te' and all([line in args.available_lines for line in ['OIII', 'OIII-4363', 'OII', 'Hb']]):
         logOH_map, logOH_int = get_Z_Te(full_hdu, args)
-        label = 'Z (Te)'
-    elif args.use_P25 and all([line in args.available_lines for line in ['OIII', 'Ha', 'SII']]):
+    elif args.Zdiag == 'P25' and all([line in args.available_lines for line in ['OIII', 'Ha', 'SII']]):
         logOH_map, logOH_int = get_Z_P25(full_hdu, args)
-        label = 'Z (P25)'
-    elif args.use_R3 and all([line in args.available_lines for line in ['OIII', 'Hb']]):
+    elif args.Zdiag == 'R3' and all([line in args.available_lines for line in ['OIII', 'Hb']]):
         logOH_map, logOH_int = get_Z_R3(full_hdu, args)
-        label = 'Z (R3)'
-    elif all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
+    elif args.Zdiag == 'R23' and all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
         logOH_map, logOH_int = get_Z_R23(full_hdu, args)
-        label = 'Z (R23)'
     else:
         print(f'Could not apply any of the metallicity diagnostics, so returning NaN metallicities')
-        logOH_map, logOH_int, label = None, np.nan, ''
+        logOH_map, logOH_int = None, np.nan
 
     if logOH_map is not None and args.mask_agn: logOH_map = np.ma.masked_where((args.distance_from_AGN_line_map > 0) | logOH_map.mask, logOH_map)
 
-    return logOH_map, logOH_int, label
+    return logOH_map, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_Z_map(full_hdu, ax, args, radprof_ax=None, snr_ax=None):
@@ -1625,11 +1619,11 @@ def plot_Z_map(full_hdu, ax, args, radprof_ax=None, snr_ax=None):
     Plots the metallicity map in the given axes
     Returns the axes handles and the 2D metallicity map just produced
     '''
-    logOH_map, logOH_int, label = get_Z(full_hdu, args)
+    logOH_map, logOH_int = get_Z(full_hdu, args)
 
     if logOH_map is not None:
         lim = [7, 9]
-        ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, logOH_int.n), cmap='viridis', radprof_ax=radprof_ax, snr_ax=snr_ax, hide_yaxis=True, hide_xaxis=True, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.use_P25)
+        ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f' % (args.Zdiag, logOH_int.n), cmap='viridis', radprof_ax=radprof_ax, snr_ax=snr_ax, hide_yaxis=True, hide_xaxis=True, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
     else:
         fig = ax.figure()
         fig.delaxes(ax)
@@ -1996,23 +1990,23 @@ def plot_metallicity_fig(full_hdu, args):
 
     if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
         # --------deriving the metallicity map-------------
-        logOH_map, logOH_int, label = get_Z(full_hdu, args)
+        logOH_map, logOH_int = get_Z(full_hdu, args)
         if args.plot_ionisation_parameter: logq_map, logq_int = get_q_O32(full_hdu, args)
 
         # ---------plotting-------------
         lim = [7.5, 9.2]
-        axes[0], logOH_radfit = plot_2D_map(logOH_map, axes[0], args, takelog=False, label=r'%s$_{\rm int}$ = %.1f $\pm$ %.1f' % (label, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.use_P25)
+        axes[0], logOH_radfit = plot_2D_map(logOH_map, axes[0], args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
 
         logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
         logOH_map_snr = np.ma.masked_where(logOH_map.mask, unp.nominal_values(10 ** logOH_map.data)) / np.ma.masked_where(logOH_map.mask, unp.std_devs(10 ** logOH_map.data))
-        axes[1], _ = plot_2D_map(logOH_map_snr, axes[1], args, takelog=False, hide_yaxis=True, label=r'%s SNR' % (label), cmap='cividis', vmin=0, vmax=6)
+        axes[1], _ = plot_2D_map(logOH_map_snr, axes[1], args, takelog=False, hide_yaxis=True, label=r'Z (%s) SNR' % (args.Zdiag), cmap='cividis', vmin=0, vmax=6)
         if args.plot_ionisation_parameter: ip_ax, _ = plot_2D_map(logq_map, ip_ax, args, takelog=False, hide_yaxis=False, label=r'log q$_{\rm int}$ = %.1f $\pm$ %.1f' % (logq_int.n, logq_int.s), cmap='viridis', vmin=6.5, vmax=8.5)
 
     else:
         print(f'Not all lines out of OIII, OII and Hb are available, so cannot compute R23 metallicity')
         logOH_map. logOH_radfit = None, None
 
-    return fig, logOH_map, logOH_radfit
+    return fig, logOH_map, logOH_int, logOH_radfit
 
 # --------------------------------------------------------------------------------------------------------------------
 def AGN_func(x, method='K01'):
@@ -2310,7 +2304,7 @@ if __name__ == "__main__":
 
         # ---------lotting metallicity profiles and gradients----------------------
         if args.plot_metallicity:
-            df_logOH_radfit = pd.DataFrame(columns=['field', 'objid', 'logOH_slope', 'logOH_slope_u', 'logOH_cen', 'logOH_cen_u'])
+            df_logOH_radfit = pd.DataFrame(columns=['field', 'objid', 'logOH_int', 'log_OH_int_u', 'logOH_slope', 'logOH_slope_u', 'logOH_cen', 'logOH_cen_u', 'logOH_diagnostic'])
 
         # ------------looping over the provided object IDs-----------------------
         for index, args.id in enumerate(args.id_arr):
@@ -2354,8 +2348,8 @@ if __name__ == "__main__":
             args.z = full_hdu[0].header['REDSHIFT']
             args.ndfilt = full_hdu[0].header['NDFILT']
             args.nlines = full_hdu[0].header['NUMLINES']
-            args.pix_arcsec = full_hdu[5].header['PIXASEC']
             args.distance = cosmo.comoving_distance(args.z)
+            args.pix_arcsec = full_hdu[5].header['PIXASEC']
             args.pa_arr = np.unique([full_hdu[0].header[item] for item in list(full_hdu[0].header.keys()) if 'PA00' in item])
             try: args.mag = catalog[catalog['id'] == args.id]['mag_auto'].data.data[0]
             except: args.mag = np.nan
@@ -2421,9 +2415,9 @@ if __name__ == "__main__":
 
             # ---------initialising the metallicity figure------------------------------
             elif args.plot_metallicity:
-                if args.mask_agn or args.use_P25: _, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_AGN_line map, without actually plotting the BPT diagram
-                fig, logOH_map, logOH_radfit = plot_metallicity_fig(full_hdu, args)
-                df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s]
+                if args.mask_agn or args.Zdiag == 'P25': _, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_AGN_line map, without actually plotting the BPT diagram
+                fig, logOH_map, logOH_int, logOH_radfit = plot_metallicity_fig(full_hdu, args)
+                df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_int.n, logOH_int.s, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s, args.Zdiag]
 
                 # ---------decorating and saving the figure------------------------------
                 fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')

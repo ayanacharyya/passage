@@ -34,6 +34,8 @@
              run make_passage_plots.py --do_field Par028 --drv 0.5 --SNR_thresh 3 --plot_full_BPT --colorcol sn_Hb --log_colorcol
 
              run make_passage_plots.py --do_field Par028 --drv 0.5 --plot_conditions SNR,mass --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --plot_mass_excitation --colorcol redshift
+             run make_passage_plots.py --do_field Par028 --drv 0.5 --plot_conditions SNR,mass --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --xcol lp_mass --ycol log_SFR_int --colorcol redshift
+             run make_passage_plots.py --do_field Par028 --drv 0.5 --plot_conditions SNR,mass --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --Zdiag R3 --xcol lp_mass --ycol logOH_int --colorcol redshift
 '''
 
 from header import *
@@ -363,12 +365,49 @@ def plot_fluxcomp(field, colx, coly_arr, ylabel, args, photcat_file=None):
     fig.savefig(photcat_file.parent / f'{field}_fluxcomp.png')
     return fig
 
+# --------------------------------------------------------------------------------------------------------------------
+def break_column_into_uncertainty(df, col, make_log=False):
+    '''
+    If a given column in a dataframe is of type ufloat (with uncertainy) then separate it into different columsn for values and errors
+    and also make corresponding log columns
+    Returns the modified dataframe
+    '''
+
+    if df[col].dtype == object:  # accompanied by uncertainty in the same column
+        counter = 0
+        for index, item in enumerate(df[col]):
+            if type(item) != str and np.isnan(item):
+                quant = [np.nan, np.nan]
+            elif 'e' in item:
+                pow = float(item[item.find('e') + 1:])
+                base = np.array(item[1:item.find('e') - 1].split('+/-')).astype(np.float64)
+                quant = base * 10 ** pow
+            else:
+                quant = np.array(item.split('+/-')).astype(np.float64)
+            df.at[index, col] = quant[0]
+            df.at[index, col + '_u'] = quant[1]
+            if make_log:
+                try:
+                    log_quant = unp.log10(ufloat(quant[0], quant[1]))
+                    df.at[index, 'log_' + col] = unp.nominal_values(log_quant)
+                    df.at[index, 'log_' + col + '_u'] = unp.std_devs(log_quant)
+                except ValueError:
+                    df.at[index, 'log_' + col] = np.nan
+                    df.at[index, 'log_' + col + '_u'] = np.nan
+                    counter += 1
+                    pass
+        if counter > 0: print(f'\n{counter} out of {len(df)} had -ve SFRs!')
+    elif make_log:
+        df['log_' + col] = np.log10(df[col])
+
+    return df
+
 # -------------------------------------global dictionaries-------------------------------------------------------------------------------
 label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$ (LePhare)', 'ez_mass': r'log M$_*$/M$_{\odot}$ (EAZY)', 'log_mass_bgp': r'log M$_*$/M$_{\odot}$ (Bagpipes)', \
               'lp_SFR': r'log SFR (M$_{\odot}$/yr) (LePhare)', 'ez_sfr': r'log SFR (M$_{\odot}$/yr) (EAZY)', 'log_sfr_bgp': r'log SFR (M$_{\odot}$/yr) (Bagpipes)', 'log_SFR_int': r'log SFR (M$_{\odot}$/yr) (Grizli)', \
               'lp_zBEST': 'Redshift (LePhare)', 'ez_z_phot': 'Redshift (EAZY)', 'z_bgp': 'Redshift (Bagpipes)', 'redshift': 'Redshift (Grizli)', \
               'logOH_slope':r'log $\nabla$Z$_r$ (dex/kpc)'}
-bounds_dict = {'lp_mass': (6, 9), 'ez_mass': (6, 9), 'log_mass_bgp': (6.5, 10.5), \
+bounds_dict = {'lp_mass': (6.5, 11), 'ez_mass': (6, 9), 'log_mass_bgp': (6.5, 10.5), \
                'lp_SFR': (-3, 1), 'ez_sfr': (-3, 1), 'log_sfr_bgp': (-3, 2), 'log_SFR_int': (-3, 2.5), \
                'ez_z_phot': (0, 3), 'lp_zBEST': (0, 3), 'z_bgp': (0, 3), 'redshift': (0.5, 2.2), \
                'logOH_slope': (-0.4, 0.1)}
@@ -452,11 +491,16 @@ if __name__ == "__main__":
             print(f'Using only the pre-determined good galaxies, and there are {len(df)} of them..')
 
         # -------combing with metallicity dataframe if it exists----------------
-        logOHgrad_filename = args.output_dir / 'catalogs' / f'logOHgrad_df_snr{args.snr_cut}_onlyseg_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}.txt'
-        if os.path.exists(logOHgrad_filename):# and args.do_field is None:
+        snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
+        only_seg_text = '_onlyseg' if args.only_seg else ''
+        vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
+        logOHgrad_filename = args.output_dir / 'catalogs' / f'logOHgrad_df{snr_text}{only_seg_text}{vorbin_text}.txt'
+
+        if os.path.exists(logOHgrad_filename):
             print(f'Reading in and merging logOH gradient df: {logOHgrad_filename}')
             df_logOHgrad = pd.read_csv(logOHgrad_filename)
-            df_logOHgrad = df_logOHgrad.drop_duplicates(subset=['field', 'objid'], keep='last')
+            df_logOHgrad = df_logOHgrad.drop_duplicates(subset=['field', 'objid', 'logOH_diagnostic'], keep='last')
+            df_logOHgrad = df_logOHgrad[df_logOHgrad['logOH_diagnostic'] == args.Zdiag]
             df = pd.merge(df, df_logOHgrad, on=['field', 'objid'], how='outer')
 
         # -------making the mass excitation plot----------------
@@ -479,43 +523,10 @@ if __name__ == "__main__":
         # -------making the desired plots----------------
         else:
             figname = args.output_dir / 'plots' / f'{args.field_set_plot_conditions_text}_run_{args.run}_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
-            if df['SFR_int'].dtype == object: # accompanied by uncertainty in the same column
-                counter = 0
-                for index, item in enumerate(df['SFR_int']):
-                    if type(item) != str and np.isnan(item):
-                        quant = [np.nan, np.nan]
-                    elif 'e' in item:
-                        pow = float(item[item.find('e')+1:])
-                        base = np.array(item[1:item.find('e')-1].split('+/-')).astype(np.float64)
-                        quant = base * 10 ** pow
-                    else:
-                        quant = np.array(item.split('+/-')).astype(np.float64)
-                    df.at[index, 'SFR_int'] = quant[0]
-                    df.at[index, 'SFR_int_u'] = quant[1]
-                    try:
-                        log_quant = unp.log10(ufloat(quant[0], quant[1]))
-                        df.at[index, 'log_SFR_int'] = unp.nominal_values(log_quant)
-                        df.at[index, 'log_SFR_int_u'] = unp.std_devs(log_quant)
-                    except ValueError:
-                        df.at[index, 'log_SFR_int'] = np.nan
-                        df.at[index, 'log_SFR_int_u'] = np.nan
-                        counter += 1
-                        pass
-                if counter > 0: print(f'\n{counter} out of {len(df)} had -ve SFRs!')
+            df = break_column_into_uncertainty(df, 'SFR_int', make_log=True)
 
             for thiscol in [item for item in df.columns if 'logOH' in item and 'int' in item]:
-                if df[thiscol].dtype == object: # accompanied by uncertainty in the same column
-                    for index, item in enumerate(df[thiscol]):
-                        if type(item) != str and np.isnan(item):
-                            quant = [np.nan, np.nan]
-                        elif 'e' in item:
-                            pow = float(item[item.find('e') + 1:])
-                            base = np.array(item[1:item.find('e') - 1].split('+/-')).astype(np.float64)
-                            quant = base * 10 ** pow
-                        else:
-                            quant = np.array(item.split('+/-')).astype(np.float64)
-                        df.at[index, thiscol] = quant[0]
-                        df.at[index, thiscol + '_u'] = quant[1]
+                df = break_column_into_uncertainty(df, thiscol, make_log=False)
 
             # ---------SFMS from df-------
             p = ax.scatter(df[args.xcol], df[args.ycol], c='gold' if args.foggie_comp else df[args.colorcol], plotnonfinite=True, marker='*' if args.foggie_comp else 'o', s=1000 if args.foggie_comp else 100, lw=1, edgecolor='w' if args.fortalk else 'k', vmin=bounds_dict[args.colorcol][0] if args.colorcol in bounds_dict else None, vmax=bounds_dict[args.colorcol][1] if args.colorcol in bounds_dict else None, cmap=colormap_dict[args.colorcol])

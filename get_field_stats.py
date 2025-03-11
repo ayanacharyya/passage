@@ -317,17 +317,18 @@ def plot_sunburst_pie(df, args, outer_col='nPA', inner_col='filters'):
     return fig
 
 # -------------------------------------------------------------------------------------------------------
-def plot_columns(df, args):
+def plot_columns(df, args, s=5):
     '''
     To plot any column vs any column colorcoded by any column for a given df
     Plots and saves the figure
     Returns figure handle
     '''
     if args.fontsize == 10: args.fontsize = 15
+
     fig, ax = plt.subplots(figsize=(8, 6))
     fig.subplots_adjust(left=0.1, right=0.98, bottom=0.1, top=0.95)
 
-    p = ax.scatter(df[args.xcol], df[args.ycol], c=df[args.colorcol], s=5, lw=0, cmap='viridis')
+    p = ax.scatter(df[args.xcol], df[args.ycol], c=df[args.colorcol], s=s, lw=0, cmap='viridis')
 
     cbar = plt.colorbar(p)
     cbar.set_label(label_dict[args.colorcol] if args.colorcol in label_dict else args.colorcol, fontsize=args.fontsize)
