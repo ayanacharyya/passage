@@ -137,6 +137,7 @@ def parse_args():
     parser.add_argument('--plot_ratio_maps', dest='plot_ratio_maps', action='store_true', default=False, help='Plot the line ratio maps for a given 2D plot? Default is no.')
     parser.add_argument('--use_H21', dest='use_H21', action='store_true', default=False, help='Use the Henry+2021 AGN-SF diagram, instead of K01? Default is no.')
     parser.add_argument('--use_O2O3', dest='use_O2O3', action='store_true', default=False, help='Use the O2/O3 in x-axis of BPT diagram, instead of SII/Ha? Default is no.')
+    parser.add_argument('--use_O2Hb', dest='use_O2Hb', action='store_true', default=False, help='Use the O2/Hb in y-axis of BPT diagram (and O3Hb on x-axis), instead of SII/Ha? Default is no.')
     parser.add_argument('--use_variable_N2Ha', dest='use_variable_N2Ha', action='store_true', default=False, help='Use variable Ha/(NII + Ha) ratio across the face of the galaxy, to compute the Ha for the x-axis of BPT diagram, instead of constant 0.82? Default is no.')
     parser.add_argument('--no_text_on_plot', dest='no_text_on_plot', action='store_true', default=False, help='Skip putting text annotations on plot2D? Default is no.')
 
@@ -875,7 +876,7 @@ def get_distance_from_line(xdata, ydata, func, method='K01'):
     '''
     print(f'Computing distance form Kewley+2001 line on the BPT diagram..')
     x = np.linspace(-2, 1, 100)
-    y = func(x)
+    y = func(x, method)
 
     min_dist_arr = []
     for P in zip(xdata.flatten(), ydata.flatten()):

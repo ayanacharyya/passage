@@ -2010,7 +2010,27 @@ def plot_metallicity_fig(full_hdu, args):
     return fig, logOH_map, logOH_int, logOH_radfit
 
 # --------------------------------------------------------------------------------------------------------------------
-def AGN_func(x, method='K01'):
+def get_AGN_func_methods(args):
+    '''
+    Determine which AGN demarcation method/s to be used in the BPT, given the x and y line ratios used
+    Returns array of strings
+    '''
+    ratios = [f'{args.ynum_line}/{args.yden_line}', f'{args.xnum_line}/{args.xden_line}']
+    if ratios == ['OIII/Hb', 'SII/Ha']:
+        if args.use_H21: methods = ['H21']
+        else: methods = ['K01', 'S24']
+    elif ratios == ['OIII/Hb', 'OII/OIII']:
+        methods = []
+    elif ratios == ['OII/Hb', 'OIII/Hb']:
+        methods = []
+    else:
+        methods = []
+
+    return methods
+
+
+# --------------------------------------------------------------------------------------------------------------------
+def AGN_func(x, method):
     '''
     Equation for AGN demarcation line on R3-S2 BPT, from different literature sources
     '''
@@ -2039,6 +2059,49 @@ def overplot_AGN_line_on_BPT(ax, method='K01', color='k', fontsize=10):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
+def take_safe_log_ratio(num_map, den_map):
+    '''
+    Takes the log of ratio of two 2D masked arrays by properly accounting for bad values so as to avoid math errors
+    Returns 2D masked array
+    '''
+    ratio_mask = (num_map.data < 0) | (den_map.data <= 0) | (~np.isfinite(unp.nominal_values(num_map.data))) | (~np.isfinite(unp.nominal_values(den_map.data)))
+    num_map[ratio_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+    den_map[ratio_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+    ratio_map = unp.log10(num_map.data / den_map.data)
+    ratio_map = np.ma.masked_where(ratio_mask | num_map.mask | den_map.mask, ratio_map)
+    
+    return ratio_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def annotate_BPT_axes(scatter_plot_handle, ax, args):
+    '''
+    Annotates the axis labels, limits etc for a BPT diagram in a given axis handle
+    Returns the axis handle
+    '''
+
+    line_labels_dict = {'OII':'O II', 'SII':'S II 6717+31', 'OIII':'O III', 'Hb':'H beta', 'Ha':'N II + H alpha' if args.use_H21 else 'H alpha'}
+    ratios_limits_dict = {'OIII/Hb':[-1, 2], 'SII/Ha':[-2, 0.3], 'OII/OIII':[-2, 1], 'OII/Hb':[-1, 1]}
+    AGN_diag_label = 'H21' if args.use_H21 else 'K01'
+
+    # ---------annotate axes-------
+    cbar = plt.colorbar(scatter_plot_handle)
+    cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from ' + AGN_diag_label if args.colorcol == 'distance_from_AGN_line' else '')
+    cbar.ax.tick_params(labelsize=args.fontsize)
+
+    ax.set_xlim(ratios_limits_dict[f'{args.xnum_line}/{args.xden_line}'])
+    ax.set_ylim(ratios_limits_dict[f'{args.ynum_line}/{args.yden_line}'])
+    ax.set_xlabel(f'log ({line_labels_dict[args.xnum_line]}/{line_labels_dict[args.xden_line]})', fontsize=args.fontsize)
+    ax.set_ylabel(f'log ({line_labels_dict[args.ynum_line]}/{line_labels_dict[args.yden_line]})', fontsize=args.fontsize)
+    ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+
+    # ---------adding literature AGN demarcation lines----------
+    method_arr = get_AGN_func_methods(args)
+    color_arr = ['brown', 'darkgreen']
+    for index, method in enumerate(method_arr): overplot_AGN_line_on_BPT(ax, method=method, color=color_arr[index], fontsize=args.fontsize)
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False, index=0):
     '''
     Plots spatially resolved BPT diagram based on fluxes from grizli, on an existing axis
@@ -2046,35 +2109,47 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
     Returns axis handle and the handle of the spatially reslved scatter plot
     '''
     print(f'Plotting BPT diagram..')
-    if args.plot_separately:
-        fig_indiv, ax_indiv = plt.subplots(1, figsize=(8, 6))
+    if args.plot_separately: fig_indiv, ax_indiv = plt.subplots(1, figsize=(8, 6))
+
+    # -----------declaring the lines to be used------------------
+    if args.use_O2Hb: args.ynum_line, args.yden_line = 'OII', 'Hb'
+    else: args.ynum_line, args.yden_line = 'OIII', 'Hb'
+
+    if args.use_O2O3: args.xnum_line, args.xden_line = 'OII', 'OIII'
+    elif args.use_O2Hb: args.xnum_line, args.xden_line = 'OIII', 'Hb'
+    else: args.xnum_line, args.xden_line = 'SII', 'Ha'
+
+    methods = get_AGN_func_methods(args)
+    if len(methods) > 0: method = methods[0]
+    else: method = None
 
     # -----------getting the fluxes------------------
-    OIII_map, OIII_wave, OIII_int, _ = get_emission_line_map('OIII', full_hdu, args)
-    Hbeta_map, Hbeta_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
-    if args.use_O2O3:
-        SII_map, SII_wave, SII_int, _ = get_emission_line_map('OII', full_hdu, args)
-        Halpha_map, Halpha_wave, Halpha_int, _ = get_emission_line_map('OIII', full_hdu, args)
-    else:
-        SII_map, SII_wave, SII_int, _ = get_emission_line_map('SII', full_hdu, args)
-        Halpha_map, Halpha_wave, Halpha_int, _ = get_emission_line_map('Ha', full_hdu, args)
+    ynum_map, _, ynum_int, _ = get_emission_line_map(args.ynum_line, full_hdu, args)
+    yden_map, _, yden_int, _ = get_emission_line_map(args.yden_line, full_hdu, args)
 
-    if not args.do_not_correct_flux and args.use_H21: # special treatment for H-alpha line, in order to add the NII 6584 component back
+    xnum_map, _, xnum_int, _ = get_emission_line_map(args.xnum_line, full_hdu, args)
+    xden_map, _, xden_int, _ = get_emission_line_map(args.xden_line, full_hdu, args)
+
+    if not args.do_not_correct_flux and args.use_H21 and args.xden_line == 'Ha': # special treatment for H-alpha line, in order to add the NII 6584 component back
         factor = 0.823  # from grizli source code
         print(f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
-        Halpha_map = np.ma.masked_where(Halpha_map.mask, Halpha_map.data / factor)
-        Halpha_int = Halpha_int / factor
+        xden_map = np.ma.masked_where(xden_map.mask, xden_map.data / factor)
+        xden_int = xden_int / factor
 
+    # -----------integrated-----------------------
     try:
-        # -----------integrated-----------------------
         color = mpl_cm.get_cmap(cmap)(0.5)
 
-        y_ratio = unp.log10(OIII_int / Hbeta_int)
-        x_ratio = unp.log10(SII_int / Halpha_int)
+        y_ratio = unp.log10(ynum_int / yden_int)
+        x_ratio = unp.log10(xnum_int / xden_int)
 
-        sign = (unp.nominal_values(y_ratio) > AGN_func(unp.nominal_values(x_ratio), method='H21' if args.use_H21 else 'K01')).astype(int)
-        if sign == 0: sign = -1
-        distance_from_AGN_line_int = sign * get_distance_from_line(unp.nominal_values(x_ratio),unp.nominal_values(y_ratio), AGN_func, method='H21' if args.use_H21 else 'K01')
+        # ------distance of integrated value from AGN line--------------
+        if method is not None:
+            sign = (unp.nominal_values(y_ratio) > AGN_func(unp.nominal_values(x_ratio), method)).astype(int)
+            if sign == 0: sign = -1
+            distance_from_AGN_line_int = sign * get_distance_from_line(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), AGN_func, method)
+        else:
+            distance_from_AGN_line_int = None
 
         if not hide_plot:
             p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, marker='o', s=200 / args.fig_scale_factor, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
@@ -2086,70 +2161,71 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
 
     except ValueError:
         print(f'Galaxy {args.id} in {args.field} has a negative integrated flux in one of the following lines, hence skipping this.')
-        print(f'OIII = {OIII_int}\nHb = {Hbeta_int}\nSII = {SII_int}\nHa = {Halpha_int}\n')
+        print(f'OIII = {ynum_int}\nHb = {yden_int}\nSII = {xnum_int}\nHa = {xden_int}\n')
         scatter_plot_handle = None
         pass
 
+    # -----------spatially_resolved-----------------------
     try:
-        # -----------spatially_resolved-----------------------
-        distance_map = get_distance_map(np.shape(OIII_map), args)
+        distance_map = get_distance_map(np.shape(ynum_map), args)
         distance_map = np.ma.masked_where(False, distance_map)
         if args.vorbin: distance_map = bin_2D(distance_map, args.voronoi_bin_IDs)
 
-        if args.use_variable_N2Ha:
+        if args.use_variable_N2Ha and args.xden_line == 'Ha':
             if not args.do_not_correct_flux:  # special treatment for H-alpha line, in order to add the NII 6584 component back
                 factor = 0.823  # from grizli source code
-                print(f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
-                Halpha_map = np.ma.masked_where(Halpha_map.mask, Halpha_map.data / factor)
+                print(
+                    f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
+                xden_map = np.ma.masked_where(xden_map.mask, xden_map.data / factor)
 
             print(f'Correcting Ha for NII component, by factor varying with distance')
-            factor = 0.5 + 0.1 * distance_map # such that in the center (high Z), Ha/(NII + Ha) = 0.5 and at 4 kpc (low Z),  Ha/(NII + Ha) = 0.9
-            Halpha_map = np.ma.masked_where(Halpha_map.mask, Halpha_map.data * factor)
+            factor = 0.5 + 0.1 * distance_map  # such that in the center (high Z), Ha/(NII + Ha) = 0.5 and at 4 kpc (low Z),  Ha/(NII + Ha) = 0.9
+            xden_map = np.ma.masked_where(xden_map.mask, xden_map.data * factor)
 
-        y_ratio_mask = (OIII_map.data < 0) | (Hbeta_map.data <= 0) | (~np.isfinite(unp.nominal_values(OIII_map.data))) | (~np.isfinite(unp.nominal_values(Hbeta_map.data)))
-        OIII_map[y_ratio_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        Hbeta_map[y_ratio_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        y_ratio = unp.log10(OIII_map.data / Hbeta_map.data)
-        y_ratio = np.ma.masked_where(y_ratio_mask | OIII_map.mask | Hbeta_map.mask, y_ratio)
-
-        x_ratio_mask = (SII_map.data < 0) | (Halpha_map.data <= 0)| (~np.isfinite(unp.nominal_values(SII_map.data))) | (~np.isfinite(unp.nominal_values(Halpha_map.data)))
-        SII_map[x_ratio_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        Halpha_map[x_ratio_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        x_ratio = unp.log10(SII_map.data / Halpha_map.data)
-        x_ratio = np.ma.masked_where(x_ratio_mask | SII_map.mask | Halpha_map.mask, x_ratio)
-        #x_ratio = np.ma.masked_where(x_ratio_mask | SII_map.mask | Halpha_map.mask | (x_ratio.data > np.log10(0.29)), x_ratio) # using a SII/Ha based DIG cut-off from Petrodjojo+19
+        y_ratio = take_safe_log_ratio(ynum_map, yden_map)
+        x_ratio = take_safe_log_ratio(xnum_map, xden_map)
+        # if args.xnum_line == 'SII' and args.xden_line == 'Ha' and not args.use_H21: x_ratio = np.ma.masked_where(x_ratio_mask | xnum_map.mask | xden_map.mask | (x_ratio.data > np.log10(0.29)), x_ratio) # using a SII/Ha based DIG cut-off from Petrodjojo+19
 
         net_mask = y_ratio.mask | x_ratio.mask
 
-        sign_map = (unp.nominal_values(y_ratio.data) > AGN_func(unp.nominal_values(x_ratio.data), method='H21' if args.use_H21 else 'K01')).astype(int)
-        sign_map[sign_map == 0] = -1
-        distance_from_AGN_line_map = sign_map * get_distance_from_line(unp.nominal_values(x_ratio.data), unp.nominal_values(y_ratio.data), AGN_func, method='H21' if args.use_H21 else 'K01')
-        distance_from_AGN_line_map = np.ma.masked_where(net_mask, distance_from_AGN_line_map)
+        # ------distance of pixels from AGN line--------------
+        if method is not None:
+            sign_map = (unp.nominal_values(y_ratio.data) > AGN_func(unp.nominal_values(x_ratio.data), method)).astype(int)
+            sign_map[sign_map == 0] = -1
+            distance_from_AGN_line_map = sign_map * get_distance_from_line(unp.nominal_values(x_ratio.data), unp.nominal_values(y_ratio.data), AGN_func, method)
+            distance_from_AGN_line_map = np.ma.masked_where(net_mask, distance_from_AGN_line_map)
+        else:
+            distance_from_AGN_line_map = None
 
+        # -----------plotting-----------------------
         if not hide_plot:
             x_ratio = np.ma.compressed(np.ma.masked_where(net_mask, x_ratio))
             y_ratio = np.ma.compressed(np.ma.masked_where(net_mask, y_ratio))
             distance_map = np.ma.compressed(np.ma.masked_where(net_mask, distance_map))
-            distance_from_AGN_line_arr = np.ma.compressed(distance_from_AGN_line_map)
-            dist_lim = max(np.abs(np.max(distance_from_AGN_line_arr)), np.abs(np.min(distance_from_AGN_line_arr)))
+            if distance_from_AGN_line_map is not None:
+                distance_from_AGN_line_arr = np.ma.compressed(distance_from_AGN_line_map)
+                dist_lim = max(np.abs(np.max(distance_from_AGN_line_arr)), np.abs(np.min(distance_from_AGN_line_arr)))
+            else:
+                distance_from_AGN_line_arr = np.zeros(len(x_ratio.flatten()))
 
-            df = pd.DataFrame({'log_sii/ha': unp.nominal_values(x_ratio).flatten(), 'log_sii/ha_err': unp.std_devs(x_ratio).flatten(), 'log_oiii/hb': unp.nominal_values(y_ratio).flatten(), 'log_oiii/hb_err':  unp.std_devs(y_ratio).flatten(), 'distance': distance_map.flatten(), 'distance_from_AGN_line': distance_from_AGN_line_arr.flatten()})
+            df = pd.DataFrame({'log_xratio': unp.nominal_values(x_ratio).flatten(), 'log_xratio_err': unp.std_devs(x_ratio).flatten(), 'log_yratio': unp.nominal_values(y_ratio).flatten(), 'log_yratio_err': unp.std_devs(y_ratio).flatten(), 'distance': distance_map.flatten(), 'distance_from_AGN_line': distance_from_AGN_line_arr.flatten()})
             df = df.sort_values(by='distance')
             df = df.drop_duplicates().reset_index(drop=True)
 
-            scatter_plot_handle = ax.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_AGN_line' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_AGN_line' else None)
-            ax.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.5 if args.fortalk else 0.5, zorder=-10)
+            scatter_plot_handle = ax.scatter(df['log_xratio'], df['log_yratio'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol == 'distance_from_AGN_line' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol == 'distance_from_AGN_line' else None)
+            ax.errorbar(df['log_xratio'], df['log_yratio'], xerr=df['log_xratio_err'], yerr=df['log_yratio_err'], c='gray', fmt='none', lw=0.5, alpha=0.5 if args.fortalk else 0.5, zorder=-10)
 
-            if args.plot_AGN_frac and not args.plot_separately and not (len(args.id_arr) > 1 and args.plot_BPT):
+            if args.plot_AGN_frac and distance_from_AGN_line_map is not None and not args.plot_separately and not (
+                    len(args.id_arr) > 1 and args.plot_BPT):
                 if ax_inset is None: ax_inset = ax.inset_axes([0.05, 0.1, 0.3, 0.3])
                 # plot_2D_map(factor, ax_inset, args, takelog=False, label='Ha/(NII+Ha)', cmap=args.diverging_cmap, hide_yaxis=not args.plot_BPT, hide_xaxis=not args.plot_BPT)
                 plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, hide_yaxis=not args.plot_BPT, hide_xaxis=not args.plot_BPT)
 
             if args.plot_separately:
-                scatter_plot_handle_indiv = ax_indiv.scatter(df['log_sii/ha'], df['log_oiii/hb'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol =='distance_from_AGN_line' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol =='distance_from_AGN_line' else None)
-                ax_indiv.errorbar(df['log_sii/ha'], df['log_oiii/hb'], xerr=df['log_sii/ha_err'], yerr=df['log_oiii/hb_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
+                scatter_plot_handle_indiv = ax_indiv.scatter(df['log_xratio'], df['log_yratio'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol == 'distance_from_AGN_line' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol == 'distance_from_AGN_line' else None)
+                ax_indiv.errorbar(df['log_xratio'], df['log_yratio'], xerr=df['log_xratio_err'], yerr=df['log_yratio_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
 
-                if args.plot_AGN_frac:
+                if args.plot_AGN_frac and distance_from_AGN_line_map is not None:
                     if ax_inset is None: ax_inset = ax_indiv.inset_axes([0.55, 0.75, 0.3, 0.3])
                     plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim)
 
@@ -2159,28 +2235,10 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
         distance_from_AGN_line_map = None
         pass
 
+    # -----------annotating axes-----------------------
     if not hide_plot:
-        AGN_diag_label = 'H21' if args.use_H21 else 'K01'
         if args.plot_separately:
-            # ---------annotate axes-------
-            cbar = plt.colorbar(scatter_plot_handle_indiv)
-            cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from ' + AGN_diag_label if args.colorcol == 'distance_from_AGN_line' else '')
-            cbar.ax.tick_params(labelsize=args.fontsize)
-
-            ax_indiv.set_xlim(-2, 1. if args.use_O2O3 else 0.3)
-            ax_indiv.set_ylim(-1, 2)
-            ax_indiv.set_xlabel(f'log (SII 6717+31/NII + Halpha)' if args.use_H21 else f'log (OII 3727/OIII 5007)' if args.use_O2O3 else f'log (SII 6717+31/Halpha)', fontsize=args.fontsize)
-            ax_indiv.set_ylabel(f'log (OIII 5007/Hbeta)', fontsize=args.fontsize)
-            ax_indiv.tick_params(axis='both', which='major', labelsize=args.fontsize)
-
-            # ---------adding literature AGN demarcation lines----------
-            if not args.use_O2O3:
-                if args.use_H21:
-                    ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='H21', color='w' if args.fortalk else 'darkgreen', fontsize=args.fontsize)
-                else:
-                    ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='K01', color='w' if args.fortalk else 'k', fontsize=args.fontsize)
-                    ax_indiv = overplot_AGN_line_on_BPT(ax_indiv, method='S24', color='y' if args.fortalk else 'brown', fontsize=args.fontsize)
-
+            ax_indiv = annotate_BPT_axes(scatter_plot_handle_indiv, ax_indiv, args)
             fig_indiv.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
             fig_indiv.text(0.15, 0.9, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
 
@@ -2191,24 +2249,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
             plt.show(block=False)
 
         if index == 0:
-            # ---------annotate axes-------
-            cbar = plt.colorbar(scatter_plot_handle)
-            cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from ' + AGN_diag_label if args.colorcol == 'distance_from_AGN_line' else '', fontsize=args.fontsize)
-            cbar.ax.tick_params(labelsize=args.fontsize)
-
-            ax.set_xlim(-2, 1. if args.use_O2O3 else 0.3)
-            ax.set_ylim(-1, 2)
-            ax.set_xlabel(f'log (SII 6717+31/NII + Halpha)' if args.use_H21 else f'log (OII 3727/OIII 5007)' if args.use_O2O3 else f'log (SII 6717+31/Halpha)', fontsize=args.fontsize)
-            ax.set_ylabel(f'log (OIII 5007/Hbeta)', fontsize=args.fontsize)
-            ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
-
-            # ---------adding literature AGN demarcation lines----------
-            if not args.use_O2O3:
-                if args.use_H21:
-                    ax = overplot_AGN_line_on_BPT(ax, method='H21', color='w' if args.fortalk else 'darkgreen', fontsize=args.fontsize)
-                else:
-                    ax = overplot_AGN_line_on_BPT(ax, method='K01', color='w' if args.fortalk else 'k', fontsize=args.fontsize)
-                    ax = overplot_AGN_line_on_BPT(ax, method='S24', color='y' if args.fortalk else 'brown', fontsize=args.fontsize)
+            ax = annotate_BPT_axes(scatter_plot_handle, ax, args)
 
     return ax, distance_from_AGN_line_map, distance_from_AGN_line_int
 
@@ -2702,7 +2743,6 @@ if __name__ == "__main__":
 
         # ---------plotting spatially resolved BPT-----------------------------
         if args.plot_BPT:
-            plt.legend()
             fig.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
             fig.text(0.15, 0.9, f'{args.field}: IDs {",".join(np.array(args.id_arr).astype(str))}', fontsize=args.fontsize, c='k', ha='left', va='top')
 
