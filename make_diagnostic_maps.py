@@ -39,6 +39,7 @@
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --use_O2O3
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --use_variable_N2Ha
              run make_diagnostic_maps.py --field glass-a2744 --id 2928,5184 --plot_radial_profile --plot_AGN_frac --only_seg --vorbin --voronoi_line OIII --voronoi_snr 10 --drv 0.5 --do_not_correct_pixel --Zdiag O3O2
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --use_H21 --plot_models --slice_at_quantity3 4,9
 
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
@@ -48,6 +49,7 @@ from util import *
 from matplotlib import cm as mpl_cm
 import imageio
 from get_field_stats import get_crossmatch_with_cosmos
+from plot_mappings_grid import plot_ratio_grid
 
 start_time = datetime.now()
 
@@ -549,7 +551,11 @@ def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
     x_coords_array = np.ma.compressed(x_coords_grid_masked)
     y_coords_array = np.ma.compressed(y_coords_grid_masked)
 
-    binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords_array, y_coords_array, map_array, map_err_array, snr_thresh, plot=plot, quiet=quiet, cvt=False, wvt=True)
+    try:
+        binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords_array, y_coords_array, map_array, map_err_array, snr_thresh, plot=plot, quiet=quiet, cvt=False, wvt=True)
+    except ValueError:
+        print(f'Already enough SNR in all pixels so no Voronoi binning was required.')
+        binIDs = np.arange(len(x_coords_array))
 
     interp = NearestNDInterpolator(list(zip(x_coords_array, y_coords_array)), binIDs)
     binID_map = interp(x_coords_grid, y_coords_grid)
@@ -1774,24 +1780,30 @@ def get_direct_image_per_filter(full_hdu, filter, target_header, args, plot_test
     pos = SkyCoord(*(pos * u.deg), frame='fk5')
 
     # ---------making cut outs-------------
-    drizzled_image_filename = glob.glob(str(args.input_dir / args.drv / args.field / f'Products/{args.field}*{filter.lower()}_drz_sci.fits'))[0]
-    direct_map = get_cutout(drizzled_image_filename, pos, size, target_header, args, plot_test_axes=plot_test_axes)
-    direct_map_wht = get_cutout(drizzled_image_filename.replace('sci', 'wht'), pos, size, target_header, args)
+    direct_image_path = args.input_dir / args.drv / args.field / 'Products'
+    drizzled_image_filename = glob.glob(str(direct_image_path / f'{args.field}*{filter.lower()}_drz_sci.fits'))
+    if len(drizzled_image_filename) == 0:
+        print(f'\nNo direct image found in {direct_image_path}, therefore cannot plot starburst map')
+        return None
+    else:
+        drizzled_image_filename = drizzled_image_filename[0]
+        direct_map = get_cutout(drizzled_image_filename, pos, size, target_header, args, plot_test_axes=plot_test_axes)
+        direct_map_wht = get_cutout(drizzled_image_filename.replace('sci', 'wht'), pos, size, target_header, args)
 
-    # -------------pixel offset----------------
-    if not args.do_not_correct_pixel:
-        ndelta_xpix, ndelta_ypix = 2, 0
-        print(f'Correcting emission lines for pixel offset by {ndelta_xpix} on x and {ndelta_ypix} on y')
-        direct_map = np.roll(direct_map, ndelta_xpix, axis=1)
-        direct_map_wht = np.roll(direct_map_wht, ndelta_xpix, axis=1)
-        direct_map = np.roll(direct_map, ndelta_ypix, axis=0)
-        direct_map_wht = np.roll(direct_map_wht, ndelta_ypix, axis=0)
+        # -------------pixel offset----------------
+        if not args.do_not_correct_pixel:
+            ndelta_xpix, ndelta_ypix = 2, 0
+            print(f'Correcting emission lines for pixel offset by {ndelta_xpix} on x and {ndelta_ypix} on y')
+            direct_map = np.roll(direct_map, ndelta_xpix, axis=1)
+            direct_map_wht = np.roll(direct_map_wht, ndelta_xpix, axis=1)
+            direct_map = np.roll(direct_map, ndelta_ypix, axis=0)
+            direct_map_wht = np.roll(direct_map_wht, ndelta_ypix, axis=0)
 
-    # ---------computing uncertainty-------------
-    direct_map_err = 0.1 * np.abs(direct_map) # 1 / np.sqrt(direct_map_wht)
-    direct_map = unp.uarray(direct_map, direct_map_err)
+        # ---------computing uncertainty-------------
+        direct_map_err = 0.1 * np.abs(direct_map) # 1 / np.sqrt(direct_map_wht)
+        direct_map = unp.uarray(direct_map, direct_map_err)
 
-    return direct_map
+        return direct_map
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_direct_images_all_filters(full_hdu, args):
@@ -1905,6 +1917,14 @@ def plot_starburst_map(full_hdu, axes, args, radprof_axes=None, vorbin_axes=None
     filter = 'F115W'
     target_header = full_hdu[ext].header
     direct_map = get_direct_image_per_filter(full_hdu, filter, target_header, args)
+    if direct_map is None:
+        fig = plt.gcf()
+        for index, ax in enumerate(np.atleast_1d(axes)):
+            fig.delaxes(ax)
+            if args.plot_radial_profiles: fig.delaxes(np.atleast_1d(radprof_axes)[index])
+            if args.plot_vorbin: fig.delaxes(np.atleast_1d(vorbin_axes)[index])
+            if args.plot_snr: fig.delaxes(np.atleast_1d(snr_axes)[index])
+        return axes, None, None
 
     # ---------getting the ratio and seg maps-------------
     new_mask = unp.nominal_values(direct_map.data) == 0
@@ -2081,11 +2101,21 @@ def annotate_BPT_axes(scatter_plot_handle, ax, args):
 
     line_labels_dict = {'OII':'O II', 'SII':'S II 6717+31', 'OIII':'O III', 'Hb':'H beta', 'Ha':'N II + H alpha' if args.use_H21 else 'H alpha'}
     ratios_limits_dict = {'OIII/Hb':[-1, 2], 'SII/Ha':[-2, 0.3], 'OII/OIII':[-2, 1], 'OII/Hb':[-1, 1]}
-    AGN_diag_label = 'H21' if args.use_H21 else 'K01'
+    methods = get_AGN_func_methods(args)
+
+    # ---------overplot MAPPINGS models-------
+    if args.plot_models:
+        args2 = copy.deepcopy(args)
+        if args2.use_H21: args2.xden_line = 'Ha,NII'
+        print(f'Overplotting MAPPINGS models for {args2.ynum_line}/{args2.yden_line} vs {args2.xnum_line}/{args2.xden_line}..')
+        geom_path_dict = {'s':'sp', 'p':'pp'}  # to determine directory structures based on geometry and iso parameters
+        grid_filename = args2.mappings_dir / 'grids' / f'mappings_grid_{geom_path_dict[args2.geometry]}_iso_{args2.iso}.txt'
+        df_ratios = pd.read_table(grid_filename, delim_whitespace=True)
+        ax, _, _ = plot_ratio_grid(df_ratios, ax, args2)
 
     # ---------annotate axes-------
     cbar = plt.colorbar(scatter_plot_handle)
-    cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from ' + AGN_diag_label if args.colorcol == 'distance_from_AGN_line' else '')
+    cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from ' + methods[0] if args.colorcol == 'distance_from_AGN_line' else '', fontsize=args.fontsize)
     cbar.ax.tick_params(labelsize=args.fontsize)
 
     ax.set_xlim(ratios_limits_dict[f'{args.xnum_line}/{args.xden_line}'])
@@ -2095,9 +2125,8 @@ def annotate_BPT_axes(scatter_plot_handle, ax, args):
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     # ---------adding literature AGN demarcation lines----------
-    method_arr = get_AGN_func_methods(args)
     color_arr = ['brown', 'darkgreen']
-    for index, method in enumerate(method_arr): overplot_AGN_line_on_BPT(ax, method=method, color=color_arr[index], fontsize=args.fontsize)
+    for index, method in enumerate(methods): overplot_AGN_line_on_BPT(ax, method=method, color=color_arr[index], fontsize=args.fontsize)
 
     return ax
 
@@ -2149,6 +2178,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
             if sign == 0: sign = -1
             distance_from_AGN_line_int = sign * get_distance_from_line(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), AGN_func, method)
         else:
+            print(f'\nFor the given combination of BPT line ratios {args.ynum_line}/{args.yden_line} vs {args.xnum_line}/{args.xden_line}, no AGN demarcation line method was found, so distance from AGN line will not be computed or plotted.\n')
             distance_from_AGN_line_int = None
 
         if not hide_plot:
@@ -2163,6 +2193,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
         print(f'Galaxy {args.id} in {args.field} has a negative integrated flux in one of the following lines, hence skipping this.')
         print(f'OIII = {ynum_int}\nHb = {yden_int}\nSII = {xnum_int}\nHa = {xden_int}\n')
         scatter_plot_handle = None
+        distance_from_AGN_line_int = None
         pass
 
     # -----------spatially_resolved-----------------------
@@ -2219,7 +2250,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
                     len(args.id_arr) > 1 and args.plot_BPT):
                 if ax_inset is None: ax_inset = ax.inset_axes([0.05, 0.1, 0.3, 0.3])
                 # plot_2D_map(factor, ax_inset, args, takelog=False, label='Ha/(NII+Ha)', cmap=args.diverging_cmap, hide_yaxis=not args.plot_BPT, hide_xaxis=not args.plot_BPT)
-                plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, hide_yaxis=not args.plot_BPT, hide_xaxis=not args.plot_BPT)
+                plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label=f'Dist from {method}', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, hide_yaxis=not args.plot_BPT, hide_xaxis=not args.plot_BPT)
 
             if args.plot_separately:
                 scatter_plot_handle_indiv = ax_indiv.scatter(df['log_xratio'], df['log_yratio'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol == 'distance_from_AGN_line' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol == 'distance_from_AGN_line' else None)
@@ -2227,7 +2258,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
 
                 if args.plot_AGN_frac and distance_from_AGN_line_map is not None:
                     if ax_inset is None: ax_inset = ax_indiv.inset_axes([0.55, 0.75, 0.3, 0.3])
-                    plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label='dist from K01', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim)
+                    plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label=f'Dist from {method}', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim)
 
     except ValueError:
         print(f'Galaxy {args.id} in {args.field} has some negative spatially resolved fluxes, hence skipping this object.')
@@ -2257,6 +2288,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
+    if args.fontsize == 10 and args.plot_BPT: args.fontsize = 15
     args.fig_scale_factor = 1.0 if args.plot_direct_filters or args.plot_BPT or args.plot_starburst or args.plot_metallicity else 1.6
     args.fontsize /= args.fig_scale_factor
     if args.plot_slope_vs_mass: args.plot_starburst, args.plot_radial_profiles = True, True
@@ -2743,7 +2775,7 @@ if __name__ == "__main__":
 
         # ---------plotting spatially resolved BPT-----------------------------
         if args.plot_BPT:
-            fig.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
+            fig.subplots_adjust(left=0.15, right=0.99, bottom=0.1, top=0.95)
             fig.text(0.15, 0.9, f'{args.field}: IDs {",".join(np.array(args.id_arr).astype(str))}', fontsize=args.fontsize, c='k', ha='left', va='top')
 
             # -----------save figure----------------

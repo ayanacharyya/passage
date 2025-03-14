@@ -140,6 +140,7 @@ def parse_args():
     parser.add_argument('--use_O2Hb', dest='use_O2Hb', action='store_true', default=False, help='Use the O2/Hb in y-axis of BPT diagram (and O3Hb on x-axis), instead of SII/Ha? Default is no.')
     parser.add_argument('--use_variable_N2Ha', dest='use_variable_N2Ha', action='store_true', default=False, help='Use variable Ha/(NII + Ha) ratio across the face of the galaxy, to compute the Ha for the x-axis of BPT diagram, instead of constant 0.82? Default is no.')
     parser.add_argument('--no_text_on_plot', dest='no_text_on_plot', action='store_true', default=False, help='Skip putting text annotations on plot2D? Default is no.')
+    parser.add_argument('--plot_models', dest='plot_models', action='store_true', default=False, help='Overplot MAPPINGS photoionisation models on the BPT diagram? Default is no.')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
@@ -199,6 +200,24 @@ def parse_args():
     parser.add_argument('--num_snr', metavar='num_snr', type=float, action='store', default=1e5, help='SNR with which to add noise for the numerator line profile; default is 1e5 i.e., basically no noise')
     parser.add_argument('--den_snr', metavar='den_snr', type=float, action='store', default=1e5, help='SNR with which to add noise for the denominator line profile; default is 1e5 i.e., basically no noise')
 
+    # ------- args added for make_mappings_grid.py ------------------------------
+    parser.add_argument('--ynum_line', metavar='ynum_line', type=str, action='store', default='OIII', help='Which line to be used as the numerator on y-axis? Default OIII')
+    parser.add_argument('--yden_line', metavar='yden_line', type=str, action='store', default='Hb', help='Which line to be used as the denominator on y-axis? Default Hb')
+    parser.add_argument('--xnum_line', metavar='xnum_line', type=str, action='store', default='SII', help='Which line to be used as the numerator on x-axis? Default SII')
+    parser.add_argument('--xden_line', metavar='xden_line', type=str, action='store', default='Ha', help='Which line to be used as the denominator on x-axis? Default Ha')
+    parser.add_argument('--mappings_dir', metavar='mappings_dir', type=str, action='store', default='/Users/acharyya/Work/astro/Mappings', help='Where do MAPPINGS files reside?')
+    parser.add_argument('--geometry', metavar='geometry', type=str, action='store', default='s', help='Models corresponding to which geometry to be used; choose between s (spherical) and p(plane parallel)? Default s')
+    parser.add_argument('--iso', metavar='iso', type=str, action='store', default='P', help='Use isobaric (P) or isodensity (d) models? Default P')
+    parser.add_argument('--quantity1', metavar='quantity1', type=str, action='store', default='Z', help='Column name for quantity1 in the ratios dataframe; Default is Z')
+    parser.add_argument('--quantity2', metavar='quantity2', type=str, action='store', default='log(q)', help='Column name for quantity3 in the ratios dataframe; Default is log(q)')
+    parser.add_argument('--quantity3', metavar='quantitt3', type=str, action='store', default='log(P/k)', help='Column name for quantity3 in the ratios dataframe; Default is log(P/k)')
+    parser.add_argument('--slice_at_quantity1', metavar='slice_at_quantity1', type=str, action='store', default=None, help='Value of quantity1 to which the model will be curtailed to? Default is None, i.e., use all values')
+    parser.add_argument('--slice_at_quantity2', metavar='slice_at_quantity2', type=str, action='store', default=None, help='Value of quantity2 to which the model will be curtailed to? Default is None, i.e., use all values')
+    parser.add_argument('--slice_at_quantity3', metavar='slice_at_quantity3', type=str, action='store', default=None, help='Value of quantity3 to which the model will be curtailed to? Default is None, i.e., use all values')
+    parser.add_argument('--plot_grid', dest='plot_grid', action='store_true', default=False, help='Plot grid of two line ratios? Default is no.')
+    parser.add_argument('--plot_model', dest='plot_model', action='store_true', default=False, help='Plot a line ratio vs model parameters? Default is no.')
+    parser.add_argument('--annotate', dest='annotate', action='store_true', default=False, help='Annotate the ratio grid plot with arrows? Default is no.')
+
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if 'v' not in args.drv: args.drv = 'v' + args.drv
@@ -210,6 +229,9 @@ def parse_args():
     args.field = args.field_arr[0]
 
     if args.id is not None: args.id = [int(item) for item in args.id.split(',')]
+    if args.slice_at_quantity1 is not None: args.slice_at_quantity1 = [float(item) for item in args.slice_at_quantity1.split(',')]
+    if args.slice_at_quantity2 is not None: args.slice_at_quantity2 = [float(item) for item in args.slice_at_quantity2.split(',')]
+    if args.slice_at_quantity3 is not None: args.slice_at_quantity3 = [float(item) for item in args.slice_at_quantity3.split(',')]
 
     if args.system == 'hd' and not os.path.exists('/Volumes/Elements/'): args.system = 'local'
     if args.line_list == 'all': args.line_list = ['Lya', 'OII', 'Hb', 'OIII-4363', 'OIII', 'Ha', 'NII','Ha+NII', 'SII', 'SIII', 'PaD','PaG','PaB','HeI-1083','PaA']
@@ -225,6 +247,7 @@ def parse_args():
     args.input_dir = Path(args.input_dir)
     args.output_dir = Path(args.output_dir)
     args.code_dir = Path(args.code_dir)
+    args.mappings_dir = Path(args.mappings_dir)
 
     if args.filters is None:
         if 'glass' in args.field:
