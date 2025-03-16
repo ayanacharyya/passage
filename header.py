@@ -43,7 +43,7 @@ from scipy.interpolate import NearestNDInterpolator
 from scipy.ndimage import gaussian_filter1d
 
 import regions
-from regions import Regions
+from regions import Regions, PixCoord
 from regions import RectangleSkyRegion, RectanglePixelRegion
 
 import vorbin
