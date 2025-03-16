@@ -41,6 +41,7 @@
              run make_diagnostic_maps.py --field glass-a2744 --id 2928,5184 --plot_radial_profile --plot_AGN_frac --only_seg --vorbin --voronoi_line OIII --voronoi_snr 10 --drv 0.5 --do_not_correct_pixel --Zdiag O3O2
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --use_H21 --plot_models --slice_at_quantity3 4,9
 
+             run make_diagnostic_maps.py --field glass-a2744 --id 321,998,1694,1983,2355,2744,2938 --plot_snr --plot_ratio_maps --plot_radial_profiles --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --fontsize 5 --arcsec_limit 0.5
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -85,8 +86,8 @@ def plot_direct_image(full_hdu, ax, args, hide_xaxis=False, hide_yaxis=False):
         filt = full_hdu[0].header[f'DFILT{index + 1:02d}']
         print(f'Plotting direct image for filter {filt} which is {index+1} of {args.ndfilt}..')
 
-        ext = 5 + index * 2
-        image = full_hdu[ext].data
+        filter_hdu = full_hdu['DSCI', f'{filt.upper()}']
+        image = filter_hdu.data
         image = trim_image(image, args)
 
         p = ax.imshow(image, cmap=cmap_arr[index], origin='lower', extent=args.extent, alpha=1)#, vmin=0, vmax=0.03)
@@ -589,12 +590,18 @@ def get_emission_line_int(line, full_hdu, args, dered=True):
     Retrieve the integrated flux for a given emission line from the HDU
     Returns the 2D line image
     '''
-    line_index = np.where(args.available_lines == line)[0][0]
-    ext = 5 + 2 * args.ndfilt + 4 * line_index
-    line_wave = full_hdu[ext].header['RESTWAVE'] # in Angstrom
+    try:
+        line_hdu = full_hdu['LINE', line]
+    except KeyError:
+        if line == 'OIII': line_hdu = full_hdu['LINE', 'OIII-5007']
+    line_wave = line_hdu.header['RESTWAVE'] # in Angstrom
 
-    line_int = full_hdu[0].header[f'FLUX{line_index + 1:03d}'] # ergs/s/cm^2
-    line_int_err = full_hdu[0].header[f'ERR{line_index + 1:03d}'] # ergs/s/cm^2
+    line_index = np.where(args.available_lines == line)[0][0]
+    try:
+        line_int = full_hdu[0].header[f'FLUX{line_index + 1:03d}'] # ergs/s/cm^2
+        line_int_err = full_hdu[0].header[f'ERR{line_index + 1:03d}'] # ergs/s/cm^2
+    except KeyError:
+        line_int, line_int_err = np.nan, np.nan
 
     # ----------deblending flux--------------------
     factor = 1.
@@ -621,11 +628,16 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     Returns the 2D line image
     '''
 
-    line_index = np.where(args.available_lines == line)[0][0]
-    ext = 5 + 2 * args.ndfilt + 4 * line_index
-    line_map = full_hdu[ext].data * 1e-17 # in units of ergs/s/cm^2
-    line_wave = full_hdu[ext].header['RESTWAVE'] # in Angstrom
-    line_map_err = 1e-17 / (full_hdu[ext + 3].data ** 0.5)  # 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
+    try:
+        line_hdu = full_hdu['LINE', line]
+        line_map_err = 1e-17 / (full_hdu['LINEWHT', line].data ** 0.5)  # 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
+    except KeyError:
+        if line == 'OIII':
+            line_hdu = full_hdu['LINE', 'OIII-5007']
+            line_map_err = 1e-17 / (full_hdu['LINEWHT', 'OIII-5007'].data ** 0.5)  # 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
+
+    line_map = line_hdu.data * 1e-17 # in units of ergs/s/cm^2
+    line_wave = line_hdu.header['RESTWAVE'] # in Angstrom
     factor = 1.0
 
     # ----------deblending flux--------------------
@@ -698,10 +710,14 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     line_int = get_emission_line_int(line, full_hdu, args, dered=True)
 
     # -----------getting the integrated EW value-----------------
-    line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
-    line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}'] # rest-frame EW
-    line_ew_err = full_hdu[2].header[f'EWHW_{line_index_in_cov:03d}'] # rest-frame EW uncertainty
-    line_ew = ufloat(line_ew, line_ew_err)
+    line_index = np.where(args.available_lines == line)[0][0]
+    try:
+        line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
+        line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}'] # rest-frame EW
+        line_ew_err = full_hdu[2].header[f'EWHW_{line_index_in_cov:03d}'] # rest-frame EW uncertainty
+        line_ew = ufloat(line_ew, line_ew_err)
+    except KeyError:
+        line_ew = ufloat(np.nan, np.nan)
 
     if not np.ma.isMaskedArray(line_map): line_map = np.ma.masked_where(False, line_map)
 
@@ -746,11 +762,7 @@ def plot_line_ratio_map(line_num, line_den, full_hdu, ax, args, cmap='cividis', 
         den_map = np.ma.masked_where(den_map.mask, den_map.data * (1 - 0.823) / factor)
         den_int = den_int * (1 - 0.823) / factor
 
-    bad_mask = (num_map.data < 0) | (den_map.data <= 0) | (~np.isfinite(unp.nominal_values(num_map.data))) | (~np.isfinite(unp.nominal_values(den_map.data)))
-    num_map[bad_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-    den_map[bad_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-    ratio_map = unp.log10(num_map.data / den_map.data)
-    ratio_map = np.ma.masked_where(bad_mask | num_map.mask | den_map.mask, ratio_map)
+    ratio_map = take_safe_log_ratio(num_map, den_map)
 
     try: ratio_int = unp.log10(num_int / den_int)
     except: ratio_int = ufloat(np.nan, np.nan)
@@ -890,7 +902,8 @@ def get_EB_V_int(full_hdu, args, verbose=False):
     Ha_int = get_emission_line_int('Ha', full_hdu, args, dered=False)
     Hb_int = get_emission_line_int('Hb', full_hdu, args, dered=False)
 
-    EB_V_int = compute_EB_V(Ha_int, Hb_int, verbose=verbose)
+    if np.isnan(Ha_int.n) or np.isnan(Hb_int.n): EB_V_int = 0.
+    else: EB_V_int = compute_EB_V(Ha_int, Hb_int, verbose=verbose)
 
     return EB_V_int
 
@@ -968,22 +981,15 @@ def compute_Te(OIII4363_flux, OIII5007_flux):
 
     if hasattr(OIII5007_flux, "__len__"): # if it is an array
         # --------computing the ratio and appropriate errors------------
-        new_mask = OIII5007_flux == 0
-        OIII5007_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        ratio = OIII4363_flux / OIII5007_flux
-        ratio = np.ma.masked_where(new_mask, ratio)
+        log_ratio = take_safe_log_ratio(OIII4363_flux, OIII5007_flux)
 
-        # --------computing the log of the ratio and appropriate errors------------
-        new_mask = ratio <= 0
-        ratio[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        log_ratio = unp.log10(ratio.data)
         logTe = np.poly1d([0., 9.18962, 3.30355])(log_ratio) / np.poly1d([-0.00935, -0.15034, 2.09136, 1.000])(log_ratio)
 
         new_mask2 = logTe > 10.
         new_mask3 = logTe < -8.
         logTe[new_mask2 | new_mask3] = 0 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
         Te = 10 ** logTe
-        Te = np.ma.masked_where(new_mask | new_mask2 | new_mask3 | ratio.mask | net_mask, Te)
+        Te = np.ma.masked_where(log_ratio.mask | net_mask, Te)
 
     else: # if it is scalar
         try:
@@ -1045,28 +1051,8 @@ def compute_Z_Te(OII3727_flux, OIII5007_flux, Hbeta_flux, Te, ne=1e3):
     x = 1e-4 * ne * unp.sqrt(t)
 
     if hasattr(Hbeta_flux, "__len__"): # if it is an array
-        # --------computing the ratio and appropriate errors------------
-        new_mask = Hbeta_flux == 0
-        Hbeta_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        ratio1 = OII3727_flux / Hbeta_flux
-        ratio2 = OIII5007_flux / Hbeta_flux
-        ratio1 = np.ma.masked_where(new_mask, ratio1)
-        ratio2 = np.ma.masked_where(new_mask, ratio2)
-
-        # --------computing the log of the ratio and polynomial and appropriate errors------------
-        new_mask1 = ratio1 <= 0
-        ratio1[new_mask1] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        log_O2H2 = poly(ratio1, t, x, 5.961, 1.676, 0.4, 0.034, 1.35) - 12  # coefficients from eqn 3 I06
-        new_mask3 = log_O2H2 > 2.
-        log_O2H2[new_mask3] = 0 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        log_O2H2 = np.ma.masked_where(new_mask1 | new_mask3 | ratio1.mask, log_O2H2)
-
-        new_mask2 = ratio2 <= 0
-        ratio2[new_mask2] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        log_O3H2 = poly(ratio2, t, x, 6.200, 1.251, -0.55, -0.014, 0.0) - 12  # coefficients from eqn 5 I06
-        new_mask4 = log_O3H2 > 2.
-        log_O3H2[new_mask4] = 0 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        log_O3H2 = np.ma.masked_where(new_mask2 | new_mask4 | ratio2.mask, log_O3H2)
+        log_O2H2 = take_safe_log_ratio(OII3727_flux, Hbeta_flux)
+        log_O3H2 = take_safe_log_ratio(OIII5007_flux, Hbeta_flux)
 
         # --------computing the combined metallicity and masks, etc.------------
         log_OH = unp.log10(10 ** log_O2H2.data + 10 ** log_O3H2.data) + 12
@@ -1119,18 +1105,7 @@ def compute_Z_O3O2(OIII5007_flux, OII3727_flux):
     k = [-0.691, -2.944, -1.308] # c0-2 parameters from Table 2 of Curti+19 3rd row (O3O2)
 
     if hasattr(OII3727_flux, "__len__"): # if it is an array
-        # --------computing the ratio and appropriate errors------------
-        new_mask = OII3727_flux == 0
-        OII3727_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-
-        ratio = OIII5007_flux / OII3727_flux
-        ratio = np.ma.masked_where(new_mask, ratio)
-
-        # --------computing the log of the ratio and appropriate errors------------
-        new_mask = ratio <= 0
-        ratio[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        O3O2 = unp.log10(ratio.data)
-        O3O2 = np.ma.masked_where(new_mask | ratio.mask, O3O2)
+        O3O2 = take_safe_log_ratio(OIII5007_flux, OII3727_flux)
 
         # --------computing the polynomial and appropriate errors------------
         log_OH = []
@@ -1197,23 +1172,7 @@ def compute_Z_O3S2(OIII5007_flux, Hbeta_flux, SII6717_flux, Halpha_flux):
 
     if hasattr(Hbeta_flux, "__len__"): # if it is an array
         # --------computing the ratio and appropriate errors------------
-        new_mask1 = Hbeta_flux == 0
-        Hbeta_flux[new_mask1] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-
-        new_mask2 = Halpha_flux == 0
-        Halpha_flux[new_mask2] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-
-        new_mask3 = SII6717_flux == 0
-        SII6717_flux[new_mask3] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-
-        ratio = (OIII5007_flux / Hbeta_flux) / (SII6717_flux / Halpha_flux)
-        ratio = np.ma.masked_where(new_mask1 | new_mask2 | new_mask3, ratio)
-
-        # --------computing the log of the ratio and appropriate errors------------
-        new_mask = ratio <= 0
-        ratio[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        O3S2 = unp.log10(ratio.data)
-        O3S2 = np.ma.masked_where(new_mask | ratio.mask, O3S2)
+        O3S2 = take_safe_log_ratio(OIII5007_flux, SII6717_flux)
 
         # --------computing the polynomial and appropriate errors------------
         log_OH = []
@@ -1303,22 +1262,8 @@ def compute_Z_P25(OIII5007_flux, NII6584_flux, SII6717_flux, AGN_map):
 
     if hasattr(SII6717_flux, "__len__"): # if it is an array
         # --------computing the ratio and appropriate errors------------
-        new_mask = SII6717_flux == 0
-        SII6717_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-
-        # --------computing the log of the ratio and appropriate errors------------
-        ratio = (OIII5007_flux / SII6717_flux)
-        new_mask = ratio <= 0
-        ratio[new_mask] = np.nan # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        O3S2 = unp.log10(ratio.data)
-        O3S2 = np.ma.masked_where(new_mask, O3S2)
-
-        # --------computing the log of the ratio and appropriate errors------------
-        ratio = (NII6584_flux / SII6717_flux)
-        new_mask = ratio <= 0
-        ratio[new_mask] = np.nan # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        N2S2 = unp.log10(ratio.data)
-        N2S2 = np.ma.masked_where(new_mask, N2S2)
+        O3S2 = take_safe_log_ratio(OIII5007_flux, SII6717_flux)
+        N2S2 = take_safe_log_ratio(NII6584_flux, SII6717_flux)
 
         # --------computing the polynomial and appropriate errors------------
         log_OH = []
@@ -1336,7 +1281,6 @@ def compute_Z_P25(OIII5007_flux, NII6584_flux, SII6717_flux, AGN_map):
             try:
                 if AGN_map_flat[index] > 0: this_log_OH = compute_Z_P25_AGN(O3S2_flat[index], N2S2_flat[index])
                 else: this_log_OH = compute_Z_P25_SFR(O3S2_flat[index], N2S2_flat[index])
-                #print(f'Deb1245: index={index}, this_log_OH = {this_log_OH}, this_O3S2={O3S2_flat[index]}, this_N2S2={N2S2_flat[index]}')  ##
                 log_OH.append(this_log_OH)
                 if args.debug_Zdiag:
                     ax[0].scatter(unp.nominal_values(this_log_OH), unp.nominal_values(O3S2_flat[index]), lw=0, s=50, c='r' if AGN_map_flat[index] > 0 else 'b')
@@ -1411,28 +1355,10 @@ def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux, branch='low'):
     q_coeff = [0.0843640, 0.739315, 7.57817] # coeffciients from 3rd column of Table 2 of KD02
 
     if hasattr(Hbeta_flux, "__len__"): # if it is an array
-        # --------computing the ratio and appropriate errors------------
-        new_mask = Hbeta_flux == 0
-        Hbeta_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        ratio = (OII3727_flux + OIII5007_flux) / Hbeta_flux
-        ratio = np.ma.masked_where(new_mask, ratio)
-
-        # --------computing the log of the ratio and appropriate errors------------
-        new_mask = ratio <= 0
-        ratio[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        R23 = unp.log10(ratio.data)
-        R23 = np.ma.masked_where(new_mask | ratio.mask, R23)
+        R23 = take_safe_log_ratio(OIII5007_flux + OII3727_flux, Hbeta_flux)
+        y = take_safe_log_ratio(OIII5007_flux, OII3727_flux)
 
         logOH_Z94 = np.poly1d([-0.333, -0.207, -0.202, -0.33, 9.625])(R23)  # Eq 8 of KD02
-
-        new_mask2 = OII3727_flux == 0
-        OII3727_flux[new_mask2] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        ratio2 = OIII5007_flux / OII3727_flux
-
-        new_mask2 = ratio2 <= 0
-        ratio2[new_mask2] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        y = unp.log10(ratio2)
-        y = np.ma.masked_where(new_mask2, y)
         logOH_M91 = 12 + np.poly1d([0.602, 0.767, -4.944])(R23) + y * np.poly1d([-0.331, 0.332, 0.29])(R23)  # Eq 9 of KD02
 
         logOH_avg = np.mean([logOH_Z94, logOH_M91], axis=0)
@@ -1452,15 +1378,13 @@ def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux, branch='low'):
                     if p >= 0:
                         if branch == 'low': logOH_R23[i][j] = (-k[1] + unp.sqrt(p))/(2 * k[2])
                         elif branch == 'high': logOH_R23[i][j] = (-k[1] - unp.sqrt(p))/(2 * k[2])
-                        #print(f'Deb1141: i={i}, j={j}, range=({np.shape(Hbeta_flux)}), logOH_Z94={logOH_Z94[i][j]}, logOH_M91={logOH_M91[i][j]}, and the avg={logOH_avg[i][j]} which is < 8.5, so computing logOH_R23={logOH_R23[i][j]} instead (using q={q:.1e}, which is closest to branch {nearest_q:.1e}).')
                     else:
                         logOH_R23[i][j] = ufloat(np.nan, np.nan)
                         continue
                 else:
-                    #print(f'Deb1145: i={i}, j={j}, range=({np.shape(Hbeta_flux)}), logOH_Z94={logOH_Z94[i][j]}, logOH_M91={logOH_M91[i][j]}, and the avg={logOH_avg[i][j]} which is > 8.5, so using this as logOH_R23.')
                     logOH_R23[i][j] = logOH_avg[i][j]
 
-        logOH_R23 = np.ma.masked_where(new_mask | R23.mask | net_mask, logOH_R23)
+        logOH_R23 = np.ma.masked_where(R23.mask | net_mask, logOH_R23)
 
     else: # if it is scalar
         ratio = (OII3727_flux + OIII5007_flux) / Hbeta_flux
@@ -1530,17 +1454,7 @@ def compute_Z_R3(OIII5007_flux, Hbeta_flux):
 
     if hasattr(Hbeta_flux, "__len__"): # if it is an array
         # --------computing the ratio and appropriate errors------------
-        new_mask = Hbeta_flux == 0
-        Hbeta_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-
-        ratio = OIII5007_flux / Hbeta_flux
-        ratio = np.ma.masked_where(new_mask, ratio)
-
-        # --------computing the log of the ratio and appropriate errors------------
-        new_mask = ratio <= 0
-        ratio[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        R3 = unp.log10(ratio.data)
-        R3 = np.ma.masked_where(new_mask | ratio.mask, R3)
+        R3 = take_safe_log_ratio(OIII5007_flux, Hbeta_flux)
 
         # --------computing the polynomial and appropriate errors------------
         log_OH = []
@@ -1632,7 +1546,7 @@ def plot_Z_map(full_hdu, ax, args, radprof_ax=None, snr_ax=None):
         lim = [7, 9]
         ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f' % (args.Zdiag, logOH_int.n), cmap='viridis', radprof_ax=radprof_ax, snr_ax=snr_ax, hide_yaxis=True, hide_xaxis=True, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
     else:
-        fig = ax.figure()
+        fig = ax.figure
         fig.delaxes(ax)
         if args.plot_radial_profiles: fig.delaxes(radprof_ax)
         if args.plot_snr: fig.delaxes(snr_ax)
@@ -1658,17 +1572,8 @@ def compute_q_O32(OII3727_flux, OIII5007_flux):
 
     if hasattr(OII3727_flux, "__len__"): # if it is an array
         # --------computing the ratio and appropriate errors------------
-        new_mask = OII3727_flux == 0
-        OII3727_flux[new_mask] = -1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
 
-        ratio = (OIII5007_flux / OII3727_flux)
-        ratio = np.ma.masked_where(new_mask, ratio)
-
-        # --------computing the log of the ratio and appropriate errors------------
-        new_mask = ratio <= 0
-        ratio[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        O32 = unp.log10(ratio.data)
-        O32 = np.ma.masked_where(new_mask | ratio.mask, O32)
+        O32 = take_safe_log_ratio(OIII5007_flux, OII3727_flux)
 
         # --------computing the polynomial and appropriate errors------------
         logq = np.ones(np.shape(OII3727_flux)) * ufloat(np.nan, np.nan)
@@ -1733,7 +1638,8 @@ def plot_this(data, ax):
 # --------------------------------------------------------------------------------------------------------------------
 def get_cutout(filename, pos, size, target_header, args, plot_test_axes=None):
     '''
-    Return a cutout from a given filename of a fits image, around a given position within a given extent
+    Return a cutout from a given filename of a fits image, around a given position within a given extent,
+    and then reproject it on to a given target header parameters
     Optionally trims the cutout as per the segmentation map, and/or Voronoi bins it
     Returns the 2D cutout as a 2D array
     '''
@@ -1813,11 +1719,12 @@ def plot_direct_images_all_filters(full_hdu, args):
     filters_arr = args.filters
 
     # -------getting the full.fits image------------
-    ext = 5
-    direct_map = full_hdu[ext].data
+    filter = 'f115w'
+    filter_hdu = full_hdu['DSCI', f'{filter.upper()}-CLEAR']
+    direct_map = filter_hdu.data
     direct_map_trimmed = trim_image(direct_map, args)
-    target_header = full_hdu[ext].header
-    direct_map_err = 1. / np.sqrt(full_hdu[ext + 1].data)
+    target_header = filter_hdu.header
+    direct_map_err = 1. / np.sqrt(full_hdu['DWHT', f'{filter.upper()}-CLEAR'].data)
     direct_map_err_trimmed = trim_image(direct_map_err, args)
 
     if args.only_seg:
@@ -1913,9 +1820,9 @@ def plot_starburst_map(full_hdu, axes, args, radprof_axes=None, vorbin_axes=None
     ha_map, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=True)
 
     # ---------getting the direct image-------------
-    ext = 5
     filter = 'F115W'
-    target_header = full_hdu[ext].header
+    filter_hdu = full_hdu['DSCI', f'{filter.upper()}-CLEAR']
+    target_header = filter_hdu.header
     direct_map = get_direct_image_per_filter(full_hdu, filter, target_header, args)
     if direct_map is None:
         fig = plt.gcf()
@@ -2084,11 +1991,18 @@ def take_safe_log_ratio(num_map, den_map):
     Takes the log of ratio of two 2D masked arrays by properly accounting for bad values so as to avoid math errors
     Returns 2D masked array
     '''
-    ratio_mask = (num_map.data < 0) | (den_map.data <= 0) | (~np.isfinite(unp.nominal_values(num_map.data))) | (~np.isfinite(unp.nominal_values(den_map.data)))
-    num_map[ratio_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-    den_map[ratio_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-    ratio_map = unp.log10(num_map.data / den_map.data)
-    ratio_map = np.ma.masked_where(ratio_mask | num_map.mask | den_map.mask, ratio_map)
+    if np.ma.isMaskedArray(num_map):
+        net_mask = num_map.mask | den_map.mask
+        num_map = num_map.data
+        den_map = den_map.data
+    else:
+        net_mask = False
+
+    bad_mask = (unp.nominal_values(num_map) < 0) | (unp.nominal_values(den_map) <= 0) | (~np.isfinite(unp.nominal_values(num_map))) | (~np.isfinite(unp.nominal_values(den_map))) | (~np.isfinite(unp.std_devs(num_map))) | (~np.isfinite(unp.std_devs(den_map)))
+    num_map[bad_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+    den_map[bad_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+    ratio_map = unp.log10(num_map / den_map)
+    ratio_map = np.ma.masked_where(bad_mask | net_mask, ratio_map)
     
     return ratio_map
 
@@ -2197,74 +2111,71 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
         pass
 
     # -----------spatially_resolved-----------------------
-    try:
-        distance_map = get_distance_map(np.shape(ynum_map), args)
-        distance_map = np.ma.masked_where(False, distance_map)
-        if args.vorbin: distance_map = bin_2D(distance_map, args.voronoi_bin_IDs)
+    distance_map = get_distance_map(np.shape(ynum_map), args)
+    distance_map = np.ma.masked_where(False, distance_map)
+    if args.vorbin: distance_map = bin_2D(distance_map, args.voronoi_bin_IDs)
 
-        if args.use_variable_N2Ha and args.xden_line == 'Ha':
-            if not args.do_not_correct_flux:  # special treatment for H-alpha line, in order to add the NII 6584 component back
-                factor = 0.823  # from grizli source code
-                print(
-                    f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
-                xden_map = np.ma.masked_where(xden_map.mask, xden_map.data / factor)
+    if args.use_variable_N2Ha and args.xden_line == 'Ha':
+        if not args.do_not_correct_flux:  # special treatment for H-alpha line, in order to add the NII 6584 component back
+            factor = 0.823  # from grizli source code
+            print(
+                f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
+            xden_map = np.ma.masked_where(xden_map.mask, xden_map.data / factor)
 
-            print(f'Correcting Ha for NII component, by factor varying with distance')
-            factor = 0.5 + 0.1 * distance_map  # such that in the center (high Z), Ha/(NII + Ha) = 0.5 and at 4 kpc (low Z),  Ha/(NII + Ha) = 0.9
-            xden_map = np.ma.masked_where(xden_map.mask, xden_map.data * factor)
+        print(f'Correcting Ha for NII component, by factor varying with distance')
+        factor = 0.5 + 0.1 * distance_map  # such that in the center (high Z), Ha/(NII + Ha) = 0.5 and at 4 kpc (low Z),  Ha/(NII + Ha) = 0.9
+        xden_map = np.ma.masked_where(xden_map.mask, xden_map.data * factor)
 
-        y_ratio = take_safe_log_ratio(ynum_map, yden_map)
-        x_ratio = take_safe_log_ratio(xnum_map, xden_map)
-        # if args.xnum_line == 'SII' and args.xden_line == 'Ha' and not args.use_H21: x_ratio = np.ma.masked_where(x_ratio_mask | xnum_map.mask | xden_map.mask | (x_ratio.data > np.log10(0.29)), x_ratio) # using a SII/Ha based DIG cut-off from Petrodjojo+19
+    y_ratio = take_safe_log_ratio(ynum_map, yden_map)
+    x_ratio = take_safe_log_ratio(xnum_map, xden_map)
+    # if args.xnum_line == 'SII' and args.xden_line == 'Ha' and not args.use_H21: x_ratio = np.ma.masked_where(x_ratio_mask | xnum_map.mask | xden_map.mask | (x_ratio.data > np.log10(0.29)), x_ratio) # using a SII/Ha based DIG cut-off from Petrodjojo+19
 
-        net_mask = y_ratio.mask | x_ratio.mask
+    net_mask = y_ratio.mask | x_ratio.mask
 
-        # ------distance of pixels from AGN line--------------
-        if method is not None:
-            sign_map = (unp.nominal_values(y_ratio.data) > AGN_func(unp.nominal_values(x_ratio.data), method)).astype(int)
-            sign_map[sign_map == 0] = -1
-            distance_from_AGN_line_map = sign_map * get_distance_from_line(unp.nominal_values(x_ratio.data), unp.nominal_values(y_ratio.data), AGN_func, method)
-            distance_from_AGN_line_map = np.ma.masked_where(net_mask, distance_from_AGN_line_map)
-        else:
-            distance_from_AGN_line_map = None
+    # ------distance of pixels from AGN line--------------
+    if method is not None:
+        sign_map = (unp.nominal_values(y_ratio.data) > AGN_func(unp.nominal_values(x_ratio.data), method)).astype(int)
+        sign_map[sign_map == 0] = -1
+        distance_from_AGN_line_map = sign_map * get_distance_from_line(unp.nominal_values(x_ratio.data), unp.nominal_values(y_ratio.data), AGN_func, method)
+        distance_from_AGN_line_map = np.ma.masked_where(net_mask, distance_from_AGN_line_map)
+    else:
+        distance_from_AGN_line_map = None
 
-        # -----------plotting-----------------------
-        if not hide_plot:
-            x_ratio = np.ma.compressed(np.ma.masked_where(net_mask, x_ratio))
-            y_ratio = np.ma.compressed(np.ma.masked_where(net_mask, y_ratio))
-            distance_map = np.ma.compressed(np.ma.masked_where(net_mask, distance_map))
-            if distance_from_AGN_line_map is not None:
-                distance_from_AGN_line_arr = np.ma.compressed(distance_from_AGN_line_map)
+    # -----------plotting-----------------------
+    if not hide_plot:
+        x_ratio = np.ma.compressed(np.ma.masked_where(net_mask, x_ratio))
+        y_ratio = np.ma.compressed(np.ma.masked_where(net_mask, y_ratio))
+        distance_map = np.ma.compressed(np.ma.masked_where(net_mask, distance_map))
+        if distance_from_AGN_line_map is not None:
+            distance_from_AGN_line_arr = np.ma.compressed(distance_from_AGN_line_map)
+            if len(distance_from_AGN_line_arr) > 0:
                 dist_lim = max(np.abs(np.max(distance_from_AGN_line_arr)), np.abs(np.min(distance_from_AGN_line_arr)))
             else:
-                distance_from_AGN_line_arr = np.zeros(len(x_ratio.flatten()))
+                #distance_from_AGN_line_arr = np.zeros(len(x_ratio.flatten()))
+                dist_lim = None
+        else:
+            distance_from_AGN_line_arr = np.zeros(len(x_ratio.flatten()))
 
-            df = pd.DataFrame({'log_xratio': unp.nominal_values(x_ratio).flatten(), 'log_xratio_err': unp.std_devs(x_ratio).flatten(), 'log_yratio': unp.nominal_values(y_ratio).flatten(), 'log_yratio_err': unp.std_devs(y_ratio).flatten(), 'distance': distance_map.flatten(), 'distance_from_AGN_line': distance_from_AGN_line_arr.flatten()})
-            df = df.sort_values(by='distance')
-            df = df.drop_duplicates().reset_index(drop=True)
+        df = pd.DataFrame({'log_xratio': unp.nominal_values(x_ratio).flatten(), 'log_xratio_err': unp.std_devs(x_ratio).flatten(), 'log_yratio': unp.nominal_values(y_ratio).flatten(), 'log_yratio_err': unp.std_devs(y_ratio).flatten(), 'distance': distance_map.flatten(), 'distance_from_AGN_line': distance_from_AGN_line_arr.flatten()})
+        df = df.sort_values(by='distance')
+        df = df.drop_duplicates().reset_index(drop=True)
 
-            scatter_plot_handle = ax.scatter(df['log_xratio'], df['log_yratio'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol == 'distance_from_AGN_line' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol == 'distance_from_AGN_line' else None)
-            ax.errorbar(df['log_xratio'], df['log_yratio'], xerr=df['log_xratio_err'], yerr=df['log_yratio_err'], c='gray', fmt='none', lw=0.5, alpha=0.5 if args.fortalk else 0.5, zorder=-10)
+        scatter_plot_handle = ax.scatter(df['log_xratio'], df['log_yratio'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=args.diverging_cmap if args.colorcol == 'distance_from_AGN_line' else cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol == 'distance_from_AGN_line' and dist_lim is not None else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol == 'distance_from_AGN_line' else None)
+        ax.errorbar(df['log_xratio'], df['log_yratio'], xerr=df['log_xratio_err'], yerr=df['log_yratio_err'], c='gray', fmt='none', lw=0.5, alpha=0.5 if args.fortalk else 0.5, zorder=-10)
 
-            if args.plot_AGN_frac and distance_from_AGN_line_map is not None and not args.plot_separately and not (
-                    len(args.id_arr) > 1 and args.plot_BPT):
-                if ax_inset is None: ax_inset = ax.inset_axes([0.05, 0.1, 0.3, 0.3])
-                # plot_2D_map(factor, ax_inset, args, takelog=False, label='Ha/(NII+Ha)', cmap=args.diverging_cmap, hide_yaxis=not args.plot_BPT, hide_xaxis=not args.plot_BPT)
-                plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label=f'Dist from {method}', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, hide_yaxis=not args.plot_BPT, hide_xaxis=not args.plot_BPT)
+        if args.plot_AGN_frac and distance_from_AGN_line_map is not None and not args.plot_separately and not (
+                len(args.id_arr) > 1 and args.plot_BPT):
+            if ax_inset is None: ax_inset = ax.inset_axes([0.05, 0.1, 0.3, 0.3])
+            # plot_2D_map(factor, ax_inset, args, takelog=False, label='Ha/(NII+Ha)', cmap=args.diverging_cmap, hide_yaxis=not args.plot_BPT, hide_xaxis=not args.plot_BPT)
+            plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label=f'Dist from {method}', cmap=args.diverging_cmap, vmin=-dist_lim if dist_lim is not None else None, vmax=dist_lim, hide_yaxis=not args.plot_BPT, hide_xaxis=not args.plot_BPT)
 
-            if args.plot_separately:
-                scatter_plot_handle_indiv = ax_indiv.scatter(df['log_xratio'], df['log_yratio'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol == 'distance_from_AGN_line' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol == 'distance_from_AGN_line' else None)
-                ax_indiv.errorbar(df['log_xratio'], df['log_yratio'], xerr=df['log_xratio_err'], yerr=df['log_yratio_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
+        if args.plot_separately:
+            scatter_plot_handle_indiv = ax_indiv.scatter(df['log_xratio'], df['log_yratio'], c=df[args.colorcol], marker='o', s=50 / args.fig_scale_factor, lw=0, cmap=cmap, alpha=0.8, vmin=0 if args.colorcol == 'distance' else -dist_lim if args.colorcol == 'distance_from_AGN_line' else None, vmax=6 if args.colorcol == 'distance' else dist_lim if args.colorcol == 'distance_from_AGN_line' else None)
+            ax_indiv.errorbar(df['log_xratio'], df['log_yratio'], xerr=df['log_xratio_err'], yerr=df['log_yratio_err'], c='gray', fmt='none', lw=0.5, alpha=0.1)
 
-                if args.plot_AGN_frac and distance_from_AGN_line_map is not None:
-                    if ax_inset is None: ax_inset = ax_indiv.inset_axes([0.55, 0.75, 0.3, 0.3])
-                    plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label=f'Dist from {method}', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim)
-
-    except ValueError:
-        print(f'Galaxy {args.id} in {args.field} has some negative spatially resolved fluxes, hence skipping this object.')
-        scatter_plot_handle = None
-        distance_from_AGN_line_map = None
-        pass
+            if args.plot_AGN_frac and distance_from_AGN_line_map is not None:
+                if ax_inset is None: ax_inset = ax_indiv.inset_axes([0.55, 0.75, 0.3, 0.3])
+                plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label=f'Dist from {method}', cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim)
 
     # -----------annotating axes-----------------------
     if not hide_plot:
@@ -2436,6 +2347,7 @@ if __name__ == "__main__":
 
             # ----------determining global parameters------------
             args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
+            args.available_lines = np.array(['OIII' if item == 'OIII-5007' else item for item in args.available_lines]) # replace 'OIII-5007' with 'OIII'
             args.z = full_hdu[0].header['REDSHIFT']
             args.ndfilt = full_hdu[0].header['NDFILT']
             args.nlines = full_hdu[0].header['NUMLINES']
@@ -2462,11 +2374,15 @@ if __name__ == "__main__":
 
             # ---------------voronoi binning stuff---------------
             if args.vorbin and args.voronoi_line is not None:
-                line_map, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True)
-                args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
-                if args.debug_vorbin:
-                    print(f'Running in --debug_vorbin mode, hence not proceeding further.')
-                    #continue
+                if args.voronoi_line in args.available_lines:
+                    line_map, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True)
+                    args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
+                    if args.debug_vorbin:
+                        print(f'Running in --debug_vorbin mode, hence not proceeding further.')
+                        #continue
+                else:
+                    print(f'Requested line for voronoi binning {args.voronoi_line} not available, therefore skipping this object..')
+                    continue
 
             # ---------------radial profile stuff---------------
             if args.plot_radial_profiles:
@@ -2576,8 +2492,12 @@ if __name__ == "__main__":
 
                 # -----------------emission line maps---------------
                 for ind, line in enumerate(all_lines_to_plot):
-                    if line in args.available_lines: ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu_r', vmin=-20, vmax=-18, hide_yaxis=False, hide_xaxis=ind < nrow - 2, hide_cbar=False, snr_ax=ax_em_lines_snr[ind] if args.plot_snr else None, radprof_ax=ax_em_lines_radprof[ind] if args.plot_radial_profiles else None)
-                    else: fig.delaxes(ax_em_lines[ind])
+                    if line in args.available_lines:
+                        ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu_r', vmin=-20, vmax=-18, hide_yaxis=False, hide_xaxis=ind < nrow - 2, hide_cbar=False, snr_ax=ax_em_lines_snr[ind] if args.plot_snr else None, radprof_ax=ax_em_lines_radprof[ind] if args.plot_radial_profiles else None)
+                    else:
+                        fig.delaxes(ax_em_lines[ind])
+                        if args.plot_snr: fig.delaxes(ax_em_lines_snr[ind])
+                        if args.plot_radial_profiles: fig.delaxes(ax_em_lines_radprof[ind])
 
                 # -----------------emission line ratio maps---------------
                 if args.plot_ratio_maps:
