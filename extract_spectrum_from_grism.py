@@ -3,7 +3,7 @@
     Notes: Extracts 1D spectra and 2D emission line maps from calibrated grism data, following Vulcani+15 method
     Author : Ayan
     Created: 13-03-25
-    Example: run extract_spectrum_from_grism.py --field Par028 --drv 0.5 --id 1303 --arcsec_limit 3 --plot_circle_at_radius 1
+    Example: run extract_spectrum_from_grism.py --field Par028 --drv 0.5 --id 1303 --arcsec_limit 3 --plot_circle_at_radius 1 --test_cutout --debug_zero_order
 '''
 from header import *
 from util import *
@@ -52,7 +52,7 @@ def make_ax_labels(ax, xlabel, ylabel, fontsize, hide_xaxis=False, hide_yaxis=Fa
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def cutout_grism_spectra(ra, dec, filter, orient, data, wcs, pixscale, ax, args, cmap='Greys', cont=None):
+def cutout_grism_spectra(ra, dec, filter, orient, data, wcs, pixscale, ax, args, cmap='Greys', cont=None, show_log=False, mask=None):
     '''
     Cutout a rectangular region corresponding to the 2D spectra from the grism image and plot it on a given axis
     Returns axis handle and the 2D cutout spectra and corresponding 1D wavelength array
@@ -65,14 +65,15 @@ def cutout_grism_spectra(ra, dec, filter, orient, data, wcs, pixscale, ax, args,
                                    'lambda_high':[1.283, 1.671, 2.226],
                                    'npix_extent':[60, 80, 120],
                                    'npix_offset_first':[-6, 55, 147],
-                                   'npix_offset_zero': [-210, -220, -230]})
+                                   'npix_offset_zero': [214, 220, 230]})
 
     # -----------------------------
     row = df_filter_prop[df_filter_prop['filter'] == filter]
     first_order_shift_pix = row['npix_offset_first'].values[0] # this should be a function of the filter
     lambda_extent_pix = row['npix_extent'].values[0] # this should be a function of the filter wavelength extent
     spatial_cutout_extent_pix = int((args.arcsec_limit/2 * u.arcsec).to(u.pixel, pixscale).value) # this should be a function of arcsec.limit
-    spatial_extract_extent_pix = int((args.plot_circle_at_arcsec * u.arcsec).to(u.pixel, pixscale).value) # this should be a function of arcsec.limit
+    spatial_extract_extent_pix = int((args.extract_arcsec * u.arcsec).to(u.pixel, pixscale).value) # this should be a function of arcsec.limit
+    spatial_extract_offset_pix = 2 # to correct for a weird offset in the grism images
 
     pos_sky = SkyCoord(*(np.array([ra, dec]) * u.deg), frame='fk5')
     pos_pix = PixCoord.from_sky(pos_sky, wcs)
@@ -80,7 +81,7 @@ def cutout_grism_spectra(ra, dec, filter, orient, data, wcs, pixscale, ax, args,
     if orient == 'r':
         spectra_start_pix_y = pos_pix.y - first_order_shift_pix
         spectra_end_pix_y = spectra_start_pix_y - lambda_extent_pix
-        spectra_center_pix_x = pos_pix.x
+        spectra_center_pix_x = pos_pix.x - spatial_extract_offset_pix
         spectra_center_pix_y = (spectra_start_pix_y + spectra_end_pix_y) / 2
 
         cutout = Cutout2D(data, [spectra_center_pix_x, spectra_center_pix_y], [lambda_extent_pix, spatial_cutout_extent_pix]) # cutout2D size = (ny, nx)
@@ -89,7 +90,7 @@ def cutout_grism_spectra(ra, dec, filter, orient, data, wcs, pixscale, ax, args,
         spectra_start_pix_x = pos_pix.x - first_order_shift_pix
         spectra_end_pix_x = spectra_start_pix_x - lambda_extent_pix
         spectra_center_pix_x = (spectra_start_pix_x + spectra_end_pix_x) / 2
-        spectra_center_pix_y = pos_pix.y
+        spectra_center_pix_y = pos_pix.y - spatial_extract_offset_pix
 
         cutout = Cutout2D(data, [spectra_center_pix_x, spectra_center_pix_y], [spatial_cutout_extent_pix, lambda_extent_pix]) # cutout2D size = (ny, nx)
 
@@ -97,7 +98,7 @@ def cutout_grism_spectra(ra, dec, filter, orient, data, wcs, pixscale, ax, args,
     if cont is not None:
         try: cutout_data = cutout_data - cont
         except: cutout_data = (cutout_data.T - cont).T
-    #cutout_data = np.log10(cutout_data)
+    if show_log: cutout_data = np.log10(cutout_data)
 
     good_data = np.ma.compressed(np.ma.masked_where(~np.isfinite(cutout_data), cutout_data))
     vmin = np.percentile(good_data, 1)
@@ -112,15 +113,19 @@ def cutout_grism_spectra(ra, dec, filter, orient, data, wcs, pixscale, ax, args,
 
     ax = make_ax_labels(ax, '', '', args.fontsize,  hide_xaxis=True, hide_yaxis=True, hide_cbar=True)
 
-    #cutout_data = 10 ** cutout_data # to bring spec2d back to flux units
+    if show_log: cutout_data = 10 ** cutout_data # to bring spec2d back to flux units
     cutout_data = cutout_data.T # this transpose is necessary to make dim_x = wavelength and dim_y = flux
     cutout_2d_spectra = cutout_data[0:lambda_extent_pix, int(spatial_cutout_extent_pix/2 - spatial_extract_extent_pix/2):int(spatial_cutout_extent_pix/2 + spatial_extract_extent_pix/2)]
-    wave_arr = np.linspace(row['lambda_low'].values[0], row['lambda_high'].values[0], lambda_extent_pix)
+    wave_arr = np.linspace(row['lambda_low'].values[0], row['lambda_high'].values[0], lambda_extent_pix) # in microns, observed frame
+
+    if mask is not None:
+        mask_wave_pix = [np.where(wave_arr >= item)[0][0] for item in mask]
+        ax.add_patch(plt.Rectangle((mask_wave_pix[0], spatial_cutout_extent_pix / 2 - spatial_extract_extent_pix / 2), mask_wave_pix[1] - mask_wave_pix[0], spatial_extract_extent_pix, color='k', fill=False, lw=0.5))
 
     return ax, cutout_2d_spectra, wave_arr
 
 # --------------------------------------------------------------------------------------------------------------------
-def cutout_grism_image(ra, dec, filter, orient, data, wcs, pixscale, ax, args, cmap='Greys', hide_xaxis=False, hide_yaxis=False, hide_cbar=False):
+def cutout_grism_image(ra, dec, filter, orient, data, wcs, pixscale, ax, args, cmap='Greys', hide_xaxis=False, hide_yaxis=False, hide_cbar=False, debug_zero_order=False):
     '''
     Cutout a square region around (ra, dec) corresponding to direct image of an object from the grism image and plot it on a given axis
     Returns axis handle
@@ -136,37 +141,39 @@ def cutout_grism_image(ra, dec, filter, orient, data, wcs, pixscale, ax, args, c
                                    'npix_offset_zero': [214, 220, 230]})
     row = df_filter_prop[df_filter_prop['filter'] == filter]
     zero_order_shift_pix = row['npix_offset_zero'].values[0] # this should be a function of the filter
+    spatial_extract_offset_pix = 1 # to correct for a weird offset in the grism images
 
     # ------------determining ra and dec of zeroth order image------------------------
-    size = args.arcsec_limit * 1 * u.arcsec
+    if debug_zero_order: size = args.arcsec_limit * 10 * u.arcsec
+    else: size = args.arcsec_limit * 1 * u.arcsec
     pos_sky = SkyCoord(*(np.array([ra, dec]) * u.deg), frame='fk5')
     pos_pix = PixCoord.from_sky(pos_sky, wcs)
 
     if orient == 'r':
-        zero_order_shift_arcsec_x = (0 * u.arcsec)
-        zero_order_shift_arcsec_y = (zero_order_shift_pix * u.pixel).to(u.arcsec, pixscale)
-        zero_order_shift_pix_x = 0
+        zero_order_shift_pix_x = -spatial_extract_offset_pix
         zero_order_shift_pix_y = zero_order_shift_pix
     elif orient == 'c':
-        zero_order_shift_arcsec_x = (zero_order_shift_pix * u.pixel).to(u.arcsec, pixscale)
-        zero_order_shift_arcsec_y = (0 * u.arcsec)
         zero_order_shift_pix_x = zero_order_shift_pix
-        zero_order_shift_pix_y = 0
+        zero_order_shift_pix_y = -spatial_extract_offset_pix
+
+    zero_order_shift_arcsec_x = (zero_order_shift_pix_x * u.pixel).to(u.arcsec, pixscale)
+    zero_order_shift_arcsec_y = (zero_order_shift_pix_y * u.pixel).to(u.arcsec, pixscale)
 
     pos_pix_zero = pos_pix + PixCoord(zero_order_shift_pix_x, zero_order_shift_pix_y)
     pos_sky_zero = pywcs.utils.pixel_to_skycoord(pos_pix_zero.x, pos_pix_zero.y, wcs)
-    cutout = Cutout2D(data, pos_sky_zero, size, wcs=wcs)
+    if debug_zero_order: cutout = Cutout2D(data, pos_sky, size, wcs=wcs)
+    else: cutout = Cutout2D(data, pos_sky_zero, size, wcs=wcs)
     cutout_data = np.log10(cutout.data)
 
     good_data = np.ma.compressed(np.ma.masked_where(~np.isfinite(cutout_data), cutout_data))
     vmin = np.percentile(good_data, 1)
     vmax = np.percentile(good_data, 99)
 
-    p = ax.imshow(cutout_data, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
+    p = ax.imshow(cutout_data, cmap=cmap, origin='lower', vmin=vmin, vmax=vmax, extent=args.extent)
     ax.scatter(0, 0, marker='x', s=10, c='r')
-    #ax.scatter((pos_sky_zero.data.lon.value - ra) * 3600, (pos_sky_zero.data.lat.value - dec) * 3600, marker='x', s=10, c='k')#, transform=ax.get_transform('fk5'))
-    #ax.scatter(zero_order_shift_arcsec_x.value, zero_order_shift_arcsec_y.value, marker='x', s=20, c='pink')
-    ax.text(0.98, 0.98, orient, fontsize=args.fontsize, c='r', ha='right', va='top', transform=ax.transAxes)#, bbox=dict(facecolor='k', edgecolor='black', alpha=0.5))
+    # ax.scatter((pos_sky_zero.data.lon.value - ra) * 3600, (pos_sky_zero.data.lat.value - dec) * 3600, marker='x', s=10, c='k')#, transform=ax.get_transform('fk5'))
+    if debug_zero_order: ax.scatter(zero_order_shift_arcsec_x.value, zero_order_shift_arcsec_y.value, marker='x', s=20, c='pink')
+    ax.text(0.98, 0.98, orient, fontsize=args.fontsize, c='r', ha='right', va='top', transform=ax.transAxes)
 
     if 'pa_arr' in args: ax = annotate_PAs(args.pa_arr, ax, fontsize=args.fontsize)
     if args.plot_circle_at_arcsec is not None: ax.add_patch(plt.Circle((0, 0), args.plot_circle_at_arcsec, color='r', fill=False, lw=0.5))#, transform=ax.get_transform('fk5')))
@@ -179,42 +186,43 @@ def cutout_grism_image(ra, dec, filter, orient, data, wcs, pixscale, ax, args, c
 
     ax.coords.grid(color='k', alpha=0.5, linestyle='solid')
 
-    # # -------just for testing----------
-    # # -----------------------------
-    # row = df_filter_prop[df_filter_prop['filter'] == filter]
-    # first_order_shift_pix = row['npix_offset'].values[0] # this should be a function of the filter
-    # lambda_extent_pix = row['npix_extent'].values[0] # this should be a function of the filter wavelength extent
-    # spatial_cutout_extent_pix = int((args.arcsec_limit * u.arcsec).to(u.pixel, pixscale).value) # this should be a function of arcsec.limit
-    #
-    # pos_pix = PixCoord.from_sky(pos_sky, wcs)
-    #
-    # print(f'\nDeb159: {filter}-{orient}: object pos (sky)=({pos.data.lon.value:.4f}, {pos.data.lat.value:.4f}), \
-    #         \nobject pos (pix)=({pos_pix.x}, {pos_pix.y}), \
-    #         \noffset to 1st order (pix)={first_order_shift_pix}')
-    #
-    # if orient == 'r':
-    #     spectra_start_pix_y = pos_pix.y - first_order_shift_pix
-    #     spectra_end_pix_y = spectra_start_pix_y - lambda_extent_pix
-    #     spectra_center_pix_x = pos_pix.x
-    #     spectra_center_pix_y = (spectra_start_pix_y + spectra_end_pix_y) / 2
-    #
-    #     spectra_start_arcsec_y = ((spectra_start_pix_y - pos_pix.y) * u.pixel).to(u.arcsec, pixscale)
-    #     spectra_end_arcsec_y = ((spectra_end_pix_y - pos_pix.y) * u.pixel).to(u.arcsec, pixscale)
-    #     spectra_center_arcsec_x = ((spectra_center_pix_x - pos_pix.x) * u.pixel).to(u.arcsec, pixscale)
-    #
-    #     ax.plot([spectra_center_arcsec_x.value, spectra_center_arcsec_x.value], [spectra_start_arcsec_y.value, spectra_end_arcsec_y.value], lw=1, c='k')
-    #
-    # elif orient == 'c':
-    #     spectra_start_pix_x = pos_pix.x - first_order_shift_pix
-    #     spectra_end_pix_x = spectra_start_pix_x - lambda_extent_pix
-    #     spectra_center_pix_x = (spectra_start_pix_x + spectra_end_pix_x) / 2
-    #     spectra_center_pix_y = pos_pix.y
-    #
-    #     spectra_start_arcsec_x = ((spectra_start_pix_x - pos_pix.x) * u.pixel).to(u.arcsec, pixscale)
-    #     spectra_end_arcsec_x = ((spectra_end_pix_x - pos_pix.x) * u.pixel).to(u.arcsec, pixscale)
-    #     spectra_center_arcsec_y = ((spectra_center_pix_y - pos_pix.y) * u.pixel).to(u.arcsec, pixscale)
-    #
-    #     ax.plot([spectra_start_arcsec_x.value, spectra_end_arcsec_x.value], [spectra_center_arcsec_y.value, spectra_center_arcsec_y.value], lw=1, c='k')
+    # -------just for testing----------
+    if False: #debug_zero_order:
+        # -----------------------------
+        row = df_filter_prop[df_filter_prop['filter'] == filter]
+        first_order_shift_pix = row['npix_offset_first'].values[0] # this should be a function of the filter
+        lambda_extent_pix = row['npix_extent'].values[0] # this should be a function of the filter wavelength extent
+        spatial_cutout_extent_pix = int((args.arcsec_limit * u.arcsec).to(u.pixel, pixscale).value) # this should be a function of arcsec.limit
+
+        pos_pix = PixCoord.from_sky(pos_sky, wcs)
+
+        print(f'\nDeb159: {filter}-{orient}: object pos (sky)=({pos_sky.data.lon.value:.4f}, {pos_sky.data.lat.value:.4f}), \
+                \nobject pos (pix)=({pos_pix.x}, {pos_pix.y}), \
+                \noffset to 1st order (pix)={first_order_shift_pix}')
+
+        if orient == 'r':
+            spectra_start_pix_y = pos_pix.y - first_order_shift_pix
+            spectra_end_pix_y = spectra_start_pix_y - lambda_extent_pix
+            spectra_center_pix_x = pos_pix.x - spatial_extract_offset_pix
+            spectra_center_pix_y = (spectra_start_pix_y + spectra_end_pix_y) / 2
+
+            spectra_start_arcsec_y = ((spectra_start_pix_y - pos_pix.y) * u.pixel).to(u.arcsec, pixscale)
+            spectra_end_arcsec_y = ((spectra_end_pix_y - pos_pix.y) * u.pixel).to(u.arcsec, pixscale)
+            spectra_center_arcsec_x = ((spectra_center_pix_x - pos_pix.x) * u.pixel).to(u.arcsec, pixscale)
+
+            ax.plot([spectra_center_arcsec_x.value, spectra_center_arcsec_x.value], [spectra_start_arcsec_y.value, spectra_end_arcsec_y.value], lw=1, c='k')
+
+        elif orient == 'c':
+            spectra_start_pix_x = pos_pix.x - first_order_shift_pix
+            spectra_end_pix_x = spectra_start_pix_x - lambda_extent_pix
+            spectra_center_pix_x = (spectra_start_pix_x + spectra_end_pix_x) / 2
+            spectra_center_pix_y = pos_pix.y - spatial_extract_offset_pix
+
+            spectra_start_arcsec_x = ((spectra_start_pix_x - pos_pix.x) * u.pixel).to(u.arcsec, pixscale)
+            spectra_end_arcsec_x = ((spectra_end_pix_x - pos_pix.x) * u.pixel).to(u.arcsec, pixscale)
+            spectra_center_arcsec_y = ((spectra_center_pix_y - pos_pix.y) * u.pixel).to(u.arcsec, pixscale)
+
+            ax.plot([spectra_start_arcsec_x.value, spectra_end_arcsec_x.value], [spectra_center_arcsec_y.value, spectra_center_arcsec_y.value], lw=1, c='k')
 
     return ax
 
@@ -225,8 +233,8 @@ def cutout_direct_image(ra, dec, data, wcs, ax, args, cmap='Greys', hide_xaxis=F
     Returns axis handle
     '''
     size = args.arcsec_limit * u.arcsec
-    pos = SkyCoord(*(np.array([ra, dec]) * u.deg), frame='fk5')
-    cutout = Cutout2D(data, pos, size, wcs=wcs).data
+    pos_sky = SkyCoord(*(np.array([ra, dec]) * u.deg), frame='fk5')
+    cutout = Cutout2D(data, pos_sky, size, wcs=wcs).data
     cutout = np.log10(cutout)
 
     good_data = np.ma.compressed(np.ma.masked_where(~np.isfinite(cutout), cutout))
@@ -260,32 +268,65 @@ def fit_cont(wave, spec, order=3):
     Fits the given continuum using spline
     Returns fit parameters
     '''
-    contfit = np.polyfit(wave, spec, order)
+    contfit = np.ma.polyfit(wave, spec, order)
 
     return contfit
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_cont(wave, spec2d, ax, redshift=0, fit_order=3, hide_xaxis=True, hide_yaxis=True, hide_cbar=True):
+def plot_cont(wave, spec2d, ax, masks, fit_order=3, orient='c', hide_xaxis=True, hide_yaxis=True, hide_cbar=True):
     '''
     Plots and fits the continuum corresponding to a grism image, on a given axis
     Returns axis handle and fit parameters
     '''
     spec1d = np.mean(spec2d, axis=1)
-    wave = 1e4 * wave / (1 + redshift) # now in Angstrom
     ax.plot(wave, np.log10(spec1d), lw=1, c='salmon')
+
+    for mask in masks: # masking out intended line/s
+        spec1d = np.ma.masked_where((wave >= mask[0]) & (wave <= mask[1]), spec1d)
+        ax.fill_betweenx([ax.get_ylim()[0], ax.get_ylim()[1]], mask[0], mask[1], color='grey', alpha=0.3, lw=0)
 
     contfit = fit_cont(wave, spec1d, order=fit_order)
     cont = np.poly1d(contfit)(wave)
     ax.plot(wave, np.log10(cont), lw=1, c='cornflowerblue')
 
-    ax = make_ax_labels(ax, 'Restframe wavelength (A)', 'log flux', args.fontsize,  hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+    ax.text(0.98, 0.98, orient, fontsize=args.fontsize, c='r', ha='right', va='top', transform=ax.transAxes)
+    ax = make_ax_labels(ax, 'Observed wavelength (microns)', 'log flux', args.fontsize,  hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
 
     return ax, cont
+
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_emission_map_rc(wave, spec2d, ax, mask, orient='c', cmap='viridis', hide_xaxis=True, hide_yaxis=True, hide_cbar=True, show_log=True):
+    '''
+    Cutout a region of dimensions wavelength mask x extract_arcsec from the continuum subtracted 2D grism spectra and plot it on a given axis
+    Returns axis handle and 2D emission map
+    '''
+    good_wave_pix = (wave >= mask[0]) & (wave <= mask[1])
+    line_map = spec2d[good_wave_pix, :]
+    line_map = line_map.T
+
+    if show_log: line_map = np.log10(line_map)
+    good_data = np.ma.compressed(np.ma.masked_where(~np.isfinite(line_map), line_map))
+    vmin = np.percentile(good_data, 1)
+    vmax = np.percentile(good_data, 99)
+    p = ax.imshow(line_map, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
+
+    ax.text(0.98, 0.98, orient, fontsize=args.fontsize, c='r', ha='right', va='top', transform=ax.transAxes)
+    ax = make_ax_labels(ax, '', '', args.fontsize, p=p, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+
+    if show_log: line_map = 10 ** line_map
+
+    return ax, line_map
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
+
+    # --------setting up hardcoded values---------------------
+    filter = 'f115w'
+    filter_line_dict = {'f115w':[['OII', 1.20, 1.24]], 'f150w':[['OIII', 1.70, 1.74]], 'f200w':[['Ha', 2.05, 2.15]]}
+    dirimg_cmap, grism_dir_cmap, grism_2d_cmap = 'cividis', 'winter', 'winter'
 
     # --------setting up global values---------------------
     args.id_arr = np.atleast_1d(args.id)
@@ -293,9 +334,8 @@ if __name__ == "__main__":
     product_dir = args.input_dir / args.drv / f'{args.field}' / 'Products'
     catalog_file = args.output_dir / 'catalogs' / 'Par028_v0.5_venn_OIII,Ha,OII,Hb,SII,SNR>2.0,mass_df.txt'
 
-    filter = 'f115w'
-    line = 'Ha'
-    dirimg_cmap, grism_dir_cmap, grism_2d_cmap = 'cividis', 'winter', 'winter'
+    args.lines = [item[0] for item in filter_line_dict[filter]]
+    args.line_masks = [[item[1], item[2]] for item in filter_line_dict[filter]]
 
     if catalog_file.exists(): df_cat = pd.read_csv(catalog_file)
     else: df_cat = None
@@ -345,30 +385,33 @@ if __name__ == "__main__":
         else:
             sys.exit(f'Photcat file does not exist in {phot_catalog_file}. So where do I get the RA/DEC from?')
 
-        #ra, dec, redshift = 150.0893979, 2.4278231, 0.001 # coords of a bright point source, for testing purposes
+        if args.test_cutout: ra, dec, redshift = 150.0893979, 2.4278231, 0.001 # coords of a bright point source, for testing purposes
         # --------cutout and plot the direct image---------------
         ax_dirimg = cutout_direct_image(ra, dec, direct_data, direct_wcs, ax_dirimg, args, cmap=dirimg_cmap, hide_cbar=True)
 
         # ----------cutout and plot the grism images of r & c orients---------------
-        #fig2 = plt.figure(figsize=(12, 6))
-        #ax2 = fig2.add_subplot(111, projection=grism_c_wcs)
-        #ax2 = cutout_grism_image(ra, dec, filter, 'c', grism_c_data, grism_c_wcs, grism_c_pixscale, ax2, args, cmap=grism_dir_cmap, hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
+        if args.debug_zero_order:
+            fig2 = plt.figure(figsize=(12, 6))
+            ax2 = fig2.add_subplot(111, projection=grism_c_wcs)
+            ax2 = cutout_grism_image(ra, dec, filter, 'c', grism_c_data, grism_c_wcs, grism_c_pixscale, ax2, args, cmap=grism_dir_cmap, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, debug_zero_order=args.debug_zero_order)
         ax_grism_dir_c = cutout_grism_image(ra, dec, filter, 'c', grism_c_data, grism_c_wcs, grism_c_pixscale, ax_grism_dir_c, args, cmap=grism_dir_cmap, hide_xaxis=True, hide_yaxis=True, hide_cbar=True)
         ax_grism_dir_r = cutout_grism_image(ra, dec, filter, 'r', grism_r_data, grism_r_wcs, grism_r_pixscale, ax_grism_dir_r, args, cmap=grism_dir_cmap, hide_xaxis=True, hide_yaxis=True, hide_cbar=True)
 
         # ----------cutout and plot the grism 2D spectra of r & c orients---------------
-        ax_grism_2d_c, spec2d_grism_c, wave_grism_c = cutout_grism_spectra(ra, dec, filter, 'c', grism_c_data, grism_c_wcs, grism_c_pixscale, ax_grism_2d_c, args, cmap=grism_2d_cmap)
-        ax_grism_2d_r, spec2d_grism_r, wave_grism_r = cutout_grism_spectra(ra, dec, filter, 'r', grism_r_data, grism_r_wcs, grism_r_pixscale, ax_grism_2d_r, args, cmap=grism_2d_cmap)
+        ax_grism_2d_c, spec2d_grism_c, wave_grism_c = cutout_grism_spectra(ra, dec, filter, 'c', grism_c_data, grism_c_wcs, grism_c_pixscale, ax_grism_2d_c, args, cmap=grism_2d_cmap, show_log=False)
+        ax_grism_2d_r, spec2d_grism_r, wave_grism_r = cutout_grism_spectra(ra, dec, filter, 'r', grism_r_data, grism_r_wcs, grism_r_pixscale, ax_grism_2d_r, args, cmap=grism_2d_cmap, show_log=False)
 
         # --------model the 2D continuum and plot---------------
-        ax_contfit_c, cont_grism_c = plot_cont(wave_grism_c, spec2d_grism_c, ax_contfit_c, redshift=redshift, fit_order=3, hide_xaxis=True, hide_yaxis=False, hide_cbar=True)
-        ax_contfit_r, cont_grism_r = plot_cont(wave_grism_r, spec2d_grism_r, ax_contfit_r, redshift=redshift, fit_order=3, hide_xaxis=False, hide_yaxis=False, hide_cbar=True)
+        ax_contfit_c, cont_grism_c = plot_cont(wave_grism_c, spec2d_grism_c, ax_contfit_c, args.line_masks, fit_order=3, orient='c', hide_xaxis=True, hide_yaxis=False, hide_cbar=True)
+        ax_contfit_r, cont_grism_r = plot_cont(wave_grism_r, spec2d_grism_r, ax_contfit_r, args.line_masks, fit_order=3, orient='r', hide_xaxis=False, hide_yaxis=False, hide_cbar=True)
 
         # --------plot the continuum subtracted 2D spectra of r & c orients---------------
-        ax_grism_sub_c, _, _ = cutout_grism_spectra(ra, dec, filter, 'c', grism_c_data, grism_c_wcs, grism_c_pixscale, ax_grism_sub_c, args, cmap=grism_2d_cmap, cont=cont_grism_c)
-        ax_grism_sub_r, _, _ = cutout_grism_spectra(ra, dec, filter, 'r', grism_r_data, grism_r_wcs, grism_r_pixscale, ax_grism_sub_r, args, cmap=grism_2d_cmap, cont=cont_grism_r)
+        ax_grism_sub_c, spec2d_contsub_grism_c, _ = cutout_grism_spectra(ra, dec, filter, 'c', grism_c_data, grism_c_wcs, grism_c_pixscale, ax_grism_sub_c, args, cmap=grism_2d_cmap, show_log=False, cont=cont_grism_c, mask=args.line_masks[0])
+        ax_grism_sub_r, spec2d_contsub_grism_r, _ = cutout_grism_spectra(ra, dec, filter, 'r', grism_r_data, grism_r_wcs, grism_r_pixscale, ax_grism_sub_r, args, cmap=grism_2d_cmap, show_log=False, cont=cont_grism_r, mask=args.line_masks[0])
 
         # --------plot the emission maps of r & c orients---------------
+        ax_em_c, line_map_c = plot_emission_map_rc(wave_grism_c, spec2d_contsub_grism_c, ax_em_c, args.line_masks[0], cmap=grism_dir_cmap, orient='c', hide_xaxis=True, hide_yaxis=True, hide_cbar=True, show_log=False)
+        ax_em_r, line_map_r = plot_emission_map_rc(wave_grism_r, spec2d_contsub_grism_r, ax_em_r, args.line_masks[0], cmap=grism_dir_cmap, orient='r', hide_xaxis=True, hide_yaxis=True, hide_cbar=True, show_log=False)
 
         # --------rotate and plot the combined the emission map---------------
 
