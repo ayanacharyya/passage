@@ -8,6 +8,7 @@
 from header import *
 from util import *
 from make_diagnostic_maps import annotate_PAs
+from scipy.interpolate import UnivariateSpline
 
 start_time = datetime.now()
 
@@ -57,23 +58,14 @@ def cutout_grism_spectra(ra, dec, filter, orient, data, wcs, pixscale, ax, args,
     Cutout a rectangular region corresponding to the 2D spectra from the grism image and plot it on a given axis
     Returns axis handle and the 2D cutout spectra and corresponding 1D wavelength array
     '''
-    # --------declaring filter-specific properties ---------
-    # --from https://jwst-docs.stsci.edu/jwst-near-infrared-imager-and-slitless-spectrograph/niriss-instrumentation/niriss-gr150-grisms#gsc.tab=0-------
-    df_filter_prop = pd.DataFrame({'filter':['f115w', 'f150w', 'f200w'],
-                                   'lambda_cen':[1.148, 1.501, 1.989],
-                                   'lambda_low':[1.013, 1.330, 1.751],
-                                   'lambda_high':[1.283, 1.671, 2.226],
-                                   'npix_extent':[60, 80, 120],
-                                   'npix_offset_first':[-6, 55, 147],
-                                   'npix_offset_zero': [214, 220, 230]})
-
     # -----------------------------
     row = df_filter_prop[df_filter_prop['filter'] == filter]
     first_order_shift_pix = row['npix_offset_first'].values[0] # this should be a function of the filter
+    if orient == 
     lambda_extent_pix = row['npix_extent'].values[0] # this should be a function of the filter wavelength extent
     spatial_cutout_extent_pix = int((args.arcsec_limit/2 * u.arcsec).to(u.pixel, pixscale).value) # this should be a function of arcsec.limit
     spatial_extract_extent_pix = int((args.extract_arcsec * u.arcsec).to(u.pixel, pixscale).value) # this should be a function of arcsec.limit
-    spatial_extract_offset_pix = 2 # to correct for a weird offset in the grism images
+    spatial_extract_offset_pix = row[f'spatial_offset_{orient}'].values[0] # to correct for a weird offset in the grism images
 
     pos_sky = SkyCoord(*(np.array([ra, dec]) * u.deg), frame='fk5')
     pos_pix = PixCoord.from_sky(pos_sky, wcs)
@@ -105,13 +97,14 @@ def cutout_grism_spectra(ra, dec, filter, orient, data, wcs, pixscale, ax, args,
     vmax = np.percentile(good_data, 99)
 
     if orient == 'r': cutout_data = cutout_data.T
-    ax.imshow(cutout_data, cmap=cmap, origin='lower', vmin=vmin, vmax=vmax)
+    #p = ax.imshow(cutout_data, cmap=cmap, origin='lower', vmin=vmin, vmax=vmax)
+    p = ax.imshow(cutout_data, cmap=cmap, origin='lower', vmin=0 if not show_log else vmin, vmax=3 if args.test_cutout and not show_log else 0.07 if not show_log else vmax)
 
     ax.scatter(lambda_extent_pix / 2, spatial_cutout_extent_pix / 2, marker='x', s=10, c='r')
     ax.add_patch(plt.Rectangle((0, spatial_cutout_extent_pix/2 - spatial_extract_extent_pix/2), lambda_extent_pix, spatial_extract_extent_pix, color='r', fill=False, lw=0.5))
     ax.text(0.98, 0.98, orient, fontsize=args.fontsize, c='r', ha='right', va='top', transform=ax.transAxes)#, bbox=dict(facecolor='k', edgecolor='black', alpha=0.5))
 
-    ax = make_ax_labels(ax, '', '', args.fontsize,  hide_xaxis=True, hide_yaxis=True, hide_cbar=True)
+    ax = make_ax_labels(ax, '', '', args.fontsize, p=p, hide_xaxis=True, hide_yaxis=True, hide_cbar=True)
 
     if show_log: cutout_data = 10 ** cutout_data # to bring spec2d back to flux units
     cutout_data = cutout_data.T # this transpose is necessary to make dim_x = wavelength and dim_y = flux
@@ -130,18 +123,9 @@ def cutout_grism_image(ra, dec, filter, orient, data, wcs, pixscale, ax, args, c
     Cutout a square region around (ra, dec) corresponding to direct image of an object from the grism image and plot it on a given axis
     Returns axis handle
     '''
-    # --------declaring filter-specific properties ---------
-    # --from https://jwst-docs.stsci.edu/jwst-near-infrared-imager-and-slitless-spectrograph/niriss-instrumentation/niriss-gr150-grisms#gsc.tab=0-------
-    df_filter_prop = pd.DataFrame({'filter': ['f115w', 'f150w', 'f200w'],
-                                   'lambda_cen': [1.148, 1.501, 1.989],
-                                   'lambda_low': [1.013, 1.330, 1.751],
-                                   'lambda_high': [1.283, 1.671, 2.226],
-                                   'npix_extent': [60, 80, 120],
-                                   'npix_offset_first': [-6, 55, 147],
-                                   'npix_offset_zero': [214, 220, 230]})
     row = df_filter_prop[df_filter_prop['filter'] == filter]
     zero_order_shift_pix = row['npix_offset_zero'].values[0] # this should be a function of the filter
-    spatial_extract_offset_pix = 1 # to correct for a weird offset in the grism images
+    spatial_extract_offset_pix = row[f'spatial_offset_{orient}'].values[0] # to correct for a weird offset in the grism images
 
     # ------------determining ra and dec of zeroth order image------------------------
     if debug_zero_order: size = args.arcsec_limit * 10 * u.arcsec
@@ -266,11 +250,15 @@ def cutout_direct_image(ra, dec, data, wcs, ax, args, cmap='Greys', hide_xaxis=F
 def fit_cont(wave, spec, order=3):
     '''
     Fits the given continuum using spline
-    Returns fit parameters
+    Returns fitted continuum
     '''
-    contfit = np.ma.polyfit(wave, spec, order)
+    #contfit = np.ma.polyfit(wave, spec, order)
+    #cont = np.poly1d(contfit)(wave)
 
-    return contfit
+    contfit = UnivariateSpline(wave, spec, k=order)
+    cont = contfit(wave)
+
+    return cont
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_cont(wave, spec2d, ax, masks, fit_order=3, orient='c', hide_xaxis=True, hide_yaxis=True, hide_cbar=True):
@@ -279,18 +267,20 @@ def plot_cont(wave, spec2d, ax, masks, fit_order=3, orient='c', hide_xaxis=True,
     Returns axis handle and fit parameters
     '''
     spec1d = np.mean(spec2d, axis=1)
-    ax.plot(wave, np.log10(spec1d), lw=1, c='salmon')
+    ax.plot(wave, spec1d, lw=1, c='salmon')
 
     for mask in masks: # masking out intended line/s
         spec1d = np.ma.masked_where((wave >= mask[0]) & (wave <= mask[1]), spec1d)
         ax.fill_betweenx([ax.get_ylim()[0], ax.get_ylim()[1]], mask[0], mask[1], color='grey', alpha=0.3, lw=0)
 
-    contfit = fit_cont(wave, spec1d, order=fit_order)
-    cont = np.poly1d(contfit)(wave)
-    ax.plot(wave, np.log10(cont), lw=1, c='cornflowerblue')
+    cont = fit_cont(wave, spec1d, order=fit_order)
+    ax.plot(wave, cont, lw=1, c='cornflowerblue')
+    ax.plot(wave, spec1d.data - cont, lw=1, c='darkseagreen')
 
+    ax.axhline(0, c='k', lw=0.5, ls='dashed')
+    ax.set_ylim(-0.01, 1 if args.test_cutout else 0.07)
     ax.text(0.98, 0.98, orient, fontsize=args.fontsize, c='r', ha='right', va='top', transform=ax.transAxes)
-    ax = make_ax_labels(ax, 'Observed wavelength (microns)', 'log flux', args.fontsize,  hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+    ax = make_ax_labels(ax, 'Observed wavelength (microns)', 'Flux', args.fontsize,  hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
 
     return ax, cont
 
@@ -304,12 +294,14 @@ def plot_emission_map_rc(wave, spec2d, ax, mask, orient='c', cmap='viridis', hid
     good_wave_pix = (wave >= mask[0]) & (wave <= mask[1])
     line_map = spec2d[good_wave_pix, :]
     line_map = line_map.T
+    x_shape, y_shape = np.shape(line_map)
+    line_map = rebin(line_map, (min(x_shape, y_shape), min(x_shape, y_shape)))
 
     if show_log: line_map = np.log10(line_map)
     good_data = np.ma.compressed(np.ma.masked_where(~np.isfinite(line_map), line_map))
     vmin = np.percentile(good_data, 1)
     vmax = np.percentile(good_data, 99)
-    p = ax.imshow(line_map, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
+    p = ax.imshow(line_map, cmap=cmap, origin='lower', vmin=vmin, vmax=vmax)
 
     ax.text(0.98, 0.98, orient, fontsize=args.fontsize, c='r', ha='right', va='top', transform=ax.transAxes)
     ax = make_ax_labels(ax, '', '', args.fontsize, p=p, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
@@ -319,14 +311,46 @@ def plot_emission_map_rc(wave, spec2d, ax, mask, orient='c', cmap='viridis', hid
     return ax, line_map
 
 # --------------------------------------------------------------------------------------------------------------------
+def plot_emission_map_combined(line_map_c, line_map_r, ax, args, cmap='viridis', hide_xaxis=True, hide_yaxis=True, hide_cbar=True, show_log=True):
+    '''
+    Combine 2D line maps from 2 grism orients and and plot it on a given axis
+    Returns axis handle and the combined 2D map
+    '''
+
+    line_map = np.mean([line_map_c, line_map_r], axis=0)
+
+    good_data = np.ma.compressed(np.ma.masked_where(~np.isfinite(line_map), line_map))
+    vmin = np.percentile(good_data, 1)
+    vmax = np.percentile(good_data, 99)
+    p = ax.imshow(line_map, cmap=cmap, origin='lower',  vmin=vmin, vmax=vmax)
+
+    ax.text(0.98, 0.98, 'comb', fontsize=args.fontsize, c='r', ha='right', va='top', transform=ax.transAxes)
+    ax = make_ax_labels(ax, '', '', args.fontsize, p=p, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+
+    return ax, line_map
+
+# --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
 
     # --------setting up hardcoded values---------------------
-    filter = 'f115w'
+    filter = 'f200w'
     filter_line_dict = {'f115w':[['OII', 1.20, 1.24]], 'f150w':[['OIII', 1.70, 1.74]], 'f200w':[['Ha', 2.05, 2.15]]}
     dirimg_cmap, grism_dir_cmap, grism_2d_cmap = 'cividis', 'winter', 'winter'
+    contfit_order = 5
+
+    # --------declaring filter-specific properties ---------
+    # --from https://jwst-docs.stsci.edu/jwst-near-infrared-imager-and-slitless-spectrograph/niriss-instrumentation/niriss-gr150-grisms#gsc.tab=0-------
+    df_filter_prop = pd.DataFrame({'filter': ['f115w', 'f150w', 'f200w'],
+                                   'lambda_cen': [1.148, 1.501, 1.989],
+                                   'lambda_low': [1.013, 1.330, 1.751],
+                                   'lambda_high': [1.283, 1.671, 2.226],
+                                   'npix_extent': [60, 80, 120],
+                                   'npix_offset_first': [-6, 55, 147],
+                                   'npix_offset_zero': [214, 220, 206],
+                                   'spatial_offset_c': [2, 2, 1],
+                                   'spatial_offset_r': [2, 2, 2]})
 
     # --------setting up global values---------------------
     args.id_arr = np.atleast_1d(args.id)
@@ -402,8 +426,8 @@ if __name__ == "__main__":
         ax_grism_2d_r, spec2d_grism_r, wave_grism_r = cutout_grism_spectra(ra, dec, filter, 'r', grism_r_data, grism_r_wcs, grism_r_pixscale, ax_grism_2d_r, args, cmap=grism_2d_cmap, show_log=False)
 
         # --------model the 2D continuum and plot---------------
-        ax_contfit_c, cont_grism_c = plot_cont(wave_grism_c, spec2d_grism_c, ax_contfit_c, args.line_masks, fit_order=3, orient='c', hide_xaxis=True, hide_yaxis=False, hide_cbar=True)
-        ax_contfit_r, cont_grism_r = plot_cont(wave_grism_r, spec2d_grism_r, ax_contfit_r, args.line_masks, fit_order=3, orient='r', hide_xaxis=False, hide_yaxis=False, hide_cbar=True)
+        ax_contfit_c, cont_grism_c = plot_cont(wave_grism_c, spec2d_grism_c, ax_contfit_c, args.line_masks, fit_order=contfit_order, orient='c', hide_xaxis=True, hide_yaxis=False, hide_cbar=True)
+        ax_contfit_r, cont_grism_r = plot_cont(wave_grism_r, spec2d_grism_r, ax_contfit_r, args.line_masks, fit_order=contfit_order, orient='r', hide_xaxis=False, hide_yaxis=False, hide_cbar=True)
 
         # --------plot the continuum subtracted 2D spectra of r & c orients---------------
         ax_grism_sub_c, spec2d_contsub_grism_c, _ = cutout_grism_spectra(ra, dec, filter, 'c', grism_c_data, grism_c_wcs, grism_c_pixscale, ax_grism_sub_c, args, cmap=grism_2d_cmap, show_log=False, cont=cont_grism_c, mask=args.line_masks[0])
@@ -414,6 +438,7 @@ if __name__ == "__main__":
         ax_em_r, line_map_r = plot_emission_map_rc(wave_grism_r, spec2d_contsub_grism_r, ax_em_r, args.line_masks[0], cmap=grism_dir_cmap, orient='r', hide_xaxis=True, hide_yaxis=True, hide_cbar=True, show_log=False)
 
         # --------rotate and plot the combined the emission map---------------
+        ax_em, line_map = plot_emission_map_combined(line_map_c, line_map_r, ax_em, args, cmap=grism_dir_cmap, hide_xaxis=True, hide_yaxis=True, hide_cbar=True)
 
         # ------------saving the full figure--------------------------
         figname = extract_dir / f'{args.id:05d}_extraction.png'
