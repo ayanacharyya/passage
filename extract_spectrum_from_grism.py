@@ -3,7 +3,7 @@
     Notes: Extracts 1D spectra and 2D emission line maps from calibrated grism data, following Vulcani+15 method
     Author : Ayan
     Created: 13-03-25
-    Example: run extract_spectrum_from_grism.py --field Par028 --drv 0.5 --id 1303 --arcsec_limit 3 --plot_circle_at_radius 1 --test_cutout --debug_zero_order
+    Example: run extract_spectrum_from_grism.py --field Par028 --drv 0.5 --id 1303,1934,2867,300 --arcsec_limit 3 --plot_circle_at_radius 1 --test_cutout --debug_zero_order
 '''
 from header import *
 from util import *
@@ -61,7 +61,7 @@ def cutout_grism_spectra(ra, dec, filter, orient, data, wcs, pixscale, ax, args,
     # -----------------------------
     row = df_filter_prop[df_filter_prop['filter'] == filter]
     first_order_shift_pix = row['npix_offset_first'].values[0] # this should be a function of the filter
-    if orient == 
+    if orient == 'r': first_order_shift_pix+= 6
     lambda_extent_pix = row['npix_extent'].values[0] # this should be a function of the filter wavelength extent
     spatial_cutout_extent_pix = int((args.arcsec_limit/2 * u.arcsec).to(u.pixel, pixscale).value) # this should be a function of arcsec.limit
     spatial_extract_extent_pix = int((args.extract_arcsec * u.arcsec).to(u.pixel, pixscale).value) # this should be a function of arcsec.limit
@@ -108,8 +108,8 @@ def cutout_grism_spectra(ra, dec, filter, orient, data, wcs, pixscale, ax, args,
 
     if show_log: cutout_data = 10 ** cutout_data # to bring spec2d back to flux units
     cutout_data = cutout_data.T # this transpose is necessary to make dim_x = wavelength and dim_y = flux
-    cutout_2d_spectra = cutout_data[0:lambda_extent_pix, int(spatial_cutout_extent_pix/2 - spatial_extract_extent_pix/2):int(spatial_cutout_extent_pix/2 + spatial_extract_extent_pix/2)]
-    wave_arr = np.linspace(row['lambda_low'].values[0], row['lambda_high'].values[0], lambda_extent_pix) # in microns, observed frame
+    cutout_2d_spectra = cutout_data[:, int(spatial_cutout_extent_pix/2 - spatial_extract_extent_pix/2):int(spatial_cutout_extent_pix/2 + spatial_extract_extent_pix/2)]
+    wave_arr = np.linspace(row['lambda_low'].values[0], row['lambda_high'].values[0], lambda_extent_pix)[:np.shape(cutout_2d_spectra)[0]] # in microns, observed frame
 
     if mask is not None:
         mask_wave_pix = [np.where(wave_arr >= item)[0][0] for item in mask]
@@ -149,9 +149,12 @@ def cutout_grism_image(ra, dec, filter, orient, data, wcs, pixscale, ax, args, c
     else: cutout = Cutout2D(data, pos_sky_zero, size, wcs=wcs)
     cutout_data = np.log10(cutout.data)
 
-    good_data = np.ma.compressed(np.ma.masked_where(~np.isfinite(cutout_data), cutout_data))
-    vmin = np.percentile(good_data, 1)
-    vmax = np.percentile(good_data, 99)
+    try:
+        good_data = np.ma.compressed(np.ma.masked_where(~np.isfinite(cutout_data), cutout_data))
+        vmin = np.percentile(good_data, 1)
+        vmax = np.percentile(good_data, 99)
+    except IndexError:
+        vmin, vmax = None, None
 
     p = ax.imshow(cutout_data, cmap=cmap, origin='lower', vmin=vmin, vmax=vmax, extent=args.extent)
     ax.scatter(0, 0, marker='x', s=10, c='r')
@@ -301,7 +304,7 @@ def plot_emission_map_rc(wave, spec2d, ax, mask, orient='c', cmap='viridis', hid
     good_data = np.ma.compressed(np.ma.masked_where(~np.isfinite(line_map), line_map))
     vmin = np.percentile(good_data, 1)
     vmax = np.percentile(good_data, 99)
-    p = ax.imshow(line_map, cmap=cmap, origin='lower', vmin=vmin, vmax=vmax)
+    p = ax.imshow(line_map, cmap=cmap, origin='lower', vmin=0, vmax=3 if args.test_cutout else 0.07)
 
     ax.text(0.98, 0.98, orient, fontsize=args.fontsize, c='r', ha='right', va='top', transform=ax.transAxes)
     ax = make_ax_labels(ax, '', '', args.fontsize, p=p, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
@@ -322,7 +325,7 @@ def plot_emission_map_combined(line_map_c, line_map_r, ax, args, cmap='viridis',
     good_data = np.ma.compressed(np.ma.masked_where(~np.isfinite(line_map), line_map))
     vmin = np.percentile(good_data, 1)
     vmax = np.percentile(good_data, 99)
-    p = ax.imshow(line_map, cmap=cmap, origin='lower',  vmin=vmin, vmax=vmax)
+    p = ax.imshow(line_map, cmap=cmap, origin='lower',  vmin=0, vmax=3 if args.test_cutout else 0.07)
 
     ax.text(0.98, 0.98, 'comb', fontsize=args.fontsize, c='r', ha='right', va='top', transform=ax.transAxes)
     ax = make_ax_labels(ax, '', '', args.fontsize, p=p, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
@@ -336,7 +339,7 @@ if __name__ == "__main__":
 
     # --------setting up hardcoded values---------------------
     filter = 'f200w'
-    filter_line_dict = {'f115w':[['OII', 1.20, 1.24]], 'f150w':[['OIII', 1.70, 1.74]], 'f200w':[['Ha', 2.05, 2.15]]}
+    filter_line_dict = {'f115w':[['OII', 1.20, 1.24]], 'f150w':[['OIII', 1.70, 1.74]], 'f200w':[['Ha', 2.08, 2.12]]}
     dirimg_cmap, grism_dir_cmap, grism_2d_cmap = 'cividis', 'winter', 'winter'
     contfit_order = 5
 
@@ -356,7 +359,7 @@ if __name__ == "__main__":
     args.id_arr = np.atleast_1d(args.id)
     args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
     product_dir = args.input_dir / args.drv / f'{args.field}' / 'Products'
-    catalog_file = args.output_dir / 'catalogs' / 'Par028_v0.5_venn_OIII,Ha,OII,Hb,SII,SNR>2.0,mass_df.txt'
+    catalog_file = args.output_dir / 'catalogs' / 'Par028_v0.5_venn_OIII,Ha,OII,Hb,SII,SNR>2.0_df.txt'
 
     args.lines = [item[0] for item in filter_line_dict[filter]]
     args.line_masks = [[item[1], item[2]] for item in filter_line_dict[filter]]
@@ -379,8 +382,8 @@ if __name__ == "__main__":
         print(f'Doing object {args.id} which is {index + 1} out of {len(args.id_arr)} objects..')
 
         # ---------setting up filenames-----------------------------
-        extract_dir = args.output_dir / f'{args.field}' / f'{args.id:05d}'
-        extract_dir.mkdir(parents=True, exist_ok=True)
+        plots_dir = args.output_dir / f'{args.field}' / f'non_grizli_extractions'
+        plots_dir.mkdir(parents=True, exist_ok=True)
 
         # --------setting up full figure----------------------------------
         nrow, ncol = 4, 9
@@ -441,7 +444,7 @@ if __name__ == "__main__":
         ax_em, line_map = plot_emission_map_combined(line_map_c, line_map_r, ax_em, args, cmap=grism_dir_cmap, hide_xaxis=True, hide_yaxis=True, hide_cbar=True)
 
         # ------------saving the full figure--------------------------
-        figname = extract_dir / f'{args.id:05d}_extraction.png'
+        figname = plots_dir / f'{args.id:05d}_extraction.png'
         fig.savefig(figname, transparent=args.fortalk)
         print(f'Saved figure as {figname}')
         plt.show(block=False)
