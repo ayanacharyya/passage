@@ -141,6 +141,7 @@ def parse_args():
     parser.add_argument('--use_variable_N2Ha', dest='use_variable_N2Ha', action='store_true', default=False, help='Use variable Ha/(NII + Ha) ratio across the face of the galaxy, to compute the Ha for the x-axis of BPT diagram, instead of constant 0.82? Default is no.')
     parser.add_argument('--no_text_on_plot', dest='no_text_on_plot', action='store_true', default=False, help='Skip putting text annotations on plot2D? Default is no.')
     parser.add_argument('--plot_models', dest='plot_models', action='store_true', default=False, help='Overplot MAPPINGS photoionisation models on the BPT diagram? Default is no.')
+    parser.add_argument('--plot_DIG', dest='plot_DIG', action='store_true', default=False, help='Plot DIG diagnostics? Default is no.')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')

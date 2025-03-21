@@ -42,6 +42,9 @@
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --use_H21 --plot_models --slice_at_quantity3 4,9
 
              run make_diagnostic_maps.py --field glass-a2744 --id 321,998,1694,1983,2355,2744,2938 --plot_snr --plot_ratio_maps --plot_radial_profiles --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --fontsize 5 --arcsec_limit 0.5
+
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_DIG --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --plot_circle_at_arcsec 0.5
+
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -160,7 +163,6 @@ def plot_MAPPINGS_lines(ax):
 
     return ax
 
-
 # --------------------------------------------------------------------------------------------------------------------
 def get_linelist(wave_lim=None):
     '''
@@ -176,7 +178,6 @@ def get_linelist(wave_lim=None):
     print(f'Found {len(lines_df)} lines in this wavelength regime from {line_list_file}; over-plotting them now..')
 
     return lines_df
-
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_linelist(ax):
@@ -674,7 +675,7 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
 
     if args.vorbin and not for_vorbin:
         if args.voronoi_line is None: # No reference emission line specified, so Voronoi IDs need to be computed now
-            bin_IDs = get_voronoi_bin_IDs(line_map, line_map_err, args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin)
+            bin_IDs = get_voronoi_bin_IDs(unp.uarray(line_map, line_map_err), args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
         else: # Reference emission line specified for Voronoi binning, so bin IDs have been pre-computed
             bin_IDs = args.voronoi_bin_IDs
 
@@ -796,7 +797,6 @@ def get_kappa(x, i):
         a = -1.073 - 0.628 * (x - 8) + 0.137 * (x - 8) ** 2 - 0.070 * (x - 8) ** 3
         b = 13.670 + 4.257 * (x - 8) - 0.420 * (x - 8) ** 2 + 0.374 * (x - 8) ** 3
     return a * Rv + b
-
 
 # -------------------------------------------------------------------------
 def get_full_kappa(wave, inAngstrom=True):
@@ -1821,7 +1821,17 @@ def plot_starburst_map(full_hdu, axes, args, radprof_axes=None, vorbin_axes=None
 
     # ---------getting the direct image-------------
     filter = 'F115W'
-    filter_hdu = full_hdu['DSCI', f'{filter.upper()}-CLEAR']
+    try:
+        filter_hdu = full_hdu['DSCI', f'{filter.upper()}-CLEAR']
+    except:
+        try:
+            filter_hdu = full_hdu['DSCI', f'{filter.upper()}']
+        except:
+            try:
+                filter_hdu = full_hdu['DSCI', f'CLEAR']
+            except:
+                print(f'\nWARNING: DSCI {filter.upper()}-CLEAR or {filter.upper()} extensions not found in full_hdu, so attempting read in DSCI F140W')
+                filter_hdu = full_hdu['DSCI', 'F140W']
     target_header = filter_hdu.header
     direct_map = get_direct_image_per_filter(full_hdu, filter, target_header, args)
     if direct_map is None:
@@ -1955,7 +1965,6 @@ def get_AGN_func_methods(args):
 
     return methods
 
-
 # --------------------------------------------------------------------------------------------------------------------
 def AGN_func(x, method):
     '''
@@ -1986,7 +1995,7 @@ def overplot_AGN_line_on_BPT(ax, method='K01', color='k', fontsize=10):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def take_safe_log_ratio(num_map, den_map):
+def take_safe_log_ratio(num_map, den_map, skip_log=False):
     '''
     Takes the log of ratio of two 2D masked arrays by properly accounting for bad values so as to avoid math errors
     Returns 2D masked array
@@ -1998,10 +2007,11 @@ def take_safe_log_ratio(num_map, den_map):
     else:
         net_mask = False
 
-    bad_mask = (unp.nominal_values(num_map) < 0) | (unp.nominal_values(den_map) <= 0) | (~np.isfinite(unp.nominal_values(num_map))) | (~np.isfinite(unp.nominal_values(den_map))) | (~np.isfinite(unp.std_devs(num_map))) | (~np.isfinite(unp.std_devs(den_map)))
+    bad_mask = (unp.nominal_values(num_map) <= 0) | (unp.nominal_values(den_map) <= 0) | (~np.isfinite(unp.nominal_values(num_map))) | (~np.isfinite(unp.nominal_values(den_map))) | (~np.isfinite(unp.std_devs(num_map))) | (~np.isfinite(unp.std_devs(den_map)))
     num_map[bad_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
     den_map[bad_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-    ratio_map = unp.log10(num_map / den_map)
+    ratio_map = num_map / den_map
+    if not skip_log: ratio_map = unp.log10(ratio_map)
     ratio_map = np.ma.masked_where(bad_mask | net_mask, ratio_map)
     
     return ratio_map
@@ -2049,7 +2059,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
     '''
     Plots spatially resolved BPT diagram based on fluxes from grizli, on an existing axis
     Then overplots theoretical lines
-    Returns axis handle and the handle of the spatially reslved scatter plot
+    Returns axis handle and the handle of the spatially resolved scatter plot
     '''
     print(f'Plotting BPT diagram..')
     if args.plot_separately: fig_indiv, ax_indiv = plt.subplots(1, figsize=(8, 6))
@@ -2194,6 +2204,112 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
             ax = annotate_BPT_axes(scatter_plot_handle, ax, args)
 
     return ax, distance_from_AGN_line_map, distance_from_AGN_line_int
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_DIG_maps(full_hdu, axes, args, radprof_axes=None, snr_axes=None):
+    '''
+    Plots spatially resolved DIG contribution based on Tomicic+21, on an existing axis
+    Returns axis handle and the handle of the spatially resolved scatter plot
+    '''
+    print(f'Plotting DIG diagnostics..')
+    # ---------getting the Ha and SII maps-------------
+    ha_map, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=True)
+    sii_map, _, _, _ = get_emission_line_map('SII', full_hdu, args, dered=True)
+
+    # ---------getting the S2Ha ratio map-------------
+    S2Ha_map = take_safe_log_ratio(sii_map, ha_map, skip_log=True)
+
+    # ---------getting the metallicity map-------------
+    logOH_map, logOH_int = get_Z(full_hdu, args)
+
+    # -----correcting S2Ha by metallicity, following Tomicic+21----------------
+    Z_MW = 8.69 # T21 (and Franchetto+20) assumed MW abundance = solar neighbourhood abundance
+    Z_ratio = 10 ** (logOH_map.data - Z_MW)
+    S2Ha_map_corr = np.ma.masked_where(S2Ha_map.mask | logOH_map.mask, (S2Ha_map.data / Z_ratio))
+
+    # ------converting units of Ha map from ergs/s/cm^2 to ergs/s/kpc^2---------
+    quant = (unp.nominal_values(ha_map.data) * u.erg / u.second / u.cm ** 2).to(u.erg / u.second / (u.kpc ** 2)).value
+    quant_u = (unp.std_devs(ha_map.data) * u.erg / u.second / u.cm ** 2).to(u.erg / u.second / (u.kpc ** 2)).value
+    ha_map = np.ma.masked_where(ha_map.mask, unp.uarray(quant, quant_u))
+
+    # --------making arrays for subplots-------------
+    maps_dict = {'ha':ha_map, 's2ha':S2Ha_map, 'metal':logOH_map, 's2ha_corr':S2Ha_map_corr}
+    labels_dict = {'ha':r'H$\alpha$', 's2ha':r'SII/H$\alpha$', 'metal':f'log(O/H)+12 ({args.Zdiag})', 's2ha_corr':r'SII/H$\alpha$ corr'}
+    lims_dict = {'ha':[23.5, 25.5], 's2ha':[0, 2], 'metal':[7.5, 9.2], 's2ha_corr':[0, 2]}
+    takelog_dict = {'ha':True, 's2ha':False, 'metal':False, 's2ha_corr':False}
+    cmap_dict = {'ha':'BuPu_r', 's2ha':'RdPu_r', 'metal':'viridis', 's2ha_corr':'RdPu_r'}
+    if len(np.atleast_1d(axes)) > 1: sequence_to_plot = ['ha', 's2ha', 'metal', 's2ha_corr']
+    else: sequence_to_plot = ['s2ha_corr']
+
+    # ---------plotting the 2D maps-------------
+    axes = np.atleast_1d(axes)
+    for index, quant in enumerate(sequence_to_plot):
+        map_err = np.ma.masked_where(maps_dict[quant].mask, unp.std_devs(maps_dict[quant].data))
+        axes[index], _ = plot_2D_map(maps_dict[quant], axes[index], args, takelog=takelog_dict[quant], label=labels_dict[quant], cmap=cmap_dict[quant], vmin=lims_dict[quant][0], vmax=lims_dict[quant][1], radprof_ax=np.atleast_1d(radprof_axes)[index] if args.plot_radial_profiles else None, snr_ax=np.atleast_1d(snr_axes)[index] if args.plot_snr else None, image_err=map_err if args.plot_snr else None, hide_yaxis=True, hide_xaxis=False, hide_cbar=True, metallicity_multi_color=args.Zdiag == 'P25' and quant == 'metal')
+
+    # ---------plotting S2Ha_corr vs Ha SB-------------
+    ax = axes[-1]
+    bad_mask = S2Ha_map_corr.mask | ha_map.mask
+    S2Ha_corr_array = np.ma.compressed(np.ma.masked_where(bad_mask, S2Ha_map_corr))
+    ha_array = np.ma.compressed(np.ma.masked_where(bad_mask, ha_map))
+    log_ha_array = unp.log10(ha_array)
+    logOH_array = np.ma.compressed(np.ma.masked_where(bad_mask, logOH_map))
+
+    ax.errorbar(unp.nominal_values(log_ha_array), unp.nominal_values(S2Ha_corr_array), xerr=unp.std_devs(log_ha_array), yerr=unp.std_devs(S2Ha_corr_array), c='grey', fmt='none', lw=1 if args.vorbin else 0.5, alpha=0.2 if args.vorbin else 0.1)
+    p = ax.scatter(unp.nominal_values(log_ha_array), unp.nominal_values(S2Ha_corr_array), s=30, lw=0.5, edgecolors='k', c=unp.nominal_values(logOH_array), cmap=args.diverging_cmap if args.Zdiag == 'P25' else 'viridis', vmin=7.5, vmax=9.2)
+
+    ax.set_xlim(23.5, 25.5)
+    ax.set_ylim(0, 2)
+
+    ax.set_xlabel(r'log H$\alpha$ (ergs/s/kpc^2)', fontsize=args.fontsize)
+    ax.set_ylabel(r'SII/H$\alpha$ corr', fontsize=args.fontsize)
+
+    ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes('right', size='5%', pad='2%')
+    cbar = plt.colorbar(p, cax=cax, orientation='vertical')
+    cbar.ax.tick_params(labelsize=args.fontsize)
+    cbar.set_label(f'log(O/H)+12 ({args.Zdiag})', fontsize=args.fontsize)
+
+    fig = ax.figure
+    if args.plot_radial_profiles: fig.delaxes(np.atleast_1d(radprof_axes)[-1])
+    if args.plot_snr: fig.delaxes(np.atleast_1d(snr_axes)[-1])
+
+    return axes, S2Ha_map_corr
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_DIG_figure(full_hdu, args):
+    '''
+    Plots the DIG diagnostics (Ha SB map, S2Ha map, metallicity map) in a new figure
+    Returns the figure handle and the ratio map just produced
+    '''
+    nrows, ncols = 1, 5
+    if args.plot_snr: nrows += 1
+    if args.plot_radial_profiles: nrows += 1
+
+    fig_size_dict = {1: [14, 4, 0.05, 0.97, 0.15, 0.9, 0.2, 0.], \
+                     2: [14, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.2], \
+                     3: [9, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.3], \
+                     4: [9, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.3]}  # figsize_w, figsize_h, l, r, b, t, ws, hs
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(fig_size_dict[nrows][0], fig_size_dict[nrows][1]))
+    if nrows > 1:
+        extra_axes = axes[1:,:]
+        axes = axes[0,:]
+    if args.plot_snr:
+        snr_axes = extra_axes[0,:].flatten()
+        extra_axes = extra_axes[1:,:]
+    if args.plot_radial_profiles:
+        radprof_axes = extra_axes[0:, :].flatten()
+        extra_axes = extra_axes[1:, :]
+
+    fig.subplots_adjust(left=fig_size_dict[nrows][2], right=fig_size_dict[nrows][3], bottom=fig_size_dict[nrows][4], top=fig_size_dict[nrows][5], wspace=fig_size_dict[nrows][6], hspace=fig_size_dict[nrows][7])
+
+    axes, cdig_map = plot_DIG_maps(full_hdu, axes, args, radprof_axes=radprof_axes if 'radprof_axes' in locals() else None, snr_axes=snr_axes if 'snr_axes' in locals() else None)
+
+    return fig, cdig_map
+
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -2429,6 +2545,15 @@ if __name__ == "__main__":
                 # ---------decorating and saving the figure------------------------------
                 fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
                 figname = fig_dir / f'{args.field}_{args.id:05d}_metallicity_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}.png'
+
+            # ---------initialising the metallicity figure------------------------------
+            elif args.plot_DIG:
+                if args.mask_agn or args.Zdiag == 'P25': _, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_AGN_line map, without actually plotting the BPT diagram
+                fig, dig_map = plot_DIG_figure(full_hdu, args)
+
+                # ---------decorating and saving the figure------------------------------
+                fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+                figname = fig_dir / f'{args.field}_{args.id:05d}_DIG_maps{radial_plot_text}{only_seg_text}{vorbin_text}.png'
 
             # ---------initialising the full figure------------------------------
             else:
