@@ -41,6 +41,7 @@ from reproject import reproject_interp, reproject_adaptive
 from scipy.stats import mode as sci_mode
 from scipy.interpolate import NearestNDInterpolator
 from scipy.ndimage import gaussian_filter1d
+from scipy.optimize import curve_fit
 
 import regions
 from regions import Regions, PixCoord

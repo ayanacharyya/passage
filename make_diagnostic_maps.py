@@ -2248,35 +2248,63 @@ def plot_DIG_maps(full_hdu, axes, args, radprof_axes=None, snr_axes=None):
         axes[index], _ = plot_2D_map(maps_dict[quant], axes[index], args, takelog=takelog_dict[quant], label=labels_dict[quant], cmap=cmap_dict[quant], vmin=lims_dict[quant][0], vmax=lims_dict[quant][1], radprof_ax=np.atleast_1d(radprof_axes)[index] if args.plot_radial_profiles else None, snr_ax=np.atleast_1d(snr_axes)[index] if args.plot_snr else None, image_err=map_err if args.plot_snr else None, hide_yaxis=True, hide_xaxis=False, hide_cbar=True, metallicity_multi_color=args.Zdiag == 'P25' and quant == 'metal')
 
     # ---------plotting S2Ha_corr vs Ha SB-------------
-    ax = axes[-1]
     bad_mask = S2Ha_map_corr.mask | ha_map.mask
     S2Ha_corr_array = np.ma.compressed(np.ma.masked_where(bad_mask, S2Ha_map_corr))
     ha_array = np.ma.compressed(np.ma.masked_where(bad_mask, ha_map))
     log_ha_array = unp.log10(ha_array)
     logOH_array = np.ma.compressed(np.ma.masked_where(bad_mask, logOH_map))
 
-    ax.errorbar(unp.nominal_values(log_ha_array), unp.nominal_values(S2Ha_corr_array), xerr=unp.std_devs(log_ha_array), yerr=unp.std_devs(S2Ha_corr_array), c='grey', fmt='none', lw=1 if args.vorbin else 0.5, alpha=0.2 if args.vorbin else 0.1)
-    p = ax.scatter(unp.nominal_values(log_ha_array), unp.nominal_values(S2Ha_corr_array), s=30, lw=0.5, edgecolors='k', c=unp.nominal_values(logOH_array), cmap=args.diverging_cmap if args.Zdiag == 'P25' else 'viridis', vmin=7.5, vmax=9.2)
+    if args.plot_radial_profiles:
+        ax = np.atleast_1d(radprof_axes)[-1]
+        ax.errorbar(unp.nominal_values(log_ha_array), unp.nominal_values(S2Ha_corr_array), xerr=unp.std_devs(log_ha_array), yerr=unp.std_devs(S2Ha_corr_array), c='grey', fmt='none', lw=1 if args.vorbin else 0.5, alpha=0.2 if args.vorbin else 0.1)
+        p = ax.scatter(unp.nominal_values(log_ha_array), unp.nominal_values(S2Ha_corr_array), s=30, lw=0.5, edgecolors='k', c=unp.nominal_values(logOH_array), cmap=args.diverging_cmap if args.Zdiag == 'P25' else 'viridis', vmin=7.5, vmax=9.2)
 
-    ax.set_xlim(23.5, 25.5)
-    ax.set_ylim(0, 2)
+        ax.set_xlim(23.5, 25.5)
+        ax.set_ylim(0, 2)
 
-    ax.set_xlabel(r'log H$\alpha$ (ergs/s/kpc^2)', fontsize=args.fontsize)
-    ax.set_ylabel(r'SII/H$\alpha$ corr', fontsize=args.fontsize)
+        ax.set_xlabel(r'log H$\alpha$ (ergs/s/kpc^2)', fontsize=args.fontsize)
+        ax.set_ylabel(r'SII/H$\alpha$ corr', fontsize=args.fontsize)
 
-    ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+        ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes('right', size='5%', pad='2%')
-    cbar = plt.colorbar(p, cax=cax, orientation='vertical')
-    cbar.ax.tick_params(labelsize=args.fontsize)
-    cbar.set_label(f'log(O/H)+12 ({args.Zdiag})', fontsize=args.fontsize)
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes('right', size='5%', pad='2%')
+        cbar = plt.colorbar(p, cax=cax, orientation='vertical')
+        cbar.ax.tick_params(labelsize=args.fontsize)
+        cbar.set_label(f'log(O/H)+12 ({args.Zdiag})', fontsize=args.fontsize)
 
     fig = ax.figure
-    if args.plot_radial_profiles: fig.delaxes(np.atleast_1d(radprof_axes)[-1])
     if args.plot_snr: fig.delaxes(np.atleast_1d(snr_axes)[-1])
 
-    return axes, S2Ha_map_corr
+    # ---------computing spatially resolved C_DIG, following Tomicic+21 S3.1-------------
+    df = pd.DataFrame({'S2Ha_corr': unp.nominal_values(S2Ha_corr_array), 'S2Ha_corr_u': unp.std_devs(S2Ha_corr_array), \
+                       'log_Ha_SB':unp.nominal_values(log_ha_array), 'log_Ha_SB_u':unp.std_devs(log_ha_array), \
+                       'logOH':unp.nominal_values(logOH_array), 'logOH_u':unp.std_devs(logOH_array)})
+    df['pct_Ha'] = df['log_Ha_SB'].rank(pct=True)
+    S2Ha_corr_DIG = np.median(df[df['pct_Ha'] <= 0.05]['S2Ha_corr'])
+    S2Ha_corr_dense = np.median(df[df['pct_Ha'] >= 0.95]['S2Ha_corr'])
+    c_dig_array = (S2Ha_corr_dense - S2Ha_corr_array) / (S2Ha_corr_dense - S2Ha_corr_DIG)
+
+    # ---------fitting C_DIG vs Ha SB------------------
+    def cdig_func(x, *popt): return np.piecewise(x, [x <= popt[0], x > popt[0]], [1, lambda x: (popt[0]/x) ** popt[1]])
+
+    popt, pcov = curve_fit(cdig_func, unp.nominal_values(ha_array), unp.nominal_values(c_dig_array), p0=[1e24, 0.7], sigma=unp.std_devs(c_dig_array), absolute_sigma=True)
+    c_dig_map = cdig_func(unp.nominal_values(ha_map), *popt)
+    c_dig_map = np.ma.masked_where(S2Ha_map_corr.mask, c_dig_map)
+
+    # -------plotting the fit-------------
+    if args.plot_radial_profiles:
+        fit_color = 'g'
+        x_array = 10 ** np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 10)
+        c_dig_array = cdig_func(x_array, *popt)
+        S2Ha_corr_array_fit = (1 - c_dig_array) * S2Ha_corr_dense + c_dig_array * S2Ha_corr_DIG
+        ax.plot(np.log10(x_array), S2Ha_corr_array_fit, lw=2, c=fit_color)
+        ax.text(0.99, 0.99, f'log(f0)={np.log10(popt[0]):.2f}, ' + r'$\beta$' + f'={popt[1]:.2f}', c=fit_color, ha='right', va='top', fontsize=args.fontsize, transform=ax.transAxes)
+
+    # ---------plotting the C_DIG map-------------
+    axes[-1], _ = plot_2D_map(c_dig_map, axes[-1], args, takelog=False, label=r'C$_{\mathrm{DIG}}$', cmap='viridis', vmin=0, vmax=1, hide_yaxis=True, hide_xaxis=False, hide_cbar=False)
+
+    return axes, c_dig_map
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_DIG_figure(full_hdu, args):
@@ -2289,7 +2317,7 @@ def plot_DIG_figure(full_hdu, args):
     if args.plot_radial_profiles: nrows += 1
 
     fig_size_dict = {1: [14, 4, 0.05, 0.97, 0.15, 0.9, 0.2, 0.], \
-                     2: [14, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.2], \
+                     2: [14, 7, 0.05, 0.98, 0.07, 0.95, 0.2, 0.2], \
                      3: [9, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.3], \
                      4: [9, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.3]}  # figsize_w, figsize_h, l, r, b, t, ws, hs
 
