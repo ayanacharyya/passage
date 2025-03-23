@@ -1018,6 +1018,23 @@ def get_custom_cmap(cmap_name, cmap_path=None):
     return mycmap_quant
 
 # --------------------------------------------------------------------------------------------------------------------
+def get_combined_cmap(breaks, cmaps, new_name='my_colormap'):
+    '''
+    Combines an arbitrary number of matplotlib colormaps at given break points
+    Returns a new colormap
+    Adapted from https://stackoverflow.com/questions/31051488/combining-two-matplotlib-colormaps
+    '''
+    colors = []
+    for index, cmap in enumerate(cmaps):
+        ncolors = int(256 * (breaks[index + 1] - breaks[index]))
+        this_colors = mplcolormaps[cmap](np.linspace(breaks[index], breaks[index + 1], ncolors))
+        colors.append(this_colors)
+    colors = np.vstack(colors)
+    new_cmap = mplcolors.LinearSegmentedColormap.from_list(new_name, colors)
+
+    return new_cmap
+
+# --------------------------------------------------------------------------------------------------------------------
 def unzip_and_delete(zip_file, destination_path):
     '''
     Unzips given zip file to given destination path and removes the zip file

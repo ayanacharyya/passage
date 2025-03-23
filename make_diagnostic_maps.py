@@ -43,8 +43,7 @@
 
              run make_diagnostic_maps.py --field glass-a2744 --id 321,998,1694,1983,2355,2744,2938 --plot_snr --plot_ratio_maps --plot_radial_profiles --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --fontsize 5 --arcsec_limit 0.5
 
-             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_DIG --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --plot_circle_at_arcsec 0.5
-
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_DIG --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag P25 --plot_circle_at_arcsec 0.5 --plot_snr
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -2245,7 +2244,7 @@ def plot_DIG_maps(full_hdu, axes, args, radprof_axes=None, snr_axes=None):
     axes = np.atleast_1d(axes)
     for index, quant in enumerate(sequence_to_plot):
         map_err = np.ma.masked_where(maps_dict[quant].mask, unp.std_devs(maps_dict[quant].data))
-        axes[index], _ = plot_2D_map(maps_dict[quant], axes[index], args, takelog=takelog_dict[quant], label=labels_dict[quant], cmap=cmap_dict[quant], vmin=lims_dict[quant][0], vmax=lims_dict[quant][1], radprof_ax=np.atleast_1d(radprof_axes)[index] if args.plot_radial_profiles else None, snr_ax=np.atleast_1d(snr_axes)[index] if args.plot_snr else None, image_err=map_err if args.plot_snr else None, hide_yaxis=True, hide_xaxis=False, hide_cbar=True, metallicity_multi_color=args.Zdiag == 'P25' and quant == 'metal')
+        axes[index], _ = plot_2D_map(maps_dict[quant], axes[index], args, takelog=takelog_dict[quant], label=labels_dict[quant], cmap=cmap_dict[quant], vmin=lims_dict[quant][0], vmax=lims_dict[quant][1], radprof_ax=np.atleast_1d(radprof_axes)[index] if args.plot_radial_profiles else None, snr_ax=np.atleast_1d(snr_axes)[index] if args.plot_snr else None, image_err=map_err if args.plot_snr else None, hide_yaxis=True, hide_xaxis=False, hide_cbar=False, metallicity_multi_color=args.Zdiag == 'P25' and quant == 'metal')
 
     # ---------plotting S2Ha_corr vs Ha SB-------------
     bad_mask = S2Ha_map_corr.mask | ha_map.mask
@@ -2254,27 +2253,27 @@ def plot_DIG_maps(full_hdu, axes, args, radprof_axes=None, snr_axes=None):
     log_ha_array = unp.log10(ha_array)
     logOH_array = np.ma.compressed(np.ma.masked_where(bad_mask, logOH_map))
 
-    if args.plot_radial_profiles:
-        ax = np.atleast_1d(radprof_axes)[-1]
-        ax.errorbar(unp.nominal_values(log_ha_array), unp.nominal_values(S2Ha_corr_array), xerr=unp.std_devs(log_ha_array), yerr=unp.std_devs(S2Ha_corr_array), c='grey', fmt='none', lw=1 if args.vorbin else 0.5, alpha=0.2 if args.vorbin else 0.1)
-        p = ax.scatter(unp.nominal_values(log_ha_array), unp.nominal_values(S2Ha_corr_array), s=30, lw=0.5, edgecolors='k', c=unp.nominal_values(logOH_array), cmap=args.diverging_cmap if args.Zdiag == 'P25' else 'viridis', vmin=7.5, vmax=9.2)
+    ax = axes[-2]
+    ax.errorbar(unp.nominal_values(log_ha_array), unp.nominal_values(S2Ha_corr_array), xerr=unp.std_devs(log_ha_array), yerr=unp.std_devs(S2Ha_corr_array), c='grey', fmt='none', lw=1 if args.vorbin else 0.5, alpha=0.2 if args.vorbin else 0.1)
+    p = ax.scatter(unp.nominal_values(log_ha_array), unp.nominal_values(S2Ha_corr_array), s=30, lw=0.5, edgecolors='k', c=unp.nominal_values(logOH_array), cmap=args.diverging_cmap if args.Zdiag == 'P25' else 'viridis', vmin=7.5, vmax=9.2)
 
-        ax.set_xlim(23.5, 25.5)
-        ax.set_ylim(0, 2)
+    ax.set_xlim(23.5, 25.5)
+    ax.set_ylim(0, 2)
 
-        ax.set_xlabel(r'log H$\alpha$ (ergs/s/kpc^2)', fontsize=args.fontsize)
-        ax.set_ylabel(r'SII/H$\alpha$ corr', fontsize=args.fontsize)
+    ax.set_xlabel(r'log H$\alpha$ (ergs/s/kpc^2)', fontsize=args.fontsize)
+    ax.set_ylabel(r'SII/H$\alpha$ corr', fontsize=args.fontsize)
 
-        ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+    ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes('right', size='5%', pad='2%')
-        cbar = plt.colorbar(p, cax=cax, orientation='vertical')
-        cbar.ax.tick_params(labelsize=args.fontsize)
-        cbar.set_label(f'log(O/H)+12 ({args.Zdiag})', fontsize=args.fontsize)
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes('right', size='5%', pad='2%')
+    cbar = plt.colorbar(p, cax=cax, orientation='vertical')
+    cbar.ax.tick_params(labelsize=args.fontsize)
+    cbar.set_label(f'log(O/H)+12 ({args.Zdiag})', fontsize=args.fontsize)
 
     fig = ax.figure
-    if args.plot_snr: fig.delaxes(np.atleast_1d(snr_axes)[-1])
+    if args.plot_radial_profiles: fig.delaxes(np.atleast_1d(radprof_axes)[-2])
+    if args.plot_snr: fig.delaxes(np.atleast_1d(snr_axes)[-2])
 
     # ---------computing spatially resolved C_DIG, following Tomicic+21 S3.1-------------
     df = pd.DataFrame({'S2Ha_corr': unp.nominal_values(S2Ha_corr_array), 'S2Ha_corr_u': unp.std_devs(S2Ha_corr_array), \
@@ -2287,22 +2286,30 @@ def plot_DIG_maps(full_hdu, axes, args, radprof_axes=None, snr_axes=None):
 
     # ---------fitting C_DIG vs Ha SB------------------
     def cdig_func(x, *popt): return np.piecewise(x, [x <= popt[0], x > popt[0]], [1, lambda x: (popt[0]/x) ** popt[1]])
-
     popt, pcov = curve_fit(cdig_func, unp.nominal_values(ha_array), unp.nominal_values(c_dig_array), p0=[1e24, 0.7], sigma=unp.std_devs(c_dig_array), absolute_sigma=True)
+
+    # ---------deriving the fitted C_DIG map and uncertainty------------------
     c_dig_map = cdig_func(unp.nominal_values(ha_map), *popt)
-    c_dig_map = np.ma.masked_where(S2Ha_map_corr.mask, c_dig_map)
+    c_dig_map_lowlim = cdig_func(unp.nominal_values(ha_map) + unp.std_devs(ha_map), *popt)
+    c_dig_map_uplim = cdig_func(unp.nominal_values(ha_map) - unp.std_devs(ha_map), *popt)
+    c_dig_map_u = np.mean(np.array([c_dig_map_lowlim, c_dig_map_uplim]), axis=0)
+    c_dig_map = np.ma.masked_where(S2Ha_map_corr.mask, unp.uarray(c_dig_map, c_dig_map_u))
 
     # -------plotting the fit-------------
-    if args.plot_radial_profiles:
-        fit_color = 'g'
-        x_array = 10 ** np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 10)
-        c_dig_array = cdig_func(x_array, *popt)
-        S2Ha_corr_array_fit = (1 - c_dig_array) * S2Ha_corr_dense + c_dig_array * S2Ha_corr_DIG
-        ax.plot(np.log10(x_array), S2Ha_corr_array_fit, lw=2, c=fit_color)
-        ax.text(0.99, 0.99, f'log(f0)={np.log10(popt[0]):.2f}, ' + r'$\beta$' + f'={popt[1]:.2f}', c=fit_color, ha='right', va='top', fontsize=args.fontsize, transform=ax.transAxes)
+    fit_color = 'g'
+    x_array = 10 ** np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 10)
+    c_dig_array = cdig_func(x_array, *popt)
+    S2Ha_corr_array_fit = (1 - c_dig_array) * S2Ha_corr_dense + c_dig_array * S2Ha_corr_DIG
+    ax.plot(np.log10(x_array), S2Ha_corr_array_fit, lw=2, c=fit_color)
+    ax.text(0.99, 0.99, f'log(f0)={np.log10(popt[0]):.2f}, ' + r'$\beta$' + f'={popt[1]:.2f}', c=fit_color, ha='right', va='top', fontsize=args.fontsize, transform=ax.transAxes)
 
     # ---------plotting the C_DIG map-------------
-    axes[-1], _ = plot_2D_map(c_dig_map, axes[-1], args, takelog=False, label=r'C$_{\mathrm{DIG}}$', cmap='viridis', vmin=0, vmax=1, hide_yaxis=True, hide_xaxis=False, hide_cbar=False)
+    dig_cmap = get_combined_cmap([0., 0.3, 0.7, 1.], ['binary', 'spring', 'hot']) # making C_DIG colormap, broken at 0.3 and 0.7
+    map_err = np.ma.masked_where(c_dig_map.mask, unp.std_devs(c_dig_map.data))
+    axes[-1], _ = plot_2D_map(c_dig_map, axes[-1], args, takelog=False, label=r'C$_{\mathrm{DIG}}$', cmap=dig_cmap, vmin=0, vmax=1, radprof_ax=np.atleast_1d(radprof_axes)[-1] if args.plot_radial_profiles else None, snr_ax=np.atleast_1d(snr_axes)[-1] if args.plot_snr else None, image_err=map_err if args.plot_snr else None, hide_yaxis=True, hide_xaxis=False, hide_cbar=False)
+    if args.plot_radial_profiles:
+        ax = np.atleast_1d(radprof_axes)[-1]
+        for val in [0.3, 0.7]: ax.axhline(val, lw=0.5, ls='--', c='k')
 
     return axes, c_dig_map
 
@@ -2312,13 +2319,13 @@ def plot_DIG_figure(full_hdu, args):
     Plots the DIG diagnostics (Ha SB map, S2Ha map, metallicity map) in a new figure
     Returns the figure handle and the ratio map just produced
     '''
-    nrows, ncols = 1, 5
+    nrows, ncols = 1, 6
     if args.plot_snr: nrows += 1
     if args.plot_radial_profiles: nrows += 1
 
     fig_size_dict = {1: [14, 4, 0.05, 0.97, 0.15, 0.9, 0.2, 0.], \
-                     2: [14, 7, 0.05, 0.98, 0.07, 0.95, 0.2, 0.2], \
-                     3: [9, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.3], \
+                     2: [14, 5, 0.05, 0.98, 0.05, 0.95, 0.2, 0.2], \
+                     3: [14, 7, 0.05, 0.98, 0.05, 0.95, 0.2, 0.2], \
                      4: [9, 7, 0.02, 0.98, 0.07, 0.95, 0.05, 0.3]}  # figsize_w, figsize_h, l, r, b, t, ws, hs
 
     fig, axes = plt.subplots(nrows, ncols, figsize=(fig_size_dict[nrows][0], fig_size_dict[nrows][1]))
@@ -2337,7 +2344,6 @@ def plot_DIG_figure(full_hdu, args):
     axes, cdig_map = plot_DIG_maps(full_hdu, axes, args, radprof_axes=radprof_axes if 'radprof_axes' in locals() else None, snr_axes=snr_axes if 'snr_axes' in locals() else None)
 
     return fig, cdig_map
-
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -2572,7 +2578,7 @@ if __name__ == "__main__":
 
                 # ---------decorating and saving the figure------------------------------
                 fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-                figname = fig_dir / f'{args.field}_{args.id:05d}_metallicity_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}.png'
+                figname = fig_dir / f'{args.field}_{args.id:05d}_metallicity_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}.png'
 
             # ---------initialising the metallicity figure------------------------------
             elif args.plot_DIG:
@@ -2581,7 +2587,7 @@ if __name__ == "__main__":
 
                 # ---------decorating and saving the figure------------------------------
                 fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-                figname = fig_dir / f'{args.field}_{args.id:05d}_DIG_maps{radial_plot_text}{only_seg_text}{vorbin_text}.png'
+                figname = fig_dir / f'{args.field}_{args.id:05d}_DIG_maps{radial_plot_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}.png'
 
             # ---------initialising the full figure------------------------------
             else:
