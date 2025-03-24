@@ -1953,7 +1953,7 @@ def get_AGN_func_methods(args):
     '''
     ratios = [f'{args.ynum_line}/{args.yden_line}', f'{args.xnum_line}/{args.xden_line}']
     if ratios == ['OIII/Hb', 'SII/Ha']:
-        if args.use_H21: methods = ['H21']
+        if args.use_H21: methods = ['H21', 'B22']
         else: methods = ['K01', 'S24']
     elif ratios == ['OIII/Hb', 'OII/OIII']:
         methods = []
@@ -1973,8 +1973,10 @@ def AGN_func(x, method):
         y = 1.3 + 0.72 / (x - 0.32)
     elif method == 'S24': # Eq 2 of Schultz+2024 (https://arxiv.org/abs/2311.18731), parameters from Table 3 for S2
         y = np.piecewise(x, [x >= -0.92, x < -0.92], [lambda x: (0.78 / (x - 0.34)) + 1.36, lambda x: -0.91 - 1.79 * x])
-    elif method == 'H21':
-        y = np.piecewise(x, [x < -0.14, x >= -0.14], [lambda x: 1.27 + (0.28 / (x + 0.14)), lambda x: -np.inf]) # Eq 2 of Henry+2021 (https://iopscience.iop.org/article/10.3847/1538-4357/ac1105/pdf)
+    elif method == 'H21': # Eq 2 of Henry+2021 (https://iopscience.iop.org/article/10.3847/1538-4357/ac1105/pdf)
+        y = np.piecewise(x, [x < -0.14, x >= -0.14], [lambda x: 1.27 + (0.28 / (x + 0.14)), lambda x: -np.inf])
+    elif method == 'B22':  # Eq 2 of Backhaus+2022 (https://iopscience.iop.org/article/10.3847/1538-4357/ac3919/pdf)
+        y = 1.3 + (0.48 / (1.09 * x + 0.12))
     else:
         sys.exit('Choose either K01 or S24 as the method for overplotting AGN demarcation lines')
     return y
@@ -1985,7 +1987,7 @@ def overplot_AGN_line_on_BPT(ax, method='K01', color='k', fontsize=10):
     Overplots a given AGN demarcation line on R3 vs S2 ratio BPT, on an existing axis
     Returns axis handle
     '''
-    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021'}
+    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021', 'B22':'Backhaus+2022'}
     x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
     y = AGN_func(x, method=method)
     ax.plot(x, y, c=color, ls='dashed', lw=2, label=label_dict[method])
