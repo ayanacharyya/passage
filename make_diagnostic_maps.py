@@ -35,11 +35,11 @@
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --mask_agn --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --keep
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --plot_circle_at_arcsec 0.5
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_snr --plot_ratio_maps --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --plot_circle_at_arcsec 0.5
-             run make_diagnostic_maps.py --field Par28 --id 2867 --plot_BPT --plot_AGN_frac --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.25 --colorcol distance_from_AGN_line --BPT_diag H21
-             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --BPT_diag O2O3
+             run make_diagnostic_maps.py --field Par28 --id 2867 --plot_BPT --plot_AGN_frac --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.25 --colorcol distance_from_AGN_line --AGN_diag H21
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --AGN_diag O2O3
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --use_variable_N2Ha
              run make_diagnostic_maps.py --field glass-a2744 --id 2928,5184 --plot_radial_profile --plot_AGN_frac --only_seg --vorbin --voronoi_line OIII --voronoi_snr 10 --drv 0.5 --do_not_correct_pixel --Zdiag O3O2
-             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --BPT_diag H21 --plot_models --slice_at_quantity3 4,9
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --AGN_diag H21 --plot_models --slice_at_quantity3 4,9
 
              run make_diagnostic_maps.py --field glass-a2744 --id 321,998,1694,1983,2355,2744,2938 --plot_snr --plot_ratio_maps --plot_radial_profiles --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --fontsize 5 --arcsec_limit 0.5
 
@@ -1951,18 +1951,18 @@ def get_AGN_func_methods(args):
     Determine which AGN demarcation method/s and line ratio combinations to be used in the BPT, given the BPT diagnostic requested
     Returns array of strings
     '''
-    if args.BPT_diag in ['VO87', 'K01', 'S24']:
+    if args.AGN_diag in ['VO87', 'K01', 'S24']:
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'SII', 'Ha', ['K01', 'S24']
-    elif args.BPT_diag in ['H21', 'B22']:
+    elif args.AGN_diag in ['H21', 'B22']:
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'SII', 'Ha', ['H21', 'B22_S2Ha']
-    elif args.BPT_diag == 'O2O3':
+    elif args.AGN_diag == 'O2O3':
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'OII', 'OIII', []
-    elif args.BPT_diag == 'O2Hb':
+    elif args.AGN_diag == 'O2Hb':
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OII', 'Hb', 'OIII', 'Hb', []
-    elif args.BPT_diag == 'Ne3O2':
+    elif args.AGN_diag == 'Ne3O2':
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'NeIII-3867', 'OII', ['B22_Ne3O2']
     else:
-        sys.exit('Choose BPT_diag to be one among VO87,H21,O2O3,O2Hb,Ne3O2')
+        sys.exit('Choose AGN_diag to be one among VO87,H21,O2O3,O2Hb,Ne3O2')
 
     return theoretical_lines
 
@@ -2028,14 +2028,14 @@ def annotate_BPT_axes(scatter_plot_handle, ax, args):
     Returns the axis handle
     '''
 
-    line_labels_dict = {'OII':'O II', 'SII':'S II 6717+31', 'OIII':'O III', 'Hb':'H beta', 'NeIII-3867':'Ne III', 'Ha':'N II + H alpha' if args.BPT_diag in ['H21', 'B22'] else 'H alpha'}
+    line_labels_dict = {'OII':'O II', 'SII':'S II 6717+31', 'OIII':'O III', 'Hb':'H beta', 'NeIII-3867':'Ne III', 'Ha':'N II + H alpha' if args.AGN_diag in ['H21', 'B22'] else 'H alpha'}
     ratios_limits_dict = {'OIII/Hb':[-1, 2], 'SII/Ha':[-2, 0.3], 'OII/OIII':[-2, 1], 'OII/Hb':[-1, 1],'NeIII-3867/OII':[-1.6, 0.5]}
     theoretical_lines = get_AGN_func_methods(args)
 
     # ---------overplot MAPPINGS models-------
     if args.plot_models:
         args2 = copy.deepcopy(args)
-        if args2.BPT_diag in ['H21', 'B22']: args2.xden_line = 'Ha,NII'
+        if args2.AGN_diag in ['H21', 'B22']: args2.xden_line = 'Ha,NII'
         print(f'Overplotting MAPPINGS models for {args2.ynum_line}/{args2.yden_line} vs {args2.xnum_line}/{args2.xden_line}..')
         geom_path_dict = {'s':'sp', 'p':'pp'}  # to determine directory structures based on geometry and iso parameters
         grid_filename = args2.mappings_dir / 'grids' / f'mappings_grid_{geom_path_dict[args2.geometry]}_iso_{args2.iso}.txt'
@@ -2079,7 +2079,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
     xnum_map, _, xnum_int, _ = get_emission_line_map(args.xnum_line, full_hdu, args)
     xden_map, _, xden_int, _ = get_emission_line_map(args.xden_line, full_hdu, args)
 
-    if not args.do_not_correct_flux and args.BPT_diag in ['H21', 'B22'] and args.xden_line == 'Ha': # special treatment for H-alpha line, in order to add the NII 6584 component back
+    if not args.do_not_correct_flux and args.AGN_diag in ['H21', 'B22'] and args.xden_line == 'Ha': # special treatment for H-alpha line, in order to add the NII 6584 component back
         factor = 0.823  # from grizli source code
         print(f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
         xden_map = np.ma.masked_where(xden_map.mask, xden_map.data / factor)
@@ -2134,7 +2134,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
 
     y_ratio = take_safe_log_ratio(ynum_map, yden_map)
     x_ratio = take_safe_log_ratio(xnum_map, xden_map)
-    # if args.xnum_line == 'SII' and args.xden_line == 'Ha' and not args.BPT_diag in ['H21', 'B22']: x_ratio = np.ma.masked_where(x_ratio_mask | xnum_map.mask | xden_map.mask | (x_ratio.data > np.log10(0.29)), x_ratio) # using a SII/Ha based DIG cut-off from Petrodjojo+19
+    # if args.xnum_line == 'SII' and args.xden_line == 'Ha' and not args.AGN_diag in ['H21', 'B22']: x_ratio = np.ma.masked_where(x_ratio_mask | xnum_map.mask | xden_map.mask | (x_ratio.data > np.log10(0.29)), x_ratio) # using a SII/Ha based DIG cut-off from Petrodjojo+19
 
     net_mask = y_ratio.mask | x_ratio.mask
 
@@ -2191,7 +2191,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
             fig_indiv.text(0.15, 0.9, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
 
             # -----------save figure----------------
-            figname = fig_dir / f'{args.field}_{args.id:05d}_BPT{snr_text}{only_seg_text}{vorbin_text}_BPT_diag_{args.BPT_diag}.png'
+            figname = fig_dir / f'{args.field}_{args.id:05d}_BPT{snr_text}{only_seg_text}{vorbin_text}_AGN_diag_{args.AGN_diag}.png'
             fig_indiv.savefig(figname, transparent=args.fortalk)
             print(f'Saved figure at {figname}')
             plt.show(block=False)
@@ -2415,7 +2415,7 @@ if __name__ == "__main__":
             writer = imageio.get_writer(outputfile, mode='I', fps=int(1. / duration_per_frame))
 
         # ----------------------initiliasing dataframe-------------------------------
-        all_lines_to_plot = ['OII', 'Hb', 'OIII', 'Ha', 'NeIII-3867' if args.BPT_diag == 'Ne3O2' else 'SII'] # from blue to red
+        all_lines_to_plot = ['OII', 'Hb', 'OIII', 'Ha', 'NeIII-3867' if args.AGN_diag == 'Ne3O2' else 'SII'] # from blue to red
         all_lines_to_save = args.line_list
         measured_quantities_to_plot = ['BPT', 'logq', 'logOH_R23', 'SFR', 'F115W/Ha'] # ['EB_V', 'SFR', 'Te', 'logOH_Te', 'logOH_R23']
 
@@ -2855,7 +2855,7 @@ if __name__ == "__main__":
             fig.text(0.15, 0.9, f'{args.field}: IDs {",".join(np.array(args.id_arr).astype(str))}', fontsize=args.fontsize, c='k', ha='left', va='top')
 
             # -----------save figure----------------
-            figname = fig_dir / f'{args.field}_{",".join(np.array(args.id_arr).astype(str))}_BPT{snr_text}{only_seg_text}{vorbin_text}_BPT_diag_{args.BPT_diag}.png'
+            figname = fig_dir / f'{args.field}_{",".join(np.array(args.id_arr).astype(str))}_BPT{snr_text}{only_seg_text}{vorbin_text}_AGN_diag_{args.AGN_diag}.png'
             fig.savefig(figname, transparent=args.fortalk)
             print(f'Saved figure at {figname}')
             plt.show(block=False)
