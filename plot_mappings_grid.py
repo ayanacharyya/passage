@@ -5,6 +5,7 @@
     Created: 13-03-25
     Example: run plot_mappings_grid.py --plot_grid --ynum_line OIII --yden_line Hb --xnum_line SII --xden_line Ha,NII --slice_at_quantity3 5 --annotate
              run plot_mappings_grid.py --plot_model --ynum_line OIII --yden_line Hb --slice_at_quantity3 4,5,6
+             run plot_mappings_grid.py --plot_grid --ynum_line OIII --yden_line Hb --xnum_line NeIII --xden_line OII --fit_y_envelope
 '''
 from header import *
 from util import *
@@ -44,12 +45,13 @@ def plot_ratio_grid(df_ratios, ax, args):
 
         for j, quant1 in enumerate(np.unique(df_sub[args.quantity1])):
             df_sub_sub = df_sub[df_sub[args.quantity1] == quant1]
-            ax.plot(np.log10(df_sub_sub[xratio_name]), np.log10(df_sub_sub[yratio_name]), color=color1, lw=1, alpha=(j+1)/len(np.unique(df_sub[args.quantity1])))
+            if not args.fit_y_envelope: ax.plot(np.log10(df_sub_sub[xratio_name]), np.log10(df_sub_sub[yratio_name]), color=color1, lw=1, alpha=(j+1)/len(np.unique(df_sub[args.quantity1])))
+            else: ax.scatter(np.log10(df_sub_sub[xratio_name]), np.log10(df_sub_sub[yratio_name]), color=color1, s=5, alpha=(j+1)/len(np.unique(df_sub[args.quantity1])))
             if args.annotate and i == len(np.unique(df_ratios[args.quantity3])) - 1: ax.annotate(f'{args.quantity1} = {quant1:.2f}', xy=(np.log10(df_sub_sub[xratio_name].values[0]), np.log10(df_sub_sub[yratio_name].values[0])), xytext=(np.log10(df_sub_sub[xratio_name].values[0]) - 0.2, np.log10(df_sub_sub[yratio_name].values[0]) - 0.1), color=color1, fontsize=args.fontsize/1.5, arrowprops=dict(arrowstyle="->", connectionstyle="arc3", color=color1))
 
         for j, quant2 in enumerate(np.unique(df_sub[args.quantity2])):
             df_sub_sub = df_sub[df_sub[args.quantity2] == quant2]
-            ax.plot(np.log10(df_sub_sub[xratio_name]), np.log10(df_sub_sub[yratio_name]), color=color2, lw=1, alpha=(j+1)/len(np.unique(df_sub[args.quantity2])))
+            if not args.fit_y_envelope: ax.plot(np.log10(df_sub_sub[xratio_name]), np.log10(df_sub_sub[yratio_name]), color=color2, lw=1, alpha=(j+1)/len(np.unique(df_sub[args.quantity2])))
             if args.annotate and i == len(np.unique(df_ratios[args.quantity3])) - 1: ax.annotate(f'{args.quantity2} = {quant2:.2f}', xy=(np.log10(df_sub_sub[xratio_name].values[-1]), np.log10(df_sub_sub[yratio_name].values[-1])), xytext=(np.log10(df_sub_sub[xratio_name].values[-1]) - 0.1, np.log10(df_sub_sub[yratio_name].values[-1]) + 0.1), color=color2, fontsize=args.fontsize/1.5, arrowprops=dict(arrowstyle="->", connectionstyle="arc3", color=color2))
 
         if args.annotate: ax.annotate(f'{args.quantity3} = {quant3:.2f}', xy=(np.log10(df_sub[xratio_name].values[-1]), np.log10(df_sub[yratio_name].values[-1])), xytext=(np.log10(df_sub[xratio_name].values[-1]) + 0.3, np.log10(df_sub[yratio_name].values[-1]) - 0.2), color=color3, fontsize=args.fontsize / 1.5, arrowprops=dict(arrowstyle="->", connectionstyle="arc3", color=color3))
@@ -57,7 +59,7 @@ def plot_ratio_grid(df_ratios, ax, args):
     for i, quant1 in enumerate(np.unique(df_ratios[args.quantity1])):
         for j, quant2 in enumerate(np.unique(df_ratios[args.quantity2])):
             df_sub = df_ratios[(df_ratios[args.quantity1] == quant1) & (df_ratios[args.quantity2] == quant2)]
-            ax.plot(np.log10(df_sub[xratio_name]), np.log10(df_sub[yratio_name]), color=color3, lw=0.5, alpha=0.7)
+            if not args.fit_y_envelope: ax.plot(np.log10(df_sub[xratio_name]), np.log10(df_sub[yratio_name]), color=color3, lw=0.5, alpha=0.7)
 
     return ax, xratio_name, yratio_name
 
@@ -69,7 +71,7 @@ def plot_ratio_grid_fig(df_ratios, args):
     '''
     # ------declare the figure-----------------------
     fig, ax = plt.subplots(figsize=(8, 6))
-    fig.subplots_adjust(left=0.1, right=0.98, bottom=0.1, top=0.95, wspace=0.2)
+    fig.subplots_adjust(left=0.13, right=0.98, bottom=0.1, top=0.95, wspace=0.2)
 
     # --------plot the model ratios---------------
     ax, xratio_name, yratio_name = plot_ratio_grid(df_ratios, ax, args)
@@ -80,8 +82,26 @@ def plot_ratio_grid_fig(df_ratios, args):
     ax.set_ylabel(f'Log {yratio_name}', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
+    df_ratios = df_ratios[(df_ratios[xratio_name] > 0) & (df_ratios[yratio_name] > 0)] # to avoid math errors later while taking log
     ax.set_xlim(np.log10(np.min(df_ratios[xratio_name]) * 0.9), np.log10(np.max(df_ratios[xratio_name]) * 1.1))
     ax.set_ylim(np.log10(np.min(df_ratios[yratio_name]) * 0.9), np.log10(np.max(df_ratios[yratio_name]) * 1.1))
+
+    # ------for fitting to upper y-axis envelope of data------------
+    if args.fit_y_envelope:
+        nbins = 20
+        p_init = [1, -4, 5]
+        xarr = np.linspace(np.log10(np.min(df_ratios[xratio_name])), np.log10(np.max(df_ratios[xratio_name])), nbins)
+        df_ratios['bin'] = pd.cut(np.log10(df_ratios[xratio_name]), bins=xarr)
+        grouped = df_ratios.groupby('bin')
+        xbins = np.log10(grouped[xratio_name].mean().values)
+        ybins = np.log10(grouped[yratio_name].max().values)
+        ax.plot(xbins, ybins, c='k', lw=0.5)
+
+        def func(x, *popt): return popt[0] + popt[1] / (x + popt[2])
+        popt, pcov = curve_fit(func, xbins, ybins, p0=p_init)
+        ax.plot(xarr, func(xarr, *p_init), c='b', lw=0.5)
+        ax.plot(xarr, func(xarr, *popt), c='brown', lw=2, ls='--')
+        ax.text(0.98, 0.01, f'y = {popt[0]:.2f} + {popt[1]:.2f}/(x + {popt[2]:.2f})', c='brown', ha='right', va='bottom', fontsize=args.fontsize, transform=ax.transAxes)
 
     # --------for talk plots--------------
     if args.fortalk:

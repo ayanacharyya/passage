@@ -1954,13 +1954,13 @@ def get_AGN_func_methods(args):
     if args.AGN_diag in ['VO87', 'K01', 'S24']:
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'SII', 'Ha', ['K01', 'S24']
     elif args.AGN_diag in ['H21', 'B22']:
-        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'SII', 'Ha', ['H21', 'B22_S2Ha']
+        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'SII', 'Ha', ['B22_S2Ha', 'H21']
     elif args.AGN_diag == 'O2O3':
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'OII', 'OIII', []
     elif args.AGN_diag == 'O2Hb':
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OII', 'Hb', 'OIII', 'Hb', []
     elif args.AGN_diag == 'Ne3O2':
-        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'NeIII-3867', 'OII', ['B22_Ne3O2']
+        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'NeIII-3867', 'OII', ['MAPPINGS', 'B22_Ne3O2']
     else:
         sys.exit('Choose AGN_diag to be one among VO87,H21,O2O3,O2Hb,Ne3O2')
 
@@ -1981,6 +1981,8 @@ def AGN_func(x, theoretical_line):
         y = np.piecewise(x, [x < -0.11, x >= -0.11], [lambda x: 1.3 + (0.48 / (1.09 * x + 0.12)), lambda x: -np.inf])
     elif theoretical_line == 'B22_Ne3O2':  # Eq 3 of Backhaus+2022 (https://iopscience.iop.org/article/10.3847/1538-4357/ac3919/pdf)
         y = np.piecewise(x, [x < 0.286, x >= 0.286], [lambda x: 0.64 + (0.35 / (2.8 * x - 0.8)), lambda x: -np.inf])
+    elif theoretical_line == 'MAPPINGS':  # new eqn based on MAPPINGS models
+            y = 2.16 - 4.83 / (x + 3.67)
     else:
         sys.exit(f'Requested theoreitcal line {theoretical_line} should be one of K01,S24,H21,B@@_S2Ha,B22_Ne3O2')
     return y
@@ -1991,7 +1993,7 @@ def overplot_AGN_line_on_BPT(ax, theoretical_line='K01', color='k', fontsize=10)
     Overplots a given AGN demarcation line on R3 vs S2 ratio BPT, on an existing axis
     Returns axis handle
     '''
-    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021', 'B22_S2Ha':'Backhaus+2022', 'B22_Ne3O2':'Backhaus+2022'}
+    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021', 'B22_S2Ha':'Backhaus+2022', 'B22_Ne3O2':'Backhaus+2022', 'MAPPINGS':'MAPPINGS'}
     x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
     y = AGN_func(x, theoretical_line)
     ax.plot(x, y, c=color, ls='dashed', lw=2, label=label_dict[theoretical_line])

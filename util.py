@@ -216,6 +216,7 @@ def parse_args():
     parser.add_argument('--plot_grid', dest='plot_grid', action='store_true', default=False, help='Plot grid of two line ratios? Default is no.')
     parser.add_argument('--plot_model', dest='plot_model', action='store_true', default=False, help='Plot a line ratio vs model parameters? Default is no.')
     parser.add_argument('--annotate', dest='annotate', action='store_true', default=False, help='Annotate the ratio grid plot with arrows? Default is no.')
+    parser.add_argument('--fit_y_envelope', dest='fit_y_envelope', action='store_true', default=False, help='Fit an envelope for the maximum y envelope in a given model grid? Default is no.')
 
     # ------- args added for extract_spectrum_from_grism.py ------------------------------
     parser.add_argument('--extract_arcsec', metavar='extract_arcsec', type=float, action='store', default=0.5, help='Spatial (cross-dispersion) extent in arcseconds from within which grism 2D spectra will be extracted; default is 0.5')
