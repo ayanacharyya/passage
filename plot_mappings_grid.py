@@ -17,7 +17,7 @@ def plot_ratio_grid(df_ratios, ax, args):
     Plots the grid of a specific given line ratio for a given value of Z, q, P, on an existing axis handle
     Returns the axis handle and ratio names
     '''
-    line_names_dict = {'OIII':'[OIII]5007', 'OII':'[OII]3727,29', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31'} # to map between user input line labels and line labels used in ratio_list.txt file
+    line_names_dict = {'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'NeIII':'[NeIII]3869', 'NeIII-3867':'[NeIII]3869', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31'} # to map between user input line labels and line labels used in ratio_list.txt file
 
     # ------------getting the line ratio names------------------
     x_num_labels = ','.join([line_names_dict[item] for item in args.xnum_line.split(',')])
