@@ -355,6 +355,44 @@ def plot_columns(df, args, s=5):
 
     return fig
 
+# -------------------------------------------------------------------------------------------------------
+def plot_columns(df, args, s=5):
+    '''
+    To plot any column vs any column colorcoded by any column for a given df
+    Plots and saves the figure
+    Returns figure handle
+    '''
+    if args.fontsize == 10: args.fontsize = 15
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    fig.subplots_adjust(left=0.1, right=0.98, bottom=0.1, top=0.95)
+
+    p = ax.scatter(df[args.xcol], df[args.ycol], c=df[args.colorcol], s=s, lw=0, cmap='viridis')
+
+    cbar = plt.colorbar(p)
+    cbar.set_label(label_dict[args.colorcol] if args.colorcol in label_dict else args.colorcol, fontsize=args.fontsize)
+
+    ax.set_xlabel(label_dict[args.xcol] if args.xcol in label_dict else args.xcol, fontsize=args.fontsize)
+    ax.set_ylabel(label_dict[args.ycol] if args.ycol in label_dict else args.ycol, fontsize=args.fontsize)
+
+    if args.xcol in bounds_dict: ax.set_xlim(bounds_dict[args.xcol][0], bounds_dict[args.xcol][1])
+    if args.ycol in bounds_dict: ax.set_ylim(bounds_dict[args.ycol][0], bounds_dict[args.ycol][1])
+
+    ax.set_xticklabels(['%.1f' % item for item in ax.get_xticks()], fontsize=args.fontsize)
+    ax.set_yticklabels(['%.1f' % item for item in ax.get_yticks()], fontsize=args.fontsize)
+
+    # ---------diagonal line---------
+    if 'redshift' in args.xcol.lower() and 'z' in args.ycol.lower():
+        line = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 10)
+        ax.plot(line, line, ls='dashed', c='k', lw=1)
+
+    fig.text(0.99, 0.99, f'Total {len(pd.unique(df["field"]))} fields: Par{args.field_text}\nTotal {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes)
+    figname = args.output_dir / 'plots' / f'all_df_{args.xcol}_vs_{args.ycol}_colorby_{args.colorcol}.png'
+    fig.savefig(figname, transparent=args.fortalk)
+    print(f'Saved figure as {figname}')
+    plt.show(block=False)
+
+    return fig
 
 # -------------------------------------------------------------------------------------------------------
 def get_detection_fraction(df, line, args):

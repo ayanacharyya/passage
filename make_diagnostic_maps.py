@@ -44,6 +44,8 @@
              run make_diagnostic_maps.py --field glass-a2744 --id 321,998,1694,1983,2355,2744,2938 --plot_snr --plot_ratio_maps --plot_radial_profiles --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --fontsize 5 --arcsec_limit 0.5
 
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_DIG --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag P25 --plot_circle_at_arcsec 0.5 --plot_snr
+
+             run make_diagnostic_maps.py --field Par28 --id 300,502,668,1302,1303,1634,1675,1798,1849,2038,2171,2180,2727,2797,2867 --plot_ratio_maps --plot_snr --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag R3 --AGN_diag Ne3O2 --mask_agn --fontsize 5
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -526,9 +528,11 @@ def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
     x_size, y_size = np.shape(map)
     map_err = unp.std_devs(map)
     map = unp.nominal_values(map)
+    snr = map / map_err
 
-    map = np.ma.masked_where(map / map_err < snr_cut_for_vorbin, map)
-    map_err = np.ma.masked_where(map / map_err < snr_cut_for_vorbin, map_err)
+    bad_mask = (snr < snr_cut_for_vorbin) | (~np.isfinite(map)) | (~np.isfinite(map_err))
+    map = np.ma.masked_where(bad_mask, map)
+    map_err = np.ma.masked_where(bad_mask, map_err)
 
     if args is not None and args.debug_vorbin:
         fig, axes = plt.subplots(1, 7, figsize=(14, 3))
@@ -538,7 +542,6 @@ def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
         plot_2D_map(map, axes[0], args, takelog=False, label=f'input {args.voronoi_line} map', cmap=cmap, hide_yaxis=False)
         plot_2D_map(map_err, axes[1], args, takelog=False, label=f'input {args.voronoi_line} err', cmap=cmap, hide_yaxis=True)
 
-        snr = map / map_err
         combined_cmap = make_combined_cmap(cmap, 'Grays', np.min(snr), np.max(snr), snr_cut_for_vorbin)
         plot_2D_map(snr, axes[2], args, takelog=False, label=f'input {args.voronoi_line} SNR', cmap=combined_cmap, hide_yaxis=True)
 
@@ -552,11 +555,15 @@ def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
     x_coords_array = np.ma.compressed(x_coords_grid_masked)
     y_coords_array = np.ma.compressed(y_coords_grid_masked)
 
+    if len(x_coords_array) == 0:
+        print(f'No unmasked pixels to Voronoi bin on..so skipping this galaxy.')
+        return None
+
     try:
         binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords_array, y_coords_array, map_array, map_err_array, snr_thresh, plot=plot, quiet=quiet, cvt=False, wvt=True)
     except ValueError:
         print(f'Already enough SNR in all pixels so no Voronoi binning was required.')
-        binIDs = np.arange(len(x_coords_array))
+        binIDs = np.arange(len(x_coords_array)) + 1
 
     interp = NearestNDInterpolator(list(zip(x_coords_array, y_coords_array)), binIDs)
     binID_map = interp(x_coords_grid, y_coords_grid)
@@ -1829,8 +1836,11 @@ def plot_starburst_map(full_hdu, axes, args, radprof_axes=None, vorbin_axes=None
             try:
                 filter_hdu = full_hdu['DSCI', f'CLEAR']
             except:
-                print(f'\nWARNING: DSCI {filter.upper()}-CLEAR or {filter.upper()} extensions not found in full_hdu, so attempting read in DSCI F140W')
-                filter_hdu = full_hdu['DSCI', 'F140W']
+                try:
+                    filter_hdu = full_hdu['DSCI', f'{filter.upper()}-{filter.upper()}-CLEAR']
+                except:
+                    print(f'\nWARNING: DSCI {filter.upper()}-CLEAR or {filter.upper()} extensions not found in full_hdu, so attempting read in DSCI F140W')
+                    filter_hdu = full_hdu['DSCI', 'F140W']
     target_header = filter_hdu.header
     direct_map = get_direct_image_per_filter(full_hdu, filter, target_header, args)
     if direct_map is None:
@@ -1960,11 +1970,14 @@ def get_AGN_func_methods(args):
     elif args.AGN_diag == 'O2Hb':
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OII', 'Hb', 'OIII', 'Hb', []
     elif args.AGN_diag == 'Ne3O2':
-        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'NeIII-3867', 'OII', ['MAPPINGS', 'B22_Ne3O2']
+        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'NeIII-3867', 'OII', ['MAPPINGS', 'F24', 'B22_Ne3O2']
     else:
         sys.exit('Choose AGN_diag to be one among VO87,H21,O2O3,O2Hb,Ne3O2')
 
-    return theoretical_lines
+    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021', 'B22_S2Ha':'Backhaus+2022', 'B22_Ne3O2':'Backhaus+2022', 'MAPPINGS':'MAPPINGS', 'F24':'Feuillet+2024'}
+    line_labels = [label_dict[item] for item in theoretical_lines]
+
+    return theoretical_lines, line_labels
 
 # --------------------------------------------------------------------------------------------------------------------
 def AGN_func(x, theoretical_line):
@@ -1981,23 +1994,24 @@ def AGN_func(x, theoretical_line):
         y = np.piecewise(x, [x < -0.11, x >= -0.11], [lambda x: 1.3 + (0.48 / (1.09 * x + 0.12)), lambda x: -np.inf])
     elif theoretical_line == 'B22_Ne3O2':  # Eq 3 of Backhaus+2022 (https://iopscience.iop.org/article/10.3847/1538-4357/ac3919/pdf)
         y = np.piecewise(x, [x < 0.286, x >= 0.286], [lambda x: 0.64 + (0.35 / (2.8 * x - 0.8)), lambda x: -np.inf])
+    elif theoretical_line == 'F24':  # Eq 6 of Feuillet+2024 (https://arxiv.org/abs/2312.17381)
+        y = np.sqrt((x + 3.4) / 1.8) - 0.55
     elif theoretical_line == 'MAPPINGS':  # new eqn based on MAPPINGS models
-            y = 2.16 - 4.83 / (x + 3.67)
+            y = np.poly1d([0.05, -0.25, 0.15, 0.89])(x)
     else:
         sys.exit(f'Requested theoreitcal line {theoretical_line} should be one of K01,S24,H21,B@@_S2Ha,B22_Ne3O2')
     return y
 
 # --------------------------------------------------------------------------------------------------------------------
-def overplot_AGN_line_on_BPT(ax, theoretical_line='K01', color='k', fontsize=10):
+def overplot_AGN_line_on_BPT(ax, theoretical_line, label, color='k', fontsize=10):
     '''
     Overplots a given AGN demarcation line on R3 vs S2 ratio BPT, on an existing axis
     Returns axis handle
     '''
-    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021', 'B22_S2Ha':'Backhaus+2022', 'B22_Ne3O2':'Backhaus+2022', 'MAPPINGS':'MAPPINGS'}
     x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
     y = AGN_func(x, theoretical_line)
-    ax.plot(x, y, c=color, ls='dashed', lw=2, label=label_dict[theoretical_line])
-    ax.legend(fontsize=fontsize)
+    ax.plot(x, y, c=color, ls='dashed', lw=2, label=label)
+    ax.legend(loc='best', fontsize=fontsize)
 
     return ax
 
@@ -2024,7 +2038,7 @@ def take_safe_log_ratio(num_map, den_map, skip_log=False):
     return ratio_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def annotate_BPT_axes(scatter_plot_handle, ax, args):
+def annotate_BPT_axes(scatter_plot_handle, ax, args, theoretical_lines=[], line_labels=[]):
     '''
     Annotates the axis labels, limits etc for a BPT diagram in a given axis handle
     Returns the axis handle
@@ -2032,7 +2046,6 @@ def annotate_BPT_axes(scatter_plot_handle, ax, args):
 
     line_labels_dict = {'OII':'O II', 'SII':'S II 6717+31', 'OIII':'O III', 'Hb':'H beta', 'NeIII-3867':'Ne III', 'Ha':'N II + H alpha' if args.AGN_diag in ['H21', 'B22'] else 'H alpha'}
     ratios_limits_dict = {'OIII/Hb':[-1, 2], 'SII/Ha':[-2, 0.3], 'OII/OIII':[-2, 1], 'OII/Hb':[-1, 1],'NeIII-3867/OII':[-1.6, 0.5]}
-    theoretical_lines = get_AGN_func_methods(args)
 
     # ---------overplot MAPPINGS models-------
     if args.plot_models:
@@ -2056,8 +2069,8 @@ def annotate_BPT_axes(scatter_plot_handle, ax, args):
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     # ---------adding literature AGN demarcation lines----------
-    color_arr = ['brown', 'darkgreen']
-    for index, theoretical_line in enumerate(theoretical_lines): overplot_AGN_line_on_BPT(ax, theoretical_line=theoretical_line, color=color_arr[index], fontsize=args.fontsize)
+    color_arr = ['brown', 'darkgreen', 'dodgerblue']
+    for index, (theoretical_line, line_label) in enumerate(zip(theoretical_lines, line_labels)): overplot_AGN_line_on_BPT(ax, theoretical_line=theoretical_line, label=line_label, color=color_arr[index], fontsize=args.fontsize)
 
     return ax
 
@@ -2071,7 +2084,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
     print(f'Plotting BPT diagram..')
     if args.plot_separately: fig_indiv, ax_indiv = plt.subplots(1, figsize=(8, 6))
 
-    theoretical_lines = get_AGN_func_methods(args)
+    theoretical_lines, line_labels = get_AGN_func_methods(args)
     dist_method = theoretical_lines[0] if len(theoretical_lines) > 0 else None
 
     # -----------getting the fluxes------------------
@@ -2188,7 +2201,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
     # -----------annotating axes-----------------------
     if not hide_plot:
         if args.plot_separately:
-            ax_indiv = annotate_BPT_axes(scatter_plot_handle_indiv, ax_indiv, args)
+            ax_indiv = annotate_BPT_axes(scatter_plot_handle_indiv, ax_indiv, args, theoretical_lines=theoretical_lines, line_labels=line_labels)
             fig_indiv.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
             fig_indiv.text(0.15, 0.9, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
 
@@ -2199,7 +2212,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
             plt.show(block=False)
 
         if index == 0:
-            ax = annotate_BPT_axes(scatter_plot_handle, ax, args)
+            ax = annotate_BPT_axes(scatter_plot_handle, ax, args, theoretical_lines=theoretical_lines, line_labels=line_labels)
 
     return ax, distance_from_AGN_line_map, distance_from_AGN_line_int
 
@@ -2528,9 +2541,13 @@ if __name__ == "__main__":
                     args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
                     if args.debug_vorbin:
                         print(f'Running in --debug_vorbin mode, hence not proceeding further.')
-                        #continue
+                        continue
                 else:
                     print(f'Requested line for voronoi binning {args.voronoi_line} not available, therefore skipping this object..')
+                    continue
+
+                if args.voronoi_bin_IDs is None:
+                    print(f'Voronoi binning was not possible, therefore skipping this object..')
                     continue
 
             # ---------------radial profile stuff---------------
@@ -2783,7 +2800,7 @@ if __name__ == "__main__":
                     try: mplcyberpunk.make_scatter_glow()
                     except: pass
 
-                fig.savefig(figname, transparent=args.fortalk, dpi=200)
+                fig.savefig(figname, transparent=args.fortalk, dpi=1000 if args.fontsize <= 5 else 200)
                 print(f'Saved figure at {figname}')
                 if args.hide: plt.close('all')
                 else: plt.show(block=False)

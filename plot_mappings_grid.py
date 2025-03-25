@@ -88,20 +88,25 @@ def plot_ratio_grid_fig(df_ratios, args):
 
     # ------for fitting to upper y-axis envelope of data------------
     if args.fit_y_envelope:
-        nbins = 20
-        p_init = [1, -4, 5]
+        nbins = 25
+
+        def func(x, *popt): return np.poly1d(popt)(x)
+        p_init_arr = [[1, 1, 1, 1]]
+        func_arr = [func]
+
         xarr = np.linspace(np.log10(np.min(df_ratios[xratio_name])), np.log10(np.max(df_ratios[xratio_name])), nbins)
         df_ratios['bin'] = pd.cut(np.log10(df_ratios[xratio_name]), bins=xarr)
         grouped = df_ratios.groupby('bin')
         xbins = np.log10(grouped[xratio_name].mean().values)
         ybins = np.log10(grouped[yratio_name].max().values)
-        ax.plot(xbins, ybins, c='k', lw=0.5)
+        ax.plot(xbins, ybins, c='r', lw=0.5)
 
-        def func(x, *popt): return popt[0] + popt[1] / (x + popt[2])
-        popt, pcov = curve_fit(func, xbins, ybins, p0=p_init)
-        ax.plot(xarr, func(xarr, *p_init), c='b', lw=0.5)
-        ax.plot(xarr, func(xarr, *popt), c='brown', lw=2, ls='--')
-        ax.text(0.98, 0.01, f'y = {popt[0]:.2f} + {popt[1]:.2f}/(x + {popt[2]:.2f})', c='brown', ha='right', va='bottom', fontsize=args.fontsize, transform=ax.transAxes)
+        col_arr = ['brown', 'darkgreen', 'cornflowerblue']
+        for index, (p_init, func) in enumerate(zip(p_init_arr, func_arr)):
+            popt, pcov = curve_fit(func, xbins, ybins, p0=p_init)
+            ax.plot(xarr, func(xarr, *p_init), c=col_arr[index], lw=1, ls='--')
+            ax.plot(xarr, func(xarr, *popt), c=col_arr[index], lw=2)
+            ax.text(0.98, 0.01 + index * 0.07, f'fit{index+1} = [{",".join([f"{item:.2f}" for item in popt])}]', c=col_arr[index], ha='right', va='bottom', fontsize=args.fontsize, transform=ax.transAxes)
 
     # --------for talk plots--------------
     if args.fortalk:
