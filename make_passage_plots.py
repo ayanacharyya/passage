@@ -396,7 +396,7 @@ def break_column_into_uncertainty(df, col, make_log=False):
                     df.at[index, 'log_' + col + '_u'] = np.nan
                     counter += 1
                     pass
-        if counter > 0: print(f'\n{counter} out of {len(df)} had -ve SFRs!')
+        if counter > 0: print(f'\n{counter} out of {len(df)} had -ve {col}!')
     elif make_log:
         df['log_' + col] = np.log10(df[col])
 
@@ -409,8 +409,8 @@ label_dict = {'lp_mass': r'log M$_*$/M$_{\odot}$ (LePhare)', 'ez_mass': r'log M$
               'logOH_slope':r'log $\nabla$Z$_r$ (dex/kpc)'}
 bounds_dict = {'lp_mass': (6.5, 11), 'ez_mass': (6, 9), 'log_mass_bgp': (6.5, 10.5), \
                'lp_SFR': (-3, 1), 'ez_sfr': (-3, 1), 'log_sfr_bgp': (-3, 2), 'log_SFR_int': (-3, 2.5), \
-               'ez_z_phot': (0, 3), 'lp_zBEST': (0, 3), 'z_bgp': (0, 3), 'redshift': (0.5, 2.2), \
-               'logOH_slope': (-0.4, 0.1)}
+               'ez_z_phot': (0, 3), 'lp_zBEST': (0, 3), 'z_bgp': (0, 3), 'redshift': (1.7, 3.1), \
+               'logOH_slope': (-0.5, 0.5)}
 colormap_dict = defaultdict(lambda: 'viridis', ez_z_phot='plasma', distance_from_K01='BrBG')
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -486,9 +486,10 @@ if __name__ == "__main__":
                     sys.exit(f'{df_infilename} does not exist')
 
         df = pd.read_csv(df_infilename)
-        if args.use_only_good and args.drv == 'v0.5' and set(args.plot_conditions) == set(['SNR']) and set(args.line_list) == set(['OIII', 'Ha', 'OII', 'Hb', 'SII']):
-            df = df[df['objid'].isin([1303,1934,2734,2867,300,2903])].reset_index(drop=True) # only choosing the pre-determined good galaxies
-            print(f'Using only the pre-determined good galaxies, and there are {len(df)} of them..')
+        if args.use_only_good and args.drv == 'v0.5' and 'SNR' in args.plot_conditions:
+            if set(args.line_list) == set(['OIII', 'Ha', 'OII', 'Hb', 'SII']): df = df[df['objid'].isin([1303,1934,2734,2867,300,2903])].reset_index(drop=True) # only choosing the pre-determined good galaxies
+            elif set(args.line_list) == set(['OIII', 'OII', 'Hb', 'NeIII-3867']): df = df[df['objid'].isin([300,1303,1634,2171,2727,2867])].reset_index(drop=True) # only choosing the pre-determined good galaxies
+            print(f'\nUsing only the pre-determined good galaxies, and there are {len(df)} of them..')
 
         # -------combing with metallicity dataframe if it exists----------------
         snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
@@ -569,13 +570,15 @@ if __name__ == "__main__":
             if args.xcol == 'redshift': # redshift axis should be reversed in values
                 ax.set_xlim(ax.get_xlim()[1], ax.get_xlim()[0])
 
-            if args.xcol == 'redshift' and args.ycol == 'logOH_slope' and args.foggie_comp: # special case, to match the FOGGIE plot limits
-                ax.set_xlim(4, 0.5)
-                ax.set_ylim(-0.5, 0.4)
+            if args.ycol == 'logOH_slope':
+                ax.axhline(0, ls='--', c='k', lw=0.5)
+                if args.xcol == 'redshift' and args.foggie_comp: # special case, to match the FOGGIE plot limits
+                    ax.set_xlim(4, 0.5)
+                    ax.set_ylim(-0.5, 0.4)
 
             if 'mass' in args.xcol and 'logOH' in args.ycol and 'slope' not in args.ycol:
                 ax.set_xlim(6.5, 12.0)
-                ax.set_ylim(6.5, 10.0)
+                ax.set_ylim(6.0, 10.0)
 
     # --------for talk plots--------------
     if args.fortalk:
