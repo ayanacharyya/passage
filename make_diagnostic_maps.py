@@ -45,7 +45,7 @@
 
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_DIG --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag P25 --plot_circle_at_arcsec 0.5 --plot_snr
 
-             run make_diagnostic_maps.py --field Par28 --id 300,502,668,1302,1303,1634,1675,1798,1849,2038,2171,2180,2727,2797,2867 --plot_ratio_maps --plot_snr --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag R3 --AGN_diag Ne3O2 --mask_agn --fontsize 5
+             run make_diagnostic_maps.py --field Par28 --id 300,1303,1634,1849,2171,2727,2867 --plot_ratio_maps --plot_snr --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 2 --drv 0.5 --do_not_correct_pixel --Zdiag R3 --AGN_diag Ne3O2 --mask_agn --fontsize 5
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -564,6 +564,9 @@ def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
     except ValueError:
         print(f'Already enough SNR in all pixels so no Voronoi binning was required.')
         binIDs = np.arange(len(x_coords_array)) + 1
+    except IndexError:
+        print(f'Voronoi binning failed..so skipping this galaxy.')
+        return None
 
     interp = NearestNDInterpolator(list(zip(x_coords_array, y_coords_array)), binIDs)
     binID_map = interp(x_coords_grid, y_coords_grid)
@@ -1918,7 +1921,8 @@ def plot_metallicity_fig(full_hdu, args):
     Plots the metallicity map, and optionally radial profile, in a new figure
     Returns the figure handle and the metallicity map just produced
     '''
-    ncols = 2
+    ncols = 1
+    if args.plot_snr: ncols += 1
     if args.plot_radial_profiles: ncols += 1
     if args.plot_ionisation_parameter: ncols += 1
 
@@ -1928,11 +1932,20 @@ def plot_metallicity_fig(full_hdu, args):
     if ncols > 3:
         ip_ax = axes[0]
         axes = axes[1:]
-    if ncols > 2:
-        radprof_ax = axes[-1]
-        axes = axes[:-1]
+
+    ax = axes[0]
+    axes = axes[1:]
+
+    if args.plot_snr:
+        snr_ax = axes[0]
+        axes = axes[1:]
+    else:
+        snr_ax = None
+    if args.plot_radial_profiles:
+        radprof_ax = axes[0]
     else:
         radprof_ax = None
+
     fig.subplots_adjust(left=fig_size_dict[ncols][2], right=fig_size_dict[ncols][3], bottom=fig_size_dict[ncols][4], top=fig_size_dict[ncols][5], wspace=fig_size_dict[ncols][6], hspace=fig_size_dict[ncols][7])
 
     if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
@@ -1942,12 +1955,13 @@ def plot_metallicity_fig(full_hdu, args):
 
         # ---------plotting-------------
         lim = [7.5, 9.2]
-        axes[0], logOH_radfit = plot_2D_map(logOH_map, axes[0], args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
-
-        logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
-        logOH_map_snr = np.ma.masked_where(logOH_map.mask, unp.nominal_values(10 ** logOH_map.data)) / np.ma.masked_where(logOH_map.mask, unp.std_devs(10 ** logOH_map.data))
-        axes[1], _ = plot_2D_map(logOH_map_snr, axes[1], args, takelog=False, hide_yaxis=True, label=r'Z (%s) SNR' % (args.Zdiag), cmap='cividis', vmin=0, vmax=6)
-        if args.plot_ionisation_parameter: ip_ax, _ = plot_2D_map(logq_map, ip_ax, args, takelog=False, hide_yaxis=False, label=r'log q$_{\rm int}$ = %.1f $\pm$ %.1f' % (logq_int.n, logq_int.s), cmap='viridis', vmin=6.5, vmax=8.5)
+        ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
+        if args.plot_snr:
+            logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
+            logOH_map_snr = np.ma.masked_where(logOH_map.mask, unp.nominal_values(10 ** logOH_map.data)) / np.ma.masked_where(logOH_map.mask, unp.std_devs(10 ** logOH_map.data))
+            snr_ax, _ = plot_2D_map(logOH_map_snr, snr_ax, args, takelog=False, hide_yaxis=True, label=r'Z (%s) SNR' % (args.Zdiag), cmap='cividis', vmin=0, vmax=6)
+        if args.plot_ionisation_parameter:
+            ip_ax, _ = plot_2D_map(logq_map, ip_ax, args, takelog=False, hide_yaxis=False, label=r'log q$_{\rm int}$ = %.1f $\pm$ %.1f' % (logq_int.n, logq_int.s), cmap='viridis', vmin=6.5, vmax=8.5)
 
     else:
         print(f'Not all lines out of OIII, OII and Hb are available, so cannot compute R23 metallicity')
@@ -2011,7 +2025,7 @@ def overplot_AGN_line_on_BPT(ax, theoretical_line, label, color='k', fontsize=10
     x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
     y = AGN_func(x, theoretical_line)
     ax.plot(x, y, c=color, ls='dashed', lw=2, label=label)
-    ax.legend(loc='best', fontsize=fontsize)
+    ax.legend(loc='lower left', fontsize=fontsize)
 
     return ax
 
@@ -2295,6 +2309,12 @@ def plot_DIG_maps(full_hdu, axes, args, radprof_axes=None, snr_axes=None):
     S2Ha_corr_DIG = np.median(df[df['pct_Ha'] <= 0.05]['S2Ha_corr'])
     S2Ha_corr_dense = np.median(df[df['pct_Ha'] >= 0.95]['S2Ha_corr'])
     c_dig_array = (S2Ha_corr_dense - S2Ha_corr_array) / (S2Ha_corr_dense - S2Ha_corr_DIG)
+
+    if np.isnan(S2Ha_corr_dense) or np.isnan(S2Ha_corr_DIG):
+        print(f'Not enough pixels to compute 5 and 95 percentile of Ha surface brightness')
+        fig.delaxes(axes[-1])
+        if args.plot_radial_profiles: fig.delaxes(np.atleast_1d(radprof_axes)[-1])
+        return axes, None
 
     # ---------fitting C_DIG vs Ha SB------------------
     def cdig_func(x, *popt): return np.piecewise(x, [x <= popt[0], x > popt[0]], [1, lambda x: (popt[0]/x) ** popt[1]])
@@ -2598,12 +2618,16 @@ if __name__ == "__main__":
 
             # ---------initialising the metallicity figure------------------------------
             elif args.plot_DIG:
-                if args.mask_agn or args.Zdiag == 'P25': _, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_AGN_line map, without actually plotting the BPT diagram
-                fig, dig_map = plot_DIG_figure(full_hdu, args)
+                if all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
+                    if args.mask_agn or args.Zdiag == 'P25': _, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_AGN_line map, without actually plotting the BPT diagram
+                    fig, dig_map = plot_DIG_figure(full_hdu, args)
 
-                # ---------decorating and saving the figure------------------------------
-                fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-                figname = fig_dir / f'{args.field}_{args.id:05d}_DIG_maps{radial_plot_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}.png'
+                    # ---------decorating and saving the figure------------------------------
+                    fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+                    figname = fig_dir / f'{args.field}_{args.id:05d}_DIG_maps{radial_plot_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}.png'
+                else:
+                    print(f'Necessary lines not present to be able to do DIG diagnostics. So skipping this object..')
+                    continue
 
             # ---------initialising the full figure------------------------------
             else:
@@ -2751,7 +2775,9 @@ if __name__ == "__main__":
                 #         fig.delaxes(rax5)
 
                 # ---------------BPT map------------------
-                if all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
+                if (args.AGN_diag in ['VO87', 'H21'] and all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']])) or \
+                    (args.AGN_diag in ['O2O3', 'O2Hb'] and all([line in args.available_lines for line in ['OIII', 'Hb', 'OII']])) or \
+                    (args.AGN_diag in ['Ne3O2'] and all([line in args.available_lines for line in ['OIII', 'Hb', 'OII', 'NeIII-3867']])):
                     ax1, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, ax1_radprof, args, cmap='viridis', ax_inset=ax1)
                 else:
                     args.distance_from_AGN_line_map = None
