@@ -224,6 +224,7 @@ def parse_args():
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
+    if 'glass' in args.field: args.drv = 'v0.5'
     if 'v' not in args.drv: args.drv = 'v' + args.drv
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
 
@@ -238,7 +239,7 @@ def parse_args():
     if args.slice_at_quantity3 is not None: args.slice_at_quantity3 = [float(item) for item in args.slice_at_quantity3.split(',')]
 
     if args.system == 'hd' and not os.path.exists('/Volumes/Elements/'): args.system = 'local'
-    if args.line_list == 'all': args.line_list = ['Lya', 'OII', 'Hb', 'OIII-4363', 'OIII', 'Ha', 'NII','Ha+NII', 'SII', 'SIII', 'PaD','PaG','PaB','HeI-1083','PaA']
+    if args.line_list == 'all': args.line_list = ['Lya', 'OII', 'NeIII-3867', 'Hb', 'OIII-4363', 'OIII', 'Ha', 'NII','Ha+NII', 'SII', 'ArIII-7138', 'SIII', 'PaD','PaG','PaB','HeI-1083','PaA']
 
     root_dir = '/Users/acharyya/Work/astro/passage' if 'local' in args.system else '/Volumes/Elements/acharyya_backup/Work/astro/passage' if 'hd' in args.system else '/Users/acharyya/Library/CloudStorage/GoogleDrive-ayan.acharyya@inaf.it/My Drive/passage' if 'gdrive' in args.system else ''
     args.root_dir = Path(root_dir)

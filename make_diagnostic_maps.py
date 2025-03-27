@@ -2515,7 +2515,7 @@ if __name__ == "__main__":
         # ---------plotting spatially resolved BPT-----------------------------
         if args.plot_BPT:
             fig, ax = plt.subplots(1, figsize=(8, 6))
-            cmap_arr = ['Reds_r', 'Greens_r', 'Purples_r', 'Greys_r', 'Oranges_r', 'Blues_r', 'YlGnBu_r', 'BuPu_r', 'GnBu_r', 'spring']
+            cmap_arr = np.tile(['Reds_r', 'Greens_r', 'Purples_r', 'Greys_r', 'Oranges_r', 'Blues_r', 'YlGnBu_r', 'BuPu_r', 'GnBu_r', 'spring'], 3)
 
         # ---------lotting metallicity profiles and gradients----------------------
         if args.plot_metallicity:
