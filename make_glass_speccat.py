@@ -74,23 +74,29 @@ if __name__ == "__main__":
     histcol = 'redshift'
     fig, ax = plt.subplots(figsize=(8, 6))
 
+    line_list_array = [['OIII', 'OII', 'Hb', 'NeIII-3867'], ['OIII', 'OII', 'Hb', 'Ha', 'SII'], ['OIII', 'OII', 'Hb', 'Ha', 'SII', 'NeIII-3867']]
+    col_arr = ['salmon', 'cornflowerblue', 'darkgreen']
+
     # ----------filtering dataframe-------------------
-    df_sub = df.copy()
-    for line in args.line_list:
-        print(f'Applying SNR >= {args.SNR_thresh} cut on {line}..')
-        df_sub = df_sub[df_sub[f'{line}_snr'] >= args.SNR_thresh]
+    for index, args.line_list in enumerate(line_list_array):
+        df_sub = df.copy()
+        for line in args.line_list:
+            print(f'Applying SNR >= {args.SNR_thresh} cut on {line}..')
+            df_sub = df_sub[df_sub[f'{line}_snr'] >= args.SNR_thresh]
 
-    line_cols = np.hstack([[item + '_int', item + '_int_u', item + '_snr'] for item in args.line_list])
-    df_sub = df_sub[np.hstack([basic_cols, line_cols])].drop(labels=['field'], axis=1)
-    print(f'{len(df_sub)} objects remain out of original {len(df)}')
+        line_cols = np.hstack([[item + '_int', item + '_int_u', item + '_snr'] for item in args.line_list])
+        df_sub = df_sub[np.hstack([basic_cols, line_cols])].drop(labels=['field'], axis=1)
+        print(f'{len(df_sub)} objects remain out of original {len(df)}')
 
 
-    ax.hist(df_sub[histcol], bins=50, range=[0,8])
-    ax.text(0.99, 0.99, f'Total {len(df_sub)} {args.field} objects\nwith {",".join(args.line_list)} SNR > {args.SNR_thresh}', ha='right', va='top', transform=ax.transAxes)
+        ax.hist(df_sub[histcol], bins=50, range=[1.5,3.5], color=col_arr[index], histtype='step')
+        ax.text(0.99, 0.99 - index * 0.1, f'Total {len(df_sub)} {args.field} objects\nwith {",".join(args.line_list)} SNR > {args.SNR_thresh}', color=col_arr[index], ha='right', va='top', transform=ax.transAxes)
 
     # -------annotating the figure-----------------
     ax.set_xlabel(histcol, fontsize=args.fontsize)
     ax.set_ylabel('# of objects', fontsize=args.fontsize)
+
+    ax.set_ylim(0, 6)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     # ------------saving the full figure--------------------------
