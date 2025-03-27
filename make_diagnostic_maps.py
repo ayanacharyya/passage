@@ -1112,6 +1112,8 @@ def compute_Z_O3O2(OIII5007_flux, OII3727_flux):
         net_mask = False
 
     k = [-0.691, -2.944, -1.308] # c0-2 parameters from Table 2 of Curti+19 3rd row (O3O2)
+    logOH_turnover = np.max(np.roots(np.polyder(np.poly1d(k[::-1]), m=1)) + 8.69) # based on solving the differential of polynomial with above coefficients, this is the value of Z where the relation peaks
+    O3O2_turnover = np.poly1d(k[::-1])(logOH_turnover - 8.69) # based on solving the differential of polynomial with above coefficients, this is the value of log(ratio) where the relation peaks
 
     if hasattr(OII3727_flux, "__len__"): # if it is an array
         O3O2 = take_safe_log_ratio(OIII5007_flux, OII3727_flux)
@@ -1126,23 +1128,31 @@ def compute_Z_O3O2(OIII5007_flux, OII3727_flux):
             ax[0].set_ylim(-1.5, 1.5)
 
         for this_O3O2 in O3O2.data.flatten():
-            try:
-                solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_O3O2)]])) if item.imag == 0]
-                this_log_OH = np.max(solution) + 8.69  # see Table 1 caption in Curti+19
-                log_OH.append(ufloat(this_log_OH, 0.))
-                if args.debug_Zdiag:
-                    ax[0].scatter(solution[0], unp.nominal_values(this_O3O2), lw=0, s=50)
-                    ax[1].scatter(this_log_OH, unp.nominal_values(this_O3O2), lw=0, s=50)
-            except:
-                log_OH.append(ufloat(np.nan, np.nan))
+            if this_O3O2 > O3O2_turnover:
+                log_OH.append(ufloat(logOH_turnover, 0.))
+            else:
+                try:
+                    solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_O3O2)]])) if item.imag == 0]
+                    this_log_OH = np.max(solution) + 8.69  # see Table 1 caption in Curti+19
+                    log_OH.append(ufloat(this_log_OH, 0.))
+                    if args.debug_Zdiag:
+                        ax[0].scatter(solution[0], unp.nominal_values(this_O3O2), lw=0, s=50)
+                        ax[0].axvline(logOH_turnover - 8.69, ls='--', c='k')
+                        ax[0].axhline(O3O2_turnover, ls='--', c='k')
+                        ax[1].scatter(this_log_OH, unp.nominal_values(this_O3O2), lw=0, s=50)
+                except:
+                    log_OH.append(ufloat(np.nan, np.nan))
         log_OH = np.ma.masked_where(O3O2.mask | net_mask, np.reshape(log_OH, np.shape(O3O2)))
 
     else: # if it is scalar
         try:
             ratio = OIII5007_flux / OII3727_flux
             O3O2 = unp.log10(ratio)
-            solution = np.min([item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(O3O2)]])) if item.imag == 0])
-            log_OH = ufloat(solution + 8.69, 0.)  # see Table 1 caption in Curti+19
+            if O3O2 > O3O2_turnover:
+                log_OH = ufloat(logOH_turnover, 0.)
+            else:
+                solution = np.max([item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(O3O2)]])) if item.imag == 0])
+                log_OH = ufloat(solution + 8.69, 0.)  # see Table 1 caption in Curti+19
         except:
             log_OH = ufloat(np.nan, np.nan)
 
@@ -1178,6 +1188,8 @@ def compute_Z_O3S2(OIII5007_flux, Hbeta_flux, SII6717_flux, Halpha_flux):
         net_mask = False
 
     k = [0.191, -4.292, -2.538, 0.053, 0.332] # c0-4 parameters from Table 2 of Curti+19 last row (O3S2)
+    logOH_turnover = np.max(np.roots(np.polyder(np.poly1d(k[::-1]), m=1)) + 8.69) # based on solving the differential of polynomial with above coefficients, this is the value of Z where the relation peaks
+    O3S2_turnover = np.poly1d(k[::-1])(logOH_turnover - 8.69) # based on solving the differential of polynomial with above coefficients, this is the value of log(ratio) where the relation peaks
 
     if hasattr(Hbeta_flux, "__len__"): # if it is an array
         # --------computing the ratio and appropriate errors------------
@@ -1193,23 +1205,31 @@ def compute_Z_O3S2(OIII5007_flux, Hbeta_flux, SII6717_flux, Halpha_flux):
             ax[0].set_ylim(-0.5, 2.5)
 
         for this_O3S2 in O3S2.data.flatten():
-            try:
-                solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_O3S2)]])) if item.imag == 0]
-                this_log_OH = np.min(solution) + 8.69  # see Table 1 caption in Curti+19
-                log_OH.append(ufloat(this_log_OH, 0.))
-                if args.debug_Zdiag:
-                    ax[0].scatter(this_log_OH, unp.nominal_values(this_O3S2), lw=0, s=50)
-                    ax[1].scatter(solution[0], unp.nominal_values(this_O3S2), lw=0, s=50)
-            except:
-                log_OH.append(ufloat(np.nan, np.nan))
+            if this_O3S2 > O3S2_turnover:
+                log_OH.append(ufloat(logOH_turnover, 0.))
+            else:
+                try:
+                    solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_O3S2)]])) if item.imag == 0]
+                    this_log_OH = np.max(solution) + 8.69  # see Table 1 caption in Curti+19
+                    log_OH.append(ufloat(this_log_OH, 0.))
+                    if args.debug_Zdiag:
+                        ax[0].scatter(this_log_OH, unp.nominal_values(this_O3S2), lw=0, s=50)
+                        ax[0].axvline(logOH_turnover, ls='--', c='k')
+                        ax[0].axhline(O3S2_turnover, ls='--', c='k')
+                        ax[1].scatter(solution[0], unp.nominal_values(this_O3S2), lw=0, s=50)
+                except:
+                    log_OH.append(ufloat(np.nan, np.nan))
         log_OH = np.ma.masked_where(O3S2.mask | net_mask, np.reshape(log_OH, np.shape(O3S2)))
 
     else: # if it is scalar
         try:
             ratio = (OIII5007_flux / Hbeta_flux) / (SII6717_flux / Halpha_flux)
             O3S2 = unp.log10(ratio)
-            solution = np.min([item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(O3S2)]])) if item.imag == 0])
-            log_OH = ufloat(solution + 8.69, 0.)  # see Table 1 caption in Curti+19
+            if O3S2 > O3S2_turnover:
+                log_OH = ufloat(logOH_turnover, 0.)
+            else:
+                solution = np.max([item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(O3S2)]])) if item.imag == 0])
+                log_OH = ufloat(solution + 8.69, 0.)  # see Table 1 caption in Curti+19
         except:
             log_OH = ufloat(np.nan, np.nan)
 
@@ -1460,6 +1480,8 @@ def compute_Z_R3(OIII5007_flux, Hbeta_flux):
         net_mask = False
 
     k = [-0.277, -3.549, -3.593, -0.981] # c0-3 parameters from Table 2 of Curti+19 2nd row (R3)
+    logOH_turnover = np.max(np.roots(np.polyder(np.poly1d(k[::-1]), m=1)) + 8.69) # based on solving the differential of polynomial with above coefficients, this is the value of Z where the relation peaks
+    R3_turnover = np.poly1d(k[::-1])(logOH_turnover - 8.69) # based on solving the differential of polynomial with above coefficients, this is the value of log(ratio) where the relation peaks
 
     if hasattr(Hbeta_flux, "__len__"): # if it is an array
         # --------computing the ratio and appropriate errors------------
@@ -1475,23 +1497,31 @@ def compute_Z_R3(OIII5007_flux, Hbeta_flux):
             ax[0].set_ylim(-1.5, 1.5)
 
         for this_R3 in R3.data.flatten():
-            try:
-                solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_R3)]])) if item.imag == 0]
-                this_log_OH = np.max(solution) + 8.69  # see Table 1 caption in Curti+19
-                log_OH.append(ufloat(this_log_OH, 0.))
-                if args.debug_Zdiag:
-                    ax[0].scatter(solution[0], unp.nominal_values(this_R3), lw=0, s=50)
-                    ax[1].scatter(this_log_OH, unp.nominal_values(this_R3), lw=0, s=50)
-            except:
-                log_OH.append(ufloat(np.nan, np.nan))
+            if this_R3 > R3_turnover:
+                log_OH.append(ufloat(logOH_turnover, 0.))
+            else:
+                try:
+                    solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_R3)]])) if item.imag == 0]
+                    this_log_OH = np.max(solution) + 8.69  # see Table 1 caption in Curti+19
+                    log_OH.append(ufloat(this_log_OH, 0.))
+                    if args.debug_Zdiag:
+                        ax[0].scatter(solution[0], unp.nominal_values(this_R3), lw=0, s=50)
+                        ax[0].axvline(logOH_turnover - 8.69, ls='--', c='k')
+                        ax[0].axhline(R3_turnover, ls='--', c='k')
+                        ax[1].scatter(this_log_OH, unp.nominal_values(this_R3), lw=0, s=50)
+                except:
+                    log_OH.append(ufloat(np.nan, np.nan))
         log_OH = np.ma.masked_where(R3.mask | net_mask, np.reshape(log_OH, np.shape(R3)))
 
     else: # if it is scalar
         try:
             ratio = OIII5007_flux / Hbeta_flux
             R3 = unp.log10(ratio)
-            solution = np.min([item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(R3)]])) if item.imag == 0])
-            log_OH = ufloat(solution + 8.69, 0.)  # see Table 1 caption in Curti+19
+            if R3 > R3_turnover:
+                log_OH = ufloat(logOH_turnover, 0.)
+            else:
+                solution = np.max([item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(R3)]])) if item.imag == 0])
+                log_OH = ufloat(solution + 8.69, 0.)  # see Table 1 caption in Curti+19
         except:
             log_OH = ufloat(np.nan, np.nan)
 
@@ -1537,7 +1567,7 @@ def get_Z(full_hdu, args):
         logOH_map, logOH_int = get_Z_R23(full_hdu, args)
     else:
         print(f'Could not apply any of the metallicity diagnostics, so returning NaN metallicities')
-        logOH_map, logOH_int = None, np.nan
+        logOH_map, logOH_int = None, None
 
     if logOH_map is not None and args.mask_agn: logOH_map = np.ma.masked_where((args.distance_from_AGN_line_map > 0) | logOH_map.mask, logOH_map)
 
@@ -1954,12 +1984,13 @@ def plot_metallicity_fig(full_hdu, args):
         if args.plot_ionisation_parameter: logq_map, logq_int = get_q_O32(full_hdu, args)
 
         # ---------plotting-------------
-        lim = [7.5, 9.2]
-        ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
-        if args.plot_snr:
-            logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
-            logOH_map_snr = np.ma.masked_where(logOH_map.mask, unp.nominal_values(10 ** logOH_map.data)) / np.ma.masked_where(logOH_map.mask, unp.std_devs(10 ** logOH_map.data))
-            snr_ax, _ = plot_2D_map(logOH_map_snr, snr_ax, args, takelog=False, hide_yaxis=True, label=r'Z (%s) SNR' % (args.Zdiag), cmap='cividis', vmin=0, vmax=6)
+        if logOH_map is not None:
+            lim = [7.5, 9.2]
+            ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
+            if args.plot_snr:
+                logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
+                logOH_map_snr = np.ma.masked_where(logOH_map.mask, unp.nominal_values(10 ** logOH_map.data)) / np.ma.masked_where(logOH_map.mask, unp.std_devs(10 ** logOH_map.data))
+                snr_ax, _ = plot_2D_map(logOH_map_snr, snr_ax, args, takelog=False, hide_yaxis=True, label=r'Z (%s) SNR' % (args.Zdiag), cmap='cividis', vmin=0, vmax=6)
         if args.plot_ionisation_parameter:
             ip_ax, _ = plot_2D_map(logq_map, ip_ax, args, takelog=False, hide_yaxis=False, label=r'log q$_{\rm int}$ = %.1f $\pm$ %.1f' % (logq_int.n, logq_int.s), cmap='viridis', vmin=6.5, vmax=8.5)
 
@@ -2200,7 +2231,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
 
         if args.plot_AGN_frac and distance_from_AGN_line_map is not None and not args.plot_separately and not (
                 len(args.id_arr) > 1 and args.plot_BPT):
-            if ax_inset is None: ax_inset = ax.inset_axes([0.05, 0.1, 0.3, 0.3])
+            if ax_inset is None: ax_inset = ax.inset_axes([0.55, 0.75, 0.3, 0.3])
             # plot_2D_map(factor, ax_inset, args, takelog=False, label='Ha/(NII+Ha)', cmap=args.diverging_cmap, hide_yaxis=not args.plot_BPT, hide_xaxis=not args.plot_BPT)
             plot_2D_map(distance_from_AGN_line_map, ax_inset, args, takelog=False, label=f'Dist from {dist_method}', cmap=args.diverging_cmap, vmin=-dist_lim if dist_lim is not None else None, vmax=dist_lim, hide_yaxis=not args.plot_BPT, hide_xaxis=not args.plot_BPT)
 
@@ -2497,19 +2528,24 @@ if __name__ == "__main__":
 
             # ------determining directories---------
             output_subdir = output_dir / f'{args.id:05d}{pixscale_text}'
-            full_fits_file = output_subdir / f'{args.field}_{args.id:05d}.full.fits'
+            full_fits_file1 = output_subdir / f'{args.field}_{args.id:05d}.full.fits'
+            full_fits_file2 = product_dir / 'full' / f'{args.field}_{args.id:05d}.full.fits'
             maps_fits_file = product_dir / 'maps' / f'{args.field}_{args.id:05d}.maps.fits'
 
-            if os.path.exists(full_fits_file): # if the fits files are in sub-directories for individual objects
-                full_filename = full_fits_file
+            if os.path.exists(full_fits_file1): # if the fits files are in sub-directories for individual objects
+                full_filename = full_fits_file1
                 od_filename = output_subdir/ f'{args.field}_{args.id:05d}.1D.fits'
 
             elif os.path.exists(maps_fits_file): # if the fits files are in Products/
                 full_filename = maps_fits_file
                 od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.1D.fits'
 
+            elif os.path.exists(full_fits_file2): # if the fits files are in Products/
+                full_filename = full_fits_file2
+                od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.1D.fits'
+
             else:
-                print(f'Could not find {full_fits_file} or {maps_fits_file} for ID {args.id}, so skipping it.')
+                print(f'Could not find {full_fits_file1} or {full_fits_file2} or {maps_fits_file} for ID {args.id}, so skipping it.')
                 continue
 
             if not os.path.exists(od_filename): od_filename = Path(str(od_filename).replace('.1D.', '.spec1D.'))
