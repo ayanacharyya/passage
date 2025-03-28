@@ -42,7 +42,7 @@
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --AGN_diag H21 --plot_models --slice_at_quantity3 4,9
 
              run make_diagnostic_maps.py --field glass-a2744 --id 321,998,1694,1983,2355,2744,2938 --plot_snr --plot_ratio_maps --plot_radial_profiles --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --fontsize 5 --arcsec_limit 0.5
-
+             run make_diagnostic_maps.py --field glass-a2744 --plot_snr --plot_ratio_maps --plot_radial_profiles --plot_AGN_frac --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 2 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.25 --AGN_diag Ne3O2 --Zdiag R3 --mask_agn --fontsize 5 --id 5184,1407,629,1504,1622,2273,2926,3422,2891,562,1300,2928,600 --output_subdir diagnostics_OIII,OII,Hb,NeIII-3867,SNR>2.0
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_DIG --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag P25 --plot_circle_at_arcsec 0.5 --plot_snr
 
              run make_diagnostic_maps.py --field Par28 --id 300,1303,1634,1849,2171,2727,2867 --plot_ratio_maps --plot_snr --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 2 --drv 0.5 --do_not_correct_pixel --Zdiag R3 --AGN_diag Ne3O2 --mask_agn --fontsize 5
@@ -990,21 +990,22 @@ def compute_Te(OIII4363_flux, OIII5007_flux):
 
     if hasattr(OIII5007_flux, "__len__"): # if it is an array
         # --------computing the ratio and appropriate errors------------
-        log_ratio = take_safe_log_ratio(OIII4363_flux, OIII5007_flux)
-
-        logTe = np.poly1d([0., 9.18962, 3.30355])(log_ratio) / np.poly1d([-0.00935, -0.15034, 2.09136, 1.000])(log_ratio)
-
-        new_mask2 = logTe > 10.
-        new_mask3 = logTe < -8.
-        logTe[new_mask2 | new_mask3] = 0 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
-        Te = 10 ** logTe
-        Te = np.ma.masked_where(log_ratio.mask | net_mask, Te)
+        log_O3 = take_safe_log_ratio(OIII4363_flux, OIII5007_flux)
+        Te = []
+        for this_log_O3 in log_O3.data.flatten():
+            try:
+                this_logTe = np.poly1d([0., 9.18962, 3.30355])(this_log_O3) / np.poly1d([-0.00935, -0.15034, 2.09136, 1.000])(this_log_O3)
+                this_Te = 10 ** this_logTe
+                Te.append(this_Te)
+            except:
+                Te.append(ufloat(np.nan, np.nan))
+        Te = np.ma.masked_where(log_O3.mask, np.reshape(Te, np.shape(log_O3)))
+        Te = np.ma.masked_where(~np.isfinite(unp.nominal_values(Te.data)), Te)
 
     else: # if it is scalar
         try:
-            ratio = OIII4363_flux / OIII5007_flux  # in case 'OIII5007_flux' happens to be 0
-            log_ratio = unp.log10(ratio.data)
-            logTe = np.poly1d([0., 9.18962, 3.30355])(log_ratio) / np.poly1d([-0.00935, -0.15034, 2.09136, 1.000])(log_ratio)
+            log_O3 = unp.log10(OIII4363_flux / OIII5007_flux)
+            logTe = np.poly1d([0., 9.18962, 3.30355])(log_O3) / np.poly1d([-0.00935, -0.15034, 2.09136, 1.000])(log_O3)
             Te = 10 ** logTe
         except:
             Te = ufloat(np.nan, np.nan)
@@ -1056,24 +1057,36 @@ def compute_Z_Te(OII3727_flux, OIII5007_flux, Hbeta_flux, Te, ne=1e3):
     def poly(R, t, x, a, b, c, d, e):
         return unp.log10(R) + a + b / t - c * unp.log10(t) - d * t + unp.log10(1 + e * x)  # eqn 3 I06 pattern
 
-    t = Te * 1e-4
-    x = 1e-4 * ne * unp.sqrt(t)
-
     if hasattr(Hbeta_flux, "__len__"): # if it is an array
-        log_O2H2 = take_safe_log_ratio(OII3727_flux, Hbeta_flux)
-        log_O3H2 = take_safe_log_ratio(OIII5007_flux, Hbeta_flux)
+        O2H2 = take_safe_log_ratio(OII3727_flux, Hbeta_flux, skip_log=True)
+        O3H2 = take_safe_log_ratio(OIII5007_flux, Hbeta_flux, skip_log=True)
 
-        # --------computing the combined metallicity and masks, etc.------------
-        log_OH = unp.log10(10 ** log_O2H2.data + 10 ** log_O3H2.data) + 12
-        log_OH = np.ma.masked_where(log_O3H2.mask | log_O2H2.mask | net_mask, log_OH)
+        log_OH = []
+        for (this_O2H2, this_O3H2, this_Te) in zip(O2H2.data.flatten(), O3H2.data.flatten(), Te.flatten()):
+            try:
+                t =this_Te * 1e-4
+                x = 1e-4 * ne * unp.sqrt(t)
+
+                this_log_O2H2 = poly(this_O2H2, t, x, 5.961, 1.676, 0.4, 0.034, 1.35) - 12  # coefficients from eqn 3 I06 # in case 'ratio1' happens to be < 0
+                this_log_O3H2 = poly(this_O3H2, t, x, 6.200, 1.251, -0.55, -0.014,0.0) - 12  # coefficients from eqn 5 I06 # in case 'ratio1' happens to be < 0
+
+                this_log_OH = unp.log10(10 ** this_log_O2H2 + 10 ** this_log_O3H2) + 12
+                log_OH.append(this_log_OH)
+            except:
+                log_OH.append(ufloat(np.nan, np.nan))
+        log_OH = np.ma.masked_where(O2H2.mask | O3H2.mask, np.reshape(log_OH, np.shape(O2H2)))
+        log_OH = np.ma.masked_where(~np.isfinite(unp.nominal_values(log_OH.data)), log_OH)
 
     else: # if it is scalar
         try:
-            ratio1 = OII3727_flux / Hbeta_flux # in case 'Hbeta_flux' happens to be 0
-            ratio2 = OIII5007_flux / Hbeta_flux
+            t = Te * 1e-4
+            x = 1e-4 * ne * unp.sqrt(t)
 
-            log_O2H2 = poly(ratio1, t, x, 5.961, 1.676, 0.4, 0.034, 1.35) - 12  # coefficients from eqn 3 I06 # in case 'ratio1' happens to be < 0
-            log_O3H2 = poly(ratio2, t, x, 6.200, 1.251, -0.55, -0.014, 0.0) - 12  # coefficients from eqn 5 I06 # in case 'ratio1' happens to be < 0
+            O2H2 = OII3727_flux / Hbeta_flux # in case 'Hbeta_flux' happens to be 0
+            O3H2 = OIII5007_flux / Hbeta_flux
+
+            log_O2H2 = poly(O2H2, t, x, 5.961, 1.676, 0.4, 0.034, 1.35) - 12  # coefficients from eqn 3 I06 # in case 'ratio1' happens to be < 0
+            log_O3H2 = poly(O3H2, t, x, 6.200, 1.251, -0.55, -0.014, 0.0) - 12  # coefficients from eqn 5 I06 # in case 'ratio1' happens to be < 0
 
             log_OH = unp.log10(10 ** log_O2H2 + 10 ** log_O3H2) + 12
         except:
@@ -2443,6 +2456,7 @@ if __name__ == "__main__":
         product_dir = args.input_dir / args.drv / args.field / 'Products'
         output_dir = args.output_dir / args.field
         if args.re_extract: output_dir = output_dir / 're_extracted'
+        if args.output_subdir is not None: output_dir = output_dir / args.output_subdir
         output_dir.mkdir(parents=True, exist_ok=True)
         outfilename = output_dir / f'{args.field}_all_diag_results.csv'
 
@@ -2515,7 +2529,7 @@ if __name__ == "__main__":
         # ---------plotting spatially resolved BPT-----------------------------
         if args.plot_BPT:
             fig, ax = plt.subplots(1, figsize=(8, 6))
-            cmap_arr = np.tile(['Reds_r', 'Greens_r', 'Purples_r', 'Greys_r', 'Oranges_r', 'Blues_r', 'YlGnBu_r', 'BuPu_r', 'GnBu_r', 'spring'], 3)
+            cmap_arr = np.tile(['Reds_r', 'Greens_r', 'Purples_r', 'Greys_r', 'Oranges_r', 'Blues_r', 'YlGnBu_r', 'BuPu_r', 'GnBu_r', 'spring'], 10)
 
         # ---------lotting metallicity profiles and gradients----------------------
         if args.plot_metallicity:
@@ -2910,10 +2924,10 @@ if __name__ == "__main__":
 
                 basic_data = [args.field, f'{args.id:05d}{pixscale_text}', full_hdu[0].header['RA'], full_hdu[0].header['DEC'], args.z]
                 flag_data = [args.radius_max, args.snr_cut if args.snr_cut is not None else np.nan, args.only_seg, args.vorbin, args.voronoi_snr if args.vorbin else np.nan, args.voronoi_line if args.vorbin else np.nan]
-                df = pd.concat([df, this_df])
                 this_row = np.hstack([basic_data, flag_data, line_properties, measured_quants])
                 this_df = pd.DataFrame(dict(map(lambda i, j: (i, [j]), cols_in_df, this_row)))
                 this_df = this_df.replace('N/A', np.nan)
+                df = pd.concat([df, this_df])
 
                 if not os.path.isfile(outfilename) or (args.clobber and index == 0):
                     this_df.to_csv(outfilename, index=None, header='column_names')
