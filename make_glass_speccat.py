@@ -74,7 +74,7 @@ if __name__ == "__main__":
     histcol = 'redshift'
     fig, ax = plt.subplots(figsize=(8, 6))
 
-    line_list_array = [['OIII', 'OII', 'Hb', 'NeIII-3867'], ['OIII', 'OII', 'Hb', 'Ha', 'SII'], ['OIII', 'OII', 'Hb', 'Ha', 'SII', 'NeIII-3867']]
+    line_list_array = [args.line_list] # [['OIII', 'OII', 'Hb', 'NeIII-3867'], ['OIII', 'OII', 'Hb', 'Ha', 'SII'], ['OIII', 'OII', 'Hb', 'Ha', 'SII', 'NeIII-3867']]
     col_arr = ['salmon', 'cornflowerblue', 'darkgreen']
 
     # ----------filtering dataframe-------------------
