@@ -197,6 +197,7 @@ if __name__ == "__main__":
 
     # --------getting region file names-------------
     reg_filenames = list(args.reg_files_dir.glob('*PASSAGE*.reg'))
+    reg_filenames += list(args.reg_files_dir.glob('*Cy2*.reg'))
     if not args.only_passage_regions:
         if args.fg_file is not None and 'miri' in args.fg_file: reg_filenames += list(args.reg_files_dir.glob('*COSMOS*MIRI*.reg'))
         elif args.fg_file is not None and 'nircam' in args.fg_file: reg_filenames += list(args.reg_files_dir.glob('*COSMOS*NIRCam*.reg'))

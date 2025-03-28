@@ -58,6 +58,10 @@ def get_passage_footprints(args=None, filename=None):
     df = df[['Par#', 'Target RA (J2000)', 'Target Dec (J2000)']].dropna().reset_index(drop=True)
     df = df.rename(columns={'Par#':'id', 'Target RA (J2000)':'ra', 'Target Dec (J2000)':'dec'})
 
+    if args is not None:
+        if args.survey == 'passage': df = df[np.array([int(item[3:]) for item in df['id']]) < 600]
+        elif args.survey.lower() == 'cy2': df = df[np.array([int(item[3:]) for item in df['id']]) > 600]
+
     df['ra_width'] = NIRISS_WFSS_fov[0] # arcseconds
     df['dec_width'] = NIRISS_WFSS_fov[1]
     df['pa'] = 0 # dummy value; in degrees
@@ -72,6 +76,11 @@ if __name__ == "__main__":
     if args.survey == 'passage':
         df = get_passage_footprints(args=args) # reading the passage footprints
         df_to_region(df, output_dir / 'PASSAGE_fields.reg', shape='box', label='JWST-PASSAGE', label_ra=150.47, label_dec=2.55, color='red')  # making the region files
+
+    elif args.survey == 'cy2':
+        df = get_passage_footprints(args=args) # reading the passage footprints
+        df_to_region(df, output_dir / 'Cy2_fields.reg', shape='box', label='NIRISS-Cy2', label_ra=150.47, label_dec=2.55, color='blue')  # making the region files
+
 
     elif args.survey == 'zcosmos':
         df = read_zCOSMOS_catalog(args=args)
