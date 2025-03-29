@@ -1998,7 +1998,7 @@ def plot_metallicity_fig(full_hdu, args):
 
         # ---------plotting-------------
         if logOH_map is not None:
-            lim = [7.5, 9.2]
+            lim = [7.5, 8.2] if args.Zdiag == 'R23' and args.Zbranch == 'low' else [7.5, 9.2]
             ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
             if args.plot_snr:
                 logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
