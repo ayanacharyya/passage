@@ -86,7 +86,7 @@ def overplot_regions(region_files, bg_img_hdu, fig, fontsize=15):
                 if type(sky_region) == regions.shapes.rectangle.RectangleSkyRegion:
                     label_pixcoord_x = pixel_region.center.xy[0] + pixel_region.width/2 + pix_offset_forlabels
                     label_pixcoord_y = pixel_region.center.xy[1] + pixel_region.height/2 + pix_offset_forlabels
-                    label_text = f'P{pixel_region.meta["text"]}'
+                    label_text = f'{pixel_region.meta["text"]}'
                     ax.text(label_pixcoord_x, label_pixcoord_y, label_text, c=color, ha='left', va='top', fontsize=fontsize/1.5)
 
     return fig, sky_regions

@@ -53,7 +53,8 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, df=None):
                 if type(sky_region) == regions.shapes.rectangle.RectangleSkyRegion:
                     label_pixcoord_x = pixel_region.center.xy[0] + pixel_region.width/2 + pix_offset_forlabels
                     label_pixcoord_y = pixel_region.center.xy[1] + pixel_region.height/2 + pix_offset_forlabels
-                    label_text = f'P{pixel_region.meta["text"]}'
+                    label_text = f'{pixel_region.meta["text"]}'
+                    if 'P' not in label_text: label_text = f'P{label_text}'
                     ax.text(label_pixcoord_x, label_pixcoord_y, label_text, c=color, ha='left', va='top', fontsize=args.fontsize/1.5, bbox=dict(facecolor='k', edgecolor='black', alpha=0.5) if args.fortalk else None)
 
                     # detecting sources from <table> that lie within this region, if <table> provided
