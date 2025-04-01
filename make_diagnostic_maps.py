@@ -1593,16 +1593,29 @@ def compute_Z_NB(line_label_array, line_flux_array):
     '''
     Calculates and returns the NebulaBayes metallicity given a list of observed line fluxes
     '''
-    print(f'\nFinal lines used for NB: {line_label_array}\n')  ##
+    line_flux_array = [np.atleast_1d(item) for item in line_flux_array]
+    npixels = len(line_flux_array[0])
+    if args.vorbin and npixels > 1: # getting how many unique IDs present, so that NB does not have to run unnecessary repeats
+        IDs_array = args.voronoi_bin_IDs.astype(int).flatten()
+    else:
+        IDs_array = np.arange(npixels).flatten()
+    unique_IDs_array = np.unique(IDs_array)
+    print(f'\nAbout to start running NB, with lines used for NB: {line_label_array}..\n')
+    if len(unique_IDs_array) > 60: print(f'This might take ~{int(len(unique_IDs_array) / 60)} min')
 
     # -----making a "net" mask array and separating out the line fluxes form the input unumpy arrays---------
     net_mask = np.zeros(np.shape(line_flux_array[0]), dtype=bool)
     obs_flux_array, obs_err_array = [], []
 
     for index in range(len(line_flux_array)):
-        if np.ma.isMaskedArray(line_flux_array[index]): net_mask = net_mask | line_flux_array[index].mask
-        obs_flux_array.append(unp.nominal_values(line_flux_array[index].data).flatten())
-        obs_err_array.append(unp.std_devs(line_flux_array[index].data).flatten())
+        if np.ma.isMaskedArray(line_flux_array[index]):
+            net_mask = net_mask | line_flux_array[index].mask
+            obs_flux_array.append(unp.nominal_values(line_flux_array[index].data).flatten())
+            obs_err_array.append(unp.std_devs(line_flux_array[index].data).flatten())
+        else:
+            obs_flux_array.append(unp.nominal_values(line_flux_array[index]).flatten())
+            obs_err_array.append(unp.std_devs(line_flux_array[index]).flatten())
+
     obs_flux_array = np.array(obs_flux_array)
     obs_err_array = np.array(obs_err_array)
     net_mask_array = net_mask.flatten()
@@ -1615,16 +1628,20 @@ def compute_Z_NB(line_label_array, line_flux_array):
 
     # -----looping over each pixel to calculate NB metallicity--------
     logOH_array = []
+    logOH_dict_unique_IDs = {}
     counter = 0
     start_time3 = datetime.now()
 
     for index in range(len(obs_flux_array[0])):
+        this_ID = IDs_array[index]
         if net_mask_array[index]: # no need to calculate for those pixels that are already masked
-            print(f'Skipping NB for pixel {index + 1} out of {len(obs_flux_array[0])}..')
+            #print(f'Skipping NB for masked pixel {index + 1} out of {len(obs_flux_array[0])}..')
             logOH = ufloat(np.nan, np.nan)
+        elif this_ID in logOH_dict_unique_IDs.keys():
+            #print(f'Skipping NB due to existing measurement from unique ID {this_ID} for pixel {index + 1} out of {len(obs_flux_array[0])}..')
+            logOH = logOH_dict_unique_IDs[this_ID]
         else:
             start_time4 = datetime.now()
-            counter += 1
             # -------setting up NB parameters----------
             this_out_dir = out_dir / f'{index}'
             this_out_dir.mkdir(exist_ok=True, parents=True)
@@ -1647,12 +1664,16 @@ def compute_Z_NB(line_label_array, line_flux_array):
             logOH_high = df_estimates.loc["12 + log O/H", "CI68_high"]
             logOH_err = np.mean([logOH_est - logOH_low, logOH_high - logOH_est])
             logOH = ufloat(logOH_est, logOH_err)
-            print(f'Ran NB for pixel {index + 1} out of {len(obs_flux_array[0])} in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
+
+            counter += 1
+            logOH_dict_unique_IDs.update({this_ID: logOH}) # updating to unique ID dictionary once logOH has been calculated for this unique ID
+            print(f'Ran NB for unique ID {this_ID} out of {len(unique_IDs_array)} in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
         logOH_array.append(logOH)
-    print(f'\nRan NB for total {counter} pixels out of {len(obs_flux_array[0])}, in {timedelta(seconds=(datetime.now() - start_time3).seconds)}\n')
+    print(f'\nRan NB for total {counter} unique pixels out of {len(obs_flux_array[0])}, in {timedelta(seconds=(datetime.now() - start_time3).seconds)}\n')
 
     # ---------collating all the metallicities computed---------
     log_OH = np.ma.masked_where(net_mask, np.reshape(logOH_array, np.shape(line_flux_array[0])))
+    if len(log_OH) == 1: log_OH = log_OH.data[0]
 
     return log_OH
 
