@@ -99,7 +99,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     # ------determining directories and global variables---------
-    args.input_dir = args.input_dir / args.drv / args.field
+    args.input_dir = args.input_dir / args.field
     args.output_dir = args.output_dir / args.field
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
