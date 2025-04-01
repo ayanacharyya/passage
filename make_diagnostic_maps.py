@@ -628,6 +628,7 @@ def get_emission_line_int(line, full_hdu, args, dered=True):
     line_int_err = line_int_err * factor
     line_int = ufloat(line_int, line_int_err)
     if dered: line_int = get_dereddened_flux(line_int, line_wave, args.EB_V)
+    print(f'Integrated {line} flux for object {args.id} is {line_int} ergs/s/cm^2.')
 
     return line_int
 
@@ -663,18 +664,23 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     line_map = line_map * factor
     line_map_err = line_map_err * factor
 
+    # ----------getting a smaller cutout around the object center-----------
     line_map = trim_image(line_map, args)
     line_map_err = trim_image(line_map_err, args)
 
+    # -------getting segmentation map cutout---------
     if args.only_seg:
         line_map = cut_by_segment(line_map, args)
         line_map_err = cut_by_segment(line_map_err, args)
 
+    line_seg_mask = line_map.mask if np.ma.isMaskedArray(line_map) else False
+
+    # -----------discarding low-snr pixels AFTER vorbin, if any-----------------
     if args.snr_cut is not None:
         snr_map = line_map / line_map_err
         mask = (~np.isfinite(snr_map)) | (snr_map < args.snr_cut)
-        line_map = np.ma.masked_where(mask, line_map)
-        line_map_err = np.ma.masked_where(mask, line_map_err)
+        line_map = np.ma.masked_where(mask, line_map.data)
+        line_map_err = np.ma.masked_where(mask, line_map_err.data)
 
     # -----------getting the dereddened flux value-----------------
     if dered:
@@ -682,6 +688,7 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
         line_map = unp.nominal_values(line_map_quant)
         line_map_err = unp.std_devs(line_map_quant)
 
+    # -----------voronoi binning the flux and err maps-----------------
     if args.vorbin and not for_vorbin:
         if args.voronoi_line is None: # No reference emission line specified, so Voronoi IDs need to be computed now
             bin_IDs = get_voronoi_bin_IDs(unp.uarray(line_map, line_map_err), args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
@@ -710,14 +717,24 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
             plot_2D_map(snr, axes[6], args, takelog=False, label='binned snr', cmap=combined_cmap, hide_yaxis=True)
             plt.show(block=False)
 
-    line_map = unp.uarray(line_map, line_map_err)
+    line_map = np.ma.masked_where(line_seg_mask, line_map)
+    line_map_err = np.ma.masked_where(line_seg_mask, line_map_err)
+
+    # -----------discarding low-snr pixels AFTER vorbin, if any-----------------
+    if args.snr_cut is not None:
+        snr_map = line_map.data / line_map_err.data
+        mask = (~np.isfinite(snr_map)) | (snr_map < args.snr_cut)
+        line_map = np.ma.masked_where(line_map.mask | mask, line_map.data)
+        line_map_err = np.ma.masked_where(line_map_err.mask | mask, line_map_err.data)
+
+    line_map = np.ma.masked_where(line_map.mask | line_map_err.mask, unp.uarray(line_map.data, line_map_err.data))
 
     # -----------getting the integrated flux value by summing the 2D map-----------------
     line_sum = np.sum(line_map) # ergs/s/cm^2
     print(f'Summed up {line} flux for object {args.id} is {line_sum/1e-17: .3f} x 10^-17 ergs/s/cm^2.')
 
     # -----------getting the integrated flux value from grizli-----------------
-    line_int = get_emission_line_int(line, full_hdu, args, dered=True)
+    line_int = get_emission_line_int(line, full_hdu, args, dered=dered)
 
     # -----------getting the integrated EW value-----------------
     line_index = np.where(args.available_lines == line)[0][0]
@@ -728,8 +745,6 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
         line_ew = ufloat(line_ew, line_ew_err)
     except KeyError:
         line_ew = ufloat(np.nan, np.nan)
-
-    if not np.ma.isMaskedArray(line_map): line_map = np.ma.masked_where(False, line_map)
 
     return line_map, line_wave, line_int, line_ew
 
@@ -1135,26 +1150,36 @@ def compute_Z_O3O2(OIII5007_flux, OII3727_flux):
         log_OH = []
         if args.debug_Zdiag:
             fig, ax = plt.subplots(1, 2, figsize=(6, 8), sharey=True)
-            ax[0].set_xlabel('Solution[0]')
-            ax[1].set_xlabel('log(O/H)+12 = min(solution) + 8.69')
+            ax[0].set_xlabel('Solution[i] + 8.69')
+            ax[1].set_xlabel('log(O/H)+12 = max(solution) + 8.69')
             ax[0].set_ylabel('O3O2')
             ax[0].set_ylim(-1.5, 1.5)
+            #ax[0].set_xlim(7.5, 9.0)
+            ax[1].set_xlim(7.5, 9.0)
 
         for this_O3O2 in O3O2.data.flatten():
             if this_O3O2 > O3O2_turnover:
                 log_OH.append(ufloat(logOH_turnover, 0.))
+                if args.debug_Zdiag:
+                    ax[1].scatter(logOH_turnover, unp.nominal_values(this_O3O2), lw=0, s=50, c='cornflowerblue')
             else:
                 try:
                     solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_O3O2)]])) if item.imag == 0]
                     this_log_OH = np.max(solution) + 8.69  # see Table 1 caption in Curti+19
                     log_OH.append(ufloat(this_log_OH, 0.))
                     if args.debug_Zdiag:
-                        ax[0].scatter(solution[0], unp.nominal_values(this_O3O2), lw=0, s=50)
-                        ax[0].axvline(logOH_turnover - 8.69, ls='--', c='k')
-                        ax[0].axhline(O3O2_turnover, ls='--', c='k')
-                        ax[1].scatter(this_log_OH, unp.nominal_values(this_O3O2), lw=0, s=50)
+                        col_arr = ['r', 'g', 'b']
+                        for index, this_sol in enumerate(solution):
+                            ax[0].scatter(this_sol + 8.69, unp.nominal_values(this_O3O2), lw=0, s=5, c=col_arr[index])
+                        ax[1].scatter(this_log_OH, unp.nominal_values(this_O3O2), lw=0, s=5)
+                        for ax1 in ax:
+                            ax1.axvline(logOH_turnover, ls='--', c='k', lw=1)
+                            ax1.axhline(O3O2_turnover, ls='--', c='k', lw=1)
                 except:
                     log_OH.append(ufloat(np.nan, np.nan))
+                    if args.debug_Zdiag:
+                        ax[1].axhline(unp.nominal_values(this_O3O2), lw=0.5, c='grey', alpha=0.3)
+
         log_OH = np.ma.masked_where(O3O2.mask | net_mask, np.reshape(log_OH, np.shape(O3O2)))
 
     else: # if it is scalar
@@ -1485,13 +1510,6 @@ def compute_Z_R3(OIII5007_flux, Hbeta_flux):
     Conversion factor is from Curti+2019
     '''
     # -----handling masks separately because uncertainty package cannot handle masks---------
-    if np.ma.isMaskedArray(OIII5007_flux):
-        net_mask = Hbeta_flux.mask | OIII5007_flux.mask
-        OIII5007_flux = OIII5007_flux.data
-        Hbeta_flux = Hbeta_flux.data
-    else:
-        net_mask = False
-
     k = [-0.277, -3.549, -3.593, -0.981] # c0-3 parameters from Table 2 of Curti+19 2nd row (R3)
     logOH_turnover = np.max(np.roots(np.polyder(np.poly1d(k[::-1]), m=1)) + 8.69) # based on solving the differential of polynomial with above coefficients, this is the value of Z where the relation peaks
     R3_turnover = np.poly1d(k[::-1])(logOH_turnover - 8.69) # based on solving the differential of polynomial with above coefficients, this is the value of log(ratio) where the relation peaks
@@ -1504,27 +1522,36 @@ def compute_Z_R3(OIII5007_flux, Hbeta_flux):
         log_OH = []
         if args.debug_Zdiag:
             fig, ax = plt.subplots(1, 2, figsize=(6, 8), sharey=True)
-            ax[0].set_xlabel('Solution[0]')
-            ax[1].set_xlabel('log(O/H)+12 = min(solution) + 8.69')
-            ax[0].set_ylabel('O3O2')
+            ax[0].set_xlabel('Solution[i] + 8.69')
+            ax[1].set_xlabel('log(O/H)+12 = max(solution) + 8.69')
+            ax[0].set_ylabel('R3')
             ax[0].set_ylim(-1.5, 1.5)
+            ax[0].set_xlim(7.5, 9.0)
+            ax[1].set_xlim(7.5, 9.0)
 
         for this_R3 in R3.data.flatten():
             if this_R3 > R3_turnover:
                 log_OH.append(ufloat(logOH_turnover, 0.))
+                if args.debug_Zdiag:
+                    ax[1].scatter(logOH_turnover, unp.nominal_values(this_R3), lw=0, s=50, c='cornflowerblue')
             else:
                 try:
-                    solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_R3)]])) if item.imag == 0]
+                    solution = np.sort([item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_R3)]])) if item.imag == 0])
                     this_log_OH = np.max(solution) + 8.69  # see Table 1 caption in Curti+19
                     log_OH.append(ufloat(this_log_OH, 0.))
                     if args.debug_Zdiag:
-                        ax[0].scatter(solution[0], unp.nominal_values(this_R3), lw=0, s=50)
-                        ax[0].axvline(logOH_turnover - 8.69, ls='--', c='k')
-                        ax[0].axhline(R3_turnover, ls='--', c='k')
-                        ax[1].scatter(this_log_OH, unp.nominal_values(this_R3), lw=0, s=50)
+                        col_arr = ['r', 'g', 'b']
+                        for index, this_sol in enumerate(solution):
+                            ax[0].scatter(this_sol + 8.69, unp.nominal_values(this_R3), lw=0, s=5, c=col_arr[index])
+                        ax[1].scatter(this_log_OH, unp.nominal_values(this_R3), lw=0, s=5)
+                        for ax1 in ax:
+                            ax1.axvline(logOH_turnover, ls='--', c='k', lw=1)
+                            ax1.axhline(R3_turnover, ls='--', c='k', lw=1)
                 except:
                     log_OH.append(ufloat(np.nan, np.nan))
-        log_OH = np.ma.masked_where(R3.mask | net_mask, np.reshape(log_OH, np.shape(R3)))
+                    if args.debug_Zdiag:
+                        ax[1].axhline(unp.nominal_values(this_O3O2), lw=0.5, c='grey', alpha=0.3)
+        log_OH = np.ma.masked_where(R3.mask, np.reshape(log_OH, np.shape(R3)))
 
     else: # if it is scalar
         try:
@@ -1541,7 +1568,7 @@ def compute_Z_R3(OIII5007_flux, Hbeta_flux):
     return log_OH
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_Z_R3(full_hdu, args, branch='low'):
+def get_Z_R3(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated R3 metallicity from a given HDU
     '''
@@ -1562,6 +1589,107 @@ def get_Z_R3(full_hdu, args, branch='low'):
     return logOH_map, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
+def compute_Z_NB(line_label_array, line_flux_array):
+    '''
+    Calculates and returns the NebulaBayes metallicity given a list of observed line fluxes
+    '''
+    print(f'\nFinal lines used for NB: {line_label_array}\n')  ##
+
+    # -----making a "net" mask array and separating out the line fluxes form the input unumpy arrays---------
+    net_mask = np.zeros(np.shape(line_flux_array[0]), dtype=bool)
+    obs_flux_array, obs_err_array = [], []
+
+    for index in range(len(line_flux_array)):
+        if np.ma.isMaskedArray(line_flux_array[index]): net_mask = net_mask | line_flux_array[index].mask
+        obs_flux_array.append(unp.nominal_values(line_flux_array[index].data).flatten())
+        obs_err_array.append(unp.std_devs(line_flux_array[index].data).flatten())
+    obs_flux_array = np.array(obs_flux_array)
+    obs_err_array = np.array(obs_err_array)
+    net_mask_array = net_mask.flatten()
+
+    # -----loading the NB HII region model grid---------
+    NB_Model_HII = NB_Model("HII", line_list=line_label_array)
+
+    out_dir = args.output_dir / args.field / f'{args.id:05d}_NB_plots'
+    if args.vorbin: out_dir = out_dir / f'{vorbin_text}'
+
+    # -----looping over each pixel to calculate NB metallicity--------
+    logOH_array = []
+    counter = 0
+    start_time3 = datetime.now()
+
+    for index in range(len(obs_flux_array[0])):
+        if net_mask_array[index]: # no need to calculate for those pixels that are already masked
+            print(f'Skipping NB for pixel {index + 1} out of {len(obs_flux_array[0])}..')
+            logOH = ufloat(np.nan, np.nan)
+        else:
+            start_time4 = datetime.now()
+            counter += 1
+            # -------setting up NB parameters----------
+            this_out_dir = out_dir / f'{index}'
+            this_out_dir.mkdir(exist_ok=True, parents=True)
+            kwargs = {'prior_plot': os.path.join(this_out_dir, f'{index}_HII_prior_plot.pdf'),
+                      'likelihood_plot': os.path.join(this_out_dir, f'{index}_HII_likelihood_plot.pdf'),
+                      'posterior_plot': os.path.join(this_out_dir, f'{index}_HII_posterior_plot.pdf'),
+                      'estimate_table': os.path.join(this_out_dir, f'{index}_HII_param_estimates.csv'),
+                      'best_model_table': os.path.join(this_out_dir, f'{index}_HII_best_model.csv'),
+                      'verbosity': 'ERROR',
+                      }
+            obs_fluxes = obs_flux_array[:,index]
+            obs_errs = obs_err_array[:, index]
+            # -------running NB--------------
+            Result = NB_Model_HII(obs_fluxes, obs_errs, line_label_array, **kwargs)
+
+            # -------estimating the resulting logOH, and associated uncertainty-----------
+            df_estimates = Result.Posterior.DF_estimates # pandas DataFrame
+            logOH_est = df_estimates.loc["12 + log O/H", "Estimate"]
+            logOH_low = df_estimates.loc["12 + log O/H", "CI68_low"]
+            logOH_high = df_estimates.loc["12 + log O/H", "CI68_high"]
+            logOH_err = np.mean([logOH_est - logOH_low, logOH_high - logOH_est])
+            logOH = ufloat(logOH_est, logOH_err)
+            print(f'Ran NB for pixel {index + 1} out of {len(obs_flux_array[0])} in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
+        logOH_array.append(logOH)
+    print(f'\nRan NB for total {counter} pixels out of {len(obs_flux_array[0])}, in {timedelta(seconds=(datetime.now() - start_time3).seconds)}\n')
+
+    # ---------collating all the metallicities computed---------
+    log_OH = np.ma.masked_where(net_mask, np.reshape(logOH_array, np.shape(line_flux_array[0])))
+
+    return log_OH
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_Z_NB(full_hdu, args):
+    '''
+    Computes and returns the spatially resolved as well as intregrated metallicity from a given HDU, based on Bayesian
+    statistics, using NebulaBayes
+    '''
+    # -----dict for converting line label names to those acceptable to NB---------
+    line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
+                       'Ha':'Halpha', 'NII':'NII6583', 'SII':'SII6716', 'NeIII-3867':'NeIII3869'}
+
+    line_map_array, line_int_array, line_label_array = [], [], []
+    for line in args.available_lines:
+        #print(f'Deb1637: doing line {line} out of {len(args.available_lines)}..') ##
+        line_map, line_wave, line_int, _ = get_emission_line_map(line, full_hdu, args, dered=False)
+        if not args.do_not_correct_flux:
+            if line == 'SII': # special treatment for SII line, in order to account for and remove the other SII component
+                factor = 0.5 # from grizli
+                print(f'Correcting SII for the doublet component, by factor of {factor:.3f}')
+                line_map = np.ma.masked_where(line_map.mask, line_map.data * factor)
+                line_int = line_int * factor
+        line_snr = line_int.n / line_int.s
+
+        if line_snr > 2 and line in line_label_dict.keys():
+            #print(f'Deb1648: including line {line} in the final list SNR {line_snr:.2f} > 2..')  ##
+            line_map_array.append(line_map)
+            line_int_array.append(line_int)
+            line_label_array.append(line_label_dict[line])
+
+    logOH_map = compute_Z_NB(line_label_array, line_map_array)
+    logOH_int = compute_Z_NB(line_label_array, line_int_array)
+
+    return logOH_map, logOH_int
+
+# --------------------------------------------------------------------------------------------------------------------
 def get_Z(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated metallicity from a given HDU
@@ -1578,6 +1706,8 @@ def get_Z(full_hdu, args):
         logOH_map, logOH_int = get_Z_R3(full_hdu, args)
     elif args.Zdiag == 'R23' and all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
         logOH_map, logOH_int = get_Z_R23(full_hdu, args)
+    elif args.Zdiag == 'NB':
+        logOH_map, logOH_int = get_Z_NB(full_hdu, args)
     else:
         print(f'Could not apply any of the metallicity diagnostics, so returning NaN metallicities')
         logOH_map, logOH_int = None, None
@@ -2091,8 +2221,9 @@ def take_safe_log_ratio(num_map, den_map, skip_log=False):
     den_map[bad_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
     ratio_map = num_map / den_map
     if not skip_log: ratio_map = unp.log10(ratio_map)
+    ratio_map[bad_mask | net_mask] = -99.
     ratio_map = np.ma.masked_where(bad_mask | net_mask, ratio_map)
-    
+
     return ratio_map
 
 # --------------------------------------------------------------------------------------------------------------------

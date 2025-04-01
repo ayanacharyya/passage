@@ -118,6 +118,8 @@ import bagpipes
 
 #from pywwt.qt import WWTQtClient
 
+from NebulaBayes import NB_Model
+
 HOME = Path.home()
 
 rest_wave_dict = {'Lya': 121.6, 'OII': 372.7, 'NeIII-3867':386.9, 'Hd': 434.0, 'OIII-4363': 436.3, 'Hb': 486.1, 'OIII': 500.7,
