@@ -1623,8 +1623,10 @@ def compute_Z_NB(line_label_array, line_flux_array):
     # -----loading the NB HII region model grid---------
     NB_Model_HII = NB_Model("HII", line_list=line_label_array)
 
-    out_dir = args.output_dir / args.field / f'{args.id:05d}_NB_plots'
+    out_dir = args.output_dir / args.field / f'{args.id:05d}_NB_results'
     if args.vorbin: out_dir = out_dir / f'{vorbin_text}'
+    out_subdirs = [out_dir / 'prior_plots', out_dir / 'likelihood_plots', out_dir / 'posterior_plots', out_dir / 'best_model_catalogs', out_dir / 'param_estimates_catalogs']
+    for this_out_subdir in out_subdirs: this_out_subdir.mkdir(exist_ok=True, parents=True)
 
     # -----looping over each pixel to calculate NB metallicity--------
     logOH_array = []
@@ -1643,13 +1645,12 @@ def compute_Z_NB(line_label_array, line_flux_array):
         else:
             start_time4 = datetime.now()
             # -------setting up NB parameters----------
-            this_out_dir = out_dir / f'{index}'
-            this_out_dir.mkdir(exist_ok=True, parents=True)
-            kwargs = {'prior_plot': os.path.join(this_out_dir, f'{index}_HII_prior_plot.pdf'),
-                      'likelihood_plot': os.path.join(this_out_dir, f'{index}_HII_likelihood_plot.pdf'),
-                      'posterior_plot': os.path.join(this_out_dir, f'{index}_HII_posterior_plot.pdf'),
-                      'estimate_table': os.path.join(this_out_dir, f'{index}_HII_param_estimates.csv'),
-                      'best_model_table': os.path.join(this_out_dir, f'{index}_HII_best_model.csv'),
+
+            kwargs = {'prior_plot': os.path.join(out_dir, 'prior_plots', f'{this_ID}_HII_prior_plot.pdf'),
+                      'likelihood_plot': os.path.join(out_dir, 'likelihood_plots', f'{this_ID}_HII_likelihood_plot.pdf'),
+                      'posterior_plot': os.path.join( out_dir, 'posterior_plots', f'{this_ID}_HII_posterior_plot.pdf'),
+                      'estimate_table': os.path.join(out_dir, 'best_model_catalogs', f'{this_ID}_HII_param_estimates.csv'),
+                      'best_model_table': os.path.join(out_dir, 'param_estimates_catalogs', f'{this_ID}_HII_best_model.csv'),
                       'verbosity': 'ERROR',
                       }
             obs_fluxes = obs_flux_array[:,index]
@@ -2149,7 +2150,7 @@ def plot_metallicity_fig(full_hdu, args):
 
         # ---------plotting-------------
         if logOH_map is not None:
-            lim = [7.5, 8.2] if args.Zdiag == 'R23' and args.Zbranch == 'low' else [7.5, 9.2]
+            lim = [7.5, 8.2] if args.Zdiag == 'R23' and args.Zbranch == 'low' else [7.3, 8.0] if args.Zdiag == 'NB' else [7.5, 9.2]
             ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
             if args.plot_snr:
                 logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
