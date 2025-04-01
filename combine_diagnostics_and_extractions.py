@@ -28,8 +28,8 @@ if __name__ == "__main__":
     description_text = f'all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}'
     description_text2 = f'diagnostics_and_extractions'
 
-    extraction_path = args.input_dir / args.drv / args.field / 'Extractions'
-    products_path = args.input_dir / args.drv / args.field / 'Products'
+    extraction_path = args.input_dir / args.field / 'Extractions'
+    products_path = args.input_dir / args.field / 'Products'
     input_dir = args.output_dir / args.field / f'{description_text}'
     quant_arr = ['line', 'stack', 'full']
     id_arr = args.id
@@ -39,7 +39,7 @@ if __name__ == "__main__":
             catalog_file = extraction_path / f'{args.field}-ir.cat.fits'
             catalog = GTable.read(catalog_file)
         except:
-            catalog_file = args.input_dir / args.drv / args.field / 'Products' / f'{args.field}_photcat.fits'
+            catalog_file = args.input_dir / args.field / 'Products' / f'{args.field}_photcat.fits'
             catalog = GTable.read(catalog_file)
 
         args.id_arr = catalog['NUMBER'] if 'NUMBER' in catalog.columns else catalog['id']

@@ -18,8 +18,8 @@ if __name__ == "__main__":
     args = parse_args()
 
     # ------determining directories and global variables---------
-    args.raw_dir = args.input_dir / args.drv / args.field / 'RAW'
-    args.work_dir = args.input_dir / args.drv / args.field / 'Prep'
+    args.raw_dir = args.input_dir / args.field / 'RAW'
+    args.work_dir = args.input_dir / args.field / 'Prep'
     root = args.field
     os.chdir(args.work_dir)
     files = glob.glob(str(args.raw_dir / '*rate.fits'))
@@ -50,7 +50,7 @@ if __name__ == "__main__":
     # ----------making grism models------------------
     pad = 800
     un = utils.Unique(res['pupil']) # Process by blocking filter
-    all_grism_files = glob.glob(str(args.input_dir / args.drv / args.field / 'Extractions') + '*GrismFLT.fits')
+    all_grism_files = glob.glob(str(args.input_dir / args.field / 'Extractions') + '*GrismFLT.fits')
     all_grism_files.sort()
 
     if len(all_grism_files) == 0:

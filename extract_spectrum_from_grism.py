@@ -358,7 +358,7 @@ if __name__ == "__main__":
     # --------setting up global values---------------------
     args.id_arr = np.atleast_1d(args.id)
     args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
-    product_dir = args.input_dir / args.drv / f'{args.field}' / 'Products'
+    product_dir = args.input_dir / f'{args.field}' / 'Products'
     catalog_file = args.output_dir / 'catalogs' / 'Par028_v0.5_venn_OIII,Ha,OII,Hb,SII,SNR>2.0_df.txt'
 
     args.lines = [item[0] for item in filter_line_dict[filter]]

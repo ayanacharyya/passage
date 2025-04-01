@@ -20,11 +20,11 @@ if __name__ == "__main__":
     # ------determining directories and global variables---------
     subdirectories_required = ['Prep', 'RAW', 'MAST', 'Extractions']
     for this_dir in subdirectories_required:
-        sub_dir = args.input_dir / args.drv / args.field / this_dir
+        sub_dir = args.input_dir / args.field / this_dir
         sub_dir.mkdir(parents=True, exist_ok=True)
-    args.download_dir = args.input_dir / args.drv / args.field / 'MAST'
-    args.raw_dir = args.input_dir / args.drv / args.field / 'RAW'
-    args.work_dir = args.input_dir / args.drv / args.field / 'Prep'
+    args.download_dir = args.input_dir / args.field / 'MAST'
+    args.raw_dir = args.input_dir / args.field / 'RAW'
+    args.work_dir = args.input_dir / args.field / 'Prep'
     root = args.field
 
     # -----copy files over to working directory-----------

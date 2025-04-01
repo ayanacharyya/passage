@@ -51,7 +51,7 @@ if __name__ == "__main__":
     snr_text = f'_snr{args.snr_cut:.1f}' if args.snr_cut is not None else ''
     description_text = f'all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}'
 
-    orig_path = args.input_dir / args.drv / args.field / 'Extractions'
+    orig_path = args.input_dir / args.field / 'Extractions'
     output_dir = args.output_dir / args.field / f'{description_text}'
     re_extraction_path = args.output_dir / args.field / 're_extracted'
     quant_arr = ['line', 'stack', 'full']
@@ -67,7 +67,7 @@ if __name__ == "__main__":
                 catalog_file = orig_path / f'{args.field}-ir.cat.fits'
                 catalog = GTable.read(catalog_file)
             except:
-                catalog_file = args.input_dir / args.drv / args.field / 'Products' / f'{args.field}_photcat.fits'
+                catalog_file = args.input_dir / args.field / 'Products' / f'{args.field}_photcat.fits'
                 catalog = GTable.read(catalog_file)
 
             args.id_arr = catalog['NUMBER'] if 'NUMBER' in catalog.columns else catalog['id']

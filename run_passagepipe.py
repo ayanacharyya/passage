@@ -51,7 +51,7 @@ if __name__ == "__main__":
     config_template = args.input_dir / 'config_files/passage_config_template.txt'
     config_filename = args.input_dir / f'config_files/passage_config_{args.field}.yml'
 
-    replacements = {'FIELD': args.field, 'FILTERS': filters_text, 'DATA_DIR': args.input_dir / args.drv, \
+    replacements = {'FIELD': args.field, 'FILTERS': filters_text, 'DATA_DIR': args.input_dir, \
                     'DO_DOWNLOAD': args.do_download, 'DO_PREP': args.do_prep, 'DO_IMAGE': args.do_image, 'DO_GRISM': args.do_grism, 'DO_EXTRACT': args.do_extract, 'DO_POST': args.do_post, 'DO_UPLOAD': args.do_upload, \
                     'DOWNLOAD_FROM_MAST': args.download_from_mast, 'CLOBBER_DOWNLOAD': args.clobber_download, 'REDO_LEVEL1': args.redo_level1, \
                     'FORCE_REF': force_ref_file, 'MAGLIM': args.mag_lim, 'MAGMIN': args.magmin, 'MAGMAX': args.mag_lim, \

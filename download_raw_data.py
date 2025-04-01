@@ -104,7 +104,7 @@ def download_from_mast(args, prop_id='1571'):
 if __name__ == '__main__':
     args = parse_args()
 
-    args.download_dir = args.input_dir / args.drv / args.field / 'MAST'
+    args.download_dir = args.input_dir / args.field / 'MAST'
     args.download_dir.mkdir(parents=True, exist_ok=True)
     download_from_mast(args)
 

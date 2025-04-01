@@ -19,10 +19,10 @@ if __name__ == "__main__":
 
     # ---------setting up directory paths-------------------
     which_files = 'full'
-    full_dir = args.input_dir / args.drv / args.field / 'Products' / which_files
+    full_dir = args.input_dir / args.field / 'Products' / which_files
     if not os.path.exists(full_dir):
         which_files = 'maps'
-        full_dir = args.input_dir / args.drv / args.field / 'Products' / which_files
+        full_dir = args.input_dir / args.field / 'Products' / which_files
     plots_dir = args.output_dir / 'plots'
     catalog_dir = args.output_dir / 'catalogs'
     for this_dir in [plots_dir, catalog_dir]: this_dir.mkdir(exist_ok=True, parents=True)

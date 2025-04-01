@@ -291,7 +291,7 @@ def plot_niriss_direct(df_fluxes, args):
     n_obj = len(df_fluxes)
     n_figs = int(np.ceil(n_obj / max_cutouts_per_page))
     cmap = 'viridis'
-    image_dir = args.input_dir / args.drv / args.field / 'Products'
+    image_dir = args.input_dir / args.field / 'Products'
 
     if args.fontsize == 10: args.fontsize = 15
     cutout_size = 2 * args.arcsec_limit # in arcsec
@@ -528,7 +528,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
         df_fluxes = pd.read_csv(photcat_filename)
     else:
         print(f'{photcat_filename} does not exist, so preparing the flux list..')
-        filename = args.input_dir / 'COSMOS' / args.drv / f'{args.field_set_plot_conditions_text}_cosmos_fluxes_subset{args.cosmos_webb_text}.csv'
+        filename = args.input_dir / 'COSMOS' / f'{args.field_set_plot_conditions_text}_cosmos_fluxes_subset{args.cosmos_webb_text}.csv'
 
         if os.path.exists(filename) and not args.clobber:
             print(f'Reading cosmos2020 and cosmoswebb flux values from existing {filename}')
@@ -540,7 +540,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
             df_fluxes = pd.DataFrame()
             for thisfield in np.unique(df_int['field']):
                 print(f'Merging COSMOS 2020 catalog for field {thisfield}..')
-                cosmos2020_photcat_for_thisfield_filename = args.input_dir / 'COSMOS' / args.drv / f'cosmos2020_objects_in_{thisfield}.fits'
+                cosmos2020_photcat_for_thisfield_filename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
                 cosmos2020_photcat_for_thisfield = read_COSMOS2020_catalog(args=None, filename=cosmos2020_photcat_for_thisfield_filename)
                 cosmos2020_photcat_for_thisfield = cosmos2020_photcat_for_thisfield.rename(columns={'id': 'cosmos_id'})
                 df_cosmos_thisfield = pd.merge(df_int[['field', 'objid', 'redshift', 'passage_id']], cosmos2020_photcat_for_thisfield, on='passage_id', how='inner')
@@ -555,7 +555,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
                 df_fluxes['passage_id'] = df_fluxes['field'].astype(str) + '-' + df_fluxes['objid'].astype(str)
                 for thisfield in np.unique(df_fluxes['field']):
                     print(f'Merging COSMOS Webb catalog for field {thisfield}..')
-                    cosmoswebb_photcat_for_thisfield_filename = args.input_dir / 'COSMOS' /  args.drv / f'cosmoswebb_objects_in_{thisfield}.fits'
+                    cosmoswebb_photcat_for_thisfield_filename = args.input_dir / 'COSMOS' / f'cosmoswebb_objects_in_{thisfield}.fits'
                     cosmoswebb_photcat_for_thisfield = read_COSMOSWebb_catalog(args=None, filename=cosmoswebb_photcat_for_thisfield_filename, aperture=1.0)
                     nircam_fluxcols = [item for item in cosmoswebb_photcat_for_thisfield.columns if 'FLUX_APER' in item]
                     nircam_errcols = [item for item in cosmoswebb_photcat_for_thisfield.columns if 'FLUX_ERR_APER' in item]
@@ -590,7 +590,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
         for index, row in df_fluxes.iterrows():
             print(f'Getting NIRISS fluxes for object {index+1} out of {len(df_fluxes)}..')
             field = row['field']
-            product_dir = args.input_dir / args.drv / field / 'Products'
+            product_dir = args.input_dir / field / 'Products'
             photcat_file = product_dir / f'{field}_photcat.fits'
             df_photcat = Table(fits.open(photcat_file)[1].data).to_pandas()
             df_photcat.columns = df_photcat.columns.str.replace('f115w', 'NIRISS_F115W', regex=True)

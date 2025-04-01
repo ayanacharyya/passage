@@ -225,7 +225,6 @@ def parse_args():
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
-    if 'glass' in args.field: args.drv = 'v0.5'
     if 'v' not in args.drv: args.drv = 'v' + args.drv
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
 
@@ -245,10 +244,15 @@ def parse_args():
     root_dir = '/Users/acharyya/Work/astro/passage' if 'local' in args.system else '/Volumes/Elements/acharyya_backup/Work/astro/passage' if 'hd' in args.system else '/Users/acharyya/Library/CloudStorage/GoogleDrive-ayan.acharyya@inaf.it/My Drive/passage' if 'gdrive' in args.system else ''
     args.root_dir = Path(root_dir)
 
+    if 'glass' in args.field: survey_name = 'glass'
+    else: survey_name = 'passage'
     if args.input_dir is None:
-        args.input_dir = args.root_dir / 'passage_data/'
+        args.input_dir = args.root_dir / f'{survey_name}_data/'
     if args.output_dir is None:
-        args.output_dir = args.root_dir / 'passage_output/' / args.drv
+        args.output_dir = args.root_dir / f'{survey_name}_output/'
+    if 'glass' not in args.field:
+        args.input_dir = args.input_dir / args.drv
+        args.output_dir = args.output_dir / args.drv
 
     args.input_dir = Path(args.input_dir)
     args.output_dir = Path(args.output_dir)

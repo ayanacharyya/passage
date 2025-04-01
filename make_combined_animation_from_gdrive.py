@@ -127,8 +127,8 @@ if __name__ == "__main__":
         print(f'\n\nCommencing field {args.field} which is {index+1} of {len(field_list)}..')
 
         # ----------determining filenames etc. to check for presence----------
-        products_path = args.input_dir / args.drv / args.field / 'Products'
-        extraction_path = args.input_dir / args.drv / args.field / 'Extractions'
+        products_path = args.input_dir / args.field / 'Products'
+        extraction_path = args.input_dir / args.field / 'Extractions'
         output_dir = args.output_dir / args.field
         file_to_check_for = f'{args.field}__{description_text2}_anim.mp4'
 

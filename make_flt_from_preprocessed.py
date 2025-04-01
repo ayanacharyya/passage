@@ -18,8 +18,8 @@ if __name__ == "__main__":
     args = parse_args()
 
     # ------determining directories and global variables---------
-    args.raw_dir = args.input_dir / args.drv / args.field / 'RAW'
-    args.work_dir = args.input_dir / args.drv / args.field / 'Prep'
+    args.raw_dir = args.input_dir / args.field / 'RAW'
+    args.work_dir = args.input_dir / args.field / 'Prep'
     root = args.field
     os.chdir(args.work_dir)
     files = glob.glob(str(args.raw_dir / '*rate.fits'))
@@ -89,7 +89,7 @@ if __name__ == "__main__":
             grp[k].drizzle_grism_models(root=root, kernel='square', scale=0.06, pixfrac=0.75)
 
     else:
-        print('Grism models already exist at', str(args.input_dir / args.drv / args.field / 'Extractions'), '; use --clobber to over-write.')
+        print('Grism models already exist at', str(args.input_dir / args.field / 'Extractions'), '; use --clobber to over-write.')
 
     # -----------------------------------------------------
     os.chdir(args.code_dir)
