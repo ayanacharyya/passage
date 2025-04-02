@@ -1494,7 +1494,7 @@ def get_Z_R23(full_hdu, args, branch='low'):
         # special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back
         ratio_5007_to_4959 = 2.98  # from grizli source code
         factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
-        print(f'Re-correcting OIII to include the 4959 component, for computing R23 metallicity, by factor of {factor:.3f}')
+        print(f'Un-correcting OIII to include the 4959 component, for computing R23 metallicity, by factor of {factor:.3f}')
         OIII5007_map = np.ma.masked_where(OIII5007_map.mask, OIII5007_map.data / factor)
         OIII5007_int = OIII5007_int / factor
 
@@ -1579,7 +1579,7 @@ def get_Z_R3(full_hdu, args):
         # special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back
         ratio_5007_to_4959 = 2.98  # from grizli source code
         factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
-        print(f'Re-correcting OIII to include the 4959 component, for computing R23 metallicity, by factor of {factor:.3f}')
+        print(f'Un-correcting OIII to include the 4959 component, for computing R23 metallicity, by factor of {factor:.3f}')
         OIII5007_map = np.ma.masked_where(OIII5007_map.mask, OIII5007_map.data / factor)
         OIII5007_int = OIII5007_int / factor
 
@@ -1668,7 +1668,7 @@ def compute_Z_NB(line_label_array, line_flux_array):
 
             counter += 1
             logOH_dict_unique_IDs.update({this_ID: logOH}) # updating to unique ID dictionary once logOH has been calculated for this unique ID
-            print(f'Ran NB for unique ID {this_ID} out of {len(unique_IDs_array)} in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
+            print(f'Ran NB for unique ID {this_ID}, which is {counter} out of {len(unique_IDs_array)} in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
         logOH_array.append(logOH)
     print(f'\nRan NB for total {counter} unique pixels out of {len(obs_flux_array[0])}, in {timedelta(seconds=(datetime.now() - start_time3).seconds)}\n')
 
@@ -1686,18 +1686,23 @@ def get_Z_NB(full_hdu, args):
     '''
     # -----dict for converting line label names to those acceptable to NB---------
     line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
-                       'Ha':'Halpha', 'NII':'NII6583', 'SII':'SII6716', 'NeIII-3867':'NeIII3869'}
+                       'Ha':'NII6583_Halpha', 'SII':'SII6716_31', 'NeIII-3867':'NeIII3869'}
 
     line_map_array, line_int_array, line_label_array = [], [], []
     for line in args.available_lines:
         #print(f'Deb1637: doing line {line} out of {len(args.available_lines)}..') ##
         line_map, line_wave, line_int, _ = get_emission_line_map(line, full_hdu, args, dered=False)
+        factor = 1.
         if not args.do_not_correct_flux:
-            if line == 'SII': # special treatment for SII line, in order to account for and remove the other SII component
-                factor = 0.5 # from grizli
-                print(f'Correcting SII for the doublet component, by factor of {factor:.3f}')
-                line_map = np.ma.masked_where(line_map.mask, line_map.data * factor)
-                line_int = line_int * factor
+            if line == 'OIII':
+                ratio_5007_to_4959 = 2.98  # from grizli source code
+                factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
+                print(f'Un-correcting OIII to include the 4959 component back, i.e. dividing by factor {factor:.3f} because in NB, OIII = 5007+4959')
+            if line == 'Ha':
+                factor = 0.823  # from grizli source code
+                print(f'Un-correcting Ha to include the NII component back, i.e. dividing by factor {factor:.3f} because NB can use line summation')
+        line_map = np.ma.masked_where(line_map.mask, line_map.data / factor)
+        line_int = line_int / factor
         line_snr = line_int.n / line_int.s
 
         if line_snr > 2 and line in line_label_dict.keys():
