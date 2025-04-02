@@ -1600,7 +1600,7 @@ def compute_Z_NB(line_label_array, line_flux_array):
     else:
         IDs_array = np.arange(npixels).flatten()
     unique_IDs_array = np.unique(IDs_array)
-    print(f'\nAbout to start running NB, with lines used for NB: {line_label_array}..\n')
+    print(f'\nAbout to start running NB, with {len(line_label_array)} lines: {line_label_array}..\n')
     if len(unique_IDs_array) > 60: print(f'This might take ~{int(len(unique_IDs_array) / 60)} min')
 
     # -----making a "net" mask array and separating out the line fluxes form the input unumpy arrays---------
@@ -1737,12 +1737,12 @@ def get_Z(full_hdu, args):
     elif args.Zdiag == 'R3' and all([line in args.available_lines for line in ['OIII', 'Hb']]):
         logOH_map, logOH_int = get_Z_R3(full_hdu, args)
     elif args.Zdiag == 'R23' and all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
-        logOH_map, logOH_int = get_Z_R23(full_hdu, args)
+        logOH_map, logOH_int = get_Z_R23(full_hdu, args, branch=args.Zbranch)
     elif args.Zdiag == 'NB':
         logOH_map, logOH_int = get_Z_NB(full_hdu, args)
     else:
         print(f'Could not apply any of the metallicity diagnostics, so returning NaN metallicities')
-        logOH_map, logOH_int = None, None
+        logOH_map, logOH_int = None, ufloat(np.nan, np.nan)
 
     if logOH_map is not None and args.mask_agn: logOH_map = np.ma.masked_where((args.distance_from_AGN_line_map > 0) | logOH_map.mask, logOH_map)
 
@@ -2124,6 +2124,7 @@ def plot_starburst_figure(full_hdu, args):
 def plot_metallicity_fig(full_hdu, args):
     '''
     Plots the metallicity map, and optionally radial profile, in a new figure
+    Saves the 2D metallicity map (along with associated uncertainty and voronoi bins if applicable) as fits file
     Returns the figure handle and the metallicity map just produced
     '''
     ncols = 1
@@ -2153,25 +2154,62 @@ def plot_metallicity_fig(full_hdu, args):
 
     fig.subplots_adjust(left=fig_size_dict[ncols][2], right=fig_size_dict[ncols][3], bottom=fig_size_dict[ncols][4], top=fig_size_dict[ncols][5], wspace=fig_size_dict[ncols][6], hspace=fig_size_dict[ncols][7])
 
-    if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
-        # --------deriving the metallicity map-------------
-        logOH_map, logOH_int = get_Z(full_hdu, args)
-        if args.plot_ionisation_parameter: logq_map, logq_int = get_q_O32(full_hdu, args)
+    # --------deriving the metallicity map-------------
+    logOH_map, logOH_int = get_Z(full_hdu, args)
+    if args.plot_ionisation_parameter: logq_map, logq_int = get_q_O32(full_hdu, args)
 
-        # ---------plotting-------------
-        if logOH_map is not None:
-            lim = [7.5, 8.2] if args.Zdiag == 'R23' and args.Zbranch == 'low' else [7.3, 8.0] if args.Zdiag == 'NB' else [7.5, 9.2]
-            ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
-            if args.plot_snr:
-                logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
-                logOH_map_snr = np.ma.masked_where(logOH_map.mask, unp.nominal_values(10 ** logOH_map.data)) / np.ma.masked_where(logOH_map.mask, unp.std_devs(10 ** logOH_map.data))
-                snr_ax, _ = plot_2D_map(logOH_map_snr, snr_ax, args, takelog=False, hide_yaxis=True, label=r'Z (%s) SNR' % (args.Zdiag), cmap='cividis', vmin=0, vmax=6)
-        if args.plot_ionisation_parameter:
-            ip_ax, _ = plot_2D_map(logq_map, ip_ax, args, takelog=False, hide_yaxis=False, label=r'log q$_{\rm int}$ = %.1f $\pm$ %.1f' % (logq_int.n, logq_int.s), cmap='viridis', vmin=6.5, vmax=8.5)
-
+    # ---------plotting-------------
+    if logOH_map is not None:
+        lim = [7.5, 8.2] if args.Zdiag == 'R23' and args.Zbranch == 'low' else [7.3, 8.0] if args.Zdiag == 'NB' else [7.5, 9.2]
+        ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
+        if args.plot_snr:
+            logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
+            logOH_map_snr = np.ma.masked_where(logOH_map.mask, unp.nominal_values(10 ** logOH_map.data)) / np.ma.masked_where(logOH_map.mask, unp.std_devs(10 ** logOH_map.data))
+            snr_ax, _ = plot_2D_map(logOH_map_snr, snr_ax, args, takelog=False, hide_yaxis=True, label=r'Z (%s) SNR' % (args.Zdiag), cmap='cividis', vmin=0, vmax=6)
+    if args.plot_ionisation_parameter:
+        ip_ax, _ = plot_2D_map(logq_map, ip_ax, args, takelog=False, hide_yaxis=False, label=r'log q$_{\rm int}$ = %.1f $\pm$ %.1f' % (logq_int.n, logq_int.s), cmap='viridis', vmin=6.5, vmax=8.5)
     else:
-        print(f'Not all lines out of OIII, OII and Hb are available, so cannot compute R23 metallicity')
-        logOH_map. logOH_radfit = None, None
+        logOH_radfit = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
+    # ---------saving the metallicity maps as fits files-------------
+    if logOH_map is not None:
+        NB_text = '_orig_grid' if args.use_original_NB_grid and args.Zdiag == 'NB' else ''
+        output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}_AGNdiag_{args.AGN_diag}{NB_text}.fits'
+        logOH_map_val = np.where(logOH_map.mask, np.nan, unp.nominal_values(logOH_map.data))
+        logOH_map_err = np.where(logOH_map.mask, np.nan, unp.std_devs(logOH_map.data))
+
+        if args.vorbin:  # getting how many unique IDs present, so that NB does not have to run unnecessary repeats
+            bin_IDs_map =  np.where(args.voronoi_bin_IDs.mask, np.nan, args.voronoi_bin_IDs.data)
+        else:
+            bin_IDs_map = np.arange(np.shape(logOH_map_val)[0] * np.shape(logOH_map_val)[1]).reshape(np.shape(logOH_map_val))
+
+        distance_map = get_distance_map(np.shape(logOH_map_val), args)
+        df = pd.DataFrame({'radius': distance_map.flatten(), 'log_OH': logOH_map_val.flatten(), 'log_OH_u': logOH_map_err.flatten(), 'bin_ID': bin_IDs_map.flatten()})
+        if args.distance_from_AGN_line_map is not None: df['agn_dist'] = args.distance_from_AGN_line_map.data.flatten()
+        df = df.dropna().reset_index(drop=True)
+        df['bin_ID'] = df['bin_ID'].astype(int)
+        df = df.groupby(['bin_ID'], as_index=False).agg(np.mean)
+
+        hdr1, hdr2 = fits.Header(), fits.Header()
+        hdr1['FIELD'] = args.field
+        hdr1['OBJECT'] = args.id
+        primary_hdu = fits.PrimaryHDU(header=hdr1)
+
+        hdr2['Z_DIAG'] = args.Zdiag
+        hdr2['AGN_DIAG'] = args.AGN_diag
+        hdr2['VORBIN_LINE'] = args.voronoi_line if args.vorbin else None
+        hdr2['VORBIN_SNR'] = args.voronoi_snr if args.vorbin else None
+        hdr2['LOG_OH_INT'] = None if np.isnan(logOH_int.n) else logOH_int.n
+        hdr2['LOG_OH_INT_ERR'] =  None if np.isnan(logOH_int.s) else logOH_int.s
+        hdr2['NB_OLD_GRID'] = True if args.use_original_NB_grid and args.Zdiag == 'NB' else False
+
+        logOH_val_hdu = fits.ImageHDU(data=logOH_map_val, name='log_OH', header=hdr2)
+        logOH_err_hdu = fits.ImageHDU(data=logOH_map_err, name='log_OH_u')
+        binID_hdu = fits.ImageHDU(data=bin_IDs_map, name='bin_ID')
+        df_hdu = fits.BinTableHDU(Table.from_pandas(df), name='tab')
+        hdul = fits.HDUList([primary_hdu, logOH_val_hdu, logOH_err_hdu, binID_hdu, df_hdu])
+        hdul.writeto(output_fitsname, overwrite=True)
+
+        print(f'Saved metallicity maps in {output_fitsname}')
 
     return fig, logOH_map, logOH_int, logOH_radfit
 

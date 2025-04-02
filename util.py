@@ -1110,5 +1110,14 @@ def adjust_lightness(color, amount=0.5):
     return color
 
 # --------------------------------------------------------------------------------------------------
+class smart_dict(dict):
+    '''
+    In order to be able to return the key itself froma dict for missing keys
+    From https://stackoverflow.com/questions/6229073/how-to-make-a-dictionary-that-returns-key-for-keys-missing-from-the-dictionary-i
+    '''
+    def __missing__(self, key):
+        return key
+
+# --------------------------------------------------------------------------------------------------
 args = parse_args()
 available_filters_for_field_dict = get_passage_filter_dict(args)
