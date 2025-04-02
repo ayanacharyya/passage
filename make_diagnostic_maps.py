@@ -1685,28 +1685,33 @@ def get_Z_NB(full_hdu, args):
     statistics, using NebulaBayes
     '''
     # -----dict for converting line label names to those acceptable to NB---------
-    line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
+    if args.use_original_NB_grid: line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
+                       'Ha':'Halpha', 'SII':'SII6716', 'NeIII-3867':'NeIII3869'}
+    else: line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
                        'Ha':'NII6583_Halpha', 'SII':'SII6716_31', 'NeIII-3867':'NeIII3869'}
 
     line_map_array, line_int_array, line_label_array = [], [], []
     for line in args.available_lines:
-        #print(f'Deb1637: doing line {line} out of {len(args.available_lines)}..') ##
         line_map, line_wave, line_int, _ = get_emission_line_map(line, full_hdu, args, dered=False)
         factor = 1.
         if not args.do_not_correct_flux:
-            if line == 'OIII':
-                ratio_5007_to_4959 = 2.98  # from grizli source code
-                factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
-                print(f'Un-correcting OIII to include the 4959 component back, i.e. dividing by factor {factor:.3f} because in NB, OIII = 5007+4959')
-            if line == 'Ha':
-                factor = 0.823  # from grizli source code
-                print(f'Un-correcting Ha to include the NII component back, i.e. dividing by factor {factor:.3f} because NB can use line summation')
-        line_map = np.ma.masked_where(line_map.mask, line_map.data / factor)
+            if args.use_original_NB_grid:
+                if line == 'SII':
+                    factor = 2.  # from grizli source code
+                    print(f'Correcting SII to exclude the other SII component, i.e. dividing by factor {factor:.3f}')
+            else:
+                if line == 'OIII':
+                    ratio_5007_to_4959 = 2.98  # from grizli source code
+                    factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
+                    print(f'Un-correcting OIII to include the 4959 component back, i.e. dividing by factor {factor:.3f} because in NB, OIII = 5007+4959')
+                if line == 'Ha':
+                    factor = 0.823  # from grizli source code
+                    print(f'Un-correcting Ha to include the NII component back, i.e. dividing by factor {factor:.3f} because NB can use line summation')
+            line_map = np.ma.masked_where(line_map.mask, line_map.data / factor)
         line_int = line_int / factor
         line_snr = line_int.n / line_int.s
 
         if line_snr > 2 and line in line_label_dict.keys():
-            #print(f'Deb1648: including line {line} in the final list SNR {line_snr:.2f} > 2..')  ##
             line_map_array.append(line_map)
             line_int_array.append(line_int)
             line_label_array.append(line_label_dict[line])
