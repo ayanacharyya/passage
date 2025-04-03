@@ -6,6 +6,7 @@
     Example: run plot_mappings_grid.py --plot_grid --ynum_line OIII --yden_line Hb --xnum_line SII --xden_line Ha,NII --slice_at_quantity3 5 --annotate
              run plot_mappings_grid.py --plot_model --ynum_line OIII --yden_line Hb --slice_at_quantity3 4,5,6
              run plot_mappings_grid.py --plot_grid --ynum_line OIII --yden_line Hb --xnum_line NeIII --xden_line OII --fit_y_envelope
+             run plot_mappings_grid.py --plot_grid --ynum_line OIII --yden_line Hb --xnum_line NeIII --xden_line OII --xmin -3.5 --xmax 1 --ymin -4 --ymax 1 --keep --phot_model nb
 '''
 from header import *
 from util import *
@@ -18,7 +19,8 @@ def plot_ratio_grid(df_ratios, ax, args):
     Plots the grid of a specific given line ratio for a given value of Z, q, P, on an existing axis handle
     Returns the axis handle and ratio names
     '''
-    line_names_dict = {'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'NeIII':'[NeIII]3869', 'NeIII-3867':'[NeIII]3869', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31'} # to map between user input line labels and line labels used in ratio_list.txt file
+    if args.phot_models.lower() in ['mappings', 'map']: line_names_dict = {'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'NeIII':'[NeIII]3869', 'NeIII-3867':'[NeIII]3869', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31'} # to map between user input line labels and line labels used in ratio_list.txt file
+    elif args.phot_models.lower() in ['nebulabayes', 'nb']: line_names_dict = {'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'}
 
     # ------------getting the line ratio names------------------
     x_num_labels = ','.join([line_names_dict[item] for item in args.xnum_line.split(',')])
@@ -83,8 +85,13 @@ def plot_ratio_grid_fig(df_ratios, args):
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     df_ratios = df_ratios[(df_ratios[xratio_name] > 0) & (df_ratios[yratio_name] > 0)] # to avoid math errors later while taking log
-    ax.set_xlim(np.log10(np.min(df_ratios[xratio_name]) * 0.9), np.log10(np.max(df_ratios[xratio_name]) * 1.1))
-    ax.set_ylim(np.log10(np.min(df_ratios[yratio_name]) * 0.9), np.log10(np.max(df_ratios[yratio_name]) * 1.1))
+    xmin = args.xmin if args.xmin is not None else np.log10(np.min(df_ratios[xratio_name]) * 0.9)
+    xmax = args.xmax if args.xmax is not None else np.log10(np.max(df_ratios[xratio_name]) * 1.1)
+    ymin = args.ymin if args.ymin is not None else np.log10(np.min(df_ratios[yratio_name]) * 0.9)
+    ymax = args.ymax if args.ymax is not None else np.log10(np.max(df_ratios[yratio_name]) * 1.1)
+
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
 
     # ------for fitting to upper y-axis envelope of data------------
     if args.fit_y_envelope:
@@ -136,7 +143,8 @@ def plot_ratio_model(df_ratios, ax, args):
     style_arr = ['solid', 'dashed', 'dotted']
     thickness_arr = [1.2, 0.7, 0.3]  # len(style_arr) \times len(tickness_arr) = at least as many as "quantity2" values
     thickness_arr = np.tile(np.repeat(thickness_arr, len(thickness_arr)), 2)
-    line_names_dict = {'OIII':'[OIII]5007', 'OII':'[OII]3727,29', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31'} # to map between user input line labels and line labels used in ratio_list.txt file
+    if args.phot_models.lower() in ['mappings', 'map']: line_names_dict = {'OIII':'[OIII]5007', 'OII':'[OII]3727,29', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31', 'NeIII':'[NeIII]3869'} # to map between user input line labels and line labels used in ratio_list.txt file
+    elif args.phot_models.lower() in ['nebulabayes', 'nb']: line_names_dict = {'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'}
 
     # ------------getting the line ratio names------------------
     num_labels = ','.join([line_names_dict[item] for item in args.ynum_line.split(',')])
@@ -180,8 +188,15 @@ def plot_ratio_model_fig(df_ratios, args):
     ax.set_xlabel('log(O/H) + 12' if args.quantity1 == 'Z' else args.quantity1, fontsize=args.fontsize)
     ax.set_ylabel(f'Log {ratio_name}', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
-    ax.set_xlim(np.min(np.unique(df_ratios[args.quantity1])) * 0.9, np.max(np.unique(df_ratios[args.quantity1])) * 1.1)
-    ax.set_ylim(np.log10(np.min(df_ratios[ratio_name]) * 0.9), np.log10(np.max(df_ratios[ratio_name]) * 1.1))
+
+
+    xmin = args.xmin if args.xmin is not None else np.min(np.unique(df_ratios[args.quantity1])) * 0.9
+    xmax = args.xmax if args.xmax is not None else  np.max(np.unique(df_ratios[args.quantity1])) * 1.1
+    ymin = args.ymin if args.ymin is not None else np.log10(np.min(df_ratios[ratio_name]) * 0.9)
+    ymax = args.ymax if args.ymax is not None else np.log10(np.max(df_ratios[ratio_name]) * 1.1)
+
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
 
     # --------for talk plots--------------
     if args.fortalk:
@@ -273,11 +288,28 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
 
     # ---------making/reading in the grid-----------------------------
-    df_ratio_names = pd.read_table(args.mappings_dir / 'ratio_list.txt', delim_whitespace=True, skiprows=3)
-    grid_filename = grid_dir / f'mappings_grid_{geom_path_dict[args.geometry][1]}_iso_{args.iso}.txt'
-    if not grid_filename.exists() or args.clobber: create_grid_file(df_ratio_names, grid_filename, args)
-    else: print(f'Reading in existing grid from {grid_filename}')
-    df_ratios = pd.read_table(grid_filename, delim_whitespace=True)
+    if args.phot_models.lower() in ['mappings', 'map']:
+        df_ratio_names = pd.read_table(args.mappings_dir / 'ratio_list.txt', delim_whitespace=True, skiprows=3)
+        grid_filename = grid_dir / f'mappings_grid_{geom_path_dict[args.geometry][1]}_iso_{args.iso}.txt'
+        if not grid_filename.exists() or args.clobber: create_grid_file(df_ratio_names, grid_filename, args)
+        else: print(f'Reading in existing grid from {grid_filename}')
+        df_ratios = pd.read_table(grid_filename, delim_whitespace=True)
+
+    elif args.phot_models.lower() in ['nebulabayes', 'nb']:
+        import NebulaBayes
+        grid_filename = Path(NebulaBayes.__path__[0]) / 'grids' / 'NB_HII_grid.fits.gz'
+        print(f'Reading in existing grid from {grid_filename}')
+        df_grid = Table(fits.getdata(grid_filename)).to_pandas()
+        df_grid['log q'] = np.round(df_grid['log U'] + np.log10(3e10), 1)
+
+        quant_names_dict = {'Z':'12 + log O/H', 'log(q)':'log q', 'log(P/k)':'log P/k', 'log(U)':'log U'}
+        line_label_dict = {'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'}
+
+        quant_names = [quant_names_dict[quant] for quant in [args.quantity1, args.quantity2, args.quantity3]]
+        df_ratios = df_grid[quant_names].sort_values(by=quant_names)
+        df_ratios = df_ratios.rename(columns={v: k for k, v in quant_names_dict.items()})
+        df_ratios[f'{line_label_dict[args.xnum_line]}/{line_label_dict[args.xden_line]}'] = df_grid[line_label_dict[args.xnum_line]] / df_grid[line_label_dict[args.xden_line]]
+        df_ratios[f'{line_label_dict[args.ynum_line]}/{line_label_dict[args.yden_line]}'] = df_grid[line_label_dict[args.ynum_line]] / df_grid[line_label_dict[args.yden_line]]
 
     # --------plot the ratio grid---------------
     if args.plot_grid: fig_grid = plot_ratio_grid_fig(df_ratios, args)
