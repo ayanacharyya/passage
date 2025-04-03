@@ -121,11 +121,13 @@ def plot_ratio_grid_fig(df_ratios, args):
         except: pass
 
     # ---------saving figure--------------
+    if args.phot_models.lower() in ['mappings', 'map']: phot_model_text = 'mappings'
+    elif args.phot_models.lower() in ['nebulabayes', 'nb']: phot_model_text = 'NebulaBayes'
     slice_text = ''
     if args.slice_at_quantity1 is not None: slice_text += f'_{args.quantity1}={",".join([str(item) for item in args.slice_at_quantity1])}'.replace('/', '-')
     if args.slice_at_quantity2 is not None: slice_text += f'_{args.quantity2}={",".join([str(item) for item in args.slice_at_quantity2])}'.replace('/', '-')
     if args.slice_at_quantity3 is not None: slice_text += f'_{args.quantity3}={",".join([str(item) for item in args.slice_at_quantity3])}'.replace('/', '-')
-    figname = args.mappings_dir / 'plots' / f'mappings_grid_{yratio_name.replace("/", "-")}_va_{xratio_name.replace("/", "-")}{slice_text}.png'
+    figname = args.mappings_dir / 'plots' / f'{phot_model_text}_grid_{yratio_name.replace("/", "-")}_va_{xratio_name.replace("/", "-")}{slice_text}.png'
     fig.savefig(figname, transparent=args.fortalk)
     print(f'\nSaved figure as {figname}')
     plt.show(block=False)
@@ -204,10 +206,12 @@ def plot_ratio_model_fig(df_ratios, args):
         except: pass
 
     # ---------saving figure--------------
+    if args.phot_models.lower() in ['mappings', 'map']: phot_model_text = 'mappings'
+    elif args.phot_models.lower() in ['nebulabayes', 'nb']: phot_model_text = 'NebulaBayes'
     slice_text = ''
     if args.slice_at_quantity2 is not None: slice_text += f'_{args.quantity2}={",".join([str(item) for item in args.slice_at_quantity2])}'.replace('/', '-')
     if args.slice_at_quantity3 is not None: slice_text += f'_{args.quantity3}={",".join([str(item) for item in args.slice_at_quantity3])}'.replace('/', '-')
-    figname = args.mappings_dir / 'plots' / f'mappings_model_{ratio_name.replace("/", "-")}_vs_{args.quantity1}{slice_text}.png'
+    figname = args.mappings_dir / 'plots' / f'{phot_model_text}_model_{ratio_name.replace("/", "-")}_vs_{args.quantity1}{slice_text}.png'
     fig.savefig(figname, transparent=args.fortalk)
     print(f'\nSaved figure as {figname}')
     plt.show(block=False)
