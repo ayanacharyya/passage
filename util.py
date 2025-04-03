@@ -276,6 +276,8 @@ def parse_args():
         print(f'Setting up plots for talks..')
         setup_plots_for_talks()
 
+    args.diverging_cmap = get_custom_cmap(args.diverging_cmap)
+
     return args
 
 # -----------------------------------------------------------------------------

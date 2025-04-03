@@ -317,40 +317,40 @@ def trim_image(image, args):
     return image
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_xaxis=False, hide_yaxis=False, image_err=None, metallicity_multi_color=False):
+def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_xaxis=False, hide_yaxis=False, image_err=None, metallicity_multi_color=False, xcol='radius', ycol='data', color='darkorange'):
     '''
     Plots the average radial profile for a given 2D map in the given axis
     Returns the axis handle
     '''
     print(f'Plotting radial profile of {label}..')
-    color = 'darkorange'
+    if type(image) == pd.core.frame.DataFrame:
+        df  = image
+    else:
+        distance_map = get_distance_map(np.shape(image), args)
+        try: distance_map = np.ma.masked_where(image.mask, distance_map)
+        except AttributeError: distance_map = np.ma.masked_where(False, distance_map)
 
-    distance_map = get_distance_map(np.shape(image), args)
-    try: distance_map = np.ma.masked_where(image.mask, distance_map)
-    except AttributeError: distance_map = np.ma.masked_where(False, distance_map)
+        # ----making the dataframe before radial profile plot--------------
+        df = pd.DataFrame({xcol: np.ma.compressed(distance_map), ycol: np.ma.compressed(image)})
+        if image_err is not None: df[ycol + '_err'] = np.ma.compressed(image_err)
+        if metallicity_multi_color: df['agn_dist'] = np.ma.compressed(np.ma.masked_where(image.mask, args.distance_from_AGN_line_map.data))
+        if len(df[df[ycol + '_err'] > 0]) == 0: image_err = None
+        df = df[df[xcol] <= args.radius_max]
+        df = df.sort_values(by=xcol)
 
-    # ----making the dataframe before radial profile plot--------------
-    xcol, ycol = 'radius', 'data'
-    df = pd.DataFrame({xcol: np.ma.compressed(distance_map), ycol: np.ma.compressed(image)})
-    if image_err is not None: df[ycol + '_err'] = np.ma.compressed(image_err)
-    if metallicity_multi_color: df['agn_fl'] = np.ma.compressed(np.ma.masked_where(image.mask, args.distance_from_AGN_line_map.data))
-    if len(df[df[ycol + '_err'] > 0]) == 0: image_err = None
-    df = df[df[xcol] <= args.radius_max]
-    df = df.sort_values(by=xcol)
-
-    # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
-    df_vorbinned = pd.DataFrame()
-    df_vorbinned[xcol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[xcol]['mean']
-    df_vorbinned[ycol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[ycol]
-    if image_err is not None: df_vorbinned[ycol+ '_err'] = df.groupby([ycol], as_index=False).agg([(np.mean)])[ycol+ '_err']
-    if metallicity_multi_color: df_vorbinned['agn_fl'] = df.groupby([ycol], as_index=False).agg([(np.mean)])['agn_fl']
-    df = df_vorbinned
+        # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
+        df_vorbinned = pd.DataFrame()
+        df_vorbinned[xcol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[xcol]['mean']
+        df_vorbinned[ycol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[ycol]
+        if image_err is not None: df_vorbinned[ycol+ '_err'] = df.groupby([ycol], as_index=False).agg([(np.mean)])[ycol+ '_err']
+        if metallicity_multi_color: df_vorbinned['agn_dist'] = df.groupby([ycol], as_index=False).agg([(np.mean)])['agn_dist']
+        df = df_vorbinned
 
     # -------proceeding with plotting--------
-    ax.scatter(df[xcol], df[ycol], c=df['agn_fl'] if metallicity_multi_color else 'grey', cmap=args.diverging_cmap if metallicity_multi_color else None, s=20 if args.vorbin else 1, alpha=1 if args.vorbin else 0.2)
-    if image_err is not None: ax.errorbar(df[xcol], df[ycol], yerr=df[ycol + '_err'], c='grey', fmt='none', lw=2 if args.vorbin else 0.5, alpha=0.2 if args.vorbin else 0.1)
+    ax.scatter(df[xcol], df[ycol], c=df['agn_dist'] if metallicity_multi_color else 'grey', cmap=args.diverging_cmap if metallicity_multi_color else None, s=20 if args.vorbin else 1, alpha=1 if args.vorbin else 0.2)
+    if ycol + '_err' in df: ax.errorbar(df[xcol], df[ycol], yerr=df[ycol + '_err'], c='grey', fmt='none', lw=2 if args.vorbin else 0.5, alpha=0.2 if args.vorbin else 0.1)
 
-    ax.set_xlim(0, args.radius_max) # kpc
+    if 'radius_max' in args: ax.set_xlim(0, args.radius_max) # kpc
     ax.set_ylim(ymin, ymax)
     ax.set_box_aspect(1)
 
@@ -457,7 +457,7 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
         radprof_fit = [np.nan, np.nan] # dummy values for when the fit was not performed
 
     if args.plot_circle_at_arcsec is not None: ax.add_patch(plt.Circle((0, 0), args.plot_circle_at_arcsec, color='r', fill=False, lw=0.5)) # additional circle for debugging purpose
-    ax.contour(args.segmentation_map != args.id, levels=0, colors='w' if args.fortalk else 'k', extent=args.extent, linewidths=0.5) # demarcating the segmentation map zone
+    if 'segmentation_map' in args: ax.contour(args.segmentation_map != args.id, levels=0, colors='w' if args.fortalk else 'k', extent=args.extent, linewidths=0.5) # demarcating the segmentation map zone
 
     if args.vorbin and args.plot_vorbin and vorbin_ax is not None:
         vorbin_IDs = args.voronoi_bin_IDs
@@ -2631,7 +2631,6 @@ if __name__ == "__main__":
     args.fontsize /= args.fig_scale_factor
     if args.plot_slope_vs_mass: args.plot_starburst, args.plot_radial_profiles = True, True
     if args.colorcol == 'ez_z_phot': args.colorcol = 'distance'
-    args.diverging_cmap = get_custom_cmap(args.diverging_cmap)
 
     # ---------determining filename suffixes-------------------------------
     radial_plot_text = '_wradprof' if args.plot_radial_profiles else ''
