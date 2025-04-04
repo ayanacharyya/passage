@@ -2231,7 +2231,7 @@ def take_safe_log_sum(map1, map2, skip_log=False):
     sum_map[bad_mask | net_mask] = -99.
     sum_map = np.ma.masked_where(bad_mask | net_mask, sum_map)
 
-    return ratio_map
+    return sum_map
 
 # --------------------------------------------------------------------------------------------------------------------
 def annotate_BPT_axes(scatter_plot_handle, ax, args, theoretical_lines=[], line_labels=[]):
