@@ -1566,14 +1566,16 @@ def get_Z_C19(full_hdu, args):
         line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OIII', 'OII'], args)
         if line_map_arr is None: return None, ufloat(np.nan, np.nan)
         ratio_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1])
-        ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
+        try: ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
+        except ValueError: ratio_int = ufloat(np.nan, np.nan)
         coeff = [-0.691, -2.944, -1.308]  # c0-2 parameters from Table 2 of Curti+19 3rd row (O3O2)
 
     elif args.Zdiag == 'R3':
         line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OIII', 'Hb'], args)
         if line_map_arr is None: return None, ufloat(np.nan, np.nan)
         ratio_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1])
-        ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
+        try: ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
+        except ValueError: ratio_int = ufloat(np.nan, np.nan)
         coeff = [-0.277, -3.549, -3.593, -0.981]  # c0-3 parameters from Table 2 of Curti+19 2nd row (R3)
 
     elif args.Zdiag == 'R23':
@@ -1582,7 +1584,8 @@ def get_Z_C19(full_hdu, args):
         R1_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[2], skip_log=True)
         R2_map = take_safe_log_ratio(line_map_arr[1], line_map_arr[2], skip_log=True)
         ratio_map = take_safe_log_sum(R1_map, R2_map)
-        ratio_int = unp.log10((line_int_arr[0] + line_int_arr[1]) / line_int_arr[2])
+        try: ratio_int = unp.log10((line_int_arr[0] + line_int_arr[1]) / line_int_arr[2])
+        except ValueError: ratio_int = ufloat(np.nan, np.nan)
         coeff = [0.527, -1.569, -1.652, -0.421]  # c0-3 parameters from Table 2 of Curti+19 4th row (R23)
 
     elif args.Zdiag == 'O3S2':
@@ -1591,14 +1594,16 @@ def get_Z_C19(full_hdu, args):
         R1_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1], skip_log=True)
         R2_map = take_safe_log_ratio(line_map_arr[2], line_map_arr[3], skip_log=True)
         ratio_map = take_safe_log_ratio(R1_map, R2_map)
-        ratio_int = unp.log10((line_int_arr[0] / line_int_arr[1]) / (line_int_arr[2] / line_int_arr[3]))
+        try: ratio_int = unp.log10((line_int_arr[0] / line_int_arr[1]) / (line_int_arr[2] / line_int_arr[3]))
+        except ValueError: ratio_int = ufloat(np.nan, np.nan)
         coeff = [0.191, -4.292, -2.538, 0.053, 0.332]  # c0-4 parameters from Table 2 of Curti+19 last row (O3S2)
 
     elif args.Zdiag == 'S2':
         line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['SII', 'Ha'], args)
         if line_map_arr is None: return None, ufloat(np.nan, np.nan)
         ratio_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1])
-        ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
+        try: ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
+        except ValueError: ratio_int = ufloat(np.nan, np.nan)
         coeff = [-0.442, -0.360, -6.271, -8.339, -3.559]  # c0-3 parameters from Table 2 of Curti+19 3rd-to-last row (S2)
 
     elif args.Zdiag == 'RS32':
@@ -1607,14 +1612,16 @@ def get_Z_C19(full_hdu, args):
         R1_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1], skip_log=True)
         R2_map = take_safe_log_ratio(line_map_arr[2], line_map_arr[3], skip_log=True)
         ratio_map = take_safe_log_sum(R1_map, R2_map)
-        ratio_int = unp.log10((line_int_arr[0] / line_int_arr[1]) + (line_int_arr[2] / line_int_arr[3]))
+        try: ratio_int = unp.log10((line_int_arr[0] / line_int_arr[1]) + (line_int_arr[2] / line_int_arr[3]))
+        except ValueError: ratio_int = ufloat(np.nan, np.nan)
         coeff = [-0.054, -2.546, -1.970, 0.082, 0.222]  # c0-3 parameters from Table 2 of Curti+19 2nd-to-last row (RS32)
 
     elif args.Zdiag == 'R2':
         line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OII', 'Hb'], args)
         if line_map_arr is None: return None, ufloat(np.nan, np.nan)
         ratio_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1])
-        ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
+        try: ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
+        except ValueError: ratio_int = ufloat(np.nan, np.nan)
         coeff = [0.435, -1.362, -5.655, -4.851, -0.478, 0.736]  # c0-3 parameters from Table 2 of Curti+19 1st row (R2)
 
     else:
