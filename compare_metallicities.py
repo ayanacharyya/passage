@@ -156,13 +156,13 @@ if __name__ == "__main__":
 
     # -------save diagnostic figure----------
     if args.debug_Zdiag:
-        figname2 = plots_dir / f'{",".join(args.id_arr.astype(str))}Zdiag_maps_{",".join(Zdiag_arr)}.png'
+        figname2 = plots_dir / f'{",".join(args.id_arr.astype(str))}_Zdiag_maps_{",".join(Zdiag_arr)}.png'
         fig2.savefig(figname2, transparent=args.fortalk)
         print(f'Saved figure as {figname2}')
 
     # ------------saving the full figure--------------------------
     colorby_text = f'_colorby_{args.colorcol}' if args.colorcol != 'color' else ''
-    figname = plots_dir / f'{",".join(args.id_arr.astype(str))}Zdiag_comparison_{",".join(Zdiag_arr)}{colorby_text}.png'
+    figname = plots_dir / f'{",".join(args.id_arr.astype(str))}_Zdiag_comparison_{",".join(Zdiag_arr)}_{colorby_text}.png'
     fig.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)

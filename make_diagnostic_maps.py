@@ -2156,11 +2156,11 @@ def get_AGN_func_methods(args):
     elif args.AGN_diag == 'O2Hb':
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OII', 'Hb', 'OIII', 'Hb', []
     elif args.AGN_diag == 'Ne3O2':
-        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'NeIII-3867', 'OII', ['MAPPINGS', 'F24', 'B22_Ne3O2']
+        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'NeIII-3867', 'OII', ['NB', 'MAPPINGS', 'F24', 'B22_Ne3O2']
     else:
         sys.exit('Choose AGN_diag to be one among VO87,H21,O2O3,O2Hb,Ne3O2')
 
-    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021', 'B22_S2Ha':'Backhaus+2022', 'B22_Ne3O2':'Backhaus+2022', 'MAPPINGS':'MAPPINGS', 'F24':'Feuillet+2024'}
+    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021', 'B22_S2Ha':'Backhaus+2022', 'B22_Ne3O2':'Backhaus+2022', 'MAPPINGS':'MAPPINGS', 'F24':'Feuillet+2024', 'NB':'NB'}
     line_labels = [label_dict[item] for item in theoretical_lines]
 
     return theoretical_lines, line_labels
@@ -2183,20 +2183,22 @@ def AGN_func(x, theoretical_line):
     elif theoretical_line == 'F24':  # Eq 6 of Feuillet+2024 (https://arxiv.org/abs/2312.17381)
         y = np.sqrt((x + 3.4) / 1.8) - 0.55
     elif theoretical_line == 'MAPPINGS':  # new eqn based on MAPPINGS models
-            y = np.poly1d([0.05, -0.25, 0.15, 0.89])(x)
+        y = np.poly1d([0.05, -0.25, 0.15, 0.89])(x)
+    elif theoretical_line == 'NB':  # new eqn based on NebulaBayes models
+        y = np.poly1d([0.09, -0.03, 0.01, 0.70])(x)
     else:
         sys.exit(f'Requested theoreitcal line {theoretical_line} should be one of K01,S24,H21,B@@_S2Ha,B22_Ne3O2')
     return y
 
 # --------------------------------------------------------------------------------------------------------------------
-def overplot_AGN_line_on_BPT(ax, theoretical_line, label, color='k', fontsize=10):
+def overplot_AGN_line_on_BPT(ax, theoretical_line, label, color='k', fontsize=10, lw=2):
     '''
     Overplots a given AGN demarcation line on R3 vs S2 ratio BPT, on an existing axis
     Returns axis handle
     '''
     x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
     y = AGN_func(x, theoretical_line)
-    ax.plot(x, y, c=color, ls='dashed', lw=2, label=label)
+    ax.plot(x, y, c=color, ls='dashed', lw=lw, label=label)
     ax.legend(loc='lower left', fontsize=fontsize)
 
     return ax
@@ -2279,8 +2281,8 @@ def annotate_BPT_axes(scatter_plot_handle, ax, args, theoretical_lines=[], line_
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     # ---------adding literature AGN demarcation lines----------
-    color_arr = ['brown', 'darkgreen', 'dodgerblue']
-    for index, (theoretical_line, line_label) in enumerate(zip(theoretical_lines, line_labels)): overplot_AGN_line_on_BPT(ax, theoretical_line=theoretical_line, label=line_label, color=color_arr[index], fontsize=args.fontsize)
+    color_arr = ['brown', 'darkgreen', 'dodgerblue', 'cyan', 'sienna']
+    for index, (theoretical_line, line_label) in enumerate(zip(theoretical_lines, line_labels)): overplot_AGN_line_on_BPT(ax, theoretical_line=theoretical_line, label=line_label, color=color_arr[index], fontsize=args.fontsize, lw=0.5 if index else 2)
 
     return ax
 
