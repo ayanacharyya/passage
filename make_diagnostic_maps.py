@@ -1513,7 +1513,7 @@ def compute_Z_C19(ratio, coeff, ax=None):
                 roots = np.roots(poly_to_solve)
                 real_roots = np.sort(roots[np.isreal(roots)]) + 8.69 # see Table 1 caption in Curti+19
                 possible_roots = real_roots[(real_roots > reasonable_Z_limit[0]) & (real_roots < reasonable_Z_limit[1])]
-                this_log_OH = np.max(possible_roots)
+                this_log_OH = np.max(possible_roots) # THIS IS WHERE MAKING THE CHOICE TO GO WITH THE HIGHER METALLICITY BRANCH, WHEREVER THE CHOICE NEEDS TO BE MADE
                 log_OH.append(ufloat(this_log_OH, 0.))
                 if ax is not None:
                     for real_root,col in zip(real_roots, ['r', 'g', 'b']): ax[0].scatter(real_root, this_ratio, lw=0, s=5, c=col)
