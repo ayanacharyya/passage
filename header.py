@@ -60,21 +60,6 @@ from astroquery.mast import Observations
 import plotly.express as px
 import gzip
 
-import matplotlib
-from matplotlib import pyplot as plt
-plt.rcParams['ytick.direction'] = 'in'
-plt.rcParams['ytick.right'] = True
-plt.rcParams['xtick.direction'] = 'in'
-plt.rcParams['xtick.top'] = True
-
-from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
-import matplotlib.image as mpimg
-from matplotlib import colors as mplcolors
-from matplotlib import colormaps as mplcolormaps
-from matplotlib import cm as mpl_cm
-from matplotlib.backends.backend_pdf import PdfPages
-import mplcyberpunk
-
 from astropy.table import Table, join
 from astropy import units as u
 from astropy.coordinates import SkyCoord, angular_separation
@@ -119,6 +104,22 @@ import bagpipes
 #from pywwt.qt import WWTQtClient
 
 from NebulaBayes import NB_Model
+
+
+import matplotlib
+from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
+import matplotlib.image as mpimg
+from matplotlib import colors as mplcolors
+from matplotlib import colormaps as mplcolormaps
+from matplotlib import cm as mpl_cm
+from matplotlib.backends.backend_pdf import PdfPages
+import mplcyberpunk
+
+from matplotlib import pyplot as plt
+plt.rcParams['ytick.direction'] = 'in'
+plt.rcParams['ytick.right'] = True
+plt.rcParams['xtick.direction'] = 'in'
+plt.rcParams['xtick.top'] = True
 
 HOME = Path.home()
 

@@ -317,11 +317,12 @@ def trim_image(image, args):
     return image
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_xaxis=False, hide_yaxis=False, image_err=None, metallicity_multi_color=False, xcol='radius', ycol='data', color='darkorange'):
+def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_xaxis=False, hide_yaxis=False, image_err=None, metallicity_multi_color=False, xcol='radius', ycol='data', color='darkorange', fontsize=None):
     '''
     Plots the average radial profile for a given 2D map in the given axis
     Returns the axis handle
     '''
+    if fontsize is None: fontsize = args.fontsize
     print(f'Plotting radial profile of {label}..')
     if type(image) == pd.core.frame.DataFrame:
         df  = image
@@ -339,12 +340,9 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
         df = df.sort_values(by=xcol)
 
         # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
-        df_vorbinned = pd.DataFrame()
-        df_vorbinned[xcol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[xcol]['mean']
-        df_vorbinned[ycol] = df.groupby([ycol], as_index=False).agg([(np.mean)])[ycol]
-        if image_err is not None: df_vorbinned[ycol+ '_err'] = df.groupby([ycol], as_index=False).agg([(np.mean)])[ycol+ '_err']
-        if metallicity_multi_color: df_vorbinned['agn_dist'] = df.groupby([ycol], as_index=False).agg([(np.mean)])['agn_dist']
-        df = df_vorbinned
+        if args.vorbin:
+            df['bin_ID'] = np.ma.compressed(args.voronoi_bin_IDs)
+            df = df.groupby('bin_ID', as_index=False).agg(np.mean)
 
     # -------proceeding with plotting--------
     ax.scatter(df[xcol], df[ycol], c=df['agn_dist'] if metallicity_multi_color else 'grey', cmap=args.diverging_cmap if metallicity_multi_color else None, s=20 if args.vorbin else 1, alpha=1 if args.vorbin else 0.2)
@@ -371,24 +369,25 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     if hide_xaxis:
         ax.set_xticklabels([])
     else:
-        ax.set_xlabel('Distance (kpc)', fontsize=args.fontsize)
-        #ax.set_xticklabels(['%d' % item / cosmo.arcsec_per_kpc_proper(args.z).value for item in ax.get_xticks()], fontsize=args.fontsize)
-        ax.tick_params(axis='x', which='major', labelsize=args.fontsize)
+        ax.set_xlabel('Distance (kpc)', fontsize=fontsize)
+        #ax.set_xticklabels(['%d' % item / cosmo.arcsec_per_kpc_proper(args.z).value for item in ax.get_xticks()], fontsize=fontsize)
+        ax.tick_params(axis='x', which='major', labelsize=fontsize)
 
     if hide_yaxis:
         ax.set_yticklabels([])
     else:
         ax.set_ylabel(label, fontsize=args.fontsize)
-        ax.tick_params(axis='y', which='major', labelsize=args.fontsize)
+        ax.tick_params(axis='y', which='major', labelsize=fontsize)
 
     return ax, linefit
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, radprof_ax=None, vorbin_ax=None, snr_ax=None, image_err=None, metallicity_multi_color=False):
+def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, radprof_ax=None, vorbin_ax=None, snr_ax=None, image_err=None, metallicity_multi_color=False, fontsize=None):
     '''
     Plots the emission map for a given line in the given axis
     Returns the axis handle
     '''
+    if fontsize is None: fontsize = args.fontsize
     if image.dtype == 'O': # if it is an uncertainty variable
         try:
             image_err = unp.std_devs(image)
@@ -418,41 +417,41 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
     else:
         p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
 
-    if not args.no_text_on_plot: ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[1] * 0.88, label, c='k', fontsize=args.fontsize if args.arcsec_limit >= 1 else args.fontsize/1.5, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+    if not args.no_text_on_plot: ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[1] * 0.88, label, c='k', fontsize=fontsize if args.arcsec_limit >= 1 else fontsize/1.5, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
     ax.scatter(0, 0, marker='x', s=10, c='grey')
 
     if hide_xaxis:
         ax.set_xticklabels([])
     else:
         if args.plot_target_frame:
-            ax.set_xlabel('Offset (kpc)', fontsize=args.fontsize)
-            ax.set_xticklabels(['%d' % (item / cosmo.arcsec_per_kpc_proper(args.z).value) for item in ax.get_xticks()], fontsize=args.fontsize)
+            ax.set_xlabel('Offset (kpc)', fontsize=fontsize)
+            ax.set_xticklabels(['%d' % (item / cosmo.arcsec_per_kpc_proper(args.z).value) for item in ax.get_xticks()], fontsize=fontsize)
         else:
-            ax.set_xlabel('RA (")', fontsize=args.fontsize)
-        ax.tick_params(axis='x', which='major', labelsize=args.fontsize)
+            ax.set_xlabel('RA (")', fontsize=fontsize)
+        ax.tick_params(axis='x', which='major', labelsize=fontsize)
 
     if hide_yaxis:
         ax.set_yticklabels([])
     else:
         if args.plot_target_frame:
-            ax.set_ylabel('Offset (kpc)', fontsize=args.fontsize)
-            ax.set_yticklabels(['%d' % (item / cosmo.arcsec_per_kpc_proper(args.z).value) for item in ax.get_xticks()], fontsize=args.fontsize)
+            ax.set_ylabel('Offset (kpc)', fontsize=fontsize)
+            ax.set_yticklabels(['%d' % (item / cosmo.arcsec_per_kpc_proper(args.z).value) for item in ax.get_xticks()], fontsize=fontsize)
         else:
-            ax.set_ylabel('Dec (")', fontsize=args.fontsize)
-        ax.tick_params(axis='y', which='major', labelsize=args.fontsize)
+            ax.set_ylabel('Dec (")', fontsize=fontsize)
+        ax.tick_params(axis='y', which='major', labelsize=fontsize)
 
     if not hide_cbar:
         divider = make_axes_locatable(ax)
         cax = divider.append_axes('right', size='5%', pad='2%')
         cbar = plt.colorbar(p, cax=cax, orientation='vertical')
-        cbar.ax.tick_params(labelsize=args.fontsize)
+        cbar.ax.tick_params(labelsize=fontsize)
 
     if args.plot_radial_profiles and radprof_ax is not None:
         radius_pix = args.radius_max * cosmo.arcsec_per_kpc_proper(args.z).value # converting args.radius_max (in kpc) to arcsec
         if radius_pix <= args.arcsec_limit:
             circle = plt.Circle((0, 0), radius_pix, color='k', fill=False, lw=0.5)
             ax.add_patch(circle)
-        radprof_ax, radprof_fit = plot_radial_profile(image, radprof_ax, args, label=label.split(r'$_{\rm int}')[0], ymin=vmin, ymax=vmax, image_err=image_err, metallicity_multi_color=metallicity_multi_color)
+        radprof_ax, radprof_fit = plot_radial_profile(image, radprof_ax, args, label=label.split(r'$_{\rm int}')[0], ymin=vmin, ymax=vmax, image_err=image_err, metallicity_multi_color=metallicity_multi_color, fontsize=fontsize)
     else:
         radprof_fit = [np.nan, np.nan] # dummy values for when the fit was not performed
 
@@ -462,7 +461,7 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
     if args.vorbin and args.plot_vorbin and vorbin_ax is not None:
         vorbin_IDs = args.voronoi_bin_IDs
         vorbin_IDs = np.ma.masked_where(image.mask, vorbin_IDs)
-        _, _ = plot_2D_map(vorbin_IDs, vorbin_ax, args, takelog=False, label=label + ' vorbin', cmap='rainbow')
+        _, _ = plot_2D_map(vorbin_IDs, vorbin_ax, args, takelog=False, label=label + ' vorbin', cmap='rainbow', fontsize=fontsize)
 
     if args.plot_snr and image_err is not None and snr_ax is not None:
         if takelog:
@@ -471,7 +470,7 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
             image_err = unp.std_devs(quant)
         snr_map = image / image_err
         snr_map = np.ma.masked_where(orig_mask, snr_map)
-        _, _ = plot_2D_map(snr_map, snr_ax, args, takelog=False, label=label.split(r'$_{\rm int}')[0] + ' SNR', cmap='cividis', vmin=0, vmax=2 if '/' in label else 8, hide_xaxis=hide_xaxis, hide_yaxis=True, hide_cbar=hide_cbar)
+        _, _ = plot_2D_map(snr_map, snr_ax, args, takelog=False, label=label.split(r'$_{\rm int}')[0] + ' SNR', cmap='cividis', vmin=0, vmax=2 if '/' in label else 8, hide_xaxis=hide_xaxis, hide_yaxis=True, hide_cbar=hide_cbar, fontsize=fontsize)
 
     return ax, radprof_fit
 
@@ -1126,169 +1125,6 @@ def get_Z_Te(full_hdu, args):
     return logOH_map, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def compute_Z_O3O2(OIII5007_flux, OII3727_flux):
-    '''
-    Calculates and returns the O3O2 metallicity given observed line fluxes
-    Conversion factor is from Curti+2019
-    '''
-    # -----handling masks separately because uncertainty package cannot handle masks---------
-    if np.ma.isMaskedArray(OIII5007_flux):
-        net_mask = OII3727_flux.mask | OIII5007_flux.mask
-        OIII5007_flux = OIII5007_flux.data
-        OII3727_flux = OII3727_flux.data
-    else:
-        net_mask = False
-
-    k = [-0.691, -2.944, -1.308] # c0-2 parameters from Table 2 of Curti+19 3rd row (O3O2)
-    logOH_turnover = np.max(np.roots(np.polyder(np.poly1d(k[::-1]), m=1)) + 8.69) # based on solving the differential of polynomial with above coefficients, this is the value of Z where the relation peaks
-    O3O2_turnover = np.poly1d(k[::-1])(logOH_turnover - 8.69) # based on solving the differential of polynomial with above coefficients, this is the value of log(ratio) where the relation peaks
-
-    if hasattr(OII3727_flux, "__len__"): # if it is an array
-        O3O2 = take_safe_log_ratio(OIII5007_flux, OII3727_flux)
-
-        # --------computing the polynomial and appropriate errors------------
-        log_OH = []
-        if args.debug_Zdiag:
-            fig, ax = plt.subplots(1, 2, figsize=(6, 8), sharey=True)
-            ax[0].set_xlabel('Solution[i] + 8.69')
-            ax[1].set_xlabel('log(O/H)+12 = max(solution) + 8.69')
-            ax[0].set_ylabel('O3O2')
-            ax[0].set_ylim(-1.5, 1.5)
-            #ax[0].set_xlim(7.5, 9.0)
-            ax[1].set_xlim(7.5, 9.0)
-
-        for this_O3O2 in O3O2.data.flatten():
-            if this_O3O2 > O3O2_turnover:
-                log_OH.append(ufloat(logOH_turnover, 0.))
-                if args.debug_Zdiag:
-                    ax[1].scatter(logOH_turnover, unp.nominal_values(this_O3O2), lw=0, s=50, c='cornflowerblue')
-            else:
-                try:
-                    solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_O3O2)]])) if item.imag == 0]
-                    this_log_OH = np.max(solution) + 8.69  # see Table 1 caption in Curti+19
-                    log_OH.append(ufloat(this_log_OH, 0.))
-                    if args.debug_Zdiag:
-                        col_arr = ['r', 'g', 'b']
-                        for index, this_sol in enumerate(solution):
-                            ax[0].scatter(this_sol + 8.69, unp.nominal_values(this_O3O2), lw=0, s=5, c=col_arr[index])
-                        ax[1].scatter(this_log_OH, unp.nominal_values(this_O3O2), lw=0, s=5)
-                        for ax1 in ax:
-                            ax1.axvline(logOH_turnover, ls='--', c='k', lw=1)
-                            ax1.axhline(O3O2_turnover, ls='--', c='k', lw=1)
-                except:
-                    log_OH.append(ufloat(np.nan, np.nan))
-                    if args.debug_Zdiag:
-                        ax[1].axhline(unp.nominal_values(this_O3O2), lw=0.5, c='grey', alpha=0.3)
-
-        log_OH = np.ma.masked_where(O3O2.mask | net_mask, np.reshape(log_OH, np.shape(O3O2)))
-
-    else: # if it is scalar
-        try:
-            ratio = OIII5007_flux / OII3727_flux
-            O3O2 = unp.log10(ratio)
-            if O3O2 > O3O2_turnover:
-                log_OH = ufloat(logOH_turnover, 0.)
-            else:
-                solution = np.max([item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(O3O2)]])) if item.imag == 0])
-                log_OH = ufloat(solution + 8.69, 0.)  # see Table 1 caption in Curti+19
-        except:
-            log_OH = ufloat(np.nan, np.nan)
-
-    return log_OH
-
-# --------------------------------------------------------------------------------------------------------------------
-def get_Z_O3O2(full_hdu, args):
-    '''
-    Computes and returns the spatially resolved as well as intregrated O3S2 metallicity from a given HDU
-    '''
-    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
-    OII3727_map, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
-
-    logOH_map = compute_Z_O3O2(OIII5007_map, OII3727_map)
-    logOH_int = compute_Z_O3O2(OIII5007_int, OII3727_int)
-
-    return logOH_map, logOH_int
-
-# --------------------------------------------------------------------------------------------------------------------
-def compute_Z_O3S2(OIII5007_flux, Hbeta_flux, SII6717_flux, Halpha_flux):
-    '''
-    Calculates and returns the O3S2 metallicity given observed line fluxes
-    Conversion factor is from Curti+2019
-    '''
-    # -----handling masks separately because uncertainty package cannot handle masks---------
-    if np.ma.isMaskedArray(OIII5007_flux):
-        net_mask = SII6717_flux.mask | OIII5007_flux.mask | Hbeta_flux.mask | Halpha_flux.mask
-        OIII5007_flux = OIII5007_flux.data
-        Hbeta_flux = Hbeta_flux.data
-        SII6717_flux = SII6717_flux.data
-        Halpha_flux = Halpha_flux.data
-    else:
-        net_mask = False
-
-    k = [0.191, -4.292, -2.538, 0.053, 0.332] # c0-4 parameters from Table 2 of Curti+19 last row (O3S2)
-    logOH_turnover = np.max(np.roots(np.polyder(np.poly1d(k[::-1]), m=1)) + 8.69) # based on solving the differential of polynomial with above coefficients, this is the value of Z where the relation peaks
-    O3S2_turnover = np.poly1d(k[::-1])(logOH_turnover - 8.69) # based on solving the differential of polynomial with above coefficients, this is the value of log(ratio) where the relation peaks
-
-    if hasattr(Hbeta_flux, "__len__"): # if it is an array
-        # --------computing the ratio and appropriate errors------------
-        O3S2 = take_safe_log_ratio(OIII5007_flux, SII6717_flux)
-
-        # --------computing the polynomial and appropriate errors------------
-        log_OH = []
-        if args.debug_Zdiag:
-            fig, ax = plt.subplots(1, 2, figsize=(6, 8), sharey=True)
-            ax[0].set_xlabel('Solution[0]')
-            ax[1].set_xlabel('log(O/H)+12 = min(solution) + 8.69')
-            ax[0].set_ylabel('O3S2')
-            ax[0].set_ylim(-0.5, 2.5)
-
-        for this_O3S2 in O3S2.data.flatten():
-            if this_O3S2 > O3S2_turnover:
-                log_OH.append(ufloat(logOH_turnover, 0.))
-            else:
-                try:
-                    solution = [item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_O3S2)]])) if item.imag == 0]
-                    this_log_OH = np.max(solution) + 8.69  # see Table 1 caption in Curti+19
-                    log_OH.append(ufloat(this_log_OH, 0.))
-                    if args.debug_Zdiag:
-                        ax[0].scatter(this_log_OH, unp.nominal_values(this_O3S2), lw=0, s=50)
-                        ax[0].axvline(logOH_turnover, ls='--', c='k')
-                        ax[0].axhline(O3S2_turnover, ls='--', c='k')
-                        ax[1].scatter(solution[0], unp.nominal_values(this_O3S2), lw=0, s=50)
-                except:
-                    log_OH.append(ufloat(np.nan, np.nan))
-        log_OH = np.ma.masked_where(O3S2.mask | net_mask, np.reshape(log_OH, np.shape(O3S2)))
-
-    else: # if it is scalar
-        try:
-            ratio = (OIII5007_flux / Hbeta_flux) / (SII6717_flux / Halpha_flux)
-            O3S2 = unp.log10(ratio)
-            if O3S2 > O3S2_turnover:
-                log_OH = ufloat(logOH_turnover, 0.)
-            else:
-                solution = np.max([item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(O3S2)]])) if item.imag == 0])
-                log_OH = ufloat(solution + 8.69, 0.)  # see Table 1 caption in Curti+19
-        except:
-            log_OH = ufloat(np.nan, np.nan)
-
-    return log_OH
-
-# --------------------------------------------------------------------------------------------------------------------
-def get_Z_O3S2(full_hdu, args):
-    '''
-    Computes and returns the spatially resolved as well as intregrated O3S2 metallicity from a given HDU
-    '''
-    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
-    Hbeta_map, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
-    SII6717_map, line_wave, SII6717_int, _ = get_emission_line_map('SII', full_hdu, args)
-    Halpha_map, line_wave, Halpha_int, _ = get_emission_line_map('Ha', full_hdu, args)
-
-    logOH_map = compute_Z_O3S2(OIII5007_map, Hbeta_map, SII6717_map, Halpha_map)
-    logOH_int = compute_Z_O3S2(OIII5007_int, Hbeta_int, SII6717_int, Halpha_int)
-
-    return logOH_map, logOH_int
-
-# --------------------------------------------------------------------------------------------------------------------
 def compute_Z_P25_SFR(O3S2, N2S2):
     '''
     Calculates and returns the SFR metallicity given observed O3S2 and N2S2 line ratios
@@ -1404,7 +1240,7 @@ def get_nearest(value, array):
     return nearest_item
 
 # --------------------------------------------------------------------------------------------------------------------
-def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux, branch='low'):
+def compute_Z_KD02_R23(OII3727_flux, OIII5007_flux, Hbeta_flux, branch='low'):
     '''
     Calculates and returns the R23 metallicity given observed line fluxes
     Conversion factor is from Kewley+2002
@@ -1482,7 +1318,7 @@ def compute_Z_R23(OII3727_flux, OIII5007_flux, Hbeta_flux, branch='low'):
     return logOH_R23
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_Z_R23(full_hdu, args, branch='low'):
+def get_Z_KD02_R23(full_hdu, args, branch='low'):
     '''
     Computes and returns the spatially resolved as well as intregrated R23 metallicity from a given HDU
     '''
@@ -1500,91 +1336,6 @@ def get_Z_R23(full_hdu, args, branch='low'):
 
     logOH_map = compute_Z_R23(OII3727_map, OIII5007_map, Hbeta_map, branch=branch)
     logOH_int = compute_Z_R23(OII3727_int, OIII5007_int, Hbeta_int, branch=branch)
-
-    return logOH_map, logOH_int
-
-# --------------------------------------------------------------------------------------------------------------------
-def compute_Z_R3(OIII5007_flux, Hbeta_flux):
-    '''
-    Calculates and returns the R3 metallicity given observed line fluxes
-    Conversion factor is from Curti+2019
-    '''
-    # -----handling masks separately because uncertainty package cannot handle masks---------
-    k = [-0.277, -3.549, -3.593, -0.981] # c0-3 parameters from Table 2 of Curti+19 2nd row (R3)
-    logOH_turnover = np.max(np.roots(np.polyder(np.poly1d(k[::-1]), m=1)) + 8.69) # based on solving the differential of polynomial with above coefficients, this is the value of Z where the relation peaks
-    R3_turnover = np.poly1d(k[::-1])(logOH_turnover - 8.69) # based on solving the differential of polynomial with above coefficients, this is the value of log(ratio) where the relation peaks
-
-    if hasattr(Hbeta_flux, "__len__"): # if it is an array
-        # --------computing the ratio and appropriate errors------------
-        R3 = take_safe_log_ratio(OIII5007_flux, Hbeta_flux)
-
-        # --------computing the polynomial and appropriate errors------------
-        log_OH = []
-        if args.debug_Zdiag:
-            fig, ax = plt.subplots(1, 2, figsize=(6, 8), sharey=True)
-            ax[0].set_xlabel('Solution[i] + 8.69')
-            ax[1].set_xlabel('log(O/H)+12 = max(solution) + 8.69')
-            ax[0].set_ylabel('R3')
-            ax[0].set_ylim(-1.5, 1.5)
-            ax[0].set_xlim(7.5, 9.0)
-            ax[1].set_xlim(7.5, 9.0)
-
-        for this_R3 in R3.data.flatten():
-            if this_R3 > R3_turnover:
-                log_OH.append(ufloat(logOH_turnover, 0.))
-                if args.debug_Zdiag:
-                    ax[1].scatter(logOH_turnover, unp.nominal_values(this_R3), lw=0, s=50, c='cornflowerblue')
-            else:
-                try:
-                    solution = np.sort([item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(this_R3)]])) if item.imag == 0])
-                    this_log_OH = np.max(solution) + 8.69  # see Table 1 caption in Curti+19
-                    log_OH.append(ufloat(this_log_OH, 0.))
-                    if args.debug_Zdiag:
-                        col_arr = ['r', 'g', 'b']
-                        for index, this_sol in enumerate(solution):
-                            ax[0].scatter(this_sol + 8.69, unp.nominal_values(this_R3), lw=0, s=5, c=col_arr[index])
-                        ax[1].scatter(this_log_OH, unp.nominal_values(this_R3), lw=0, s=5)
-                        for ax1 in ax:
-                            ax1.axvline(logOH_turnover, ls='--', c='k', lw=1)
-                            ax1.axhline(R3_turnover, ls='--', c='k', lw=1)
-                except:
-                    log_OH.append(ufloat(np.nan, np.nan))
-                    if args.debug_Zdiag:
-                        ax[1].axhline(unp.nominal_values(this_O3O2), lw=0.5, c='grey', alpha=0.3)
-        log_OH = np.ma.masked_where(R3.mask, np.reshape(log_OH, np.shape(R3)))
-
-    else: # if it is scalar
-        try:
-            ratio = OIII5007_flux / Hbeta_flux
-            R3 = unp.log10(ratio)
-            if R3 > R3_turnover:
-                log_OH = ufloat(logOH_turnover, 0.)
-            else:
-                solution = np.max([item.real for item in np.roots(np.hstack([k[::-1][:-1], [k[0] - unp.nominal_values(R3)]])) if item.imag == 0])
-                log_OH = ufloat(solution + 8.69, 0.)  # see Table 1 caption in Curti+19
-        except:
-            log_OH = ufloat(np.nan, np.nan)
-
-    return log_OH
-
-# --------------------------------------------------------------------------------------------------------------------
-def get_Z_R3(full_hdu, args):
-    '''
-    Computes and returns the spatially resolved as well as intregrated R3 metallicity from a given HDU
-    '''
-    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
-    Hbeta_map, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
-
-    if not args.do_not_correct_flux:
-        # special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back
-        ratio_5007_to_4959 = 2.98  # from grizli source code
-        factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
-        print(f'Un-correcting OIII to include the 4959 component, for computing R23 metallicity, by factor of {factor:.3f}')
-        OIII5007_map = np.ma.masked_where(OIII5007_map.mask, OIII5007_map.data / factor)
-        OIII5007_int = OIII5007_int / factor
-
-    logOH_map = compute_Z_R3(OIII5007_map, Hbeta_map)
-    logOH_int = compute_Z_R3(OIII5007_int, Hbeta_int)
 
     return logOH_map, logOH_int
 
@@ -1722,27 +1473,190 @@ def get_Z_NB(full_hdu, args):
     return logOH_map, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
+def compute_Z_C19(ratio, coeff, ax=None):
+    '''
+    Calculates and returns the metallicity given observed line fluxes ratio and coefficient, according to Curti+2019
+    '''
+    # -----handling turnover situations, where measured ratio is beyond model peak ratio---------
+    reasonable_Z_limit = [7, 9]
+    model = np.poly1d(coeff)
+    model_diff = np.polyder(model, m=1)
+    model_turnovers = np.roots(model_diff) + 8.69
+    possible_model_turnovers = model_turnovers[(model_turnovers > reasonable_Z_limit[0]) & (model_turnovers < reasonable_Z_limit[1])]
+    logOH_turnover = np.max(possible_model_turnovers) # based on solving the differential of polynomial with above coefficients, this is the value of Z where the relation peaks
+    ratio_turnover = model(logOH_turnover - 8.69)
+
+    if ax is not None:
+        for ax1 in ax:
+            ax1.axvline(logOH_turnover, ls='--', c='k', lw=1)
+            ax1.axhline(ratio_turnover, ls='--', c='k', lw=1)
+
+    # --------determining data and masks------------
+    if np.ma.isMaskedArray(ratio):
+        ratio_arr = np.atleast_1d(ratio.data).flatten()
+        mask = ratio.mask
+    else:
+        ratio_arr = np.atleast_1d(ratio).flatten()
+        mask = None
+
+    # --------computing the metallicitities------------
+    log_OH = []
+
+    for this_ratio in ratio_arr:
+        this_ratio = unp.nominal_values(this_ratio)
+        if this_ratio > ratio_turnover:
+            log_OH.append(ufloat(logOH_turnover, 0.))
+            if ax is not None: ax[1].scatter(logOH_turnover, this_ratio, lw=0, s=50, c='cornflowerblue')
+        else:
+            try:
+                poly_to_solve = np.hstack([coeff[:-1], [coeff[-1] - this_ratio]])
+                roots = np.roots(poly_to_solve)
+                real_roots = np.sort(roots[np.isreal(roots)]) + 8.69 # see Table 1 caption in Curti+19
+                possible_roots = real_roots[(real_roots > reasonable_Z_limit[0]) & (real_roots < reasonable_Z_limit[1])]
+                this_log_OH = np.max(possible_roots)
+                log_OH.append(ufloat(this_log_OH, 0.))
+                if ax is not None:
+                    for real_root,col in zip(real_roots, ['r', 'g', 'b']): ax[0].scatter(real_root, this_ratio, lw=0, s=5, c=col)
+                    ax[1].scatter(this_log_OH, this_ratio, lw=0, s=5)
+            except:
+                log_OH.append(ufloat(np.nan, np.nan))
+                if ax is not None: ax[1].axhline(this_ratio, lw=0.5, c='grey', alpha=0.3)
+
+    log_OH = np.reshape(log_OH, np.shape(ratio))
+    if mask is not None: log_OH = np.ma.masked_where(mask, log_OH)
+
+    return log_OH
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_emission_line_maps(full_hdu, line_labels, args):
+    '''
+    Computes and returns the spatially resolved as well as intregrated metallicity based on a given Curti+2019 calibration, from a given HDU
+    '''
+    if not all([line in args.available_lines for line in line_labels]):
+        print(f'All lines in {line_labels} not available in object {args.id}')
+        return None, None
+
+    line_map_arr, line_int_arr = [], []
+    for line in line_labels:
+        line_map, line_wave, line_int, _ = get_emission_line_map(line, full_hdu, args)
+
+        if not args.do_not_correct_flux:
+            factor = 1.
+            if line == 'OIII': # special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back
+                ratio_5007_to_4959 = 2.98  # from grizli source code
+                factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
+                print(f'Un-correcting OIII to include the 4959 component, for computing R23 metallicity, by factor of {factor:.3f}')
+
+            line_map = np.ma.masked_where(line_map.mask, line_map.data / factor)
+            line_int = line_int / factor
+
+        line_map_arr.append(line_map)
+        line_int_arr.append(line_int)
+
+
+    return line_map_arr, line_int_arr
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_Z_C19(full_hdu, args):
+    '''
+    Computes and returns the spatially resolved as well as intregrated metallicity based on a given Curti+2019 calibration, from a given HDU
+    '''
+    # ------getting appropriate emission lines and calibration coefficients--------------
+    if args.Zdiag == 'O3O2':
+        line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OIII', 'OII'], args)
+        ratio_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1])
+        ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
+        coeff = [-0.691, -2.944, -1.308]  # c0-2 parameters from Table 2 of Curti+19 3rd row (O3O2)
+
+    elif args.Zdiag == 'R3':
+        line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OIII', 'Hb'], args)
+        ratio_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1])
+        ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
+        coeff = [-0.277, -3.549, -3.593, -0.981]  # c0-3 parameters from Table 2 of Curti+19 2nd row (R3)
+
+    elif args.Zdiag == 'R23':
+        line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OIII', 'OII', 'Hb'], args)
+        R1_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[2], skip_log=True)
+        R2_map = take_safe_log_ratio(line_map_arr[1], line_map_arr[2], skip_log=True)
+        ratio_map = take_safe_log_sum(R1_map, R2_map)
+        ratio_int = unp.log10((line_int_arr[0] + line_int_arr[1]) / line_int_arr[2])
+        coeff = [0.527, -1.569, -1.652, -0.421]  # c0-3 parameters from Table 2 of Curti+19 4th row (R23)
+
+    elif args.Zdiag == 'O3S2':
+        line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OIII', 'Hb', 'SII', 'Ha'], args)
+        R1_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1], skip_log=True)
+        R2_map = take_safe_log_ratio(line_map_arr[2], line_map_arr[3], skip_log=True)
+        ratio_map = take_safe_log_ratio(R1_map, R2_map)
+        ratio_int = unp.log10((line_int_arr[0] / line_int_arr[1]) / (line_int_arr[2] / line_int_arr[3]))
+        coeff = [0.191, -4.292, -2.538, 0.053, 0.332]  # c0-4 parameters from Table 2 of Curti+19 last row (O3S2)
+
+    elif args.Zdiag == 'S2':
+        line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['SII', 'Ha'], args)
+        ratio_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1])
+        ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
+        coeff = [-0.442, -0.360, -6.271, -8.339, -3.559]  # c0-3 parameters from Table 2 of Curti+19 3rd-to-last row (S2)
+
+    elif args.Zdiag == 'RS32':
+        line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OIII', 'Hb', 'SII', 'Ha'], args)
+        R1_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1], skip_log=True)
+        R2_map = take_safe_log_ratio(line_map_arr[2], line_map_arr[3], skip_log=True)
+        ratio_map = take_safe_log_sum(R1_map, R2_map)
+        ratio_int = unp.log10((line_int_arr[0] / line_int_arr[1]) + (line_int_arr[2] / line_int_arr[3]))
+        coeff = [-0.054, -2.546, -1.970, 0.082, 0.222]  # c0-3 parameters from Table 2 of Curti+19 2nd-to-last row (RS32)
+
+    elif args.Zdiag == 'R2':
+        line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OII', 'Hb'], args)
+        ratio_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1])
+        ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
+        coeff = [0.435, -1.362, -5.655, -4.851, -0.478, 0.736]  # c0-3 parameters from Table 2 of Curti+19 1st row (R2)
+
+    else:
+        print(f'Could not apply any of the metallicity diagnostics, so returning NaN metallicities')
+        return None, ufloat(np.nan, np.nan)
+
+    coeff = coeff[::-1] # because in Curti+2019 the coefficients are listed in the reverse order compared to what np.poly1d prefers
+
+    # ----setting up Z diag debugging plots---------
+    if args.debug_Zdiag:
+        fig, ax = plt.subplots(1, 2, figsize=(6, 8), sharey=True)
+        ax[0].set_xlabel('Solution[i] + 8.69')
+        ax[1].set_xlabel('log(O/H)+12 = max(solution) + 8.69')
+        ax[0].set_ylabel(f'Observed {args.Zdiag}')
+        Z_limits = [2, 13]
+        ratio_limits = [-5, 5]
+
+        xarr = np.linspace(Z_limits[0], Z_limits[1], 100)
+        ax[0].plot(xarr, np.poly1d(coeff)(xarr - 8.69), lw=0.5, c='k', ls='dotted')
+        ax[1].plot(xarr, np.poly1d(coeff)(xarr - 8.69), lw=0.5, c='k', ls='dotted')
+
+        ax[0].set_ylim(ratio_limits[0], ratio_limits[1])
+        ax[0].set_xlim(Z_limits[0], Z_limits[1])
+        ax[1].set_xlim(Z_limits[0], Z_limits[1])
+    else:
+        ax = None
+
+    # -------estimating the metallicities---------------
+    logOH_map = compute_Z_C19(ratio_map, coeff, ax=ax)
+    logOH_int = compute_Z_C19(ratio_int, coeff, ax=ax)
+    logOH_int = ufloat(unp.nominal_values(np.atleast_1d(logOH_int))[0], unp.std_devs(np.atleast_1d(logOH_int))[0])
+
+    return logOH_map, logOH_int
+
+# --------------------------------------------------------------------------------------------------------------------
 def get_Z(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated metallicity from a given HDU
     '''
-    if args.Zdiag == 'O3S2' and all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
-        logOH_map, logOH_int = get_Z_O3S2(full_hdu, args)
-    elif args.Zdiag == 'O3O2' and all([line in args.available_lines for line in ['OIII', 'OII']]):
-        logOH_map, logOH_int = get_Z_O3O2(full_hdu, args)
+    if args.Zdiag == 'NB':
+        logOH_map, logOH_int = get_Z_NB(full_hdu, args)
+    elif args.Zdiag == 'KD02_R23' and all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
+        logOH_map, logOH_int = get_Z_KD02_R23(full_hdu, args, branch=args.Zbranch)
     elif args.Zdiag == 'Te' and all([line in args.available_lines for line in ['OIII', 'OIII-4363', 'OII', 'Hb']]):
         logOH_map, logOH_int = get_Z_Te(full_hdu, args)
     elif args.Zdiag == 'P25' and all([line in args.available_lines for line in ['OIII', 'Ha', 'SII']]):
         logOH_map, logOH_int = get_Z_P25(full_hdu, args)
-    elif args.Zdiag == 'R3' and all([line in args.available_lines for line in ['OIII', 'Hb']]):
-        logOH_map, logOH_int = get_Z_R3(full_hdu, args)
-    elif args.Zdiag == 'R23' and all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
-        logOH_map, logOH_int = get_Z_R23(full_hdu, args, branch=args.Zbranch)
-    elif args.Zdiag == 'NB':
-        logOH_map, logOH_int = get_Z_NB(full_hdu, args)
     else:
-        print(f'Could not apply any of the metallicity diagnostics, so returning NaN metallicities')
-        logOH_map, logOH_int = None, ufloat(np.nan, np.nan)
+        logOH_map, logOH_int = get_Z_C19(full_hdu, args)
 
     if logOH_map is not None and args.mask_agn: logOH_map = np.ma.masked_where((args.distance_from_AGN_line_map > 0) | logOH_map.mask, logOH_map)
 
@@ -2160,7 +2074,7 @@ def plot_metallicity_fig(full_hdu, args):
 
     # ---------plotting-------------
     if logOH_map is not None:
-        lim = [7.5, 8.2] if args.Zdiag == 'R23' and args.Zbranch == 'low' else [7.3, 8.0] if args.Zdiag == 'NB' else [7.5, 9.2]
+        lim = [7.5, 8.2] if args.Zdiag == 'KD02_R23' and args.Zbranch == 'low' else [7.1, 9.1]
         ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
         if args.plot_snr:
             logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
@@ -2293,6 +2207,29 @@ def take_safe_log_ratio(num_map, den_map, skip_log=False):
     if not skip_log: ratio_map = unp.log10(ratio_map)
     ratio_map[bad_mask | net_mask] = -99.
     ratio_map = np.ma.masked_where(bad_mask | net_mask, ratio_map)
+
+    return ratio_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def take_safe_log_sum(map1, map2, skip_log=False):
+    '''
+    Takes the log of the sum of two 2D masked arrays by properly accounting for bad values so as to avoid math errors
+    Returns 2D masked array
+    '''
+    if np.ma.isMaskedArray(map1):
+        net_mask = map1.mask | map2.mask
+        map1 = map1.data
+        map2 = map2.data
+    else:
+        net_mask = False
+
+    bad_mask = (unp.nominal_values(map1) <= 0) | (unp.nominal_values(map2) <= 0) | (~np.isfinite(unp.nominal_values(map1))) | (~np.isfinite(unp.nominal_values(map2))) | (~np.isfinite(unp.std_devs(map1))) | (~np.isfinite(unp.std_devs(map2)))
+    map1[bad_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+    map2[bad_mask] = 1e-9  # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+    sum_map = map1 + map2
+    if not skip_log: sum_map = unp.log10(sum_map)
+    sum_map[bad_mask | net_mask] = -99.
+    sum_map = np.ma.masked_where(bad_mask | net_mask, sum_map)
 
     return ratio_map
 

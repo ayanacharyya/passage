@@ -3,12 +3,12 @@
     Notes: Compares spatially resolved metallicity map across different diagnostics for a given set of galaxies
     Author : Ayan
     Created: 02-04-25
-    Example: run compare_metallicities.py --field Par028 --id 300,1303,1634,1849,2171,2727,2867 --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --AGN_diag Ne3O2 --Zdiag O3O2,P25,R3,NB --use_original_NB_grid
+    Example: run compare_metallicities.py --field Par028 --id 300,1303,1634,1849,2171,2727,2867 --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --AGN_diag Ne3O2 --Zdiag O3O2,R3,P25,NB --use_original_NB_grid --colorcol radius --debug_Zdiag
              run compare_metallicities.py --field Par028 --id 300 --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --AGN_diag Ne3O2 --Zdiag O3O2,R3,NB --colorcol radius --debug_Zdiag
 '''
+from make_diagnostic_maps import plot_2D_map, plot_radial_profile
 from header import *
 from util import *
-from make_diagnostic_maps import plot_2D_map, plot_radial_profile
 
 start_time = datetime.now()
 
@@ -32,11 +32,7 @@ if __name__ == "__main__":
     only_seg_text = '_onlyseg' if args.only_seg else ''
     vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
 
-    # --------setting up full figure----------------------------------
-    nrow, ncol = len(Zdiag_arr) - 1, len(Zdiag_arr) - 1
-    fig, axes = plt.subplots(nrow, ncol, figsize=(8, 7), layout='tight')  # layout = 'tight' or 'constrained'
-    axes = np.atleast_2d(axes)
-
+    # --------setting up global variables----------------------------------
     col_arr = ['salmon', 'sienna', 'cornflowerblue', 'darkolivegreen', 'darkgoldenrod', 'darkorchid', 'darkcyan', 'hotpink']
     Zdiag_label_dict = smart_dict({'NB_orig_grid': 'NB (original grid)'})
     Z_limits = [7.1, 9.1]
@@ -44,6 +40,12 @@ if __name__ == "__main__":
 
     args.radius_max = color_lim_dict['radius'][1]
     offset = 2 if args.plot_radial_profiles else 1
+    debug_fontsize = max(args.fontsize / len(args.id_arr), 3)
+
+    # --------setting up full figure----------------------------------
+    nrow, ncol = len(Zdiag_arr) - 1, len(Zdiag_arr) - 1
+    fig, axes = plt.subplots(nrow, ncol, figsize=(8, 7), layout='tight')  # layout = 'tight' or 'constrained'
+    axes = np.atleast_2d(axes)
 
     # -------setting up diagnostic figure----------
     if args.debug_Zdiag:
@@ -86,17 +88,18 @@ if __name__ == "__main__":
                 # -------plotting metallicity map----------
                 if args.debug_Zdiag:
                     logOH_map = hdul['log_OH'].data
-                    axes2[index * offset][index2], _ = plot_2D_map(logOH_map, axes2[index * offset][index2], args, takelog=False, label=f'{Zdiag}: Z = {this_logOH_int.n:.1f}', cmap='viridis', hide_yaxis=index2 > 0, hide_xaxis=index < len(args.id_arr) - 1, vmin=Z_limits[0], vmax=Z_limits[1], hide_cbar=index2 < len(Zdiag_arr) - 1)
-                    if args.plot_radial_profiles: axes2[index * offset + 1][index2], _ = plot_radial_profile(df, axes2[index * offset + 1][index2], args, label=f'log(O/H) + 12', ymin=Z_limits[0], ymax=Z_limits[1], hide_xaxis=index < len(args.id_arr) - 1, hide_yaxis=index2 > 0, xcol='radius', ycol=f'log_OH_{Zdiag}')
+                    axes2[index * offset][index2], _ = plot_2D_map(logOH_map, axes2[index * offset][index2], args, takelog=False, label=f'{Zdiag}: Z = {this_logOH_int.n:.1f}', cmap='viridis', hide_yaxis=index2 > 0, hide_xaxis=index < len(args.id_arr) - 1, vmin=Z_limits[0], vmax=Z_limits[1], hide_cbar=index2 < len(Zdiag_arr) - 1, fontsize=debug_fontsize)
+                    if args.plot_radial_profiles: axes2[index * offset + 1][index2], _ = plot_radial_profile(df, axes2[index * offset + 1][index2], args, label=f'log(O/H) + 12', ymin=Z_limits[0], ymax=Z_limits[1], hide_xaxis=index < len(args.id_arr) - 1, hide_yaxis=index2 > 0, xcol='radius', ycol=f'log_OH_{Zdiag}', fontsize=debug_fontsize)
 
             else:
-                log_int_array.append(this_logOH_int)
+                log_int_array.append(ufloat(np.nan, np.nan))
+                if args.debug_Zdiag: fig2.delaxes(axes2[index * offset][index2])
                 print(f'{fitsname} not found, so skipping this diagnostic {Zdiag}')
 
         # -------plotting voronoi bin map----------
         if args.debug_Zdiag:
             bin_ID_map = hdul['bin_ID'].data
-            axes2[index * offset][index2 + 1], _ = plot_2D_map(bin_ID_map, axes2[index * offset][index2 + 1], args, takelog=False, label=f'ID {args.id}: Vorbin ID', cmap='rainbow', hide_yaxis=True, hide_xaxis=index < len(args.id_arr) - 1, hide_cbar=False)
+            axes2[index * offset][index2 + 1], _ = plot_2D_map(bin_ID_map, axes2[index * offset][index2 + 1], args, takelog=False, label=f'ID {args.id}: Vorbins', cmap='rainbow', hide_yaxis=True, hide_xaxis=index < len(args.id_arr) - 1, hide_cbar=False, fontsize=debug_fontsize)
             if args.plot_radial_profiles: fig2.delaxes(axes2[index * offset + 1][index2 + 1])
 
         # ------now plotting for every diag combination--------------
@@ -142,12 +145,12 @@ if __name__ == "__main__":
                         print(f'Cannot plot {Zdiag1} vs {Zdiag2} comparison for object {args.id}')
 
         # ------annotating figure----------------------
-        fig.text(0.88, 0.96 - index * 0.03, f'ID #{args.id}', c=col_arr[index], ha='left', va='top', fontsize=args.fontsize)
+        fig.text(0.88, 0.98 - index * 0.03, f'ID #{args.id}', c=col_arr[index], ha='left', va='top', fontsize=args.fontsize)
 
         # ------making colorbar----------------------
-        if args.colorcol != 'color' and index == len(args.id_arr) - 1:
+        if 'p' in locals() and args.colorcol != 'color' and index == len(args.id_arr) - 1:
             fig.subplots_adjust(right=0.8)
-            cbar_ax = fig.add_axes([0.89, 0.3, 0.02, 0.4]) # left, bottom, width, height
+            cbar_ax = fig.add_axes([0.89, 0.45, 0.02, 0.3]) # left, bottom, width, height
             cbar = fig.colorbar(p, cax=cbar_ax, orientation='vertical')
             cbar.set_label(color_lim_dict[args.colorcol][2], fontsize=args.fontsize)
 
