@@ -31,6 +31,7 @@ if __name__ == "__main__":
     snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
     only_seg_text = '_onlyseg' if args.only_seg else ''
     vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
+    Zbranch_text = '' if np.array([item in ['NB', 'P25'] for item in Zdiag_arr]).all() else f'-{args.Zbranch}'
 
     # --------setting up global variables----------------------------------
     col_arr = ['salmon', 'sienna', 'cornflowerblue', 'darkolivegreen', 'darkgoldenrod', 'darkorchid', 'darkcyan', 'hotpink']
@@ -65,8 +66,8 @@ if __name__ == "__main__":
             if Zdiag == 'NB_orig_grid':
                 fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_NB_AGNdiag_{args.AGN_diag}_orig_grid.fits'
             else:
-                Zbranch_text = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
-                fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}-{args.Zbranch}_AGNdiag_{args.AGN_diag}.fits'
+                Zbranch_text1 = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
+                fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{Zdiag}{Zbranch_text1}_AGNdiag_{args.AGN_diag}.fits'
             if os.path.exists(fitsname):
                 hdul = fits.open(fitsname)
                 this_df = Table(hdul['tab'].data).to_pandas()
@@ -75,7 +76,6 @@ if __name__ == "__main__":
                 else:
                     df = pd.merge(df, this_df, on = ['radius', 'bin_ID', 'agn_dist'])
                 df = df.rename(columns={'log_OH': f'log_OH_{Zdiag}', 'log_OH_u': f'log_OH_{Zdiag}_err'})
-                df['color'] = col_arr[index]
 
                 # ----getting the integrated values-------
                 header = hdul['log_OH'].header
@@ -104,6 +104,7 @@ if __name__ == "__main__":
             if args.plot_radial_profiles: fig2.delaxes(axes2[index * offset + 1][index2 + 1])
 
         # ------now plotting for every diag combination--------------
+        df['color'] = col_arr[index]
         for col_index in range(ncol):
             for row_index in range(nrow):
                 ax = axes[row_index][col_index]
@@ -163,7 +164,7 @@ if __name__ == "__main__":
 
     # ------------saving the full figure--------------------------
     colorby_text = f'_colorby_{args.colorcol}' if args.colorcol != 'color' else ''
-    figname = plots_dir / f'{",".join(args.id_arr.astype(str))}_Zdiag_comparison_{",".join(Zdiag_arr)}{Zbranch_text}_{colorby_text}.png'
+    figname = plots_dir / f'{",".join(args.id_arr.astype(str))}_Zdiag_comparison_{",".join(Zdiag_arr)}{Zbranch_text}{colorby_text}.png'
     fig.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
