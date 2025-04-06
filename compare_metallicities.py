@@ -4,7 +4,7 @@
     Author : Ayan
     Created: 02-04-25
     Example: run compare_metallicities.py --field Par028 --id 300,1303,1634,1849,2171,2727,2867 --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --AGN_diag Ne3O2 --Zdiag O3O2,R3,P25,NB --use_original_NB_grid --colorcol radius --debug_Zdiag
-             run compare_metallicities.py --field Par028 --id 300 --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --AGN_diag Ne3O2 --Zdiag O3O2,R3,NB --Zbranch low --colorcol radius --debug_Zdiag
+             run compare_metallicities.py --field Par028 --id 300 --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --AGN_diag Ne3O2 --Zdiag O3O2,R3,NB --Zbranch low --colorcol radius --debug_Zdiag --exclude_line SII
 '''
 from make_diagnostic_maps import plot_2D_map, plot_radial_profile
 from header import *
@@ -21,6 +21,8 @@ if __name__ == "__main__":
     # -----figuring out the array fo diagnostics to use------------
     Zdiag_arr = args.Zdiag.split(',')
     if 'NB' in args.Zdiag and args.use_original_NB_grid: Zdiag_arr += ['NB_orig_grid']
+    if 'NB' in args.Zdiag and len(args.exclude_lines) > 0: Zdiag_arr += [f'NB_without_{",".join(args.exclude_lines)}']
+
     args.id_arr = np.atleast_1d(args.id)
     args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
 
@@ -65,6 +67,8 @@ if __name__ == "__main__":
         for index2, Zdiag in enumerate(Zdiag_arr):
             if Zdiag == 'NB_orig_grid':
                 fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_NB_AGNdiag_{args.AGN_diag}_orig_grid.fits'
+            elif 'NB_without' in Zdiag:
+                fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_NB_AGNdiag_{args.AGN_diag}_without_{",".join(args.exclude_lines)}.fits'
             else:
                 Zbranch_text1 = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
                 fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{Zdiag}{Zbranch_text1}_AGNdiag_{args.AGN_diag}.fits'

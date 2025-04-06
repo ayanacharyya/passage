@@ -142,6 +142,7 @@ def parse_args():
     parser.add_argument('--plot_DIG', dest='plot_DIG', action='store_true', default=False, help='Plot DIG diagnostics? Default is no.')
     parser.add_argument('--output_subdir', metavar='output_subdir', type=str, action='store', default=None, help='Any specific subdirectory (with output_dir) to put output files in; default is None (i.e. files will be put in output_dir)')
     parser.add_argument('--use_original_NB_grid', dest='use_original_NB_grid', action='store_true', default=False, help='Use the original, unmodified NebulaBayes grid? Default is no.')
+    parser.add_argument('--exclude_lines', metavar='exclude_lines', type=str, action='store', default='', help='Which lines to be excluded for metallicity measurement with NB? Default is empty string, i.e., use all available lines')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
@@ -282,6 +283,7 @@ def parse_args():
         setup_plots_for_talks()
 
     args.diverging_cmap = get_custom_cmap(args.diverging_cmap)
+    args.exclude_lines = args.exclude_lines.split(',')
 
     return args
 

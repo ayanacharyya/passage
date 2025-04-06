@@ -46,6 +46,7 @@
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_DIG --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag P25 --plot_circle_at_arcsec 0.5 --plot_snr
 
              run make_diagnostic_maps.py --field Par28 --id 300,1303,1634,1849,2171,2727,2867 --plot_ratio_maps --plot_snr --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 2 --drv 0.5 --do_not_correct_pixel --Zdiag R3 --AGN_diag Ne3O2 --mask_agn --fontsize 5
+             run make_diagnostic_maps.py --field Par28 --id 300,1303,1634,1849,2171,2727,2867 --plot_metallicity --plot_radial_profile --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --do_not_correct_pixel --Zdiag R3,R2,R23,O3O2,P25,NB --AGN_diag Ne3O2 --mask_agn --exclude_line SII
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -1463,7 +1464,7 @@ def get_Z_NB(full_hdu, args):
         line_int = line_int / factor
         line_snr = line_int.n / line_int.s
 
-        if line_snr > 2 and line in line_label_dict.keys():
+        if line_snr > 2 and line in line_label_dict.keys() and line not in args.exclude_lines:
             line_map_array.append(line_map)
             line_int_array.append(line_int)
             line_label_array.append(line_label_dict[line])
@@ -2106,8 +2107,9 @@ def plot_metallicity_fig(full_hdu, args):
     # ---------saving the metallicity maps as fits files-------------
     if logOH_map is not None:
         NB_text = '_orig_grid' if args.use_original_NB_grid and args.Zdiag == 'NB' else ''
+        exclude_text = '_without_' + ','.join(args.exclude_lines) if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
         Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
-        output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{NB_text}.fits'
+        output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{NB_text}{exclude_text}.fits'
         logOH_map_val = np.where(logOH_map.mask, np.nan, unp.nominal_values(logOH_map.data))
         logOH_map_err = np.where(logOH_map.mask, np.nan, unp.std_devs(logOH_map.data))
 
@@ -2831,7 +2833,8 @@ if __name__ == "__main__":
                     # ---------decorating and saving the figure------------------------------
                     fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
                     Zbranch_text = '' if args.Zdiag in ['NB', 'P25', 'Te'] else f'-{args.Zbranch}'
-                    figname = fig_dir / f'{args.field}_{args.id:05d}_metallicity_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}.png'
+                    exclude_text = '_without_' + ','.join(args.exclude_lines) if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
+                    figname = fig_dir / f'{args.field}_{args.id:05d}_metallicity_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}{exclude_text}.png'
 
                 # ---------initialising the metallicity figure------------------------------
                 elif args.plot_DIG:
