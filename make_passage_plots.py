@@ -501,7 +501,7 @@ if __name__ == "__main__":
             print(f'Reading in and merging logOH gradient df: {logOHgrad_filename}')
             df_logOHgrad = pd.read_csv(logOHgrad_filename)
             df_logOHgrad = df_logOHgrad.drop_duplicates(subset=['field', 'objid', 'logOH_diagnostic'], keep='last')
-            df_logOHgrad = df_logOHgrad[df_logOHgrad['logOH_diagnostic'] == args.Zdiag]
+            df_logOHgrad = df_logOHgrad[(df_logOHgrad['logOH_diagnostic'] == args.Zdiag) & (df_logOHgrad['logOH_branch'] == args.Zbranch)]
             df = pd.merge(df, df_logOHgrad, on=['field', 'objid'], how='outer')
 
         # -------making the mass excitation plot----------------

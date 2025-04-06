@@ -336,13 +336,14 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
         if image_err is not None: df[ycol + '_err'] = np.ma.compressed(image_err)
         if metallicity_multi_color: df['agn_dist'] = np.ma.compressed(np.ma.masked_where(image.mask, args.distance_from_AGN_line_map.data))
         if len(df[df[ycol + '_err'] > 0]) == 0: image_err = None
-        df = df[df[xcol] <= args.radius_max]
-        df = df.sort_values(by=xcol)
 
         # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
         if args.vorbin:
-            df['bin_ID'] = np.ma.compressed(args.voronoi_bin_IDs)
+            df['bin_ID'] = np.ma.compressed(np.ma.masked_where(image.mask, args.voronoi_bin_IDs.data))
             df = df.groupby('bin_ID', as_index=False).agg(np.mean)
+
+        df = df[df[xcol] <= args.radius_max]
+        df = df.sort_values(by=xcol)
 
     # -------proceeding with plotting--------
     ax.scatter(df[xcol], df[ycol], c=df['agn_dist'] if metallicity_multi_color else 'grey', cmap=args.diverging_cmap if metallicity_multi_color else None, s=20 if args.vorbin else 1, alpha=1 if args.vorbin else 0.2)
@@ -1473,7 +1474,7 @@ def get_Z_NB(full_hdu, args):
     return logOH_map, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def compute_Z_C19(ratio, coeff, ax=None):
+def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
     '''
     Calculates and returns the metallicity given observed line fluxes ratio and coefficient, according to Curti+2019
     '''
@@ -1513,7 +1514,10 @@ def compute_Z_C19(ratio, coeff, ax=None):
                 roots = np.roots(poly_to_solve)
                 real_roots = np.sort(roots[np.isreal(roots)]) + 8.69 # see Table 1 caption in Curti+19
                 possible_roots = real_roots[(real_roots > reasonable_Z_limit[0]) & (real_roots < reasonable_Z_limit[1])]
-                this_log_OH = np.max(possible_roots) # THIS IS WHERE MAKING THE CHOICE TO GO WITH THE HIGHER METALLICITY BRANCH, WHEREVER THE CHOICE NEEDS TO BE MADE
+                if branch == 'high': # THIS IS WHERE MAKING THE CHOICE TO GO WITH THE HIGHER METALLICITY BRANCH, WHEREVER THE CHOICE NEEDS TO BE MADE
+                    this_log_OH = np.max(possible_roots)
+                elif branch == 'low':
+                    this_log_OH = np.min(possible_roots)
                 log_OH.append(ufloat(this_log_OH, 0.))
                 if ax is not None:
                     for real_root,col in zip(real_roots, ['r', 'g', 'b']): ax[0].scatter(real_root, this_ratio, lw=0, s=5, c=col)
@@ -1634,7 +1638,8 @@ def get_Z_C19(full_hdu, args):
     if args.debug_Zdiag:
         fig, ax = plt.subplots(1, 2, figsize=(6, 8), sharey=True)
         ax[0].set_xlabel('Solution[i] + 8.69')
-        ax[1].set_xlabel('log(O/H)+12 = max(solution) + 8.69')
+        if args.Zbranch == 'high': ax[1].set_xlabel('log(O/H)+12 = max(solution) + 8.69')
+        elif args.Zbranch == 'low': ax[1].set_xlabel('log(O/H)+12 = min(solution) + 8.69')
         ax[0].set_ylabel(f'Observed {args.Zdiag}')
         Z_limits = [2, 13]
         ratio_limits = [-5, 5]
@@ -1650,8 +1655,8 @@ def get_Z_C19(full_hdu, args):
         ax = None
 
     # -------estimating the metallicities---------------
-    logOH_map = compute_Z_C19(ratio_map, coeff, ax=ax)
-    logOH_int = compute_Z_C19(ratio_int, coeff, ax=ax)
+    logOH_map = compute_Z_C19(ratio_map, coeff, ax=ax, branch=args.Zbranch)
+    logOH_int = compute_Z_C19(ratio_int, coeff, ax=ax, branch=args.Zbranch)
     logOH_int = ufloat(unp.nominal_values(np.atleast_1d(logOH_int))[0], unp.std_devs(np.atleast_1d(logOH_int))[0])
 
     return logOH_map, logOH_int
@@ -2101,7 +2106,8 @@ def plot_metallicity_fig(full_hdu, args):
     # ---------saving the metallicity maps as fits files-------------
     if logOH_map is not None:
         NB_text = '_orig_grid' if args.use_original_NB_grid and args.Zdiag == 'NB' else ''
-        output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}_AGNdiag_{args.AGN_diag}{NB_text}.fits'
+        Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
+        output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{NB_text}.fits'
         logOH_map_val = np.where(logOH_map.mask, np.nan, unp.nominal_values(logOH_map.data))
         logOH_map_err = np.where(logOH_map.mask, np.nan, unp.std_devs(logOH_map.data))
 
@@ -2600,428 +2606,546 @@ if __name__ == "__main__":
     else:
         field_list = args.field_arr
 
-    # --------loop over all fields------------------
-    for index2, field in enumerate(field_list):
-        start_time2 = datetime.now()
-        args.field = f'Par{int(field[3:]):03}' if len(field) < 6 else field
-        print(f'\n\nCommencing field {args.field} which is {index2 + 1} of {len(field_list)}..')
+    # -------looping over all Zdiagnostics-----------
+    Zdiag_arr = args.Zdiag.split(',')
+    id_arr = args.id
 
-        product_dir = args.input_dir / args.field / 'Products'
-        output_dir = args.output_dir / args.field
-        if args.re_extract: output_dir = output_dir / 're_extracted'
-        if args.output_subdir is not None: output_dir = output_dir / args.output_subdir
-        output_dir.mkdir(parents=True, exist_ok=True)
-        outfilename = output_dir / f'{args.field}_all_diag_results.csv'
+    for index3, args.Zdiag in enumerate(Zdiag_arr):
+        print(f'\n\nCommencing Zdiag {args.Zdiag} which is {index3 + 1} of {len(Zdiag_arr)}..')
 
-        if os.path.exists(outfilename) and not args.clobber and args.write_file:
-            print(f'result file for {args.field} already exists as {outfilename}, so skipping this field.')
-            continue
+        # --------loop over all fields------------------
+        for index2, field in enumerate(field_list):
+            start_time2 = datetime.now()
+            args.field = f'Par{int(field[3:]):03}' if len(field) < 6 else field
+            print(f'\n\nCommencing field {args.field} which is {index2 + 1} of {len(field_list)}..')
 
-        # ---------prep the catalog file--------------------
-        catalog_file = product_dir / f'{args.field}_photcat.fits'
-        if os.path.exists(catalog_file):
-            catalog = GTable.read(catalog_file)
-        elif args.do_all_obj:
-            print(f'photcat file for {args.field} does not exist, please download from gdrive or run data reduction. Until then, skipping this field.')
-            continue
+            product_dir = args.input_dir / args.field / 'Products'
+            output_dir = args.output_dir / args.field
+            if args.re_extract: output_dir = output_dir / 're_extracted'
+            if args.output_subdir is not None: output_dir = output_dir / args.output_subdir
+            output_dir.mkdir(parents=True, exist_ok=True)
+            outfilename = output_dir / f'{args.field}_all_diag_results.csv'
 
-        # --------determine which objects to loop over----------
-        if args.do_all_obj:
-            if args.re_extract: args.id_arr = ids_to_re_extract_dict[args.field]
-            else: args.id_arr = catalog['id']
-        else:
-            args.id_arr = args.id
-
-        if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
-        if len(args.id_arr) == 1: args.plot_separately = False
-        fig_dir = output_dir / f'{description_text}'
-        fig_dir.mkdir(parents=True, exist_ok=True)
-
-        # ---------for diplay and amimations----------------
-        if len(args.id_arr) > 20: args.hide = True # if too many plots, do not display them, just save them
-        if len(args.id_arr) > 20: args.make_anim = False #True
-        else: args.make_anim = False
-
-        if args.make_anim:
-            outputfile = output_dir / f'{args.field}_{description_text}.mp4'
-            duration_per_frame = 0.1 #sec
-            writer = imageio.get_writer(outputfile, mode='I', fps=int(1. / duration_per_frame))
-
-        # ----------------------initiliasing dataframe-------------------------------
-        all_lines_to_plot = ['OII', 'Hb', 'OIII', 'Ha', 'NeIII-3867' if args.AGN_diag == 'Ne3O2' else 'SII'] # from blue to red
-        all_lines_to_save = args.line_list
-        measured_quantities_to_plot = ['BPT', 'logq', 'logOH_R23', 'SFR', 'F115W/Ha'] # ['EB_V', 'SFR', 'Te', 'logOH_Te', 'logOH_R23']
-
-        if args.write_file:
-            basic_cols = ['field', 'objid', 'ra', 'dec', 'redshift']
-            flag_cols = ['radfit_extent_kpc', 'snr_cut', 'flag_only_seg', 'flag_vorbin', 'vor_snr', 'vor_line']
-            cols_in_df = np.hstack([basic_cols, flag_cols, np.hstack([[item + '_int', item + '_int_u', item + '_EW', item + '_EW_u'] for item in all_lines_to_save]), np.hstack([[item + '_int', item + '_cen', item + '_slope'] for item in measured_quantities_to_plot])])
-            df = pd.DataFrame(columns=cols_in_df)
-
-            # -------checking if about to write the same columns-----------
-            if os.path.exists(str(outfilename).replace('.csv', '.txt')): os.remove(str(outfilename).replace('.csv', '.txt'))
-            if os.path.exists(outfilename):
-                if args.clobber:
-                    os.remove(outfilename)
-                    print(f'Deleting existing {outfilename}')
-                else:
-                    existing_df = pd.read_table(outfilename, delim_whitespace=True)
-                    existing_cols = existing_df.columns
-                    if set(existing_cols) != set(cols_in_df):
-                        new_cols = set(cols_in_df) - set(existing_cols)
-                        print(
-                        f'Existing dataframe at {outfilename} has a different set of columns (the difference being {new_cols}) than currently trying to '
-                        f'write it in. Either delete/double check the existing file, OR use --clobber to overwrite the '
-                        f'existing file. Aborting.')
-                        sys.exit()
-
-        # ---------plotting fit vs stellar mass-----------------------------
-        if args.plot_slope_vs_mass:
-            df_starburst_slope = pd.DataFrame(columns=['field', 'objid', 'ra', 'dec', 'redshift', 'F115W_slope', 'Ha_slope', 'Ha/F115W_slope'])
-
-        # ---------plotting spatially resolved BPT-----------------------------
-        if args.plot_BPT:
-            fig, ax = plt.subplots(1, figsize=(8, 6))
-            cmap_arr = np.tile(['Reds_r', 'Greens_r', 'Purples_r', 'Greys_r', 'Oranges_r', 'Blues_r', 'YlGnBu_r', 'BuPu_r', 'GnBu_r', 'spring'], 10)
-
-        # ---------lotting metallicity profiles and gradients----------------------
-        if args.plot_metallicity:
-            df_logOH_radfit = pd.DataFrame(columns=['field', 'objid', 'logOH_int', 'log_OH_int_u', 'logOH_slope', 'logOH_slope_u', 'logOH_cen', 'logOH_cen_u', 'logOH_diagnostic'])
-
-        # ------------looping over the provided object IDs-----------------------
-        for index, args.id in enumerate(args.id_arr):
-            start_time3 = datetime.now()
-            print(f'\nCommencing ID {args.id} which is {index+1} of {len(args.id_arr)}..')
-
-            # ------determining directories---------
-            output_subdir = output_dir / f'{args.id:05d}{pixscale_text}'
-            full_fits_file1 = output_subdir / f'{args.field}_{args.id:05d}.full.fits'
-            full_fits_file2 = product_dir / 'full' / f'{args.field}_{args.id:05d}.full.fits'
-            maps_fits_file = product_dir / 'maps' / f'{args.field}_{args.id:05d}.maps.fits'
-
-            if os.path.exists(full_fits_file1): # if the fits files are in sub-directories for individual objects
-                full_filename = full_fits_file1
-                od_filename = output_subdir/ f'{args.field}_{args.id:05d}.1D.fits'
-
-            elif os.path.exists(maps_fits_file): # if the fits files are in Products/
-                full_filename = maps_fits_file
-                od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.1D.fits'
-
-            elif os.path.exists(full_fits_file2): # if the fits files are in Products/
-                full_filename = full_fits_file2
-                od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.1D.fits'
-
-            else:
-                print(f'Could not find {full_fits_file1} or {full_fits_file2} or {maps_fits_file} for ID {args.id}, so skipping it.')
+            if os.path.exists(outfilename) and not args.clobber and args.write_file:
+                print(f'result file for {args.field} already exists as {outfilename}, so skipping this field.')
                 continue
 
-            if not os.path.exists(od_filename): od_filename = Path(str(od_filename).replace('.1D.', '.spec1D.'))
-
-            # ------------read in fits files--------------------------------
-            if os.path.exists(full_filename):
-                full_hdu = fits.open(full_filename)
-            else:
-                print('Full fits file does not exists, cannot proceed, so skipping..')
+            # ---------prep the catalog file--------------------
+            catalog_file = product_dir / f'{args.field}_photcat.fits'
+            if os.path.exists(catalog_file):
+                catalog = GTable.read(catalog_file)
+            elif args.do_all_obj:
+                print(f'photcat file for {args.field} does not exist, please download from gdrive or run data reduction. Until then, skipping this field.')
                 continue
 
-            if os.path.exists(od_filename):
-                od_hdu = fits.open(od_filename)
+            # --------determine which objects to loop over----------
+            if args.do_all_obj:
+                if args.re_extract: args.id_arr = ids_to_re_extract_dict[args.field]
+                else: args.id_arr = catalog['id']
             else:
-                print('1D fits file does not exists, cannot proceed, so skipping..')
-                continue
+                args.id_arr = id_arr
 
-            # ----------determining global parameters------------
-            args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
-            args.available_lines = np.array(['OIII' if item == 'OIII-5007' else item for item in args.available_lines]) # replace 'OIII-5007' with 'OIII'
-            args.z = full_hdu[0].header['REDSHIFT']
-            args.ndfilt = full_hdu[0].header['NDFILT']
-            args.nlines = full_hdu[0].header['NUMLINES']
-            args.distance = cosmo.comoving_distance(args.z)
-            args.pix_arcsec = full_hdu[5].header['PIXASEC']
-            args.pa_arr = np.unique([full_hdu[0].header[item] for item in list(full_hdu[0].header.keys()) if 'PA00' in item])
-            try: args.mag = catalog[catalog['id'] == args.id]['mag_auto'].data.data[0]
-            except: args.mag = np.nan
+            if args.start_id: args.id_arr = args.id_arr[args.start_id - 1:]
+            if len(args.id_arr) == 1: args.plot_separately = False
+            fig_dir = output_dir / f'{description_text}'
+            fig_dir.mkdir(parents=True, exist_ok=True)
 
-            line_wcs = pywcs.WCS(full_hdu['DSCI'].header)
-            args.pix_size_arcsec = utils.get_wcs_pscale(line_wcs)
-            imsize_arcsec = full_hdu['DSCI'].data.shape[0] * args.pix_size_arcsec
-            args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
-            args.EB_V = 0. # until gets over-written, if both H alpha and H beta lines are present
+            # ---------for diplay and amimations----------------
+            if len(args.id_arr) > 20: args.hide = True # if too many plots, do not display them, just save them
+            if len(args.id_arr) > 20: args.make_anim = False #True
+            else: args.make_anim = False
 
-            # ---------------segmentation map---------------
-            segmentation_map = full_hdu['SEG'].data
-            args.segmentation_map = trim_image(segmentation_map, args)
+            if args.make_anim:
+                outputfile = output_dir / f'{args.field}_{description_text}.mp4'
+                duration_per_frame = 0.1 #sec
+                writer = imageio.get_writer(outputfile, mode='I', fps=int(1. / duration_per_frame))
 
-            # ---------------dust value---------------
-            if all([line in args.available_lines for line in ['Ha', 'Hb']]) and not args.test_cutout:
-                try: args.EB_V = get_EB_V_int(full_hdu, args, verbose=True)
-                except: args.EB_V = 0.
+            # ----------------------initiliasing dataframe-------------------------------
+            all_lines_to_plot = ['OII', 'Hb', 'OIII', 'Ha', 'NeIII-3867' if args.AGN_diag == 'Ne3O2' else 'SII'] # from blue to red
+            all_lines_to_save = args.line_list
+            measured_quantities_to_plot = ['BPT', 'logq', 'logOH_R23', 'SFR', 'F115W/Ha'] # ['EB_V', 'SFR', 'Te', 'logOH_Te', 'logOH_R23']
 
-            # ---------------voronoi binning stuff---------------
-            if args.vorbin and args.voronoi_line is not None:
-                if args.voronoi_line in args.available_lines:
-                    line_map, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True)
-                    args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
-                    if args.debug_vorbin:
-                        print(f'Running in --debug_vorbin mode, hence not proceeding further.')
-                        continue
-                else:
-                    print(f'Requested line for voronoi binning {args.voronoi_line} not available, therefore skipping this object..')
-                    continue
+            if args.write_file:
+                basic_cols = ['field', 'objid', 'ra', 'dec', 'redshift']
+                flag_cols = ['radfit_extent_kpc', 'snr_cut', 'flag_only_seg', 'flag_vorbin', 'vor_snr', 'vor_line']
+                cols_in_df = np.hstack([basic_cols, flag_cols, np.hstack([[item + '_int', item + '_int_u', item + '_EW', item + '_EW_u'] for item in all_lines_to_save]), np.hstack([[item + '_int', item + '_cen', item + '_slope'] for item in measured_quantities_to_plot])])
+                df = pd.DataFrame(columns=cols_in_df)
 
-                if args.voronoi_bin_IDs is None:
-                    print(f'Voronoi binning was not possible, therefore skipping this object..')
-                    continue
+                # -------checking if about to write the same columns-----------
+                if os.path.exists(str(outfilename).replace('.csv', '.txt')): os.remove(str(outfilename).replace('.csv', '.txt'))
+                if os.path.exists(outfilename):
+                    if args.clobber:
+                        os.remove(outfilename)
+                        print(f'Deleting existing {outfilename}')
+                    else:
+                        existing_df = pd.read_table(outfilename, delim_whitespace=True)
+                        existing_cols = existing_df.columns
+                        if set(existing_cols) != set(cols_in_df):
+                            new_cols = set(cols_in_df) - set(existing_cols)
+                            print(
+                            f'Existing dataframe at {outfilename} has a different set of columns (the difference being {new_cols}) than currently trying to '
+                            f'write it in. Either delete/double check the existing file, OR use --clobber to overwrite the '
+                            f'existing file. Aborting.')
+                            sys.exit()
 
-            # ---------------radial profile stuff---------------
-            if args.plot_radial_profiles:
-                seg_map = full_hdu['SEG'].data
-                distance_map = get_distance_map(np.shape(seg_map), args)
-                distance_map = np.ma.compressed(np.ma.masked_where(seg_map != args.id, distance_map))
-                args.radius_max = np.max(distance_map)
-            else:
-                args.radius_max = np.nan
-
-            # ---------initialising the starburst figure------------------------------
-            if args.test_cutout or args.plot_direct_filters:
-                fig = plot_direct_images_all_filters(full_hdu, args)
-
-                # ---------decorating and saving the figure------------------------------
-                fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-                main_text = 'direct_filter_images' if args.plot_direct_filters else 'cutout_tests'
-                figname = fig_dir / f'{args.field}_{args.id:05d}_{main_text}{only_seg_text}{vorbin_text}.png'
+            # ---------plotting fit vs stellar mass-----------------------------
+            if args.plot_slope_vs_mass:
+                df_starburst_slope = pd.DataFrame(columns=['field', 'objid', 'ra', 'dec', 'redshift', 'F115W_slope', 'Ha_slope', 'Ha/F115W_slope'])
 
             # ---------plotting spatially resolved BPT-----------------------------
-            elif args.plot_BPT:
-                ax, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, ax, args, cmap=args.diverging_cmap if args.colorcol == 'distance_from_AGN_line' else cmap_arr[index], index=index)
+            if args.plot_BPT:
+                fig, ax = plt.subplots(1, figsize=(8, 6))
+                cmap_arr = np.tile(['Reds_r', 'Greens_r', 'Purples_r', 'Greys_r', 'Oranges_r', 'Blues_r', 'YlGnBu_r', 'BuPu_r', 'GnBu_r', 'spring'], 10)
 
-            # ---------initialising the starburst figure------------------------------
-            elif args.plot_starburst:
-                fig, ratio_map, starburst_radfit = plot_starburst_figure(full_hdu, args)
+            # ---------lotting metallicity profiles and gradients----------------------
+            if args.plot_metallicity:
+                df_logOH_radfit = pd.DataFrame(columns=['field', 'objid', 'logOH_int', 'log_OH_int_u', 'logOH_slope', 'logOH_slope_u', 'logOH_cen', 'logOH_cen_u', 'logOH_diagnostic', 'logOH_branch'])
 
-                # ---------decorating and saving the figure------------------------------
-                fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-                figname = fig_dir / f'{args.field}_{args.id:05d}_starburst_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}.png'
+            # ------------looping over the provided object IDs-----------------------
+            for index, args.id in enumerate(args.id_arr):
+                start_time3 = datetime.now()
+                print(f'\nCommencing ID {args.id} which is {index+1} of {len(args.id_arr)}..')
 
-                # ---------plotting fit vs stellar mass-----------------------------
-                if args.plot_slope_vs_mass:
-                    this_row = np.hstack(([args.field, args.id, full_hdu[0].header['RA'], full_hdu[0].header['DEC'], args.z], np.array(starburst_radfit)[:, 0]))
-                    this_df = pd.DataFrame(dict(map(lambda i, j: (i, [j]), df_starburst_slope.columns, this_row)))
-                    df_starburst_slope = pd.concat([df_starburst_slope, this_df])
+                # ------determining directories---------
+                output_subdir = output_dir / f'{args.id:05d}{pixscale_text}'
+                full_fits_file1 = output_subdir / f'{args.field}_{args.id:05d}.full.fits'
+                full_fits_file2 = product_dir / 'full' / f'{args.field}_{args.id:05d}.full.fits'
+                maps_fits_file = product_dir / 'maps' / f'{args.field}_{args.id:05d}.maps.fits'
 
-            # ---------initialising the metallicity figure------------------------------
-            elif args.plot_metallicity:
-                if args.mask_agn or args.Zdiag == 'P25': _, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_AGN_line map, without actually plotting the BPT diagram
-                fig, logOH_map, logOH_int, logOH_radfit = plot_metallicity_fig(full_hdu, args)
-                df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_int.n, logOH_int.s, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s, args.Zdiag]
+                if os.path.exists(full_fits_file1): # if the fits files are in sub-directories for individual objects
+                    full_filename = full_fits_file1
+                    od_filename = output_subdir/ f'{args.field}_{args.id:05d}.1D.fits'
 
-                # ---------decorating and saving the figure------------------------------
-                fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-                figname = fig_dir / f'{args.field}_{args.id:05d}_metallicity_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}.png'
+                elif os.path.exists(maps_fits_file): # if the fits files are in Products/
+                    full_filename = maps_fits_file
+                    od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.1D.fits'
 
-            # ---------initialising the metallicity figure------------------------------
-            elif args.plot_DIG:
-                if all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
-                    if args.mask_agn or args.Zdiag == 'P25': _, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_AGN_line map, without actually plotting the BPT diagram
-                    fig, dig_map = plot_DIG_figure(full_hdu, args)
+                elif os.path.exists(full_fits_file2): # if the fits files are in Products/
+                    full_filename = full_fits_file2
+                    od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.1D.fits'
+
+                else:
+                    print(f'Could not find {full_fits_file1} or {full_fits_file2} or {maps_fits_file} for ID {args.id}, so skipping it.')
+                    continue
+
+                if not os.path.exists(od_filename): od_filename = Path(str(od_filename).replace('.1D.', '.spec1D.'))
+
+                # ------------read in fits files--------------------------------
+                if os.path.exists(full_filename):
+                    full_hdu = fits.open(full_filename)
+                else:
+                    print('Full fits file does not exists, cannot proceed, so skipping..')
+                    continue
+
+                if os.path.exists(od_filename):
+                    od_hdu = fits.open(od_filename)
+                else:
+                    print('1D fits file does not exists, cannot proceed, so skipping..')
+                    continue
+
+                # ----------determining global parameters------------
+                args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
+                args.available_lines = np.array(['OIII' if item == 'OIII-5007' else item for item in args.available_lines]) # replace 'OIII-5007' with 'OIII'
+                args.z = full_hdu[0].header['REDSHIFT']
+                args.ndfilt = full_hdu[0].header['NDFILT']
+                args.nlines = full_hdu[0].header['NUMLINES']
+                args.distance = cosmo.comoving_distance(args.z)
+                args.pix_arcsec = full_hdu[5].header['PIXASEC']
+                args.pa_arr = np.unique([full_hdu[0].header[item] for item in list(full_hdu[0].header.keys()) if 'PA00' in item])
+                try: args.mag = catalog[catalog['id'] == args.id]['mag_auto'].data.data[0]
+                except: args.mag = np.nan
+
+                line_wcs = pywcs.WCS(full_hdu['DSCI'].header)
+                args.pix_size_arcsec = utils.get_wcs_pscale(line_wcs)
+                imsize_arcsec = full_hdu['DSCI'].data.shape[0] * args.pix_size_arcsec
+                args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
+                args.EB_V = 0. # until gets over-written, if both H alpha and H beta lines are present
+
+                # ---------------segmentation map---------------
+                segmentation_map = full_hdu['SEG'].data
+                args.segmentation_map = trim_image(segmentation_map, args)
+
+                # ---------------dust value---------------
+                if all([line in args.available_lines for line in ['Ha', 'Hb']]) and not args.test_cutout:
+                    try: args.EB_V = get_EB_V_int(full_hdu, args, verbose=True)
+                    except: args.EB_V = 0.
+
+                # ---------------voronoi binning stuff---------------
+                if args.vorbin and args.voronoi_line is not None:
+                    if args.voronoi_line in args.available_lines:
+                        line_map, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True)
+                        args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
+                        if args.debug_vorbin:
+                            print(f'Running in --debug_vorbin mode, hence not proceeding further.')
+                            continue
+                    else:
+                        print(f'Requested line for voronoi binning {args.voronoi_line} not available, therefore skipping this object..')
+                        continue
+
+                    if args.voronoi_bin_IDs is None:
+                        print(f'Voronoi binning was not possible, therefore skipping this object..')
+                        continue
+
+                # ---------------radial profile stuff---------------
+                if args.plot_radial_profiles:
+                    seg_map = full_hdu['SEG'].data
+                    distance_map = get_distance_map(np.shape(seg_map), args)
+                    distance_map = np.ma.compressed(np.ma.masked_where(seg_map != args.id, distance_map))
+                    args.radius_max = np.max(distance_map)
+                else:
+                    args.radius_max = np.nan
+
+                # ---------initialising the starburst figure------------------------------
+                if args.test_cutout or args.plot_direct_filters:
+                    fig = plot_direct_images_all_filters(full_hdu, args)
 
                     # ---------decorating and saving the figure------------------------------
                     fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-                    figname = fig_dir / f'{args.field}_{args.id:05d}_DIG_maps{radial_plot_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}.png'
+                    main_text = 'direct_filter_images' if args.plot_direct_filters else 'cutout_tests'
+                    figname = fig_dir / f'{args.field}_{args.id:05d}_{main_text}{only_seg_text}{vorbin_text}.png'
+
+                # ---------plotting spatially resolved BPT-----------------------------
+                elif args.plot_BPT:
+                    ax, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, ax, args, cmap=args.diverging_cmap if args.colorcol == 'distance_from_AGN_line' else cmap_arr[index], index=index)
+
+                # ---------initialising the starburst figure------------------------------
+                elif args.plot_starburst:
+                    fig, ratio_map, starburst_radfit = plot_starburst_figure(full_hdu, args)
+
+                    # ---------decorating and saving the figure------------------------------
+                    fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+                    figname = fig_dir / f'{args.field}_{args.id:05d}_starburst_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}.png'
+
+                    # ---------plotting fit vs stellar mass-----------------------------
+                    if args.plot_slope_vs_mass:
+                        this_row = np.hstack(([args.field, args.id, full_hdu[0].header['RA'], full_hdu[0].header['DEC'], args.z], np.array(starburst_radfit)[:, 0]))
+                        this_df = pd.DataFrame(dict(map(lambda i, j: (i, [j]), df_starburst_slope.columns, this_row)))
+                        df_starburst_slope = pd.concat([df_starburst_slope, this_df])
+
+                # ---------initialising the metallicity figure------------------------------
+                elif args.plot_metallicity:
+                    if args.mask_agn or args.Zdiag == 'P25': _, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_AGN_line map, without actually plotting the BPT diagram
+                    fig, logOH_map, logOH_int, logOH_radfit = plot_metallicity_fig(full_hdu, args)
+                    df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_int.n, logOH_int.s, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s, args.Zdiag, args.Zbranch]
+
+                    # ---------decorating and saving the figure------------------------------
+                    fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+                    Zbranch_text = '' if args.Zdiag in ['NB', 'P25', 'Te'] else f'-{args.Zbranch}'
+                    figname = fig_dir / f'{args.field}_{args.id:05d}_metallicity_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}.png'
+
+                # ---------initialising the metallicity figure------------------------------
+                elif args.plot_DIG:
+                    if all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']]):
+                        if args.mask_agn or args.Zdiag == 'P25': _, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_AGN_line map, without actually plotting the BPT diagram
+                        fig, dig_map = plot_DIG_figure(full_hdu, args)
+
+                        # ---------decorating and saving the figure------------------------------
+                        fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+                        figname = fig_dir / f'{args.field}_{args.id:05d}_DIG_maps{radial_plot_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}.png'
+                    else:
+                        print(f'Necessary lines not present to be able to do DIG diagnostics. So skipping this object..')
+                        continue
+
+                # ---------initialising the full figure------------------------------
                 else:
-                    print(f'Necessary lines not present to be able to do DIG diagnostics. So skipping this object..')
-                    continue
+                    nrow = len(all_lines_to_plot) + 1
+                    nquant_col = 2
+                    if args.plot_ratio_maps: nquant_col += 1
+                    ncol = nquant_col
+                    if args.plot_snr: ncol += nquant_col
+                    if args.plot_radial_profiles: ncol += nquant_col
 
-            # ---------initialising the full figure------------------------------
-            else:
-                nrow = len(all_lines_to_plot) + 1
-                nquant_col = 2
-                if args.plot_ratio_maps: nquant_col += 1
-                ncol = nquant_col
-                if args.plot_snr: ncol += nquant_col
-                if args.plot_radial_profiles: ncol += nquant_col
+                    figsize = (18, 12) if ncol == 9 else (13, 12) if ncol == 6 else (10, 2) if ncol == 3 else (6, 2)
+                    figsize = (figsize[0] / args.fig_scale_factor, figsize[1] / args.fig_scale_factor)
+                    fig = plt.figure(figsize=figsize, layout='constrained')
 
-                figsize = (18, 12) if ncol == 9 else (13, 12) if ncol == 6 else (10, 2) if ncol == 3 else (6, 2)
-                figsize = (figsize[0] / args.fig_scale_factor, figsize[1] / args.fig_scale_factor)
-                fig = plt.figure(figsize=figsize, layout='constrained')
+                    axis_dirimg = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 0), colspan=1)
+                    axis_1dspec = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 1), colspan=ncol - 1)
+                    col_loc = 0
 
-                axis_dirimg = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 0), colspan=1)
-                axis_1dspec = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 1), colspan=ncol - 1)
-                col_loc = 0
-
-                # ---------setting up emission line map axes----------------
-                ax_em_lines = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # OII, H beta, OIII, H alpha, SII maps
-                if args.plot_snr:
-                    col_loc += 1
-                    ax_em_lines_snr = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # OII, H beta, OIII, H alpha, SII SNRs
-                if args.plot_radial_profiles:
-                    col_loc += 1
-                    ax_em_lines_radprof = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # OII, H beta, OIII, H alpha, SII radial profiles
-
-                # ---------setting up line ratio map axes----------------
-                if args.plot_ratio_maps:
-                    col_loc += 1
-                    ax_ratio_maps = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # O3Hb, S2Ha, O3S2, N2S2, O3O2 ratio maps
-                    ax_o3hb, ax_s2ha, ax_o3s2, ax_ne3o2, ax_o3o2 = ax_ratio_maps
-
+                    # ---------setting up emission line map axes----------------
+                    ax_em_lines = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # OII, H beta, OIII, H alpha, SII maps
                     if args.plot_snr:
                         col_loc += 1
-                        ax_ratio_maps_snr = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # O3Hb, S2Ha, O3S2, N2S2, O3O2 ratio SNRs
-                        ax_o3hb_snr, ax_s2ha_snr, ax_o3s2_snr, ax_ne3o2_snr, ax_o3o2_snr = ax_ratio_maps_snr
+                        ax_em_lines_snr = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # OII, H beta, OIII, H alpha, SII SNRs
                     if args.plot_radial_profiles:
                         col_loc += 1
-                        ax_ratio_maps_radprof = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # O3Hb, S2Ha, O3S2, N2S2, O3O2 ratio radial profiles
-                        ax_o3hb_radprof, ax_s2ha_radprof, ax_o3s2_radprof, ax_ne3o2_radprof, ax_o3o2_radprof = ax_ratio_maps_radprof
+                        ax_em_lines_radprof = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # OII, H beta, OIII, H alpha, SII radial profiles
 
-                # ---------setting up measured quantity axes----------------
-                col_loc += 1
-                ax_quant = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # BPT, log(q), Z, SFR, Ha/F115W maps
-                ax1, ax2, ax3, ax4, ax5 = ax_quant
-                if args.plot_snr:
+                    # ---------setting up line ratio map axes----------------
+                    if args.plot_ratio_maps:
+                        col_loc += 1
+                        ax_ratio_maps = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # O3Hb, S2Ha, O3S2, N2S2, O3O2 ratio maps
+                        ax_o3hb, ax_s2ha, ax_o3s2, ax_ne3o2, ax_o3o2 = ax_ratio_maps
+
+                        if args.plot_snr:
+                            col_loc += 1
+                            ax_ratio_maps_snr = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # O3Hb, S2Ha, O3S2, N2S2, O3O2 ratio SNRs
+                            ax_o3hb_snr, ax_s2ha_snr, ax_o3s2_snr, ax_ne3o2_snr, ax_o3o2_snr = ax_ratio_maps_snr
+                        if args.plot_radial_profiles:
+                            col_loc += 1
+                            ax_ratio_maps_radprof = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # O3Hb, S2Ha, O3S2, N2S2, O3O2 ratio radial profiles
+                            ax_o3hb_radprof, ax_s2ha_radprof, ax_o3s2_radprof, ax_ne3o2_radprof, ax_o3o2_radprof = ax_ratio_maps_radprof
+
+                    # ---------setting up measured quantity axes----------------
                     col_loc += 1
-                    ax_quant_snr = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # BPT, log(q), Z, SFR, Ha/F115W SNRs
-                    ax1_snr, ax2_snr, ax3_snr, ax4_snr, ax5_snr = ax_quant_snr
-                if args.plot_radial_profiles:
-                    col_loc += 1
-                    ax_quant_radprof = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)]  # BPT, log(q), Z, SFR, Ha/F115W radial profiles
-                    ax1_radprof, ax2_radprof, ax3_radprof, ax4_radprof, ax5_radprof = ax_quant_radprof
+                    ax_quant = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # BPT, log(q), Z, SFR, Ha/F115W maps
+                    ax1, ax2, ax3, ax4, ax5 = ax_quant
+                    if args.plot_snr:
+                        col_loc += 1
+                        ax_quant_snr = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)] # BPT, log(q), Z, SFR, Ha/F115W SNRs
+                        ax1_snr, ax2_snr, ax3_snr, ax4_snr, ax5_snr = ax_quant_snr
+                    if args.plot_radial_profiles:
+                        col_loc += 1
+                        ax_quant_radprof = [plt.subplot2grid(shape=(nrow, ncol), loc=(item, col_loc), colspan=1) for item in np.arange(1, nrow)]  # BPT, log(q), Z, SFR, Ha/F115W radial profiles
+                        ax1_radprof, ax2_radprof, ax3_radprof, ax4_radprof, ax5_radprof = ax_quant_radprof
 
-                # ---------direct imaging------------------------------
-                axis_dirimg = plot_direct_image(full_hdu, axis_dirimg, args)
+                    # ---------direct imaging------------------------------
+                    axis_dirimg = plot_direct_image(full_hdu, axis_dirimg, args)
 
-                # ---------1D spectra------------------------------
-                axis_1dspec = plot_1d_spectra(od_hdu, axis_1dspec, args)
+                    # ---------1D spectra------------------------------
+                    axis_1dspec = plot_1d_spectra(od_hdu, axis_1dspec, args)
 
-                # -----------------emission line maps---------------
-                for ind, line in enumerate(all_lines_to_plot):
-                    if line in args.available_lines:
-                        ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu_r', vmin=-20, vmax=-18, hide_yaxis=False, hide_xaxis=ind < nrow - 2, hide_cbar=False, snr_ax=ax_em_lines_snr[ind] if args.plot_snr else None, radprof_ax=ax_em_lines_radprof[ind] if args.plot_radial_profiles else None)
+                    # -----------------emission line maps---------------
+                    for ind, line in enumerate(all_lines_to_plot):
+                        if line in args.available_lines:
+                            ax_em_lines[ind] = plot_emission_line_map(line, full_hdu, ax_em_lines[ind], args, cmap='BuPu_r', vmin=-20, vmax=-18, hide_yaxis=False, hide_xaxis=ind < nrow - 2, hide_cbar=False, snr_ax=ax_em_lines_snr[ind] if args.plot_snr else None, radprof_ax=ax_em_lines_radprof[ind] if args.plot_radial_profiles else None)
+                        else:
+                            fig.delaxes(ax_em_lines[ind])
+                            if args.plot_snr: fig.delaxes(ax_em_lines_snr[ind])
+                            if args.plot_radial_profiles: fig.delaxes(ax_em_lines_radprof[ind])
+
+                    # -----------------emission line ratio maps---------------
+                    if args.plot_ratio_maps:
+                        cmap_ratio = 'RdPu_r'
+                        # -----------------emission line ratio maps: O3Hb---------------
+                        if all([line in args.available_lines for line in ['OIII', 'Hb']]):
+                            ax_o3hb = plot_line_ratio_map('OIII', 'Hb', full_hdu, ax_o3hb, args, cmap=cmap_ratio, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=True, hide_cbar=False, snr_ax=ax_o3hb_snr if args.plot_snr else None, radprof_ax=ax_o3hb_radprof if args.plot_radial_profiles else None)
+                        else:
+                            fig.delaxes(ax_o3hb)
+                            if args.plot_snr: fig.delaxes(ax_o3hb_snr)
+                            if args.plot_radial_profiles: fig.delaxes(ax_o3hb_radprof)
+
+                        # -----------------emission line ratio maps: S2Ha---------------
+                        if all([line in args.available_lines for line in ['SII', 'Ha']]):
+                            ax_s2ha = plot_line_ratio_map('SII', 'Ha', full_hdu, ax_s2ha, args, cmap=cmap_ratio, vmin=-1.5, vmax=0.5, hide_xaxis=True, hide_yaxis=True, hide_cbar=False, snr_ax=ax_s2ha_snr if args.plot_snr else None, radprof_ax=ax_s2ha_radprof if args.plot_radial_profiles else None)
+                        else:
+                            fig.delaxes(ax_s2ha)
+                            if args.plot_snr: fig.delaxes(ax_s2ha_snr)
+                            if args.plot_radial_profiles: fig.delaxes(ax_s2ha_radprof)
+
+                        # -----------------emission line ratio maps: O3S2---------------
+                        if all([line in args.available_lines for line in ['OIII', 'SII']]):
+                            ax_o3s2 = plot_line_ratio_map('OIII', 'SII', full_hdu, ax_o3s2, args, cmap=cmap_ratio, vmin=-0.5, vmax=1.5, hide_xaxis=True, hide_yaxis=True, hide_cbar=False, snr_ax=ax_o3s2_snr if args.plot_snr else None, radprof_ax=ax_o3s2_radprof if args.plot_radial_profiles else None)
+                        else:
+                            fig.delaxes(ax_o3s2)
+                            if args.plot_snr: fig.delaxes(ax_o3s2_snr)
+                            if args.plot_radial_profiles: fig.delaxes(ax_o3s2_radprof)
+
+                        # -----------------emission line ratio maps: N2S2---------------
+                        if all([line in args.available_lines for line in ['NeIII-3867', 'OII']]):
+                            ax_ne3o2 = plot_line_ratio_map('NeIII-3867', 'OII', full_hdu, ax_ne3o2, args, cmap=cmap_ratio, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=True, hide_cbar=False, snr_ax=ax_ne3o2_snr if args.plot_snr else None, radprof_ax=ax_ne3o2_radprof if args.plot_radial_profiles else None)
+                        else:
+                            fig.delaxes(ax_ne3o2)
+                            if args.plot_snr: fig.delaxes(ax_ne3o2_snr)
+                            if args.plot_radial_profiles: fig.delaxes(ax_ne3o2_radprof)
+
+                        # -----------------emission line ratio maps: O3O2---------------
+                        if all([line in args.available_lines for line in ['OIII', 'OII']]):
+                            ax_o3o2 = plot_line_ratio_map('OIII', 'OII', full_hdu, ax_o3o2, args, cmap=cmap_ratio, vmin=-0.5, vmax=0.5, hide_xaxis=False, hide_yaxis=True, hide_cbar=False, snr_ax=ax_o3o2_snr if args.plot_snr else None, radprof_ax=ax_o3o2_radprof if args.plot_radial_profiles else None)
+                        else:
+                            fig.delaxes(ax_o3o2)
+                            if args.plot_snr: fig.delaxes(ax_o3o2_snr)
+                            if args.plot_radial_profiles: fig.delaxes(ax_o3o2_radprof)
+
+                    # # ---------------dust map---------------
+                    # if all([line in args.available_lines for line in ['Ha', 'Hb']]):
+                    #     try: ax2, EB_V_map, EB_V_radfit, EB_V_int = plot_EB_V_map(full_hdu, ax2, args, radprof_ax=rax2)
+                    #     except:
+                    #         EB_V_map, EB_V_radfit, EB_V_int = np.nan, [np.nan, np.nan], np.nan
+                    #         pass
+                    # else:
+                    #     fig.delaxes(ax2)
+                    #     if args.plot_radial_profiles: fig.delaxes(rax2)
+                    #     EB_V_map, EB_V_radfit, EB_V_int = np.nan, [np.nan, np.nan], np.nan
+                    #
+                    # # ---------------electron temperature map---------------
+                    # if all([line in args.available_lines for line in ['OIII-4363', 'OIII']]):
+                    #     try: ax3, Te_map, Te_radfit, Te_int = plot_Te_map(full_hdu, ax3, args, radprof_ax=rax3)
+                    #     except: pass
+                    # else:
+                    #     fig.delaxes(ax3)
+                    #     if args.plot_radial_profiles: fig.delaxes(rax3)
+                    #
+                    # # ---------------metallicity maps---------------
+                    # if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
+                    #     if 'OIII-4363' in args.available_lines:
+                    #         try: ax4, logOH_Te_map, logOH_Te_radfit, logOH_Te_int = plot_Z_Te_map(full_hdu, ax4, args, radprof_ax=rax4)
+                    #         except: pass
+                    #     try: ax5, logOH_map, logOH_radfit, logOH_int = plot_Z_R23_map(full_hdu, ax5, args, radprof_ax=rax5)
+                    #     except: pass
+                    # else:
+                    #     fig.delaxes(ax4)
+                    #     fig.delaxes(ax5)
+                    #     if args.plot_radial_profiles:
+                    #         fig.delaxes(rax4)
+                    #         fig.delaxes(rax5)
+
+                    # ---------------BPT map------------------
+                    if (args.AGN_diag in ['VO87', 'H21'] and all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']])) or \
+                        (args.AGN_diag in ['O2O3', 'O2Hb'] and all([line in args.available_lines for line in ['OIII', 'Hb', 'OII']])) or \
+                        (args.AGN_diag in ['Ne3O2'] and all([line in args.available_lines for line in ['OIII', 'Hb', 'OII', 'NeIII-3867']])):
+                        ax1, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, ax1_radprof, args, cmap='viridis', ax_inset=ax1)
                     else:
-                        fig.delaxes(ax_em_lines[ind])
-                        if args.plot_snr: fig.delaxes(ax_em_lines_snr[ind])
-                        if args.plot_radial_profiles: fig.delaxes(ax_em_lines_radprof[ind])
+                        args.distance_from_AGN_line_map = None
+                        fig.delaxes(ax1)
+                        if args.plot_radial_profiles: fig.delaxes(ax1_radprof)
+                    if args.plot_snr: fig.delaxes(ax1_snr)
 
-                # -----------------emission line ratio maps---------------
-                if args.plot_ratio_maps:
-                    cmap_ratio = 'RdPu_r'
-                    # -----------------emission line ratio maps: O3Hb---------------
-                    if all([line in args.available_lines for line in ['OIII', 'Hb']]):
-                        ax_o3hb = plot_line_ratio_map('OIII', 'Hb', full_hdu, ax_o3hb, args, cmap=cmap_ratio, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=True, hide_cbar=False, snr_ax=ax_o3hb_snr if args.plot_snr else None, radprof_ax=ax_o3hb_radprof if args.plot_radial_profiles else None)
-                    else:
-                        fig.delaxes(ax_o3hb)
-                        if args.plot_snr: fig.delaxes(ax_o3hb_snr)
-                        if args.plot_radial_profiles: fig.delaxes(ax_o3hb_radprof)
-
-                    # -----------------emission line ratio maps: S2Ha---------------
-                    if all([line in args.available_lines for line in ['SII', 'Ha']]):
-                        ax_s2ha = plot_line_ratio_map('SII', 'Ha', full_hdu, ax_s2ha, args, cmap=cmap_ratio, vmin=-1.5, vmax=0.5, hide_xaxis=True, hide_yaxis=True, hide_cbar=False, snr_ax=ax_s2ha_snr if args.plot_snr else None, radprof_ax=ax_s2ha_radprof if args.plot_radial_profiles else None)
-                    else:
-                        fig.delaxes(ax_s2ha)
-                        if args.plot_snr: fig.delaxes(ax_s2ha_snr)
-                        if args.plot_radial_profiles: fig.delaxes(ax_s2ha_radprof)
-
-                    # -----------------emission line ratio maps: O3S2---------------
-                    if all([line in args.available_lines for line in ['OIII', 'SII']]):
-                        ax_o3s2 = plot_line_ratio_map('OIII', 'SII', full_hdu, ax_o3s2, args, cmap=cmap_ratio, vmin=-0.5, vmax=1.5, hide_xaxis=True, hide_yaxis=True, hide_cbar=False, snr_ax=ax_o3s2_snr if args.plot_snr else None, radprof_ax=ax_o3s2_radprof if args.plot_radial_profiles else None)
-                    else:
-                        fig.delaxes(ax_o3s2)
-                        if args.plot_snr: fig.delaxes(ax_o3s2_snr)
-                        if args.plot_radial_profiles: fig.delaxes(ax_o3s2_radprof)
-
-                    # -----------------emission line ratio maps: N2S2---------------
-                    if all([line in args.available_lines for line in ['NeIII-3867', 'OII']]):
-                        ax_ne3o2 = plot_line_ratio_map('NeIII-3867', 'OII', full_hdu, ax_ne3o2, args, cmap=cmap_ratio, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=True, hide_cbar=False, snr_ax=ax_ne3o2_snr if args.plot_snr else None, radprof_ax=ax_ne3o2_radprof if args.plot_radial_profiles else None)
-                    else:
-                        fig.delaxes(ax_ne3o2)
-                        if args.plot_snr: fig.delaxes(ax_ne3o2_snr)
-                        if args.plot_radial_profiles: fig.delaxes(ax_ne3o2_radprof)
-
-                    # -----------------emission line ratio maps: O3O2---------------
+                    # ---------------logq map------------------
                     if all([line in args.available_lines for line in ['OIII', 'OII']]):
-                        ax_o3o2 = plot_line_ratio_map('OIII', 'OII', full_hdu, ax_o3o2, args, cmap=cmap_ratio, vmin=-0.5, vmax=0.5, hide_xaxis=False, hide_yaxis=True, hide_cbar=False, snr_ax=ax_o3o2_snr if args.plot_snr else None, radprof_ax=ax_o3o2_radprof if args.plot_radial_profiles else None)
+                        ax2, logq_map, logq_radfit, logq_int = plot_q_O32_map(full_hdu, ax2, args, radprof_ax=ax2_radprof if args.plot_radial_profiles else None, snr_ax=ax2_snr if args.plot_snr else None)
                     else:
-                        fig.delaxes(ax_o3o2)
-                        if args.plot_snr: fig.delaxes(ax_o3o2_snr)
-                        if args.plot_radial_profiles: fig.delaxes(ax_o3o2_radprof)
+                        fig.delaxes(ax2)
+                        if args.plot_radial_profiles: fig.delaxes(ax2_radprof)
+                        if args.plot_snr: fig.delaxes(ax2_snr)
 
-                # # ---------------dust map---------------
-                # if all([line in args.available_lines for line in ['Ha', 'Hb']]):
-                #     try: ax2, EB_V_map, EB_V_radfit, EB_V_int = plot_EB_V_map(full_hdu, ax2, args, radprof_ax=rax2)
-                #     except:
-                #         EB_V_map, EB_V_radfit, EB_V_int = np.nan, [np.nan, np.nan], np.nan
-                #         pass
-                # else:
-                #     fig.delaxes(ax2)
-                #     if args.plot_radial_profiles: fig.delaxes(rax2)
-                #     EB_V_map, EB_V_radfit, EB_V_int = np.nan, [np.nan, np.nan], np.nan
-                #
-                # # ---------------electron temperature map---------------
-                # if all([line in args.available_lines for line in ['OIII-4363', 'OIII']]):
-                #     try: ax3, Te_map, Te_radfit, Te_int = plot_Te_map(full_hdu, ax3, args, radprof_ax=rax3)
-                #     except: pass
-                # else:
-                #     fig.delaxes(ax3)
-                #     if args.plot_radial_profiles: fig.delaxes(rax3)
-                #
-                # # ---------------metallicity maps---------------
-                # if all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
-                #     if 'OIII-4363' in args.available_lines:
-                #         try: ax4, logOH_Te_map, logOH_Te_radfit, logOH_Te_int = plot_Z_Te_map(full_hdu, ax4, args, radprof_ax=rax4)
-                #         except: pass
-                #     try: ax5, logOH_map, logOH_radfit, logOH_int = plot_Z_R23_map(full_hdu, ax5, args, radprof_ax=rax5)
-                #     except: pass
-                # else:
-                #     fig.delaxes(ax4)
-                #     fig.delaxes(ax5)
-                #     if args.plot_radial_profiles:
-                #         fig.delaxes(rax4)
-                #         fig.delaxes(rax5)
+                    # ---------------metallicity map---------------
+                    ax3, logOH_map, logOH_radfit, logOH_int = plot_Z_map(full_hdu, ax3, args, radprof_ax=ax3_radprof if args.plot_radial_profiles else None, snr_ax=ax3_snr if args.plot_snr else None)
 
-                # ---------------BPT map------------------
-                if (args.AGN_diag in ['VO87', 'H21'] and all([line in args.available_lines for line in ['OIII', 'Hb', 'SII', 'Ha']])) or \
-                    (args.AGN_diag in ['O2O3', 'O2Hb'] and all([line in args.available_lines for line in ['OIII', 'Hb', 'OII']])) or \
-                    (args.AGN_diag in ['Ne3O2'] and all([line in args.available_lines for line in ['OIII', 'Hb', 'OII', 'NeIII-3867']])):
-                    ax1, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, ax1_radprof, args, cmap='viridis', ax_inset=ax1)
-                else:
-                    args.distance_from_AGN_line_map = None
-                    fig.delaxes(ax1)
-                    if args.plot_radial_profiles: fig.delaxes(ax1_radprof)
-                if args.plot_snr: fig.delaxes(ax1_snr)
+                    # ---------------SFR map------------------
+                    if 'Ha' in args.available_lines:
+                        ax4, SFR_map, SFR_radfit, SFR_int = plot_SFR_map(full_hdu, ax4, args, radprof_ax=ax4_radprof if args.plot_radial_profiles else None, snr_ax=ax4_snr if args.plot_snr else None)
+                    else:
+                        fig.delaxes(ax4)
+                        if args.plot_radial_profiles: fig.delaxes(ax4_radprof)
+                        if args.plot_snr: fig.delaxes(ax4_snr)
 
-                # ---------------logq map------------------
-                if all([line in args.available_lines for line in ['OIII', 'OII']]):
-                    ax2, logq_map, logq_radfit, logq_int = plot_q_O32_map(full_hdu, ax2, args, radprof_ax=ax2_radprof if args.plot_radial_profiles else None, snr_ax=ax2_snr if args.plot_snr else None)
-                else:
-                    fig.delaxes(ax2)
-                    if args.plot_radial_profiles: fig.delaxes(ax2_radprof)
-                    if args.plot_snr: fig.delaxes(ax2_snr)
+                    # ---------------F115W/Ha map------------------
+                    if 'Ha' in args.available_lines:
+                        ax5, SB_map, SB_radfit = plot_starburst_map(full_hdu, ax5, args, radprof_axes=ax5_radprof if args.plot_radial_profiles else None, snr_axes=ax5_snr if args.plot_snr else None)
+                    else:
+                        fig.delaxes(ax5)
+                        if args.plot_radial_profiles: fig.delaxes(ax5_radprof)
+                        if args.plot_snr: fig.delaxes(ax5_snr)
 
-                # ---------------metallicity map---------------
-                ax3, logOH_map, logOH_radfit, logOH_int = plot_Z_map(full_hdu, ax3, args, radprof_ax=ax3_radprof if args.plot_radial_profiles else None, snr_ax=ax3_snr if args.plot_snr else None)
+                    # ---------decorating and saving the figure------------------------------
+                    fig.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.95)
+                    fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
+                    figname = fig_dir / f'{args.field}_{args.id:05d}_{description_text}{vorbin_text}.png'
 
-                # ---------------SFR map------------------
-                if 'Ha' in args.available_lines:
-                    ax4, SFR_map, SFR_radfit, SFR_int = plot_SFR_map(full_hdu, ax4, args, radprof_ax=ax4_radprof if args.plot_radial_profiles else None, snr_ax=ax4_snr if args.plot_snr else None)
-                else:
-                    fig.delaxes(ax4)
-                    if args.plot_radial_profiles: fig.delaxes(ax4_radprof)
-                    if args.plot_snr: fig.delaxes(ax4_snr)
+                # --------for talk plots--------------
+                if not args.plot_BPT:
+                    if args.fortalk:
+                        mplcyberpunk.add_glow_effects()
+                        try: mplcyberpunk.make_lines_glow()
+                        except: pass
+                        try: mplcyberpunk.make_scatter_glow()
+                        except: pass
 
-                # ---------------F115W/Ha map------------------
-                if 'Ha' in args.available_lines:
-                    ax5, SB_map, SB_radfit = plot_starburst_map(full_hdu, ax5, args, radprof_axes=ax5_radprof if args.plot_radial_profiles else None, snr_axes=ax5_snr if args.plot_snr else None)
-                else:
-                    fig.delaxes(ax5)
-                    if args.plot_radial_profiles: fig.delaxes(ax5_radprof)
-                    if args.plot_snr: fig.delaxes(ax5_snr)
+                    fig.savefig(figname, transparent=args.fortalk, dpi=1000 if args.fontsize <= 5 else 200)
+                    print(f'Saved figure at {figname}')
+                    if args.hide: plt.close('all')
+                    else: plt.show(block=False)
 
-                # ---------decorating and saving the figure------------------------------
-                fig.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.95)
-                fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-                figname = fig_dir / f'{args.field}_{args.id:05d}_{description_text}{vorbin_text}.png'
+                # ------------------making animation--------------------------
+                if args.make_anim:
+                    print(f'Appending file {figname} to animation..')  #
+                    try: writer.append_data(imageio.imread(figname))
+                    except (ValueError, IOError) as e: print(f'Skipping snapshot due to ' + str(e))
 
-            # --------for talk plots--------------
-            if not args.plot_BPT:
+                # ----------appending and writing to catalog file-----------------
+                if args.write_file and not (args.test_cutout or args.plot_starburst or args.plot_metallicity):
+
+                    # -------collating all the integrated line fluxes from the HDU header----------
+                    line_properties = []
+                    for line in all_lines_to_save:
+                        try:
+                            line_index = np.where(args.available_lines == line)[0][0]
+                            flux = full_hdu[0].header[f'FLUX{line_index + 1:03d}']
+                            flux_err = full_hdu[0].header[f'ERR{line_index + 1:03d}']
+                            line_properties += [flux, flux_err]
+                        except IndexError:
+                            line_properties += [np.nan, np.nan]
+                        try:
+                            line_index = np.where(args.available_lines == line)[0][0]
+                            line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
+                            ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}'] # rest-frame EW
+                            ew_err = full_hdu[2].header[f'EWHW_{line_index_in_cov:03d}']
+                            line_properties += [ew, ew_err]
+                        except IndexError:
+                            line_properties += [np.nan, np.nan]
+
+                    # -------collating all the measured quantities----------
+                    measured_quants = []
+                    for quantity in measured_quantities_to_plot:
+                        if quantity + '_int' in locals():
+                            measured_quants += [locals()[quantity + '_int']]
+                        else:
+                            measured_quants += [np.nan]
+                        if quantity + '_radfit' in locals():
+                            try: measured_quants += [locals()[quantity + '_radfit'][0].n, locals()[quantity + '_radfit'][1].n]
+                            except AttributeError: measured_quants += [np.nan, np.nan]
+                        else:
+                            measured_quants += [np.nan, np.nan]
+
+                    basic_data = [args.field, f'{args.id:05d}{pixscale_text}', full_hdu[0].header['RA'], full_hdu[0].header['DEC'], args.z]
+                    flag_data = [args.radius_max, args.snr_cut if args.snr_cut is not None else np.nan, args.only_seg, args.vorbin, args.voronoi_snr if args.vorbin else np.nan, args.voronoi_line if args.vorbin else np.nan]
+                    this_row = np.hstack([basic_data, flag_data, line_properties, measured_quants])
+                    this_df = pd.DataFrame(dict(map(lambda i, j: (i, [j]), cols_in_df, this_row)))
+                    this_df = this_df.replace('N/A', np.nan)
+                    df = pd.concat([df, this_df])
+
+                    if not os.path.isfile(outfilename) or (args.clobber and index == 0):
+                        this_df.to_csv(outfilename, index=None, header='column_names')
+                        print(f'Wrote to catalog file {outfilename}')
+                    else:
+                        this_df.to_csv(outfilename, index=None, mode='a', header=False)
+                        print(f'Appended to catalog file {outfilename}')
+
+                print(f'Completed id {args.id} in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(args.id_arr) - index - 1} to go!')
+
+            # ------------------writing out Z gradient fits, for making MZGR plot later--------------------------
+            if args.plot_metallicity:
+                outfilename = args.output_dir / 'catalogs' / f'logOHgrad_df{snr_text}{only_seg_text}{vorbin_text}.txt'
+                df_logOH_radfit.to_csv(outfilename, index=None, mode='a', header=not os.path.exists(outfilename))
+                print(f'Appended metallicity gradient fits to catalog file {outfilename}')
+
+            # ---------plotting spatially resolved BPT-----------------------------
+            if args.plot_BPT:
+                fig.subplots_adjust(left=0.15, right=0.99, bottom=0.1, top=0.95)
+                fig.text(0.15, 0.9, f'{args.field}: IDs {",".join(np.array(args.id_arr).astype(str))}', fontsize=args.fontsize, c='k', ha='left', va='top')
+
+                # -----------save figure----------------
+                figname = fig_dir / f'{args.field}_{",".join(np.array(args.id_arr).astype(str))}_BPT{snr_text}{only_seg_text}{vorbin_text}_AGN_diag_{args.AGN_diag}.png'
+                fig.savefig(figname, transparent=args.fortalk)
+                print(f'Saved figure at {figname}')
+                plt.show(block=False)
+
+            # -----------plotting F115W/Ha slope vs stellar mass--------------
+            if args.plot_slope_vs_mass:
+                print(f'Now plotting fit slopess vs stellar mass..')
+                df_starburst_slope = get_crossmatch_with_cosmos(df_starburst_slope, args)
+                df_starburst_slope['redshift'] = df_starburst_slope['redshift'].astype(np.float32)
+
+                # -----------plotting stuff with the resultant intersecting dataframe--------
+                fig, ax = plt.subplots(1, figsize=(8, 6))
+                fig.subplots_adjust(left=0.1, right=0.85, bottom=0.1, top=0.95)
+                figname = fig_dir / f'{args.field}_lp_mass_vs_ha-f115w_slope{snr_text}{only_seg_text}{vorbin_text}.png'
+
+                # ---------SFMS from df-------
+                p = ax.scatter(df_starburst_slope['lp_mass'].values, unp.nominal_values(df_starburst_slope['Ha/F115W_slope'].values), c=df_starburst_slope['redshift'].values, marker='s', s=100, lw=1, edgecolor='k')
+                ax.errorbar(df_starburst_slope['lp_mass'].values, unp.nominal_values(df_starburst_slope['Ha/F115W_slope'].values), yerr=unp.std_devs(df_starburst_slope['Ha/F115W_slope'].values), c='gray', fmt='none', lw=1)
+                cbar = plt.colorbar(p)
+                cbar.set_label('Redshift')
+
+                # ---------annotate axes and save figure-------
+                ax.set_xlabel(r'log M$_*$/M$_{\odot}$')
+                ax.set_ylabel(r'H$_\alpha$/F115W slope')
+
+                ax.set_ylim(-1.0, 1.0)
+
+                # --------for talk plots--------------
                 if args.fortalk:
                     mplcyberpunk.add_glow_effects()
                     try: mplcyberpunk.make_lines_glow()
@@ -3029,120 +3153,10 @@ if __name__ == "__main__":
                     try: mplcyberpunk.make_scatter_glow()
                     except: pass
 
-                fig.savefig(figname, transparent=args.fortalk, dpi=1000 if args.fontsize <= 5 else 200)
-                print(f'Saved figure at {figname}')
-                if args.hide: plt.close('all')
-                else: plt.show(block=False)
+                fig.savefig(figname, transparent=args.fortalk)
+                print(f'\nSaved figure as {figname}')
+                plt.show(block=False)
 
-            # ------------------making animation--------------------------
-            if args.make_anim:
-                print(f'Appending file {figname} to animation..')  #
-                try: writer.append_data(imageio.imread(figname))
-                except (ValueError, IOError) as e: print(f'Skipping snapshot due to ' + str(e))
-
-            # ----------appending and writing to catalog file-----------------
-            if args.write_file and not (args.test_cutout or args.plot_starburst or args.plot_metallicity):
-
-                # -------collating all the integrated line fluxes from the HDU header----------
-                line_properties = []
-                for line in all_lines_to_save:
-                    try:
-                        line_index = np.where(args.available_lines == line)[0][0]
-                        flux = full_hdu[0].header[f'FLUX{line_index + 1:03d}']
-                        flux_err = full_hdu[0].header[f'ERR{line_index + 1:03d}']
-                        line_properties += [flux, flux_err]
-                    except IndexError:
-                        line_properties += [np.nan, np.nan]
-                    try:
-                        line_index = np.where(args.available_lines == line)[0][0]
-                        line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
-                        ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}'] # rest-frame EW
-                        ew_err = full_hdu[2].header[f'EWHW_{line_index_in_cov:03d}']
-                        line_properties += [ew, ew_err]
-                    except IndexError:
-                        line_properties += [np.nan, np.nan]
-
-                # -------collating all the measured quantities----------
-                measured_quants = []
-                for quantity in measured_quantities_to_plot:
-                    if quantity + '_int' in locals():
-                        measured_quants += [locals()[quantity + '_int']]
-                    else:
-                        measured_quants += [np.nan]
-                    if quantity + '_radfit' in locals():
-                        try: measured_quants += [locals()[quantity + '_radfit'][0].n, locals()[quantity + '_radfit'][1].n]
-                        except AttributeError: measured_quants += [np.nan, np.nan]
-                    else:
-                        measured_quants += [np.nan, np.nan]
-
-                basic_data = [args.field, f'{args.id:05d}{pixscale_text}', full_hdu[0].header['RA'], full_hdu[0].header['DEC'], args.z]
-                flag_data = [args.radius_max, args.snr_cut if args.snr_cut is not None else np.nan, args.only_seg, args.vorbin, args.voronoi_snr if args.vorbin else np.nan, args.voronoi_line if args.vorbin else np.nan]
-                this_row = np.hstack([basic_data, flag_data, line_properties, measured_quants])
-                this_df = pd.DataFrame(dict(map(lambda i, j: (i, [j]), cols_in_df, this_row)))
-                this_df = this_df.replace('N/A', np.nan)
-                df = pd.concat([df, this_df])
-
-                if not os.path.isfile(outfilename) or (args.clobber and index == 0):
-                    this_df.to_csv(outfilename, index=None, header='column_names')
-                    print(f'Wrote to catalog file {outfilename}')
-                else:
-                    this_df.to_csv(outfilename, index=None, mode='a', header=False)
-                    print(f'Appended to catalog file {outfilename}')
-
-            print(f'Completed id {args.id} in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(args.id_arr) - index - 1} to go!')
-
-        # ------------------writing out Z gradient fits, for making MZGR plot later--------------------------
-        if args.plot_metallicity:
-            outfilename = args.output_dir / 'catalogs' / f'logOHgrad_df{snr_text}{only_seg_text}{vorbin_text}.txt'
-            df_logOH_radfit.to_csv(outfilename, index=None, mode='a', header=not os.path.exists(outfilename))
-            print(f'Appended metallicity gradient fits to catalog file {outfilename}')
-
-        # ---------plotting spatially resolved BPT-----------------------------
-        if args.plot_BPT:
-            fig.subplots_adjust(left=0.15, right=0.99, bottom=0.1, top=0.95)
-            fig.text(0.15, 0.9, f'{args.field}: IDs {",".join(np.array(args.id_arr).astype(str))}', fontsize=args.fontsize, c='k', ha='left', va='top')
-
-            # -----------save figure----------------
-            figname = fig_dir / f'{args.field}_{",".join(np.array(args.id_arr).astype(str))}_BPT{snr_text}{only_seg_text}{vorbin_text}_AGN_diag_{args.AGN_diag}.png'
-            fig.savefig(figname, transparent=args.fortalk)
-            print(f'Saved figure at {figname}')
-            plt.show(block=False)
-
-        # -----------plotting F115W/Ha slope vs stellar mass--------------
-        if args.plot_slope_vs_mass:
-            print(f'Now plotting fit slopess vs stellar mass..')
-            df_starburst_slope = get_crossmatch_with_cosmos(df_starburst_slope, args)
-            df_starburst_slope['redshift'] = df_starburst_slope['redshift'].astype(np.float32)
-
-            # -----------plotting stuff with the resultant intersecting dataframe--------
-            fig, ax = plt.subplots(1, figsize=(8, 6))
-            fig.subplots_adjust(left=0.1, right=0.85, bottom=0.1, top=0.95)
-            figname = fig_dir / f'{args.field}_lp_mass_vs_ha-f115w_slope{snr_text}{only_seg_text}{vorbin_text}.png'
-
-            # ---------SFMS from df-------
-            p = ax.scatter(df_starburst_slope['lp_mass'].values, unp.nominal_values(df_starburst_slope['Ha/F115W_slope'].values), c=df_starburst_slope['redshift'].values, marker='s', s=100, lw=1, edgecolor='k')
-            ax.errorbar(df_starburst_slope['lp_mass'].values, unp.nominal_values(df_starburst_slope['Ha/F115W_slope'].values), yerr=unp.std_devs(df_starburst_slope['Ha/F115W_slope'].values), c='gray', fmt='none', lw=1)
-            cbar = plt.colorbar(p)
-            cbar.set_label('Redshift')
-
-            # ---------annotate axes and save figure-------
-            ax.set_xlabel(r'log M$_*$/M$_{\odot}$')
-            ax.set_ylabel(r'H$_\alpha$/F115W slope')
-
-            ax.set_ylim(-1.0, 1.0)
-
-            # --------for talk plots--------------
-            if args.fortalk:
-                mplcyberpunk.add_glow_effects()
-                try: mplcyberpunk.make_lines_glow()
-                except: pass
-                try: mplcyberpunk.make_scatter_glow()
-                except: pass
-
-            fig.savefig(figname, transparent=args.fortalk)
-            print(f'\nSaved figure as {figname}')
-            plt.show(block=False)
-
-        print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index2 - 1} to go!')
+            print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index2 - 1} to go!')
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

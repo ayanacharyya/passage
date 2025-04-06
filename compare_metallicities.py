@@ -4,7 +4,7 @@
     Author : Ayan
     Created: 02-04-25
     Example: run compare_metallicities.py --field Par028 --id 300,1303,1634,1849,2171,2727,2867 --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --AGN_diag Ne3O2 --Zdiag O3O2,R3,P25,NB --use_original_NB_grid --colorcol radius --debug_Zdiag
-             run compare_metallicities.py --field Par028 --id 300 --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --AGN_diag Ne3O2 --Zdiag O3O2,R3,NB --colorcol radius --debug_Zdiag
+             run compare_metallicities.py --field Par028 --id 300 --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --AGN_diag Ne3O2 --Zdiag O3O2,R3,NB --Zbranch low --colorcol radius --debug_Zdiag
 '''
 from make_diagnostic_maps import plot_2D_map, plot_radial_profile
 from header import *
@@ -65,7 +65,8 @@ if __name__ == "__main__":
             if Zdiag == 'NB_orig_grid':
                 fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_NB_AGNdiag_{args.AGN_diag}_orig_grid.fits'
             else:
-                fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{Zdiag}_AGNdiag_{args.AGN_diag}.fits'
+                Zbranch_text = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
+                fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}-{args.Zbranch}_AGNdiag_{args.AGN_diag}.fits'
             if os.path.exists(fitsname):
                 hdul = fits.open(fitsname)
                 this_df = Table(hdul['tab'].data).to_pandas()
@@ -162,7 +163,7 @@ if __name__ == "__main__":
 
     # ------------saving the full figure--------------------------
     colorby_text = f'_colorby_{args.colorcol}' if args.colorcol != 'color' else ''
-    figname = plots_dir / f'{",".join(args.id_arr.astype(str))}_Zdiag_comparison_{",".join(Zdiag_arr)}_{colorby_text}.png'
+    figname = plots_dir / f'{",".join(args.id_arr.astype(str))}_Zdiag_comparison_{",".join(Zdiag_arr)}{Zbranch_text}_{colorby_text}.png'
     fig.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
