@@ -2110,7 +2110,7 @@ def plot_metallicity_fig(full_hdu, args):
     # ---------saving the metallicity maps as fits files-------------
     if logOH_map is not None:
         NB_text = '_orig_grid' if args.use_original_NB_grid and args.Zdiag == 'NB' else ''
-        exclude_text = '_without_' + ','.join(args.exclude_lines) if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
+        exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
         Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
         output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{NB_text}{exclude_text}.fits'
         logOH_map_val = np.where(logOH_map.mask, np.nan, unp.nominal_values(logOH_map.data))
@@ -2840,7 +2840,7 @@ if __name__ == "__main__":
                     # ---------decorating and saving the figure------------------------------
                     fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
                     Zbranch_text = '' if args.Zdiag in ['NB', 'P25', 'Te'] else f'-{args.Zbranch}'
-                    exclude_text = '_without_' + ','.join(args.exclude_lines) if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
+                    exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
                     figname = fig_dir / f'{args.field}_{args.id:05d}_metallicity_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}{exclude_text}.png'
 
                 # ---------initialising the metallicity figure------------------------------

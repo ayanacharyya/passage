@@ -21,7 +21,7 @@ if __name__ == "__main__":
     # -----figuring out the array fo diagnostics to use------------
     Zdiag_arr = args.Zdiag.split(',')
     if 'NB' in args.Zdiag and args.use_original_NB_grid: Zdiag_arr += ['NB_orig_grid']
-    if 'NB' in args.Zdiag and len(args.exclude_lines) > 0: Zdiag_arr += [f'NB_without_{",".join(args.exclude_lines)}']
+    if 'NB' in args.Zdiag and len(args.exclude_lines) > 0: Zdiag_arr += [f'NB_without_{args.exclude_lines}']
 
     args.id_arr = np.atleast_1d(args.id)
     args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
@@ -68,7 +68,7 @@ if __name__ == "__main__":
             if Zdiag == 'NB_orig_grid':
                 fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_NB_AGNdiag_{args.AGN_diag}_orig_grid.fits'
             elif 'NB_without' in Zdiag:
-                fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_NB_AGNdiag_{args.AGN_diag}_without_{",".join(args.exclude_lines)}.fits'
+                fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_NB_AGNdiag_{args.AGN_diag}_without_{args.exclude_lines}.fits'
             else:
                 Zbranch_text1 = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
                 fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{Zdiag}{Zbranch_text1}_AGNdiag_{args.AGN_diag}.fits'
