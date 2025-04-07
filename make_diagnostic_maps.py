@@ -1666,17 +1666,87 @@ def get_Z_C19(full_hdu, args):
 def get_Z(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated metallicity from a given HDU
+    Also saves the metallicity map as a fits file
     '''
-    if args.Zdiag == 'NB':
-        logOH_map, logOH_int, line_label_array = get_Z_NB(full_hdu, args)
-    elif args.Zdiag == 'KD02_R23' and all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
-        logOH_map, logOH_int = get_Z_KD02_R23(full_hdu, args, branch=args.Zbranch)
-    elif args.Zdiag == 'Te' and all([line in args.available_lines for line in ['OIII', 'OIII-4363', 'OII', 'Hb']]):
-        logOH_map, logOH_int = get_Z_Te(full_hdu, args)
-    elif args.Zdiag == 'P25' and all([line in args.available_lines for line in ['OIII', 'Ha', 'SII']]):
-        logOH_map, logOH_int = get_Z_P25(full_hdu, args)
+    # -----------determining output fits file name---------
+    NB_text = '_orig_grid' if args.use_original_NB_grid and args.Zdiag == 'NB' else ''
+    exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
+    Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
+    output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{NB_text}{exclude_text}.fits'
+
+    # ------checking if the outputfile already exists--------------
+    if os.path.exists(output_fitsname) and not args.clobber:
+        print(f'\nReading metallicity map from existing fits file {output_fitsname}')
+        hdul = fits.open(output_fitsname)
+        hdu = hdul['log_OH']
+        logOH_map = np.ma.masked_where(np.isnan(hdu.data), unp.uarray(hdu.data, hdul['log_OH_u'].data))
+        if hdu.header['LOG_OH_INT'] is None: logOH_int = ufloat(np.nan, np.nan)
+        else: logOH_int = ufloat(hdu.header['LOG_OH_INT'], hdu.header['LOG_OH_INT_ERR'])
+        if args.Zdiag == 'NB': line_label_array = hdu.header['LINES'].split(',')
+
     else:
-        logOH_map, logOH_int = get_Z_C19(full_hdu, args)
+        # --------deriving the metallicity map-------------
+        if args.Zdiag == 'NB':
+            logOH_map, logOH_int, line_label_array = get_Z_NB(full_hdu, args)
+        elif args.Zdiag == 'KD02_R23' and all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
+            logOH_map, logOH_int = get_Z_KD02_R23(full_hdu, args, branch=args.Zbranch)
+        elif args.Zdiag == 'Te' and all([line in args.available_lines for line in ['OIII', 'OIII-4363', 'OII', 'Hb']]):
+            logOH_map, logOH_int = get_Z_Te(full_hdu, args)
+        elif args.Zdiag == 'P25' and all([line in args.available_lines for line in ['OIII', 'Ha', 'SII']]):
+            logOH_map, logOH_int = get_Z_P25(full_hdu, args)
+        else:
+            logOH_map, logOH_int = get_Z_C19(full_hdu, args)
+
+        # ---------saving the metallicity maps as fits files-------------
+        if logOH_map is not None:
+            NB_text = '_orig_grid' if args.use_original_NB_grid and args.Zdiag == 'NB' else ''
+            exclude_text = f'_without_{args.exclude_lines}' if len(
+                args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
+            Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
+            output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{NB_text}{exclude_text}.fits'
+            logOH_map_val = np.where(logOH_map.mask, np.nan, unp.nominal_values(logOH_map.data))
+            logOH_map_err = np.where(logOH_map.mask, np.nan, unp.std_devs(logOH_map.data))
+
+            if args.vorbin:  # getting how many unique IDs present, so that NB does not have to run unnecessary repeats
+                bin_IDs_map = np.where(args.voronoi_bin_IDs.mask, np.nan, args.voronoi_bin_IDs.data)
+            else:
+                bin_IDs_map = np.arange(np.shape(logOH_map_val)[0] * np.shape(logOH_map_val)[1]).reshape(
+                    np.shape(logOH_map_val))
+
+            distance_map = get_distance_map(np.shape(logOH_map_val), args)
+            df = pd.DataFrame({'radius': distance_map.flatten(), 'log_OH': logOH_map_val.flatten(),
+                               'log_OH_u': logOH_map_err.flatten(), 'bin_ID': bin_IDs_map.flatten()})
+            if args.distance_from_AGN_line_map is not None: df[
+                'agn_dist'] = args.distance_from_AGN_line_map.data.flatten()
+            df = df.dropna().reset_index(drop=True)
+            df['bin_ID'] = df['bin_ID'].astype(int)
+            df = df.groupby(['bin_ID'], as_index=False).agg(np.mean)
+
+            hdr1, hdr2 = fits.Header(), fits.Header()
+            hdr1['FIELD'] = args.field
+            hdr1['OBJECT'] = args.id
+            primary_hdu = fits.PrimaryHDU(header=hdr1)
+
+            hdr2['Z_DIAG'] = args.Zdiag
+            hdr2['ZBRANCH'] = args.Zbranch
+            hdr2['AGN_DIAG'] = args.AGN_diag
+            hdr2['VORBIN_LINE'] = args.voronoi_line if args.vorbin else None
+            hdr2['VORBIN_SNR'] = args.voronoi_snr if args.vorbin else None
+            hdr2['LOG_OH_INT'] = None if np.isnan(logOH_int.n) else logOH_int.n
+            hdr2['LOG_OH_INT_ERR'] = None if np.isnan(logOH_int.s) else logOH_int.s
+            hdr2['NB_OLD_GRID'] = True if args.use_original_NB_grid and args.Zdiag == 'NB' else False
+            if 'NB' in args.Zdiag:
+                hdr2['LINES'] = ','.join(line_label_array)
+                hdr2['NLINES'] = len(line_label_array)
+
+            logOH_val_hdu = fits.ImageHDU(data=logOH_map_val, name='log_OH', header=hdr2)
+            logOH_err_hdu = fits.ImageHDU(data=logOH_map_err, name='log_OH_u')
+            binID_hdu = fits.ImageHDU(data=bin_IDs_map, name='bin_ID')
+            df_hdu = fits.BinTableHDU(Table.from_pandas(df), name='tab')
+            hdul = fits.HDUList([primary_hdu, logOH_val_hdu, logOH_err_hdu, binID_hdu, df_hdu])
+            hdul.writeto(output_fitsname, overwrite=True)
+
+            print(f'Saved metallicity maps in {output_fitsname}')
 
     if logOH_map is not None and args.mask_agn: logOH_map = np.ma.masked_where((args.distance_from_AGN_line_map > 0) | logOH_map.mask, logOH_map)
 
@@ -2093,6 +2163,8 @@ def plot_metallicity_fig(full_hdu, args):
     # --------deriving the metallicity map-------------
     if args.Zdiag == 'NB': logOH_map, logOH_int, line_label_array = get_Z(full_hdu, args)
     else: logOH_map, logOH_int = get_Z(full_hdu, args)
+
+    # --------deriving the ionisation parameter map-------------
     if args.plot_ionisation_parameter: logq_map, logq_int = get_q_O32(full_hdu, args)
 
     # ---------plotting-------------
@@ -2103,56 +2175,10 @@ def plot_metallicity_fig(full_hdu, args):
             logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
             logOH_map_snr = np.ma.masked_where(logOH_map.mask, unp.nominal_values(10 ** logOH_map.data)) / np.ma.masked_where(logOH_map.mask, unp.std_devs(10 ** logOH_map.data))
             snr_ax, _ = plot_2D_map(logOH_map_snr, snr_ax, args, takelog=False, hide_yaxis=True, label=r'Z (%s) SNR' % (args.Zdiag), cmap='cividis', vmin=0, vmax=6)
-    if args.plot_ionisation_parameter:
-        ip_ax, _ = plot_2D_map(logq_map, ip_ax, args, takelog=False, hide_yaxis=False, label=r'log q$_{\rm int}$ = %.1f $\pm$ %.1f' % (logq_int.n, logq_int.s), cmap='viridis', vmin=6.5, vmax=8.5)
+        if args.plot_ionisation_parameter:
+            ip_ax, _ = plot_2D_map(logq_map, ip_ax, args, takelog=False, hide_yaxis=False, label=r'log q$_{\rm int}$ = %.1f $\pm$ %.1f' % (logq_int.n, logq_int.s), cmap='viridis', vmin=6.5, vmax=8.5)
     else:
         logOH_radfit = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
-    # ---------saving the metallicity maps as fits files-------------
-    if logOH_map is not None:
-        NB_text = '_orig_grid' if args.use_original_NB_grid and args.Zdiag == 'NB' else ''
-        exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
-        Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
-        output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{NB_text}{exclude_text}.fits'
-        logOH_map_val = np.where(logOH_map.mask, np.nan, unp.nominal_values(logOH_map.data))
-        logOH_map_err = np.where(logOH_map.mask, np.nan, unp.std_devs(logOH_map.data))
-
-        if args.vorbin:  # getting how many unique IDs present, so that NB does not have to run unnecessary repeats
-            bin_IDs_map =  np.where(args.voronoi_bin_IDs.mask, np.nan, args.voronoi_bin_IDs.data)
-        else:
-            bin_IDs_map = np.arange(np.shape(logOH_map_val)[0] * np.shape(logOH_map_val)[1]).reshape(np.shape(logOH_map_val))
-
-        distance_map = get_distance_map(np.shape(logOH_map_val), args)
-        df = pd.DataFrame({'radius': distance_map.flatten(), 'log_OH': logOH_map_val.flatten(), 'log_OH_u': logOH_map_err.flatten(), 'bin_ID': bin_IDs_map.flatten()})
-        if args.distance_from_AGN_line_map is not None: df['agn_dist'] = args.distance_from_AGN_line_map.data.flatten()
-        df = df.dropna().reset_index(drop=True)
-        df['bin_ID'] = df['bin_ID'].astype(int)
-        df = df.groupby(['bin_ID'], as_index=False).agg(np.mean)
-
-        hdr1, hdr2 = fits.Header(), fits.Header()
-        hdr1['FIELD'] = args.field
-        hdr1['OBJECT'] = args.id
-        primary_hdu = fits.PrimaryHDU(header=hdr1)
-
-        hdr2['Z_DIAG'] = args.Zdiag
-        hdr2['ZBRANCH'] = args.Zbranch
-        hdr2['AGN_DIAG'] = args.AGN_diag
-        hdr2['VORBIN_LINE'] = args.voronoi_line if args.vorbin else None
-        hdr2['VORBIN_SNR'] = args.voronoi_snr if args.vorbin else None
-        hdr2['LOG_OH_INT'] = None if np.isnan(logOH_int.n) else logOH_int.n
-        hdr2['LOG_OH_INT_ERR'] =  None if np.isnan(logOH_int.s) else logOH_int.s
-        hdr2['NB_OLD_GRID'] = True if args.use_original_NB_grid and args.Zdiag == 'NB' else False
-        if 'NB' in args.Zdiag:
-            hdr2['LINES'] = ','.join(line_label_array)
-            hdr2['NLINES'] = len(line_label_array)
-
-        logOH_val_hdu = fits.ImageHDU(data=logOH_map_val, name='log_OH', header=hdr2)
-        logOH_err_hdu = fits.ImageHDU(data=logOH_map_err, name='log_OH_u')
-        binID_hdu = fits.ImageHDU(data=bin_IDs_map, name='bin_ID')
-        df_hdu = fits.BinTableHDU(Table.from_pandas(df), name='tab')
-        hdul = fits.HDUList([primary_hdu, logOH_val_hdu, logOH_err_hdu, binID_hdu, df_hdu])
-        hdul.writeto(output_fitsname, overwrite=True)
-
-        print(f'Saved metallicity maps in {output_fitsname}')
 
     return fig, logOH_map, logOH_int, logOH_radfit
 
@@ -2800,9 +2826,7 @@ if __name__ == "__main__":
                     seg_map = full_hdu['SEG'].data
                     distance_map = get_distance_map(np.shape(seg_map), args)
                     distance_map = np.ma.compressed(np.ma.masked_where(seg_map != args.id, distance_map))
-                    args.radius_max = np.max(distance_map)
-                else:
-                    args.radius_max = np.nan
+                    if args.radius_max is None: args.radius_max = np.max(distance_map)
 
                 # ---------initialising the starburst figure------------------------------
                 if args.test_cutout or args.plot_direct_filters:
@@ -2834,6 +2858,7 @@ if __name__ == "__main__":
                 # ---------initialising the metallicity figure------------------------------
                 elif args.plot_metallicity:
                     if args.mask_agn or args.Zdiag == 'P25': _, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_AGN_line map, without actually plotting the BPT diagram
+                    else: args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = None, None
                     fig, logOH_map, logOH_int, logOH_radfit = plot_metallicity_fig(full_hdu, args)
                     df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_int.n, logOH_int.s, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s, args.Zdiag, args.Zbranch]
 

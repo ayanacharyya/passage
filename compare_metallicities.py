@@ -10,6 +10,11 @@ from make_diagnostic_maps import plot_2D_map, plot_radial_profile
 from header import *
 from util import *
 
+plt.rcParams['ytick.direction'] = 'in'
+plt.rcParams['ytick.right'] = True
+plt.rcParams['xtick.direction'] = 'in'
+plt.rcParams['xtick.top'] = True
+
 start_time = datetime.now()
 
 # --------------------------------------------------------------------------------------------------------------------
