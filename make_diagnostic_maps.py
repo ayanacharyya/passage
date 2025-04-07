@@ -1472,7 +1472,7 @@ def get_Z_NB(full_hdu, args):
     logOH_map = compute_Z_NB(line_label_array, line_map_array)
     logOH_int = compute_Z_NB(line_label_array, line_int_array)
 
-    return logOH_map, logOH_int
+    return logOH_map, logOH_int, line_label_array
 
 # --------------------------------------------------------------------------------------------------------------------
 def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
@@ -1668,7 +1668,7 @@ def get_Z(full_hdu, args):
     Computes and returns the spatially resolved as well as intregrated metallicity from a given HDU
     '''
     if args.Zdiag == 'NB':
-        logOH_map, logOH_int = get_Z_NB(full_hdu, args)
+        logOH_map, logOH_int, line_label_array = get_Z_NB(full_hdu, args)
     elif args.Zdiag == 'KD02_R23' and all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
         logOH_map, logOH_int = get_Z_KD02_R23(full_hdu, args, branch=args.Zbranch)
     elif args.Zdiag == 'Te' and all([line in args.available_lines for line in ['OIII', 'OIII-4363', 'OII', 'Hb']]):
@@ -1680,7 +1680,8 @@ def get_Z(full_hdu, args):
 
     if logOH_map is not None and args.mask_agn: logOH_map = np.ma.masked_where((args.distance_from_AGN_line_map > 0) | logOH_map.mask, logOH_map)
 
-    return logOH_map, logOH_int
+    if 'line_label_array' in locals(): return logOH_map, logOH_int, line_label_array
+    else: return logOH_map, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_Z_map(full_hdu, ax, args, radprof_ax=None, snr_ax=None):
@@ -1688,7 +1689,8 @@ def plot_Z_map(full_hdu, ax, args, radprof_ax=None, snr_ax=None):
     Plots the metallicity map in the given axes
     Returns the axes handles and the 2D metallicity map just produced
     '''
-    logOH_map, logOH_int = get_Z(full_hdu, args)
+    if args.Zdiag == 'NB': logOH_map, logOH_int, line_label_array = get_Z(full_hdu, args)
+    else: logOH_map, logOH_int = get_Z(full_hdu, args)
 
     if logOH_map is not None:
         lim = [7, 9]
@@ -2089,7 +2091,8 @@ def plot_metallicity_fig(full_hdu, args):
     fig.subplots_adjust(left=fig_size_dict[ncols][2], right=fig_size_dict[ncols][3], bottom=fig_size_dict[ncols][4], top=fig_size_dict[ncols][5], wspace=fig_size_dict[ncols][6], hspace=fig_size_dict[ncols][7])
 
     # --------deriving the metallicity map-------------
-    logOH_map, logOH_int = get_Z(full_hdu, args)
+    if args.Zdiag == 'NB': logOH_map, logOH_int, line_label_array = get_Z(full_hdu, args)
+    else: logOH_map, logOH_int = get_Z(full_hdu, args)
     if args.plot_ionisation_parameter: logq_map, logq_int = get_q_O32(full_hdu, args)
 
     # ---------plotting-------------
@@ -2131,12 +2134,16 @@ def plot_metallicity_fig(full_hdu, args):
         primary_hdu = fits.PrimaryHDU(header=hdr1)
 
         hdr2['Z_DIAG'] = args.Zdiag
+        hdr2['ZBRANCH'] = args.Zbranch
         hdr2['AGN_DIAG'] = args.AGN_diag
         hdr2['VORBIN_LINE'] = args.voronoi_line if args.vorbin else None
         hdr2['VORBIN_SNR'] = args.voronoi_snr if args.vorbin else None
         hdr2['LOG_OH_INT'] = None if np.isnan(logOH_int.n) else logOH_int.n
         hdr2['LOG_OH_INT_ERR'] =  None if np.isnan(logOH_int.s) else logOH_int.s
         hdr2['NB_OLD_GRID'] = True if args.use_original_NB_grid and args.Zdiag == 'NB' else False
+        if 'NB' in args.Zdiag:
+            hdr2['LINES'] = ','.join(line_label_array)
+            hdr2['NLINES'] = len(line_label_array)
 
         logOH_val_hdu = fits.ImageHDU(data=logOH_map_val, name='log_OH', header=hdr2)
         logOH_err_hdu = fits.ImageHDU(data=logOH_map_err, name='log_OH_u')
