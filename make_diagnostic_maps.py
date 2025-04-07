@@ -1638,13 +1638,13 @@ def get_Z_C19(full_hdu, args):
 
     # ----setting up Z diag debugging plots---------
     if args.debug_Zdiag:
-        fig, ax = plt.subplots(1, 2, figsize=(6, 8), sharey=True)
+        fig, ax = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
         ax[0].set_xlabel('Solution[i] + 8.69')
         if args.Zbranch == 'high': ax[1].set_xlabel('log(O/H)+12 = max(solution) + 8.69')
         elif args.Zbranch == 'low': ax[1].set_xlabel('log(O/H)+12 = min(solution) + 8.69')
         ax[0].set_ylabel(f'Observed {args.Zdiag}')
-        Z_limits = [2, 13]
-        ratio_limits = [-5, 5]
+        Z_limits = [5, 10]
+        ratio_limits = [-2, 2]
 
         xarr = np.linspace(Z_limits[0], Z_limits[1], 100)
         ax[0].plot(xarr, np.poly1d(coeff)(xarr - 8.69), lw=0.5, c='k', ls='dotted')
@@ -1660,6 +1660,13 @@ def get_Z_C19(full_hdu, args):
     logOH_map = compute_Z_C19(ratio_map, coeff, ax=ax, branch=args.Zbranch)
     logOH_int = compute_Z_C19(ratio_int, coeff, ax=ax, branch=args.Zbranch)
     logOH_int = ufloat(unp.nominal_values(np.atleast_1d(logOH_int))[0], unp.std_devs(np.atleast_1d(logOH_int))[0])
+
+    # -------saving the debugging plots---------------
+    if ax is not None:
+        Zbranch_text = '' if args.Zdiag in ['NB', 'P25', 'Te'] else f'-{args.Zbranch}'
+        figname = fig_dir / f'{args.field}_{args.id:05d}_metallicity_debug{snr_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}.png'
+        fig.savefig(figname, transparent=args.fortalk, dpi=200)
+        print(f'\nSaved figure at {figname}')
 
     return logOH_map, logOH_int
 
