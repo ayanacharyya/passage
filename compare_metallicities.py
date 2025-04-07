@@ -41,7 +41,7 @@ if __name__ == "__main__":
     Zbranch_text = '' if np.array([item in ['NB', 'P25'] for item in Zdiag_arr]).all() else f'-{args.Zbranch}'
 
     # --------setting up global variables----------------------------------
-    col_arr = ['salmon', 'sienna', 'cornflowerblue', 'darkolivegreen', 'darkgoldenrod', 'darkorchid', 'darkcyan', 'hotpink']
+    col_arr = np.tile(['salmon', 'sienna', 'cornflowerblue', 'darkolivegreen', 'darkgoldenrod', 'darkorchid', 'darkcyan', 'hotpink'], 30)
     Zdiag_label_dict = smart_dict({'NB_orig_grid': 'NB (original grid)'})
     Z_limits = [7.1, 9.1]
     color_lim_dict = {'color':[None, None, '', ''], 'bin_ID':[None, None, 'Voronoi bin ID', 'rainbow'], 'radius':[0, 5, 'Galactocentric distance (kpc)', 'cividis'], 'agn_dist':[-1, 1, f'Distance from {args.AGN_diag} SF line', args.diverging_cmap]}
@@ -131,7 +131,7 @@ if __name__ == "__main__":
                         ax.errorbar(log_int_array[Z1_index].n, log_int_array[Z2_index].n, xerr=log_int_array[Z1_index].s, yerr=log_int_array[Z2_index].s, c=col_arr[index], fmt='none', lw=0.5, alpha=0.5)
 
                         # ---plotting spatially resolved--
-                        p = ax.scatter(df[f'log_OH_{Zdiag1}'], df[f'log_OH_{Zdiag2}'], s=markersize/2, c=df[args.colorcol], lw=0, cmap=color_lim_dict[args.colorcol][3], vmin=color_lim_dict[args.colorcol][0], vmax=color_lim_dict[args.colorcol][1])
+                        p = ax.scatter(df[f'log_OH_{Zdiag1}'], df[f'log_OH_{Zdiag2}'], s=markersize/3, c=df[args.colorcol], lw=0, cmap=color_lim_dict[args.colorcol][3], vmin=color_lim_dict[args.colorcol][0], vmax=color_lim_dict[args.colorcol][1])
                         ax.errorbar(df[f'log_OH_{Zdiag1}'], df[f'log_OH_{Zdiag2}'], xerr=df[f'log_OH_{Zdiag1}_err'], yerr=df[f'log_OH_{Zdiag2}_err'], c='grey', fmt='none', lw=0.1, alpha=0.5)
 
                         # ----annotate axis----------

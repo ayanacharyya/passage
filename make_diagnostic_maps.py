@@ -1492,6 +1492,7 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
         for ax1 in ax:
             ax1.axvline(logOH_turnover, ls='--', c='k', lw=1)
             ax1.axhline(ratio_turnover, ls='--', c='k', lw=1)
+            ax1.fill_betweenx([-5, 5], reasonable_Z_limit[0], reasonable_Z_limit[1], color='cyan', alpha=0.1, lw=0)
 
     # --------determining data and masks------------
     if np.ma.isMaskedArray(ratio):

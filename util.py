@@ -143,6 +143,7 @@ def parse_args():
     parser.add_argument('--output_subdir', metavar='output_subdir', type=str, action='store', default=None, help='Any specific subdirectory (with output_dir) to put output files in; default is None (i.e. files will be put in output_dir)')
     parser.add_argument('--use_original_NB_grid', dest='use_original_NB_grid', action='store_true', default=False, help='Use the original, unmodified NebulaBayes grid? Default is no.')
     parser.add_argument('--exclude_lines', metavar='exclude_lines', type=str, action='store', default='', help='Which lines to be excluded for metallicity measurement with NB? Default is empty string, i.e., use all available lines')
+    parser.add_argument('--radius_max', metavar='radius_max', type=float, action='store', default=None, help='Impose a radius (kpc) on radial plots, to be appliedduring radial fitting; default is None i.e. extends up to the full extent of the cutout defined by args.arcsec_limit')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')

@@ -19,8 +19,8 @@ def plot_ratio_grid(df_ratios, ax, args):
     Plots the grid of a specific given line ratio for a given value of Z, q, P, on an existing axis handle
     Returns the axis handle and ratio names
     '''
-    if args.phot_models.lower() in ['mappings', 'map']: line_names_dict = {'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'NeIII':'[NeIII]3869', 'NeIII-3867':'[NeIII]3869', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31'} # to map between user input line labels and line labels used in ratio_list.txt file
-    elif args.phot_models.lower() in ['nebulabayes', 'nb']: line_names_dict = {'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'}
+    if args.phot_models.lower() in ['mappings', 'map']: line_names_dict = smart_dict({'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'NeIII':'[NeIII]3869', 'NeIII-3867':'[NeIII]3869', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31'}) # to map between user input line labels and line labels used in ratio_list.txt file
+    elif args.phot_models.lower() in ['nebulabayes', 'nb']: line_names_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'})
 
     # ------------getting the line ratio names------------------
     x_num_labels = ','.join([line_names_dict[item] for item in args.xnum_line.split(',')])
@@ -145,8 +145,8 @@ def plot_ratio_model(df_ratios, ax, args):
     style_arr = ['solid', 'dashed', 'dotted']
     thickness_arr = [1.2, 0.7, 0.3]  # len(style_arr) \times len(tickness_arr) = at least as many as "quantity2" values
     thickness_arr = np.tile(np.repeat(thickness_arr, len(thickness_arr)), 2)
-    if args.phot_models.lower() in ['mappings', 'map']: line_names_dict = {'OIII':'[OIII]5007', 'OII':'[OII]3727,29', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31', 'NeIII':'[NeIII]3869'} # to map between user input line labels and line labels used in ratio_list.txt file
-    elif args.phot_models.lower() in ['nebulabayes', 'nb']: line_names_dict = {'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'}
+    if args.phot_models.lower() in ['mappings', 'map']: line_names_dict = smart_dict({'OIII':'[OIII]5007', 'OII':'[OII]3727,29', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31', 'NeIII':'[NeIII]3869'}) # to map between user input line labels and line labels used in ratio_list.txt file
+    elif args.phot_models.lower() in ['nebulabayes', 'nb']: line_names_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'})
 
     # ------------getting the line ratio names------------------
     num_labels = ','.join([line_names_dict[item] for item in args.ynum_line.split(',')])
@@ -307,7 +307,7 @@ if __name__ == "__main__":
         df_grid['log q'] = np.round(df_grid['log U'] + np.log10(3e10), 1)
 
         quant_names_dict = {'Z':'12 + log O/H', 'log(q)':'log q', 'log(P/k)':'log P/k', 'log(U)':'log U'}
-        line_label_dict = {'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'}
+        line_label_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'})
 
         quant_names = [quant_names_dict[quant] for quant in [args.quantity1, args.quantity2, args.quantity3]]
         df_ratios = df_grid[quant_names].sort_values(by=quant_names)
