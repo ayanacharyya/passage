@@ -233,7 +233,6 @@ def parse_args():
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
-    if 'v' not in args.drv: args.drv = 'v' + args.drv
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
 
     args.field_arr = args.field.split(',')
@@ -258,9 +257,16 @@ def parse_args():
         args.input_dir = args.root_dir / f'{survey_name}_data/'
     if args.output_dir is None:
         args.output_dir = args.root_dir / f'{survey_name}_output/'
-    if 'glass' not in args.field:
-        args.input_dir = args.input_dir / args.drv
-        args.output_dir = args.output_dir / args.drv
+
+    if 'glass' in args.field and args.drv == 'v0.1':
+        args.drv = 'orig'
+    elif 'Par' in args.field and 'v' not in args.drv:
+        args.drv = 'v' + args.drv
+
+    args.input_dir = args.input_dir / args.drv
+    args.output_dir = args.output_dir / args.drv
+    (args.output_dir / 'catalogs').mkdir(exist_ok=True, parents=True)
+    (args.output_dir / 'plots').mkdir(exist_ok=True, parents=True)
 
     args.input_dir = Path(args.input_dir)
     args.output_dir = Path(args.output_dir)

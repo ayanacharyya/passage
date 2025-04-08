@@ -665,6 +665,15 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
     line_map = line_map * factor
     line_map_err = line_map_err * factor
 
+    # -------------pixel offset----------------
+    if not args.do_not_correct_pixel:
+        ndelta_xpix, ndelta_ypix = 1, 1
+        print(f'Correcting emission lines for pixel offset by {ndelta_xpix} on x and {ndelta_ypix} on y')
+        line_map = np.roll(line_map, ndelta_xpix, axis=1)
+        line_map_err = np.roll(line_map_err, ndelta_xpix, axis=1)
+        line_map = np.roll(line_map, ndelta_ypix, axis=0)
+        line_map_err = np.roll(line_map_err, ndelta_ypix, axis=0)
+
     # ----------getting a smaller cutout around the object center-----------
     line_map = trim_image(line_map, args)
     line_map_err = trim_image(line_map_err, args)
