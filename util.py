@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument('--keep', dest='keep', action='store_true', default=False, help='Keep existing plot windows open? Default is no.')
     parser.add_argument('--forpaper', dest='forpaper', action='store_true', default=False, help='Format plots to paper quality? Default is no.')
     parser.add_argument('--fortalk', dest='fortalk', action='store_true', default=False, help='Format plots suitable for putting in talks? Default is no.')
-    parser.add_argument('--drv', metavar='drv', type=str, action='store', default='v0.1', help='Which data reduction version? Default v0.1')
+    parser.add_argument('--drv', metavar='drv', type=str, action='store', default='v0.5', help='Which data reduction version? Default v0.1')
     parser.add_argument('--fontsize', metavar='fontsize', type=int, action='store', default=10, help='fontsize of plot labels, etc.; default is 15')
 
     parser.add_argument('--field', metavar='field', type=str, action='store', default='Par3', help='Which passage field? Default is Par50')
@@ -1132,6 +1132,53 @@ class smart_dict(dict):
     '''
     def __missing__(self, key):
         return key
+
+# --------------------------------------------------------------------------------------------------
+def compare_SNR(filename, line_label, radius_arcsec = 0.25):
+    '''
+    Test function to compare various measures of SNRs of a given line in a given full.fits filename
+    Returns integrated line flux, line flux map within segmentation map, and line flux map within a certain distance form the center, all with accompanying uncertainties
+    '''
+    full_hdu = fits.open(filename)
+    header = full_hdu[0].header
+
+    available_lines = np.array(header['HASLINES'].split(' '))
+    line_index = np.where(available_lines == line_label)[0][0]
+
+    line_flux_int = header[f'FLUX{line_index + 1:03d}']
+    line_err_int = header[f'ERR{line_index + 1:03d}']
+    line_int = ufloat(line_flux_int, line_err_int)
+
+    line_flux_map = full_hdu['LINE', line_label].data * 1e-17
+    line_err_map = 1e-17 / (full_hdu['LINEWHT', line_label].data ** 0.5)
+    line_map = unp.uarray(line_flux_map, line_err_map)
+
+    bad_mask = unp.nominal_values(line_map) <= 0 | ~np.isfinite(unp.std_devs(line_map))
+    seg_map = full_hdu['SEG'].data
+    seg_mask = seg_map != header['ID']
+
+    line_map_seg = np.ma.masked_where(bad_mask | seg_mask, line_map)
+    line_map_seg_sum = np.sum(line_map_seg)
+
+    line_wcs = pywcs.WCS(full_hdu['DSCI'].header)
+    pix_size_arcsec = utils.get_wcs_pscale(line_wcs)
+
+    pixscale_kpc = pix_size_arcsec/ cosmo.arcsec_per_kpc_proper(header['REDSHIFT']).value # kpc
+    center_pix = np.shape(line_map)[0] / 2.
+    distance_map = np.array([[np.sqrt((i - center_pix)**2 + (j - center_pix)**2) for j in range(np.shape(line_map)[1])] for i in range(np.shape(line_map)[0])]) * pixscale_kpc # kpc
+    radius_kpc = radius_arcsec / cosmo.arcsec_per_kpc_proper(header['REDSHIFT']).value  # converting arcsec to kpc
+    distance_mask = distance_map > radius_kpc
+
+    line_map_center = np.ma.masked_where(bad_mask | distance_mask, line_map)
+    line_map_center_sum = np.sum(line_map_center)
+
+    print(f'Obj: {header["ID"]}, line: {line_label}\n'
+          f'integrated flux = {line_int}, SNR={line_int.n / line_int.s: .1f}\n'
+          f'total sum within seg map = {line_map_seg_sum: .2e}, SNR={line_map_seg_sum.n / line_map_seg_sum.s: .1f}\n'
+          f'total sum within {radius_arcsec: .2f} arcsec (={radius_kpc: .1f} kpc) radius = {line_map_center_sum: .2e}, SNR={line_map_center_sum.n / line_map_center_sum.s: .1f}\n')
+
+    return line_int, line_map_seg, line_map_center
+
 
 # --------------------------------------------------------------------------------------------------
 args = parse_args()

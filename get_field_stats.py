@@ -26,12 +26,12 @@ from util import *
 start_time = datetime.now()
 
 # -------------------------------------------------------------------------------------------------------
-def make_set(df, condition, label, set_arr, label_arr):
+def make_set(df, condition, label, set_arr, label_arr, silent=False):
     '''
     Applies the given condition on given df and appends the ID list into a set and assigns a label
     '''
     id_list = df[condition]['par_obj'].values
-    print(f'{len(id_list)} objects meet the {label} condition')
+    if not silent: print(f'{len(id_list)} objects meet the {label} condition')
     set_arr.append(set(id_list))
     label_arr.append(label)
 
@@ -53,15 +53,14 @@ def is_line_within_filter(line, redshift, filters=None, field=None, trim_factor=
     return is_line_available
 
 # -------------------------------------------------------------------------------------------------------
-def plot_venn(df, args):
+def plot_venn(df, args, silent=False):
     '''
     To plot Venn diagrams with a given df, for a bunch of criteria
-    Plots and saves the figure
-    Returns intersecting dataframe
+    Returns intersecting dataframe and the axis handle
     '''
-    n_fields = len(pd.unique(df["field"]))
+    n_fields = len(pd.unique(df['field']))
     if 'par_obj' not in df: df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)
-    print(f'\nOut of the total {len(df)} objects in {n_fields} fields..\n')
+    if not silent: print(f'\nOut of the total {len(df)} objects in {n_fields} fields..\n')
 
     set_arr = []
     label_arr = []
@@ -71,47 +70,47 @@ def plot_venn(df, args):
 
     for line in line_list:
         condition1 = df.apply(lambda x: is_line_within_filter(line, x['redshift'], field=x['field'], trim_factor=args.trim_filter_by_wavelength_factor), axis=1)
-        set_arr, label_arr = make_set(df, condition1, f'{line} available', set_arr, label_arr)
+        set_arr, label_arr = make_set(df, condition1, f'{line} available', set_arr, label_arr, silent=silent)
 
         if 'present' in args.plot_conditions or 'SNR' in args.plot_conditions or 'EW' in args.plot_conditions:
             try:
                 condition2 = (np.isfinite(df[f'{line}_EW'])) & (df[f'{line}_EW'] > 0)
-                set_arr, label_arr = make_set(df, condition1 & condition2, f'{line} present', set_arr, label_arr)
+                set_arr, label_arr = make_set(df, condition1 & condition2, f'{line} present', set_arr, label_arr, silent=silent)
             except:
-                print(f'Could not apply the {line} present condition')
+                if not silent: print(f'Could not apply the {line} present condition')
                 pass
         if 'SNR' in args.plot_conditions or 'EW' in args.plot_conditions:
             try:
                 condition3 = df[f'{line}_SNR'] > args.SNR_thresh
-                set_arr, label_arr = make_set(df, condition1 & condition2 & condition3, f'{line} SNR > {args.SNR_thresh}', set_arr, label_arr)
+                set_arr, label_arr = make_set(df, condition1 & condition2 & condition3, f'{line} SNR > {args.SNR_thresh}', set_arr, label_arr, silent=silent)
             except:
-                print(f'Could not apply the {line} SNR condition')
+                if not silent: print(f'Could not apply the {line} SNR condition')
                 pass
         if 'EW' in args.plot_conditions:
             try:
                 condition4 = df[f'{line}_EW'] > args.EW_thresh
-                set_arr, label_arr = make_set(df, condition1 & condition2 & condition3 & condition4, f'{line} EW_r > {args.EW_thresh}; SNR > {args.SNR_thresh}', set_arr, label_arr)
+                set_arr, label_arr = make_set(df, condition1 & condition2 & condition3 & condition4, f'{line} EW_r > {args.EW_thresh}; SNR > {args.SNR_thresh}', set_arr, label_arr, silent=silent)
             except:
-                print(f'Could not apply the {line} EW condition')
+                if not silent: print(f'Could not apply the {line} EW condition')
                 pass
 
     # ---------add magnitude set------------
     if args.mag_lim is None: mag_lim = 26
     else: mag_lim = args.mag_lim
     condition = df['mag'] <= mag_lim
-    set_arr, label_arr = make_set(df, condition, f'mag <= {mag_lim}', set_arr, label_arr)
+    set_arr, label_arr = make_set(df, condition, f'mag <= {mag_lim}', set_arr, label_arr, silent=silent)
 
     # ---------add semi-major (a_image) axis set------------
     condition = df['a_image'] >= args.a_thresh
-    set_arr, label_arr = make_set(df, condition, f'a_image >= {args.a_thresh}', set_arr, label_arr)
+    set_arr, label_arr = make_set(df, condition, f'a_image >= {args.a_thresh}', set_arr, label_arr, silent=silent)
 
     # ------add redshift range set-----------
     condition = df['redshift'].between(args.zmin, args.zmax)
-    set_arr, label_arr = make_set(df, condition, f'{args.zmin}<z<{args.zmax}', set_arr, label_arr)
+    set_arr, label_arr = make_set(df, condition, f'{args.zmin}<z<{args.zmax}', set_arr, label_arr, silent=silent)
 
     # ------add number of grism orientations set-----------
     condition = df['nPA'] == 2
-    set_arr, label_arr = make_set(df, condition, '#PA = 2', set_arr, label_arr)
+    set_arr, label_arr = make_set(df, condition, '#PA = 2', set_arr, label_arr, silent=silent)
 
     # ------add number of filter sets-----------
     if 'filters' in df:
@@ -119,40 +118,40 @@ def plot_venn(df, args):
 
         for index, filter in enumerate(filter_arr):
             condition = df['n_filters'] == index + 1
-            set_arr, label_arr = make_set(df, condition, f'n_filters = {index + 1}', set_arr, label_arr)
+            set_arr, label_arr = make_set(df, condition, f'n_filters = {index + 1}', set_arr, label_arr, silent=silent)
 
             condition = df['filters'].str.contains(filter)
-            set_arr, label_arr = make_set(df, condition, f'has {filter}', set_arr, label_arr)
+            set_arr, label_arr = make_set(df, condition, f'has {filter}', set_arr, label_arr, silent=silent)
 
     # ---------add sets from visual inspection------------
     if 'Notes' in df:
-        print('\n')
+        if not silent: print('\n')
         for attribute in ['compact', 'tail', 'merging', 'neighbour', 'clumpy', 'bulge', 'pea', 'bar', 'mg']:
             condition = df['Notes'].str.contains(attribute)
-            set_arr, label_arr = make_set(df, condition, attribute, set_arr, label_arr)
+            set_arr, label_arr = make_set(df, condition, attribute, set_arr, label_arr, silent=silent)
 
-        print('\n')
+        if not silent: print('\n')
         for strong_line in ['OIII', 'Ha']:
             condition = (df[f'{strong_line} emission'].str.contains('strong')) & (df_visual['OIII emission'].str != np.nan)
-            set_arr, label_arr = make_set(df, condition, f'strong_{strong_line}', set_arr, label_arr)
+            set_arr, label_arr = make_set(df, condition, f'strong_{strong_line}', set_arr, label_arr, silent=silent)
 
-        print('\n')
+        if not silent: print('\n')
         condition = df['DQ/RQ'].str.contains('okay')
-        set_arr, label_arr = make_set(df, condition, 'RQ = okay', set_arr, label_arr)
+        set_arr, label_arr = make_set(df, condition, 'RQ = okay', set_arr, label_arr, silent=silent)
 
     # ---------add sets from cosmos dataset------------
     if 'lp_mass' in df:
-        print('\n')
+        if not silent: print('\n')
         condition = np.isfinite(df['lp_mass'])
-        set_arr, label_arr = make_set(df, condition, 'mass available', set_arr, label_arr)
+        set_arr, label_arr = make_set(df, condition, 'mass available', set_arr, label_arr, silent=silent)
 
     if 'lp_SFR' in df:
         condition = df['lp_SFR'] > args.log_SFR_thresh
-        set_arr, label_arr = make_set(df, condition, f'log sfr > {args.log_SFR_thresh}', set_arr, label_arr)
+        set_arr, label_arr = make_set(df, condition, f'log sfr > {args.log_SFR_thresh}', set_arr, label_arr, silent=silent)
 
     if 'lp_sSFR' in df:
         condition = df['lp_sSFR'] > args.log_sSFR_thresh
-        set_arr, label_arr = make_set(df, condition, f'log sSFR > {args.log_sSFR_thresh}', set_arr, label_arr)
+        set_arr, label_arr = make_set(df, condition, f'log sSFR > {args.log_sSFR_thresh}', set_arr, label_arr, silent=silent)
 
     # ----------plot the venn diagrams----------
     which_sets_to_plot = [np.array([item1 in item2 for item1 in args.plot_conditions]).any() for item2 in label_arr]
@@ -168,7 +167,7 @@ def plot_venn(df, args):
     ax = draw_venn(petal_labels=petal_labels, dataset_labels=dataset_dict.keys(), hint_hidden=False, colors=colors, figsize=(8, 6), fontsize=args.fontsize, legend_loc='lower left', ax=None)
 
     # ---------printing the conditions for each non-zero petal label----------
-    print('\n')
+    if not silent: print('\n')
     for index in range(len(petal_labels.keys())):
         if list(petal_labels.values())[index] != '':
             bool_arr = list(petal_labels.keys())[index]
@@ -176,10 +175,34 @@ def plot_venn(df, args):
             for index2 in range(len(bool_arr)):
                 if int(bool_arr[index2]) == 1:
                     cond_arr.append(label_arr[index2])
-            print(f'{int(list(petal_labels.values())[index])} objects in: {" and ".join(cond_arr)}')
+            if not silent: print(f'{int(list(petal_labels.values())[index])} objects in: {" and ".join(cond_arr)}')
 
     # -------calling the wrapper function, with automatic petal labelling (as opposed to manual calling above) but then 0 counts are displayed as such-------
     #ax = venn(dataset_dict, cmap=cmap, fmt='{size}', fontsize=8, legend_loc='upper left', ax=None)
+
+    # ----------deriving the dataframe corresponding to the innermost intersection----------
+    intersecting_set = set.intersection(*set_arr)
+    if len(intersecting_set) > 0:
+        intersecting_par_obj = np.transpose([item.split('-') for item in list(intersecting_set)])
+        df_int = pd.DataFrame({'field': intersecting_par_obj[0], 'objid':intersecting_par_obj[1]})
+        df_int['objid'] = df_int['objid'].astype(int)
+        df_int = df.merge(df_int, on=['field', 'objid'], how='inner')
+        df_int.drop('par_obj', axis=1, inplace=True)
+        if 'NUMBER' in df_int: df_int.drop('NUMBER', axis=1, inplace=True)
+    else:
+        df_int = pd.DataFrame()
+
+    return df_int, ax
+
+# -------------------------------------------------------------------------------------------------------
+def plot_venn_wrap(df, args):
+    '''
+    Wrapper for plot_venn()
+    Saves the figure
+    Returns intersecting dataframe
+    '''
+    n_fields = len(pd.unique(df['field']))
+    df_int, ax = plot_venn(df, args)
 
     # ----------annotate and save the diagram----------
     fig = ax.figure
@@ -198,18 +221,6 @@ def plot_venn(df, args):
     fig.savefig(figname, transparent=args.fortalk)
     print(f'\nSaved figure as {figname}')
     plt.show(block=False)
-
-    # ----------deriving the dataframe corresponding to the innermost intersection----------
-    intersecting_set = set.intersection(*set_arr)
-    if len(intersecting_set) > 0:
-        intersecting_par_obj = np.transpose([item.split('-') for item in list(intersecting_set)])
-        df_int = pd.DataFrame({'field': intersecting_par_obj[0], 'objid':intersecting_par_obj[1]})
-        df_int['objid'] = df_int['objid'].astype(int)
-        df_int = df.merge(df_int, on=['field', 'objid'], how='inner')
-        df_int.drop('par_obj', axis=1, inplace=True)
-        if 'NUMBER' in df_int: df_int.drop('NUMBER', axis=1, inplace=True)
-    else:
-        df_int = pd.DataFrame()
 
     return df_int
 
@@ -531,7 +542,7 @@ def read_visual_df(args):
     return df
 
 # ----------------------------------------------------------------------------------------------------------
-def get_crossmatch_with_cosmos(df, args):
+def get_crossmatch_with_cosmos(df, args, cosmos_name='web'):
     '''
     Determines crossmatch of a given dataframe with COSMOS2020 catalog
     Returns input dataframe merged with COSMOS stellar masses, etc. wherever available
@@ -546,8 +557,8 @@ def get_crossmatch_with_cosmos(df, args):
     df_cosmos = pd.DataFrame()
 
     for index, thisfield in enumerate(fields):
-        #filename = args.input_dir / 'COSMOS' /  args.drv / f'cosmos2020_objects_in_{thisfield}.fits'
-        filename = args.input_dir / 'COSMOS' /  args.drv / f'cosmoswebb_objects_in_{thisfield}.fits'
+        if 'web' in cosmos_name: filename = args.input_dir / 'COSMOS' /  f'cosmoswebb_objects_in_{thisfield}.fits'
+        elif '2020' in cosmos_name: filename = args.input_dir / 'COSMOS' /  f'cosmos2020_objects_in_{thisfield}.fits'
         if os.path.exists(filename):
             print(f'{index+1} of {len(fields)} fields: Reading COSMOS subset table from {filename}')
             if 'cosmos2020' in str(filename): df_cosmos_thisfield = read_COSMOS2020_catalog(filename=filename)
@@ -686,7 +697,7 @@ if __name__ == "__main__":
         # ------------merging cosmos datasets for the venn diagrams--------------------
         conditions_from_cosmos = ['mass', 'sfr', 'sSFR']
         if len(set(conditions_from_cosmos).intersection(set(args.plot_conditions))) > 0:
-            df = get_crossmatch_with_cosmos(df, args)
+            df = get_crossmatch_with_cosmos(df, args, cosmos_name='web')
 
         # ------------doing the photo-z vs spec-z comparison--------------------
         if args.plot_columns:
@@ -698,7 +709,7 @@ if __name__ == "__main__":
             fig = plot_sunburst_pie(df, args, outer_col='nPA', inner_col='filters')
         else:
             # ------------doing the venn diagrams--------------------
-            df_int = plot_venn(df, args)
+            df_int = plot_venn_wrap(df, args)
 
             # ------------saving the resultant intersecting dataframe--------------------
             df_int.to_csv(df_outfilename, index=None)

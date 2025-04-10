@@ -14,7 +14,7 @@ from util import *
 start_time = datetime.now()
 
 # ---------plots a grid in 2 ratios--------------------------------------
-def plot_ratio_grid(df_ratios, ax, args):
+def plot_ratio_grid(df_ratios, ax, args, color1='salmon', color2='cornflowerblue', color3='sienna'):
     '''
     Plots the grid of a specific given line ratio for a given value of Z, q, P, on an existing axis handle
     Returns the axis handle and ratio names
@@ -41,7 +41,6 @@ def plot_ratio_grid(df_ratios, ax, args):
         print(f'Slicing the model at {args.quantity3} == {args.slice_at_quantity3}')
         df_ratios = df_ratios[df_ratios[args.quantity3].isin(args.slice_at_quantity3)] # to plot grid for only one value of quantity3, to reduce clutter
 
-    color1, color2, color3 = 'salmon', 'cornflowerblue', 'sienna'
     for i, quant3 in enumerate(np.unique(df_ratios[args.quantity3])):
         df_sub = df_ratios[df_ratios[args.quantity3] == quant3]
 

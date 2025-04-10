@@ -166,7 +166,7 @@ def plot_mass_excitation(df, ax, args, mass_col='lp_mass'):
     Then overplots theoretical lines
     Returns axis handle
     '''
-    print(f'Plotting integrated BPT diagram..')
+    print(f'Plotting integrated MEx diagram..')
 
     df = df[(df['Hb_SNR'] > args.SNR_thresh) & (df['OIII_SNR'] > args.SNR_thresh)]
 

@@ -104,7 +104,7 @@ import bagpipes
 #from pywwt.qt import WWTQtClient
 
 from NebulaBayes import NB_Model
-
+import NebulaBayes
 
 import matplotlib
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
