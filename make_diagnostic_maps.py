@@ -66,7 +66,7 @@ def annotate_PAs(pa_arr, ax, fontsize=10):
     Returns the axis handle
     '''
     color = 'grey'
-    x_cen = ax.get_xlim()[1] - 0.1 * np.diff(ax.get_xlim())[0]
+    x_cen = ax.get_xlim()[1] - 0.15 * np.diff(ax.get_xlim())[0]
     y_cen = ax.get_ylim()[1] - 0.15 * np.diff(ax.get_ylim())[0]
     len = np.diff(ax.get_xlim())[0] * 0.1
 
@@ -182,7 +182,7 @@ def get_linelist(wave_lim=None):
     return lines_df
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_linelist(ax):
+def plot_linelist(ax, fontsize=10):
     '''
     Plots a list of emission line wavelengths on the given axis
     Returns axis handle
@@ -193,7 +193,7 @@ def plot_linelist(ax):
         ax.axvline(lines_df.iloc[index]['restwave'], c='cornflowerblue', lw=1)
         xpos = lines_df.iloc[index]['restwave'] + np.diff(ax.get_xlim())[0] * 0.01
         ypos = ax.get_ylim()[1] * 0.98 if index % 2 else 0.02 + ax.get_ylim()[0] * 1.02
-        ax.text(xpos, ypos, lines_df.iloc[index]['LineID'].strip(), rotation=90, va='top' if index % 2 else 'bottom', ha='left', fontsize=args.fontsize)
+        ax.text(xpos, ypos, lines_df.iloc[index]['LineID'].strip(), rotation=90, va='top' if index % 2 else 'bottom', ha='left', fontsize=fontsize)
 
     return ax
 
@@ -234,7 +234,7 @@ def plot_1d_spectra(od_hdu, ax, args):
 
     # ---vertical lines for emission line wavelengths------
     if args.plot_mappings: ax = plot_MAPPINGS_lines(ax)
-    else: ax = plot_linelist(ax)
+    else: ax = plot_linelist(ax, fontsize=args.fontsize)
 
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 

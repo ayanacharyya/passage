@@ -1124,6 +1124,25 @@ def adjust_lightness(color, amount=0.5):
     color = colorsys.hls_to_rgb(c[0], max(0.1, min(0.9, amount * c[1])), c[2])
     return color
 
+# ------------------------------------------------------------------------------
+def insert_line_in_file(line, pos, filename, output=None):
+    '''
+    Function to inserting a line in a file, given the filename and what and where to insert
+    '''
+    f = open(filename, 'r')
+    contents = f.readlines()
+    f.close()
+
+    if pos == -1: pos = len(contents)  # to append to end of file
+    contents.insert(pos, line)
+
+    if output is None: output = filename
+    f = open(output, 'w')
+    contents = ''.join(contents)
+    f.write(contents)
+    f.close()
+    return
+
 # --------------------------------------------------------------------------------------------------
 class smart_dict(dict):
     '''
