@@ -3,7 +3,7 @@
     Notes: Makes ALL plots related to PASSAGE metallicity gradient paper and saves them separately; some intentional hard-coding and reduction of flexibility in this script, for posterity
     Author : Ayan
     Created: 09-04-25
-    Example: run plots_for_zgrad_paper.py --voronoi_line NeIII-3867 --voronoi_snr 4 --colorcol radius --phot_models nb
+    Example: run plots_for_zgrad_paper.py --do_not_correct_pixel --voronoi_line NeIII-3867 --voronoi_snr 4 --colorcol radius --phot_models nb
 '''
 from header import *
 from util import *
@@ -356,6 +356,7 @@ def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False
     '''
     Plots and saves the ratio vs ratio parameter space and, optionally, a fit to its envelope, for a given photoionisation model grid
     '''
+    print(f'Plotting photoionisation grid for {ratio_y} vs {ratio_x}..')
     if args.phot_models.lower() in ['mappings', 'map']: line_label_dict = smart_dict({'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'NeIII':'[NeIII]3869', 'NeIII-3867':'[NeIII]3869', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31'}) # to map between user input line labels and line labels used in ratio_list.txt file
     elif args.phot_models.lower() in ['nebulabayes', 'nb']: line_label_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'})
     args.xnum_line, args.xden_line = ratio_x.split('/')
@@ -421,6 +422,7 @@ def plot_photoionisation_models(ratio_y, parameter_x, args):
     '''
     Plots and saves the ratio vs parameter for a given photoionisation model grid and parameter
     '''
+    print(f'Plotting photoionisation models for {ratio_y} vs {parameter_x}..')
     if args.phot_models.lower() in ['mappings', 'map']: line_label_dict = smart_dict({'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'NeIII':'[NeIII]3869', 'NeIII-3867':'[NeIII]3869', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31'}) # to map between user input line labels and line labels used in ratio_list.txt file
     elif args.phot_models.lower() in ['nebulabayes', 'nb']: line_label_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'})
     args.ynum_line, args.yden_line = ratio_y.split('/')
@@ -514,6 +516,7 @@ def plot_1D_spectra(od_hdu, ax, args):
     Plots the 1D spectra for a given object, in a given axis
     Returns the axis handle
     '''
+    print(f'Plotting 1D spectra..')
     nfilters = sum(['GRISM' in item for item in list(od_hdu[0].header.keys())])
     filters = [od_hdu[0].header[f'GRISM{item + 1:03d}'] for item in range(nfilters)]
     color = 'orangered'
@@ -546,7 +549,7 @@ def plot_1D_spectra(od_hdu, ax, args):
     ax2.set_xlabel(r'Observed wavelength ($\mu$)', fontsize=args.fontsize)
 
     # ---vertical lines for emission line wavelengths------
-    ax = plot_linelist(ax, fontsize=args.fontsize / args.fontfactor)
+    ax = plot_linelist(ax, fontsize=args.fontsize / args.fontfactor, line_list_file=HOME / 'Work/astro/Mappings/labframe.passagelinelist')
 
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
@@ -609,6 +612,7 @@ def plot_rgb_image(full_hdu, filters, ax, args):
     Plots the direct image as an RGB image, combining the given list of filters, for a given object, in a given axis
     Returns the axis handle
     '''
+    print(f'Plotting the RGB images with filters {filters}..')
     cmap_arr = ['Blues', 'Greens', 'Reds']
 
     # -------plot direct image for each filter---------
@@ -653,29 +657,17 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', takelog=True, vmin=None,
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_line_maps(full_hdu, line_labels, axes, args, cmap='cividis', vmin=None, vmax=None, hide_xaxis=False, hide_cbar=True):
-    '''
-    Plots the 2D line flux maps for a given list of lines for a given object, in a given axis
-    Returns the axis handle
-    '''
-    for index, ax in enumerate(axes):
-        line = line_labels[index]
-        line_map, _, _, _ = get_emission_line_map(line, full_hdu, args, dered=True)
-        ax = plot_2D_map(line_map, ax, line, args, cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
-
-    return axes
-
-# --------------------------------------------------------------------------------------------------------------------
 def plot_line_ratio_maps(full_hdu, ratio_labels, axes, args, cmap='cividis', vmin=None, vmax=None, hide_xaxis=False, hide_cbar=True):
     '''
     Plots the 2D line ratio maps for a given list of lines for a given object, in a given axis
     Returns the axis handle
     '''
+    print(f'Plotting the line ratio maps {ratio_labels}..')
     for index, ax in enumerate(axes):
         ratio = ratio_labels[index]
         num_line, den_line = ratio.split('/')
-        line_map_num, _, _, _ = get_emission_line_map(num_line, full_hdu, args, dered=True)
-        line_map_den, _, _, _ = get_emission_line_map(den_line, full_hdu, args, dered=True)
+        line_map_num, _, _, _ = get_emission_line_map(num_line, full_hdu, args, dered=True, silent=True)
+        line_map_den, _, _, _ = get_emission_line_map(den_line, full_hdu, args, dered=True, silent=True)
 
         bad_mask = unp.nominal_values(line_map_den.data) == 0
         line_map_den[bad_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
@@ -687,10 +679,25 @@ def plot_line_ratio_maps(full_hdu, ratio_labels, axes, args, cmap='cividis', vmi
     return axes
 
 # --------------------------------------------------------------------------------------------------------------------
+def plot_line_maps(full_hdu, line_labels, axes, args, cmap='cividis', vmin=None, vmax=None, hide_xaxis=False, hide_cbar=True):
+    '''
+    Plots the 2D line flux maps for a given list of lines for a given object, in a given axis
+    Returns the axis handle
+    '''
+    print(f'Plotting the line maps {line_labels}..')
+    for index, ax in enumerate(axes):
+        line = line_labels[index]
+        line_map, _, _, _ = get_emission_line_map(line, full_hdu, args, dered=True, silent=True)
+        ax = plot_2D_map(line_map, ax, line, args, cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
+
+    return axes
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_galaxy_example_fig(objid, field, args):
     '''
     Plots and saves a single figure with the direct image, 1D spectra, emission line maps and emission line ratio maps for a given object
     '''
+    print(f'\nPlotting example galaxy {field}:{objid}..')
     nrow = 2 # 2 rows: one for direct image + 1D spectra, one for flux maps
     if args.plot_ratio_maps: nrow += 1 # additional row for ratio maps
     ncol = len(args.line_list) # one each for OII, OIII, Hb and NeIII line
@@ -725,12 +732,12 @@ def plot_galaxy_example_fig(objid, field, args):
     args.segmentation_map = trim_image(segmentation_map, args)
 
     # ---------------dust value---------------
-    try: args.EB_V = get_EB_V_int(full_hdu, args, verbose=False)
+    try: args.EB_V = get_EB_V_int(full_hdu, args, verbose=False, silent=True)
     except: args.EB_V = 0.
 
     # ---------------voronoi binning stuff---------------
     if args.vorbin and args.voronoi_line is not None:
-        line_map, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True)
+        line_map, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True, silent=True)
         args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr, plot=False, quiet=True, args=args)
 
     # ----------plotting direct image--------------
@@ -740,7 +747,7 @@ def plot_galaxy_example_fig(objid, field, args):
     ax_1dspec = plot_1D_spectra(od_hdu, ax_1dspec, args)
 
     # ----------plotting line flux maps--------------
-    axes_line_maps = plot_line_maps(full_hdu, args.line_list, axes_line_maps, args, cmap='RdBu_r', vmin=None, vmax=None, hide_xaxis=args.plot_ratio_maps, hide_cbar=True)
+    axes_line_maps = plot_line_maps(full_hdu, args.line_list, axes_line_maps, args, cmap='RdPu_r', vmin=-20, vmax=-18, hide_xaxis=args.plot_ratio_maps, hide_cbar=True)
 
     # ----------plotting line ratio image--------------
     if args.plot_ratio_maps:
@@ -758,6 +765,7 @@ def plot_AGN_demarcation(full_hdu, args):
     '''
     Plots and saves the spatially resolved AGN demarcation for a given object
     '''
+    print(f'Plotting AGN demarcation diagram for {full_hdu[0].header["ID"]}..')
 
     return
 
@@ -788,6 +796,7 @@ def plot_metallicity_fig(full_hdu, Zdiag, args):
     '''
     Plots and saves a single figure with the direct image, 2D metallicity map and metallicity radial profile for a given object
     '''
+    print(f'Plotting metallicity ({Zdiag}) figure for {full_hdu[0].header["ID"]}..')
 
     return
 
@@ -796,6 +805,7 @@ def plot_metallicity_sfr_fig(full_hdu, Zdiag, args):
     '''
     Plots and saves a single figure with the direct image, 2D metallicity map, metallicity radial profile, SFR map, metallicity vs SFR plot for a given object
     '''
+    print(f'Plotting metallicity-SFR figure..')
 
     return
 
@@ -805,6 +815,7 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_list, args):
     Plots and saves a single figure with corner plots for comparisons across a given list of different metallicity diagnostics for a given list of objects
     Repeats that for both high and low metallicity branch solutions
     '''
+    print(f'Plotting metallicity diagnostics comparison for {Zdiag_list}..')
 
     return
 
@@ -885,7 +896,7 @@ if __name__ == "__main__":
     #df_latex = make_latex_table(df, args)
 
     # ---------individual galaxy plot: example galaxy----------------------
-    plot_galaxy_example_fig(300, 'Par028', args)
+    plot_galaxy_example_fig(1303, 'Par028', args)
     '''
     # ---------individual galaxy plots: looping over objects----------------------
     for index, obj in enumerate(objlist):

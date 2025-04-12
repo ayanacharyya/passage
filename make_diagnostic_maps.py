@@ -166,12 +166,12 @@ def plot_MAPPINGS_lines(ax):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_linelist(wave_lim=None):
+def get_linelist(wave_lim=None, line_list_file=None):
     '''
     Reads in an emission line list
     Returns list of lines that are within the given wavelength limits, as a pandas dataframe
     '''
-    line_list_file = HOME / 'Work/astro/Mappings/labframe.shortlinelist'
+    if line_list_file is None: line_list_file = HOME / 'Work/astro/Mappings/labframe.shortlinelist'
 
     lines_df = pd.read_table(line_list_file, comment='#', delim_whitespace=True)
     lines_df = lines_df[~lines_df['LineID'].str.contains('Fe')] # not interested in the numerous Fe lines
@@ -182,12 +182,12 @@ def get_linelist(wave_lim=None):
     return lines_df
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_linelist(ax, fontsize=10):
+def plot_linelist(ax, fontsize=10, line_list_file=None):
     '''
     Plots a list of emission line wavelengths on the given axis
     Returns axis handle
     '''
-    lines_df = get_linelist(wave_lim=ax.get_xlim())
+    lines_df = get_linelist(wave_lim=ax.get_xlim(), line_list_file=line_list_file)
 
     for index in range(len(lines_df)):
         ax.axvline(lines_df.iloc[index]['restwave'], c='cornflowerblue', lw=1)
@@ -596,7 +596,7 @@ def cut_by_segment(map, args):
     return cut_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_emission_line_int(line, full_hdu, args, dered=True):
+def get_emission_line_int(line, full_hdu, args, dered=True, silent=False):
     '''
     Retrieve the integrated flux for a given emission line from the HDU
     Returns the 2D line image
@@ -629,12 +629,12 @@ def get_emission_line_int(line, full_hdu, args, dered=True):
     line_int_err = line_int_err * factor
     line_int = ufloat(line_int, line_int_err)
     if dered: line_int = get_dereddened_flux(line_int, line_wave, args.EB_V)
-    print(f'Integrated {line} flux for object {args.id} is {line_int} ergs/s/cm^2.')
+    if not silent: print(f'Integrated {line} flux for object {args.id} is {line_int} ergs/s/cm^2.')
 
     return line_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
+def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, silent=False):
     '''
     Retrieve the emission map for a given line from the HDU
     Returns the 2D line image
@@ -657,10 +657,10 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
         if line == 'OIII': # special treatment for OIII 5007 line, in order to account for and remove the OIII 4959 component
             ratio_5007_to_4959 = 2.98 # from grizli source code
             factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
-            print(f'Correcting OIII for 4959 component, by factor of {factor:.3f}')
+            if not silent: print(f'Correcting OIII for 4959 component, by factor of {factor:.3f}')
         elif line == 'Ha': # special treatment for Ha line, in order to account for and remove the NII component
             factor = 0.823 # from James et al. 2023?
-            print(f'Correcting Ha for NII component, by factor of {factor:.3f}')
+            if not silent: print(f'Correcting Ha for NII component, by factor of {factor:.3f}')
 
     line_map = line_map * factor
     line_map_err = line_map_err * factor
@@ -741,10 +741,10 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False):
 
     # -----------getting the integrated flux value by summing the 2D map-----------------
     line_sum = np.sum(line_map) # ergs/s/cm^2
-    print(f'Summed up {line} flux for object {args.id} is {line_sum/1e-17: .3f} x 10^-17 ergs/s/cm^2.')
+    if not silent: print(f'Summed up {line} flux for object {args.id} is {line_sum/1e-17: .3f} x 10^-17 ergs/s/cm^2.')
 
     # -----------getting the integrated flux value from grizli-----------------
-    line_int = get_emission_line_int(line, full_hdu, args, dered=dered)
+    line_int = get_emission_line_int(line, full_hdu, args, dered=dered, silent=silent)
 
     # -----------getting the integrated EW value-----------------
     line_index = np.where(args.available_lines == line)[0][0]
@@ -913,14 +913,14 @@ def compute_EB_V(Ha_flux, Hb_flux,verbose=False):
     return EB_V
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_EB_V_map(full_hdu, args, verbose=False):
+def get_EB_V_map(full_hdu, args, verbose=False, silent=False):
     '''
     Computes and returns the spatially resolved as well as integrated dust extinction map from a given HDU
     Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
     '''
 
-    Ha_map, Ha_wave, Ha_int, _ = get_emission_line_map('Ha', full_hdu, args, dered=False) # do not need to deredden the lines when we are fetching the flux in order to compute reddening
-    Hb_map, Hb_wave, Hb_int, _ = get_emission_line_map('Hb', full_hdu, args, dered=False)
+    Ha_map, Ha_wave, Ha_int, _ = get_emission_line_map('Ha', full_hdu, args, dered=False, silent=silent) # do not need to deredden the lines when we are fetching the flux in order to compute reddening
+    Hb_map, Hb_wave, Hb_int, _ = get_emission_line_map('Hb', full_hdu, args, dered=False, silent=silent)
 
     EB_V_map = compute_EB_V(Ha_map, Hb_map)
     EB_V_int = compute_EB_V(Ha_int, Hb_int, verbose=verbose)
@@ -928,13 +928,13 @@ def get_EB_V_map(full_hdu, args, verbose=False):
     return EB_V_map, EB_V_int
 
 # -------------------------------------------------------------------------------------------------------------------
-def get_EB_V_int(full_hdu, args, verbose=False):
+def get_EB_V_int(full_hdu, args, verbose=False, silent=False):
     '''
     Computes and returns the integrated dust extinction value from a given HDU
     Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
     '''
-    Ha_int = get_emission_line_int('Ha', full_hdu, args, dered=False)
-    Hb_int = get_emission_line_int('Hb', full_hdu, args, dered=False)
+    Ha_int = get_emission_line_int('Ha', full_hdu, args, dered=False, silent=silent)
+    Hb_int = get_emission_line_int('Hb', full_hdu, args, dered=False, silent=silent)
 
     if np.isnan(Ha_int.n) or np.isnan(Hb_int.n): EB_V_int = 0.
     else: EB_V_int = compute_EB_V(Ha_int, Hb_int, verbose=verbose)
