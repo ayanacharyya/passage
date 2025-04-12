@@ -2308,7 +2308,7 @@ def take_safe_log_sum(map1, map2, skip_log=False):
     return sum_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def annotate_BPT_axes(scatter_plot_handle, ax, args, theoretical_lines=[], line_labels=[]):
+def annotate_BPT_axes(scatter_plot_handle, ax, args, theoretical_lines=[], line_labels=[], color_label=''):
     '''
     Annotates the axis labels, limits etc for a BPT diagram in a given axis handle
     Returns the axis handle
@@ -2329,7 +2329,7 @@ def annotate_BPT_axes(scatter_plot_handle, ax, args, theoretical_lines=[], line_
 
     # ---------annotate axes-------
     cbar = plt.colorbar(scatter_plot_handle)
-    cbar.set_label('Distance (kpc)' if args.colorcol == 'distance' else 'Distance from ' + theoretical_lines[0] if args.colorcol == 'distance_from_AGN_line' else '', fontsize=args.fontsize)
+    cbar.set_label(color_label, fontsize=args.fontsize)
     cbar.ax.tick_params(labelsize=args.fontsize)
 
     ax.set_xlim(ratios_limits_dict[f'{args.xnum_line}/{args.xden_line}'])
@@ -2470,8 +2470,9 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
 
     # -----------annotating axes-----------------------
     if not hide_plot:
+        color_label = 'Distance (kpc)' if args.colorcol == 'distance' else 'Distance from ' + theoretical_lines[0] if args.colorcol == 'distance_from_AGN_line' else ''
         if args.plot_separately:
-            ax_indiv = annotate_BPT_axes(scatter_plot_handle_indiv, ax_indiv, args, theoretical_lines=theoretical_lines, line_labels=line_labels)
+            ax_indiv = annotate_BPT_axes(scatter_plot_handle_indiv, ax_indiv, args, color_label=color_label, theoretical_lines=theoretical_lines, line_labels=line_labels)
             fig_indiv.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
             fig_indiv.text(0.15, 0.9, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
 
@@ -2482,7 +2483,7 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
             plt.show(block=False)
 
         if index == 0:
-            ax = annotate_BPT_axes(scatter_plot_handle, ax, args, theoretical_lines=theoretical_lines, line_labels=line_labels)
+            ax = annotate_BPT_axes(scatter_plot_handle, ax, args,  color_label=color_label, theoretical_lines=theoretical_lines, line_labels=line_labels)
 
     return ax, distance_from_AGN_line_map, distance_from_AGN_line_int
 

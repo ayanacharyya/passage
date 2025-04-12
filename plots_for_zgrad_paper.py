@@ -11,7 +11,7 @@ from util import *
 from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
 from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso22, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
-from make_diagnostic_maps import get_emission_line_map, annotate_PAs, plot_linelist, trim_image, get_EB_V_int, get_voronoi_bin_IDs
+from make_diagnostic_maps import get_emission_line_map, annotate_PAs, plot_linelist, trim_image, get_EB_V_int, get_voronoi_bin_IDs, get_AGN_func_methods, AGN_func, take_safe_log_ratio, annotate_BPT_axes
 
 
 plt.rcParams['ytick.direction'] = 'in'
@@ -493,6 +493,36 @@ def load_1d_fits(objid, field, args):
     return od_hdu
 
 # --------------------------------------------------------------------------------------------------------------------
+def load_object_specific_args(full_hdu, args):
+    '''
+    Loads some object specific details into args
+    Returns modified args
+    '''
+    # ----------loading object specific things into args---------------------
+    args.z = full_hdu[0].header['REDSHIFT']
+    args.id = full_hdu[0].header['ID']
+    line_wcs = pywcs.WCS(full_hdu['DSCI'].header)
+    args.pix_size_arcsec = utils.get_wcs_pscale(line_wcs)
+    args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
+    args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
+    args.available_lines = np.array(['OIII' if item == 'OIII-5007' else item for item in args.available_lines])  # replace 'OIII-5007' with 'OIII'
+
+    # ---------------segmentation map---------------
+    segmentation_map = full_hdu['SEG'].data
+    args.segmentation_map = trim_image(segmentation_map, args)
+
+    # ---------------dust value---------------
+    try: args.EB_V = get_EB_V_int(full_hdu, args, verbose=False, silent=True)
+    except: args.EB_V = 0.
+
+    # ---------------voronoi binning stuff---------------
+    if args.vorbin and args.voronoi_line is not None:
+        line_map, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True, silent=True)
+        args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr, plot=False, quiet=True, args=args)
+
+    return args
+
+# --------------------------------------------------------------------------------------------------------------------
 def annotate_ax(ax, xlabel, ylabel, args):
     '''
     Annotates the axis of a given x-y plot
@@ -717,28 +747,7 @@ def plot_galaxy_example_fig(objid, field, args):
     # ----------loading the full.fits and 1D.fits files--------------
     full_hdu = load_full_fits(objid, field, args)
     od_hdu = load_1d_fits(objid, field, args)
-
-    # ----------loading object specific things into args---------------------
-    args.z = full_hdu[0].header['REDSHIFT']
-    args.id = full_hdu[0].header['ID']
-    line_wcs = pywcs.WCS(full_hdu['DSCI'].header)
-    args.pix_size_arcsec = utils.get_wcs_pscale(line_wcs)
-    args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
-    args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
-    args.available_lines = np.array(['OIII' if item == 'OIII-5007' else item for item in args.available_lines])  # replace 'OIII-5007' with 'OIII'
-
-    # ---------------segmentation map---------------
-    segmentation_map = full_hdu['SEG'].data
-    args.segmentation_map = trim_image(segmentation_map, args)
-
-    # ---------------dust value---------------
-    try: args.EB_V = get_EB_V_int(full_hdu, args, verbose=False, silent=True)
-    except: args.EB_V = 0.
-
-    # ---------------voronoi binning stuff---------------
-    if args.vorbin and args.voronoi_line is not None:
-        line_map, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True, silent=True)
-        args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr, plot=False, quiet=True, args=args)
+    args = load_object_specific_args(full_hdu, args)
 
     # ----------plotting direct image--------------
     ax_dirimg = plot_rgb_image(full_hdu, ['F115W', 'F150W', 'F200W'], ax_dirimg, args)
@@ -761,11 +770,103 @@ def plot_galaxy_example_fig(objid, field, args):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_AGN_demarcation(full_hdu, args):
+def get_distance_map_from_AGN_line(x_num, x_den, y_num, y_den, args):
+    '''
+    Computes and returns the distance of each elements in (x_num, x_den, y_num, y_den) form the AGN demarcation line
+    Returned array has same shape as x_num, etc.
+    '''
+    theoretical_lines, line_labels = get_AGN_func_methods(args)
+    dist_method = theoretical_lines[0]
+
+    y_ratio = take_safe_log_ratio(y_num, y_den)
+    x_ratio = take_safe_log_ratio(x_num, x_den)
+
+    net_mask = y_ratio.mask | x_ratio.mask
+
+    # ------distance of pixels from AGN line--------------
+    sign_map = (unp.nominal_values(y_ratio.data) > AGN_func(unp.nominal_values(x_ratio.data), dist_method)).astype(int)
+    sign_map[sign_map == 0] = -1
+    distance_from_AGN_line_map = sign_map * get_distance_from_line(unp.nominal_values(x_ratio.data), unp.nominal_values(y_ratio.data), AGN_func, dist_method)
+    distance_from_AGN_line_map = np.ma.masked_where(net_mask, distance_from_AGN_line_map)
+
+    return distance_from_AGN_line_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_AGN_demarcation_ax(x_num, x_den, y_num, y_den, ax, args, color=None, marker='o', size=20, lw=0.5):
+    '''
+    Plots line ratio vs line ratio on a given axis
+    Returns axis handle and the scatter plot handle
+    '''
+    df = pd.DataFrame({'xnum': unp.nominal_values(np.atleast_1d(x_num)).flatten(), \
+                       'xnum_u': unp.std_devs(np.atleast_1d(x_num)).flatten(), \
+                       'xden': unp.nominal_values(np.atleast_1d(x_den)).flatten(), \
+                       'xden_u': unp.std_devs(np.atleast_1d(x_den)).flatten(), \
+                       'ynum': unp.nominal_values(np.atleast_1d(y_num)).flatten(), \
+                       'ynum_u': unp.std_devs(np.atleast_1d(y_num)).flatten(), \
+                       'yden': unp.nominal_values(np.atleast_1d(y_den)).flatten(), \
+                       'yden_u': unp.std_devs(np.atleast_1d(y_den)).flatten(), \
+                       })
+    df = df.drop_duplicates().reset_index(drop=True)
+    df = df[(df['xnum'] > 0) & (df['xden'] > 0) & (df['ynum'] > 0) & (df['yden'] > 0)]
+
+    y_ratio = unp.log10(unp.uarray(df['ynum'], df['ynum_u']) / unp.uarray(df['yden'], df['yden_u']))
+    x_ratio = unp.log10(unp.uarray(df['xnum'], df['xnum_u']) / unp.uarray(df['xden'], df['xden_u']))
+
+    if color is None:
+        color = get_distance_map_from_AGN_line(df['xnum'], df['xden'], df['ynum'], df['yden'], args).data
+        dist_lim = np.max(np.abs(color))
+
+    p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, marker=marker, s=size, lw=lw, edgecolor='w' if args.fortalk else 'k', zorder=10)
+    ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c='gray', fmt='none', lw=lw, alpha=0.5)
+
+    return ax, p
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_AGN_demarcation_figure(full_hdu, args, marker='o'):
     '''
     Plots and saves the spatially resolved AGN demarcation for a given object
     '''
-    print(f'Plotting AGN demarcation diagram for {full_hdu[0].header["ID"]}..')
+    print(f'Plotting AGN demarcation diagram for ID: {full_hdu[0].header["ID"]}..')
+    theoretical_lines, line_labels = get_AGN_func_methods(args)
+    dist_method = theoretical_lines[0]
+
+    # -----------getting the fluxes------------------
+    ynum_map, _, ynum_int, _ = get_emission_line_map(args.ynum_line, full_hdu, args, silent=True)
+    yden_map, _, yden_int, _ = get_emission_line_map(args.yden_line, full_hdu, args, silent=True)
+
+    xnum_map, _, xnum_int, _ = get_emission_line_map(args.xnum_line, full_hdu, args, silent=True)
+    xden_map, _, xden_int, _ = get_emission_line_map(args.xden_line, full_hdu, args, silent=True)
+
+    if not args.do_not_correct_flux and args.AGN_diag in ['H21', 'B22'] and args.xden_line == 'Ha': # special treatment for H-alpha line, in order to add the NII 6584 component back
+        factor = 0.823  # from grizli source code
+        print(f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
+        xden_map = np.ma.masked_where(xden_map.mask, xden_map.data / factor)
+        xden_int = xden_int / factor
+
+    # -------setting up the figure--------------------
+    fig, ax = plt.subplots(1, figsize=(8, 6))
+    fig.subplots_adjust(left=0.13, right=0.99, bottom=0.1, top=0.98)
+    args.fontsize *= args.fontfactor
+
+    # -----------integrated-----------------------
+    ax, _ = plot_AGN_demarcation_ax(xnum_int, xden_int, ynum_int, yden_int, ax, args, marker=marker, size=200, lw=2)
+
+    # -----------spatially_resolved-----------------------
+    ax, scatter_plot_handle = plot_AGN_demarcation_ax(xnum_map, xden_map, ynum_map, yden_map, ax, args, marker=marker, size=50, lw=0.5)
+
+    # -----------2D map inset-----------------------
+    ax_inset = ax.inset_axes([0.7, 0.68, 0.3, 0.3])
+    distance_from_AGN_line_map = get_distance_map_from_AGN_line(xnum_map, xden_map, ynum_map, yden_map, args)
+    dist_lim = np.max(np.abs(np.ma.compressed(distance_from_AGN_line_map)))
+    ax_inset = plot_2D_map(distance_from_AGN_line_map, ax_inset, '', args, takelog=False, cmap=args.diverging_cmap, vmin=-dist_lim, vmax=dist_lim, hide_xaxis=True, hide_yaxis=True, hide_cbar=True)
+
+    # -----------annotating axes-----------------------
+    ax = annotate_BPT_axes(scatter_plot_handle, ax, args, color_label='Distance from ' + theoretical_lines[0], theoretical_lines=theoretical_lines, line_labels=line_labels)
+
+    # -----------saving figure------------
+    ax.text(0.05, 0.9, f'ID #{full_hdu[0].header["ID"]}', fontsize=args.fontsize, c='k', ha='left', va='top', transform=ax.transAxes)
+    figname = f'BPT_{full_hdu[0].header["ID"]:05d}.png'
+    save_fig(fig, figname, args)
 
     return
 
@@ -874,43 +975,46 @@ if __name__ == "__main__":
     args.only_seg_text = '_onlyseg' if args.only_seg else ''
     args.vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
 
+    '''
     # ---------loading full dataframe for all relevant PASSAGE fields------------
-    #df_all = load_full_df(passage_objlist, args, cosmos_name=cosmos_name)
+    df_all = load_full_df(passage_objlist, args, cosmos_name=cosmos_name)
 
     # ---------venn diagram plot----------------------
-    #plot_passage_venn(df_all, args)
+    plot_passage_venn(df_all, args)
 
     # ---------loading master dataframe with only objects in objlist------------
-    #df = make_master_df(df_all, objlist, args)
+    df = make_master_df(df_all, objlist, args)
 
     # ---------photoionisation model plots----------------------
-    #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True)
-    #plot_photoionisation_models('OIII/Hb', 'Z', args)
+    plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True)
+    plot_photoionisation_models('OIII/Hb', 'Z', args)
 
     # ---------full population plots----------------------
-    #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR')
-    #plot_MEx(df, args, mass_col='lp_mass')
-    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB')
+    plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR')
+    plot_MEx(df, args, mass_col='lp_mass')
+    plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB')
 
     # ---------metallicity latex table for paper----------------------
-    #df_latex = make_latex_table(df, args)
+    df_latex = make_latex_table(df, args)
 
     # ---------individual galaxy plot: example galaxy----------------------
     plot_galaxy_example_fig(1303, 'Par028', args)
     '''
     # ---------individual galaxy plots: looping over objects----------------------
+    objlist = objlist[:1] ##
     for index, obj in enumerate(objlist):
         field = obj[0]
         objid = obj[1]
         print(f'Doing object {field}-{objid} which is {index + 1} of {len(objlist)} objects..')
 
         full_hdu = load_full_fits(objid, field, args)
-        plot_AGN_demarcation(full_hdu, args)
+        args = load_object_specific_args(full_hdu, args)
+
+        #plot_AGN_demarcation_figure(full_hdu, args, marker='o' if 'Par' in field else 's')
         plot_metallicity_fig(full_hdu, primary_Zdiag, args)
-        plot_metallicity_sfr_fig(full_hdu, primary_Zdiag, args)
+        #plot_metallicity_sfr_fig(full_hdu, primary_Zdiag, args)
 
     # ---------metallicity comparison plots----------------------
-    plot_metallicity_comparison_fig(objlist, args.Zdiag, args)
-    '''
+    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
