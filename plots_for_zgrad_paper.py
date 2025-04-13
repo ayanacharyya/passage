@@ -989,17 +989,25 @@ def plot_metallicity_sfr_fig(full_hdu, Zdiag, args):
 
     # -----------loading the data---------------
     logOH_map, logOH_int = load_metallicity_map(field, objid, Zdiag, args)
+    distance = cosmo.comoving_distance(args.z)
+    Zlim = [7.1, 8.1]
+    log_sfr_lim = [-3, -2]
 
     # --------setting up the figure------------
-    fig, axes = plt.subplots(1, 3, figsize=(9, 3))
+    fig, axes = plt.subplots(1, 5 if args.debug_Zsfr else 3, figsize=(14, 3) if args.debug_Zsfr else (9, 3))
     fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.5, hspace=0.3)
-
-    # -----plotting 2D metallicity map-----------
-    Zlim = [7.1, 8.1]
-    axes[0] = plot_2D_map(logOH_map, axes[0], f'log O/H + 12 ({Zdiag})', args, takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
 
     # -------deriving H-alpha map-----------
     N2_plus_Ha_map, _, _, _ = get_emission_line_map('Ha', full_hdu, args, silent=True)
+
+    # ------plotting native Ha and SFR maps------------
+    if args.debug_Zsfr:
+        axes[0] = plot_2D_map(N2_plus_Ha_map, axes[0], r'H$\alpha$', args, takelog=True, cmap='RdPu_r', vmin=-20, vmax=-18, hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
+        sfr_map = compute_SFR(N2_plus_Ha_map, distance) # N2_plus_Ha_map here is really Ha_map, because the correction has not been undone yet
+        axes[1] = plot_2D_map(sfr_map, axes[1], f'log SFR', args, takelog=True, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=True, hide_cbar=False)
+        axes = axes[2:]
+
+    # ----------correcting Ha map------------
     if not args.do_not_correct_flux:
         factor = 0.823 # from James et al. 2023?
         N2_plus_Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask, N2_plus_Ha_map.data / factor)
@@ -1020,9 +1028,11 @@ def plot_metallicity_sfr_fig(full_hdu, Zdiag, args):
     Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask | N2Ha_map.mask, N2_plus_Ha_map.data / (1 + N2Ha_map.data))
 
     # -------deriving SFR map-----------
-    distance = cosmo.comoving_distance(args.z)
     sfr_map = compute_SFR(Ha_map, distance)
     log_sfr_map = np.ma.masked_where(sfr_map.mask, unp.log10(sfr_map.data))
+
+    # -----plotting 2D metallicity map-----------
+    axes[0] = plot_2D_map(logOH_map, axes[0], f'log O/H + 12 ({Zdiag})', args, takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=False, hide_yaxis=args.debug_Zsfr, hide_cbar=False)
 
     # -----plotting 2D SFR map-----------
     log_sfr_lim = [-3, -2]
@@ -1065,7 +1075,7 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_list, args):
     Repeats that for both high and low metallicity branch solutions
     '''
     print(f'Plotting metallicity diagnostics comparison for {Zdiag_list}..')
-
+    
     return
 
 # --------------------------------------------------------------------------------------------------------------------

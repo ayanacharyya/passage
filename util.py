@@ -231,6 +231,9 @@ def parse_args():
     parser.add_argument('--extract_arcsec', metavar='extract_arcsec', type=float, action='store', default=0.5, help='Spatial (cross-dispersion) extent in arcseconds from within which grism 2D spectra will be extracted; default is 0.5')
     parser.add_argument('--debug_zero_order', dest='debug_zero_order', action='store_true', default=False, help='Debug mode to find the zero order location in the grism image? Default is no.')
 
+    # ------- args added for plots_for_zgrad_paper.py ------------------------------
+    parser.add_argument('--debug_Zsfr', dest='debug_Zsfr', action='store_true', default=False, help='Debug the metallicity-sfr plots? Default is no.')
+
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]

@@ -153,7 +153,7 @@ def plot_ratio_model(df_ratios, ax, args):
     ratio_name = f'{num_labels}/{den_labels}'
 
     if args.slice_at_quantity2 is not None:
-        print(f'Slicing the model at {args.quantity2} == {args.slice_at_quantity3}')
+        print(f'Slicing the model at {args.quantity2} == {args.slice_at_quantity2}')
         df_ratios = df_ratios[df_ratios[args.quantity2].isin(args.slice_at_quantity2)] # to plot grid for only one value of quantity2, to reduce clutter
     if args.slice_at_quantity3 is not None:
         print(f'Slicing the model at {args.quantity3} == {args.slice_at_quantity3}')
@@ -198,6 +198,35 @@ def plot_ratio_model_fig(df_ratios, args):
 
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
+
+    # ------for fitting to upper y-axis envelope of data------------
+    if args.fit_y_envelope:
+        nbins = 25
+
+        def func(x, *popt): return np.poly1d(popt)(x)
+        p_init_arr = [[1, 1]]
+        func_arr = [func]
+
+        if args.slice_at_quantity2 is not None: df_ratios = df_ratios[df_ratios[args.quantity2].isin(args.slice_at_quantity2)]  # to plot grid for only one value of quantity2, to reduce clutter
+        if args.slice_at_quantity3 is not None: df_ratios = df_ratios[df_ratios[args.quantity3].isin(args.slice_at_quantity3)]  # to plot grid for only one value of quantity3, to reduce clutter
+        df_ratios = df_ratios.dropna()
+
+        xarr = np.linspace(np.min(df_ratios[args.quantity1]),np.max(df_ratios[args.quantity1]), nbins)
+        df_ratios['bin'] = pd.cut(df_ratios[args.quantity1], bins=xarr)
+        grouped = df_ratios.groupby('bin')
+        xbins = grouped[args.quantity1].mean().values
+        ybins = np.log10(grouped[ratio_name].max().values)
+        good_mask = np.isfinite(xbins) & np.isfinite(ybins)
+        xbins = xbins[good_mask]
+        ybins = ybins[good_mask]
+        ax.plot(xbins, ybins, c='r', lw=0.5)
+
+        col_arr = ['brown', 'darkgreen', 'cornflowerblue']
+        for index, (p_init, func) in enumerate(zip(p_init_arr, func_arr)):
+            popt, pcov = curve_fit(func, xbins, ybins, p0=p_init)
+            ax.plot(xarr, func(xarr, *p_init), c=col_arr[index], lw=1, ls='--')
+            ax.plot(xarr, func(xarr, *popt), c=col_arr[index], lw=2)
+            ax.text(0.98, 0.01 + index * 0.07, f'fit{index+1} = [{",".join([f"{item:.2f}" for item in popt])}]', c=col_arr[index], ha='right', va='bottom', fontsize=args.fontsize, transform=ax.transAxes)
 
     # --------for talk plots--------------
     if args.fortalk:
