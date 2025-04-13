@@ -108,6 +108,7 @@ import NebulaBayes
 
 import matplotlib
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 import matplotlib.image as mpimg
 from matplotlib import colors as mplcolors
 from matplotlib import colormaps as mplcolormaps

@@ -11,8 +11,7 @@ from util import *
 from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
 from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso22, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
-from make_diagnostic_maps import get_emission_line_map, annotate_PAs, plot_linelist, trim_image, get_EB_V_int, get_voronoi_bin_IDs, get_AGN_func_methods, AGN_func, take_safe_log_ratio, annotate_BPT_axes
-
+from make_diagnostic_maps import get_emission_line_map, annotate_PAs, plot_linelist, trim_image, get_EB_V_int, get_voronoi_bin_IDs, get_AGN_func_methods, AGN_func, take_safe_log_ratio, annotate_BPT_axes, get_distance_map, compute_SFR
 
 plt.rcParams['ytick.direction'] = 'in'
 plt.rcParams['ytick.right'] = True
@@ -523,22 +522,45 @@ def load_object_specific_args(full_hdu, args):
     return args
 
 # --------------------------------------------------------------------------------------------------------------------
-def annotate_ax(ax, xlabel, ylabel, args):
-    '''
-    Annotates the axis of a given x-y plot
-    Returns the axis handle
-    '''
-
-    return ax
-
-# --------------------------------------------------------------------------------------------------------------------
-def plot_radial_profile(image, ax, args):
+def plot_radial_profile(image, ax, args, ylim=None, xlim=None):
     '''
     Plots and fits the radial profile from a given 2D image in a given axis
-    Returns the axis handle
+    Returns the axis handle and the linefit
     '''
+    # ----------getting the distance map--------
+    distance_map = get_distance_map(np.shape(image), args)
+    distance_map = np.ma.masked_where(image.mask, distance_map)
 
-    return ax
+    # ----making the dataframe before radial profile plot--------------
+    df = pd.DataFrame({'radius': np.ma.compressed(distance_map), 'logOH': unp.nominal_values(np.ma.compressed(image)), 'logOH_u': unp.std_devs(np.ma.compressed(image))})
+
+    # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
+    if args.vorbin:
+        df['bin_ID'] = np.ma.compressed(np.ma.masked_where(image.mask, args.voronoi_bin_IDs.data))
+        df = df.groupby('bin_ID', as_index=False).agg(np.mean)
+
+    if args.radius_max is not None: df = df[df['radius'] <= args.radius_max]
+    df = df.sort_values(by='radius').reset_index(drop=True)
+
+    # -------plotting--------
+    ax.scatter(df['radius'], df['logOH'], c='grey', s=20, alpha=1)
+    ax.errorbar(df['radius'], df['logOH'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
+
+    # -------radial fitting-------------
+    fit_color = 'salmon'
+    linefit, linecov = np.polyfit(df['radius'], df['logOH'], 1, cov=True, w=1. / (df['logOH_u']) ** 2)
+    y_fitted = np.poly1d(linefit)(df['radius'])
+    ax.plot(df['radius'], y_fitted, color=fit_color, lw=1, ls='dashed')
+    linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
+    ax.text(0.05, 0.05, r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc', c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
+
+    # --------annotating axis--------------
+    if xlim is not None: ax.set_xlim(xlim[0], xlim[1]) # kpc
+    if ylim is not None: ax.set_ylim(ylim[0], ylim[1])
+    ax.set_box_aspect(1)
+    ax = annotate_axes(ax, 'Radius', 'log (O/H) + 12', args)
+    
+    return ax, linefit
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_1D_spectra(od_hdu, ax, args):
@@ -586,7 +608,7 @@ def plot_1D_spectra(od_hdu, ax, args):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def annotate_2d_plot(ax, xlabel, ylabel, args, label='', hide_xaxis=False, hide_yaxis=False, hide_cbar=True, p=None):
+def annotate_axes(ax, xlabel, ylabel, args, label='', hide_xaxis=False, hide_yaxis=False, hide_cbar=True, p=None):
     '''
     Annotates the axis of a given 2D image
     Returns the axis handle
@@ -611,6 +633,18 @@ def annotate_2d_plot(ax, xlabel, ylabel, args, label='', hide_xaxis=False, hide_
         cax = divider.append_axes('right', size='5%', pad='2%')
         cbar = plt.colorbar(p, cax=cax, orientation='vertical')
         cbar.ax.tick_params(labelsize=args.fontsize)
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def annotate_kpc_scale_bar(kpc, ax, args, color='k', loc='lower left'):
+    '''
+    Annotate existing axis with a scale bar corresponding to a given kpc length
+    Returns axis handle
+    '''
+    pix = kpc * cosmo.arcsec_per_kpc_proper(args.z).value  # converting kpc to arcsec
+    scalebar = AnchoredSizeBar(ax.transData, pix, f'{kpc} kpc', loc, pad=0.5, color=color, frameon=False, size_vertical=0.01, fontproperties={'size':args.fontsize / args.fontfactor})
+    ax.add_artist(scalebar)
 
     return ax
 
@@ -654,6 +688,7 @@ def plot_rgb_image(full_hdu, filters, ax, args):
     ax.scatter(0, 0, marker='x', s=10, c='grey')
     ax.text(0.05, 0.05, f'z={args.z:.2f}', c='k', fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
 
+    # ----------annotate axis---------------
     pa_arr = np.unique([full_hdu[0].header[item] for item in list(full_hdu[0].header.keys()) if 'PA00' in item])
     ax = annotate_PAs(pa_arr, ax, fontsize=args.fontsize / args.fontfactor)
 
@@ -661,7 +696,8 @@ def plot_rgb_image(full_hdu, filters, ax, args):
     ax.set_ylim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
 
     if 'segmentation_map' in args: ax.contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=0.5)
-    ax = annotate_2d_plot(ax, 'arcsec', 'arcsec', args, hide_xaxis=False, hide_yaxis=False, hide_cbar=True)
+    ax = annotate_axes(ax, 'arcsec', 'arcsec', args, hide_xaxis=False, hide_yaxis=False, hide_cbar=True)
+    ax = annotate_kpc_scale_bar(2, ax, args, loc='lower right')
 
     return ax
 
@@ -682,7 +718,7 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', takelog=True, vmin=None,
     ax.scatter(0, 0, marker='x', s=10, c='grey')
 
     if 'segmentation_map' in args: ax.contour(args.segmentation_map != args.id, levels=0, colors='w' if args.fortalk else 'k', extent=args.extent, linewidths=0.5) # demarcating the segmentation map zone
-    ax = annotate_2d_plot(ax, 'arcsec', 'arcsec', args, label=label, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p)
+    ax = annotate_axes(ax, 'arcsec', 'arcsec', args, label=label, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p)
 
     return ax
 
@@ -878,8 +914,19 @@ def load_metallicity_map(field, objid, Zdiag, args):
     '''
     Zbranch_text = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
     exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and Zdiag == 'NB' else ''
+    if 'Par' in field: survey = 'passage'
+    elif 'glass' in field: survey = 'glass'
+    output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{exclude_text}.fits'
 
-    return logOH_map
+    # ------reading in existing outputfile--------------
+    print(f'\nReading metallicity map from existing fits file {output_fitsname}')
+    hdul = fits.open(output_fitsname)
+    hdu = hdul['log_OH']
+    logOH_map = np.ma.masked_where(np.isnan(hdu.data), unp.uarray(hdu.data, hdul['log_OH_u'].data))
+    if hdu.header['LOG_OH_INT'] is None: logOH_int = ufloat(np.nan, np.nan)
+    else: logOH_int = ufloat(hdu.header['LOG_OH_INT'], hdu.header['LOG_OH_INT_ERR'])
+
+    return logOH_map, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def load_metallicity_df(field, objid, Zdiag, args):
@@ -889,6 +936,14 @@ def load_metallicity_df(field, objid, Zdiag, args):
     '''
     Zbranch_text = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
     exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and Zdiag == 'NB' else ''
+    if 'Par' in field: survey = 'passage'
+    elif 'glass' in field: survey = 'glass'
+    output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{exclude_text}.fits'
+
+    # ------reading in existing outputfile--------------
+    print(f'\nReading metallicity map from existing fits file {output_fitsname}')
+    hdul = fits.open(output_fitsname)
+    logOH_df = Table(hdul['tab'].data).to_pandas()
 
     return logOH_df
 
@@ -897,7 +952,30 @@ def plot_metallicity_fig(full_hdu, Zdiag, args):
     '''
     Plots and saves a single figure with the direct image, 2D metallicity map and metallicity radial profile for a given object
     '''
-    print(f'Plotting metallicity ({Zdiag}) figure for {full_hdu[0].header["ID"]}..')
+    objid = full_hdu[0].header["ID"]
+    print(f'Plotting metallicity ({Zdiag}) figure for {objid}..')
+
+    # -----------loading the data---------------
+    logOH_map, logOH_int = load_metallicity_map(field, objid, Zdiag, args)
+
+    # --------setting up the figure------------
+    fig, axes = plt.subplots(1, 3, figsize=(9, 3))
+    fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.5, hspace=0.3)
+
+    # -----plotting direct image-----------------
+    axes[0] = plot_rgb_image(full_hdu, ['F115W', 'F150W', 'F200W'], axes[0], args)
+
+    # -----plotting 2D metallicity map-----------
+    Zlim = [7.1, 8.1]
+    axes[1] = plot_2D_map(logOH_map, axes[1], f'log O/H + 12 ({Zdiag})', args, takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=False, hide_yaxis=True, hide_cbar=False)
+
+    # ------plotting metallicity radial profile-----------
+    axes[2], _ = plot_radial_profile(logOH_map, axes[2], args, ylim=Zlim, xlim=[0, 5])
+    
+    # -----------saving figure------------
+    axes[2].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[2].transAxes)
+    figname = f'metallicity_{objid:05d}.png'
+    save_fig(fig, figname, args)
 
     return
 
@@ -906,7 +984,77 @@ def plot_metallicity_sfr_fig(full_hdu, Zdiag, args):
     '''
     Plots and saves a single figure with the direct image, 2D metallicity map, metallicity radial profile, SFR map, metallicity vs SFR plot for a given object
     '''
-    print(f'Plotting metallicity-SFR figure..')
+    objid = full_hdu[0].header["ID"]
+    print(f'Plotting metallicity-SFR figure for {objid}..')
+
+    # -----------loading the data---------------
+    logOH_map, logOH_int = load_metallicity_map(field, objid, Zdiag, args)
+
+    # --------setting up the figure------------
+    fig, axes = plt.subplots(1, 3, figsize=(9, 3))
+    fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.5, hspace=0.3)
+
+    # -----plotting 2D metallicity map-----------
+    Zlim = [7.1, 8.1]
+    axes[0] = plot_2D_map(logOH_map, axes[0], f'log O/H + 12 ({Zdiag})', args, takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
+
+    # -------deriving H-alpha map-----------
+    N2_plus_Ha_map, _, _, _ = get_emission_line_map('Ha', full_hdu, args, silent=True)
+    if not args.do_not_correct_flux:
+        factor = 0.823 # from James et al. 2023?
+        N2_plus_Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask, N2_plus_Ha_map.data / factor)
+
+    log_N2Ha_logOH_poly_coeff = [1, -10] # from approx fit to MAPPINGS models
+
+    logOH_arr = logOH_map.data.flatten()
+    log_N2Ha_arr = []
+    for logOH in logOH_arr:
+        try:
+            log_N2Ha = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH)
+            log_N2Ha_arr.append(log_N2Ha)
+        except:
+            log_N2Ha_array.append(np.nan)
+    log_N2Ha_map = np.ma.masked_where(logOH_map.mask, np.reshape(log_N2Ha_arr, np.shape(logOH_map)))
+    N2Ha_map = np.ma.masked_where(log_N2Ha_map.mask, 10 ** log_N2Ha_map.data)
+
+    Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask | N2Ha_map.mask, N2_plus_Ha_map.data / (1 + N2Ha_map.data))
+
+    # -------deriving SFR map-----------
+    distance = cosmo.comoving_distance(args.z)
+    sfr_map = compute_SFR(Ha_map, distance)
+    log_sfr_map = np.ma.masked_where(sfr_map.mask, unp.log10(sfr_map.data))
+
+    # -----plotting 2D SFR map-----------
+    log_sfr_lim = [-3, -2]
+    axes[1] = plot_2D_map(log_sfr_map, axes[1], f'log SFR', args, takelog=False, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=True, hide_cbar=False)
+
+    # ------plotting metallicity vs SFR-----------
+    df = pd.DataFrame({'logOH': unp.nominal_values(np.ma.compressed(logOH_map)), 'logOH_u': unp.std_devs(np.ma.compressed(logOH_map)), 'log_sfr':unp.nominal_values(np.ma.compressed(log_sfr_map)), 'log_sfr_u': unp.std_devs(np.ma.compressed(log_sfr_map))})
+    if args.vorbin:
+        df['bin_ID'] = np.ma.compressed(np.ma.masked_where(log_sfr_map.mask, args.voronoi_bin_IDs.data))
+        df = df.groupby('bin_ID', as_index=False).agg(np.mean)
+
+    axes[2].scatter(df['log_sfr'], df['logOH'], c='grey', s=20, alpha=1)
+    axes[2].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
+
+    # -------radial fitting-------------
+    fit_color = 'salmon'
+    linefit, linecov = np.polyfit(df['log_sfr'], df['logOH'], 1, cov=True, w=1. / (df['logOH_u']) ** 2)
+    y_fitted = np.poly1d(linefit)(df['log_sfr'])
+    axes[2].plot(df['log_sfr'], y_fitted, color=fit_color, lw=1, ls='dashed')
+    linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
+    axes[2].text(0.05, 0.05, f'Slope = {linefit[0]: .2f} dex/kpc', c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=axes[2].transAxes)
+
+    # --------annotating axis--------------
+    axes[2].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
+    axes[2].set_ylim(Zlim[0], Zlim[1])
+    axes[2].set_box_aspect(1)
+    axes[2] = annotate_axes(axes[2], 'log SFR (Msun/yr)', 'log (O/H) + 12', args)
+
+    # -----------saving figure------------
+    axes[2].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[2].transAxes)
+    figname = f'metallicity-sfr_{objid:05d}.png'
+    save_fig(fig, figname, args)
 
     return
 
@@ -999,7 +1147,7 @@ if __name__ == "__main__":
 
     # ---------individual galaxy plot: example galaxy----------------------
     plot_galaxy_example_fig(1303, 'Par028', args)
-    '''
+    
     # ---------individual galaxy plots: looping over objects----------------------
     objlist = objlist[:1] ##
     for index, obj in enumerate(objlist):
@@ -1010,11 +1158,15 @@ if __name__ == "__main__":
         full_hdu = load_full_fits(objid, field, args)
         args = load_object_specific_args(full_hdu, args)
 
-        #plot_AGN_demarcation_figure(full_hdu, args, marker='o' if 'Par' in field else 's')
+        plot_AGN_demarcation_figure(full_hdu, args, marker='o' if 'Par' in field else 's')
         plot_metallicity_fig(full_hdu, primary_Zdiag, args)
-        #plot_metallicity_sfr_fig(full_hdu, primary_Zdiag, args)
-
+        try:
+            plot_metallicity_sfr_fig(full_hdu, primary_Zdiag, args)
+        except:
+            print(f'Could not plot SFR figure for ID# {objid}, so skipping this object..')
+            pass
+    '''
     # ---------metallicity comparison plots----------------------
-    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args)
+    plot_metallicity_comparison_fig(objlist, args.Zdiag, args)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
