@@ -1231,6 +1231,7 @@ if __name__ == "__main__":
     args.SNR_thresh = 2
     args.Zdiag = 'R2,R3,R23,NB'.split(',')
     args.colorcol = 'radius'
+    args.phot_models = 'nb'
 
     # -------setting up objects to plot--------------
     Par28_objects = [300, 1303, 1849, 2171, 2727, 2867]
@@ -1270,7 +1271,7 @@ if __name__ == "__main__":
     #plot_galaxy_example_fig(1303, 'Par028', args)
 
     # ---------individual galaxy plots: looping over objects----------------------
-    #objlist = objlist[:1] ##
+    objlist = objlist[3:4] ##
     for index, obj in enumerate(objlist):
         field = obj[0]
         objid = obj[1]
