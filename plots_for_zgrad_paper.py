@@ -547,12 +547,16 @@ def plot_radial_profile(image, ax, args, ylim=None, xlim=None):
     ax.errorbar(df['radius'], df['logOH'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
 
     # -------radial fitting-------------
-    fit_color = 'salmon'
-    linefit, linecov = np.polyfit(df['radius'], df['logOH'], 1, cov=True, w=1. / (df['logOH_u']) ** 2)
-    y_fitted = np.poly1d(linefit)(df['radius'])
-    ax.plot(df['radius'], y_fitted, color=fit_color, lw=1, ls='dashed')
-    linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
-    ax.text(0.05, 0.05, r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc', c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
+    try:
+        fit_color = 'salmon'
+        linefit, linecov = np.polyfit(df['radius'], df['logOH'], 1, cov=True, w=1. / (df['logOH_u']) ** 2)
+        y_fitted = np.poly1d(linefit)(df['radius'])
+        ax.plot(df['radius'], y_fitted, color=fit_color, lw=1, ls='dashed')
+        linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
+        ax.text(0.05, 0.05, r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc', c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
+    except:
+        print(f'WARNING: Could not fit radial profile, returning nan fit parameters')
+        linefit = np.array([ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)])
 
     # --------annotating axis--------------
     if xlim is not None: ax.set_xlim(xlim[0], xlim[1]) # kpc
@@ -662,7 +666,11 @@ def plot_direct_image(full_hdu, filter, ax, args, cmap='Greens'):
             hdu = full_hdu['DSCI', filter_dummy.upper()]
             print(f'WARNING: Plotting direct image for filter {filter_dummy} instead of {filter}..')
         except:
-            sys.exit(f'Neither {filter} nor {filter_dummy} available')
+            try:
+                hdu = full_hdu['DSCI', f'{filter.upper()}-{filter.upper()}-CLEAR']
+                print(f'WARNING: Plotting direct image for filter {filter_dummy} instead of {filter}..')
+            except:
+                sys.exit(f'Neither {filter} nor {filter_dummy} available')
 
     image = hdu.data
     image = trim_image(image, args)
@@ -867,17 +875,18 @@ def plot_AGN_demarcation_figure(full_hdu, args, marker='o'):
     dist_method = theoretical_lines[0]
 
     # -----------getting the fluxes------------------
-    ynum_map, _, ynum_int, _, _ = get_emission_line_map(args.ynum_line, full_hdu, args, silent=True)
-    yden_map, _, yden_int, _, _ = get_emission_line_map(args.yden_line, full_hdu, args, silent=True)
+    ynum_map, _, ynum_int, ynum_sum, _ = get_emission_line_map(args.ynum_line, full_hdu, args, silent=True)
+    yden_map, _, yden_int, yden_sum, _ = get_emission_line_map(args.yden_line, full_hdu, args, silent=True)
 
-    xnum_map, _, xnum_int, _, _ = get_emission_line_map(args.xnum_line, full_hdu, args, silent=True)
-    xden_map, _, xden_int, _, _ = get_emission_line_map(args.xden_line, full_hdu, args, silent=True)
+    xnum_map, _, xnum_int, xnum_sum, _ = get_emission_line_map(args.xnum_line, full_hdu, args, silent=True)
+    xden_map, _, xden_int, xden_sum, _ = get_emission_line_map(args.xden_line, full_hdu, args, silent=True)
 
     if not args.do_not_correct_flux and args.AGN_diag in ['H21', 'B22'] and args.xden_line == 'Ha': # special treatment for H-alpha line, in order to add the NII 6584 component back
         factor = 0.823  # from grizli source code
         print(f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
         xden_map = np.ma.masked_where(xden_map.mask, xden_map.data / factor)
         xden_int = xden_int / factor
+        xden_sum = xden_sum / factor
 
     # -------setting up the figure--------------------
     fig, ax = plt.subplots(1, figsize=(8, 6))
@@ -886,6 +895,7 @@ def plot_AGN_demarcation_figure(full_hdu, args, marker='o'):
 
     # -----------integrated-----------------------
     ax, _ = plot_AGN_demarcation_ax(xnum_int, xden_int, ynum_int, yden_int, ax, args, marker=marker, size=200, lw=2)
+    #ax, _ = plot_AGN_demarcation_ax(xnum_sum, xden_sum, ynum_sum, yden_sum, ax, args, marker=marker, size=200, lw=2)
 
     # -----------spatially_resolved-----------------------
     ax, scatter_plot_handle = plot_AGN_demarcation_ax(xnum_map, xden_map, ynum_map, yden_map, ax, args, marker=marker, size=50, lw=0.5)
@@ -928,8 +938,8 @@ def load_metallicity_map(field, objid, Zdiag, args):
     hdul = fits.open(output_fitsname)
     hdu = hdul['log_OH']
     logOH_map = np.ma.masked_where(np.isnan(hdu.data), unp.uarray(hdu.data, hdul['log_OH_u'].data))
-    if hdu.header['LOG_OH_INT'] is None: logOH_int = ufloat(np.nan, np.nan)
-    else: logOH_int = ufloat(hdu.header['LOG_OH_INT'], hdu.header['LOG_OH_INT_ERR'])
+    if hdu.header['log_oh_int'] is None: logOH_int = ufloat(np.nan, np.nan)
+    else: logOH_int = ufloat(hdu.header['log_oh_int'], hdu.header['log_oh_int_err'])
     if hdu.header['log_oh_sum'] is None: logOH_sum = ufloat(np.nan, np.nan)
     else: logOH_sum = ufloat(hdu.header['log_oh_sum'], hdu.header['log_oh_sum_err'])
 
@@ -959,10 +969,12 @@ def load_metallicity_df(field, objid, Zdiag, args):
     logOH_df = Table(hdul['tab'].data).to_pandas()
 
     hdu = hdul['log_OH']
-    if hdu.header['LOG_OH_INT'] is None: logOH_int = ufloat(np.nan, np.nan)
-    else: logOH_int = ufloat(hdu.header['LOG_OH_INT'], hdu.header['LOG_OH_INT_ERR'])
+    if hdu.header['log_oh_int'] is None: logOH_int = ufloat(np.nan, np.nan)
+    else: logOH_int = ufloat(hdu.header['log_oh_int'], hdu.header['log_oh_int_err'])
+    if hdu.header['log_oh_sum'] is None: logOH_sum = ufloat(np.nan, np.nan)
+    else: logOH_sum = ufloat(hdu.header['log_oh_sum'], hdu.header['log_oh_sum_err'])
 
-    return logOH_df, logOH_int
+    return logOH_df, logOH_int, logOH_sum
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_metallicity_fig(full_hdu, field, Zdiag, args):
@@ -973,7 +985,7 @@ def plot_metallicity_fig(full_hdu, field, Zdiag, args):
     print(f'Plotting metallicity ({Zdiag}) figure for {objid}..')
 
     # -----------loading the data---------------
-    logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
+    logOH_map, _, _ = load_metallicity_map(field, objid, Zdiag, args)
 
     # --------setting up the figure------------
     fig, axes = plt.subplots(1, 3, figsize=(9, 3))
@@ -1005,7 +1017,7 @@ def plot_metallicity_sfr_fig(full_hdu, field, Zdiag, args):
     print(f'Plotting metallicity-SFR figure for {objid}..')
 
     # -----------loading the data---------------
-    logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
+    logOH_map, _, _ = load_metallicity_map(field, objid, Zdiag, args)
     distance = cosmo.comoving_distance(args.z)
     Zlim = [7.1, 8.1]
     log_sfr_lim = [-3, -2]
@@ -1113,19 +1125,20 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low'):
     for index, obj in enumerate(objlist):
         field = obj[0]
         objid = obj[1]
-        markersize = 100
+        markersize = 80
         marker='o' if 'Par' in field else 's'
         log_int_array = []
 
         # --------looping over diagnostics---------------------
         for index2, Zdiag in enumerate(Zdiag_arr):
-            this_df, this_logOH_int = load_metallicity_df(field, objid, Zdiag, args)
+            this_df, this_logOH_int, this_logOH_sum = load_metallicity_df(field, objid, Zdiag, args)
             if index2 == 0:
                 df = this_df
             else:
                 df = pd.merge(df, this_df, on = ['radius', 'bin_ID', 'agn_dist'])
             df = df.rename(columns={'log_OH': f'log_OH_{Zdiag}', 'log_OH_u': f'log_OH_{Zdiag}_err'})
-            log_int_array.append(this_logOH_int)
+            #log_int_array.append(this_logOH_int)
+            log_int_array.append(this_logOH_sum)
 
        # ------now plotting for every diag combination--------------
         df['color'] = color
@@ -1150,6 +1163,8 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low'):
                         ax.errorbar(df[f'log_OH_{Zdiag1}'], df[f'log_OH_{Zdiag2}'], xerr=df[f'log_OH_{Zdiag1}_err'], yerr=df[f'log_OH_{Zdiag2}_err'], c='grey', fmt='none', lw=0.1, alpha=0.5)
 
                         ax.plot(Z_limits, Z_limits, ls='dotted', lw=0.1, c='k')
+
+                        if 'NB' in Zdiag2: [x.set_linewidth(2) for x in ax.spines.values()] # making thicker borders for NB axes
 
                         # ----annotate axis----------
                         if index == len(objlist) - 1:
@@ -1214,7 +1229,7 @@ if __name__ == "__main__":
     args.plot_conditions = 'SNR,mass'.split(',')
     args.line_list = 'OII,NeIII-3867,Hb,OIII'.split(',')
     args.SNR_thresh = 2
-    args.Zdiag = 'O3O2,R2,R3,R23,NB'.split(',')
+    args.Zdiag = 'R2,R3,R23,NB'.split(',')
     args.colorcol = 'radius'
 
     # -------setting up objects to plot--------------
@@ -1253,9 +1268,9 @@ if __name__ == "__main__":
     
     # ---------individual galaxy plot: example galaxy----------------------
     #plot_galaxy_example_fig(1303, 'Par028', args)
-    '''
+
     # ---------individual galaxy plots: looping over objects----------------------
-    objlist = objlist[:1] ##
+    #objlist = objlist[:1] ##
     for index, obj in enumerate(objlist):
         field = obj[0]
         objid = obj[1]
@@ -1263,17 +1278,18 @@ if __name__ == "__main__":
 
         full_hdu = load_full_fits(objid, field, args)
         args = load_object_specific_args(full_hdu, args)
+        args.fontsize = 10
 
         #plot_AGN_demarcation_figure(full_hdu, args, marker='o' if 'Par' in field else 's')
-        #plot_metallicity_fig(full_hdu, field, primary_Zdiag, args, Zbranch=args.Zbranch)
+        #plot_metallicity_fig(full_hdu, field, primary_Zdiag, args)
         try:
             plot_metallicity_sfr_fig(full_hdu, field, primary_Zdiag, args)
         except:
             print(f'Could not plot SFR figure for ID# {objid}, so skipping this object..')
             pass
-    '''
+
     # ---------metallicity comparison plots----------------------
-    plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low')
-    plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high')
+    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low')
+    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high')
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

@@ -244,13 +244,13 @@ if __name__ == "__main__":
         # ------plotting and saving photoionisation model with observed ratios----------
         ax = plot_photoionisation_models(ratio, 'Z', args)
         for index, row in df.iterrows():
-            #col_int, col_sum = 'sandybrown', 'cornflowerblue'
-            col_int, col_sum = col_arr[index], col_arr[index]
+            col_int, col_sum = 'sandybrown', 'cornflowerblue'
+            #col_int, col_sum = col_arr[index], col_arr[index]
 
             ax.axhline(row[ratio_name_int], ls='solid', c=col_int, lw=0.5, alpha=1)
             ax.fill_between([ax.get_xlim()[0], ax.get_xlim()[1]], row[ratio_name_int] - row[ratio_name_int + '_u'] / 2, row[ratio_name_int] + row[ratio_name_int + '_u'] / 2, lw=0, color=col_int, alpha=0.1)
 
-            ax.axhline(row[ratio_name_sum], ls='dotted', c=col_sum, lw=0.5, alpha=1)
+            ax.axhline(row[ratio_name_sum], ls='dashed', c=col_sum, lw=0.5, alpha=1)
             ax.fill_between([ax.get_xlim()[0], ax.get_xlim()[1]], row[ratio_name_sum] - row[ratio_name_sum + '_u'] / 2, row[ratio_name_sum] + row[ratio_name_sum + '_u'] / 2, lw=0, color=col_sum, alpha=0.1)
 
         ax.text(0.98, 0.05, 'Integrated (Grizli)', c=col_int, fontsize=args.fontsize, va='bottom', ha='right', transform=ax.transAxes)
