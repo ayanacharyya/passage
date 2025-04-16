@@ -488,7 +488,7 @@ if __name__ == "__main__":
         df = pd.read_csv(df_infilename)
         if args.use_only_good and args.drv == 'v0.5' and 'SNR' in args.plot_conditions:
             if set(args.line_list) == set(['OIII', 'Ha', 'OII', 'Hb', 'SII']): df = df[df['objid'].isin([1303,1934,2734,2867,300,2903])].reset_index(drop=True) # only choosing the pre-determined good galaxies
-            elif set(args.line_list) == set(['OIII', 'OII', 'Hb', 'NeIII-3867']): df = df[df['objid'].isin([300,1303,1634,2171,2727,2867])].reset_index(drop=True) # only choosing the pre-determined good galaxies
+            elif set(args.line_list) == set(['OIII', 'OII', 'Hb', 'NeIII-3867']): df = df[df['objid'].isin([300,1303,2171,2727,2867])].reset_index(drop=True) # only choosing the pre-determined good galaxies
             print(f'\nUsing only the pre-determined good galaxies, and there are {len(df)} of them..')
 
         # -------combing with metallicity dataframe if it exists----------------

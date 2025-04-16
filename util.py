@@ -144,6 +144,7 @@ def parse_args():
     parser.add_argument('--use_original_NB_grid', dest='use_original_NB_grid', action='store_true', default=False, help='Use the original, unmodified NebulaBayes grid? Default is no.')
     parser.add_argument('--exclude_lines', metavar='exclude_lines', type=str, action='store', default='', help='Which lines to be excluded for metallicity measurement with NB? Default is empty string, i.e., use all available lines')
     parser.add_argument('--radius_max', metavar='radius_max', type=float, action='store', default=None, help='Impose a radius (kpc) on radial plots, to be appliedduring radial fitting; default is None i.e. extends up to the full extent of the cutout defined by args.arcsec_limit')
+    parser.add_argument('--only_integrated', dest='only_integrated', action='store_true', default=False, help='Analyse only the integrated fluxes? Default is no.')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
@@ -261,7 +262,7 @@ def parse_args():
     if args.output_dir is None:
         args.output_dir = args.root_dir / f'{survey_name}_output/'
 
-    if 'glass' in args.field and args.drv == 'v0.1':
+    if 'glass' in args.field and args.drv == 'v0.5':
         args.drv = 'orig'
     elif 'Par' in args.field and 'v' not in args.drv:
         args.drv = 'v' + args.drv
@@ -277,11 +278,8 @@ def parse_args():
     args.mappings_dir = Path(args.mappings_dir)
 
     if args.filters is None:
-        if 'glass' in args.field:
-            args.filters = ['F115W', 'F150W', 'F200W']
-        else:
-            if 'available_filters_for_field_dict' not in locals(): available_filters_for_field_dict = get_passage_filter_dict(args)
-            args.filters = available_filters_for_field_dict[args.field]
+        args.available_filters_for_field_dict = get_passage_filter_dict(args=args)
+        args.filters = args.available_filters_for_field_dict[args.field]
     else:
         args.filters = args.filters.split(',')
 
@@ -771,8 +769,7 @@ def get_passage_filter_dict(args=None, filename=None):
     Reads PASSAGE spreadsheet and and returns a dictionary with PASSAGE field names and which filters are present in them
     '''
     if filename is None:
-        input_dir = Path('/Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data') if args is None else args.input_dir
-        filename = input_dir / 'JWST PASSAGE Cycle 1 - Cy1 Executed.csv'
+        filename =  args.root_dir / 'passage_data' / 'v0.5' / 'JWST PASSAGE Cycle 1 - Cy1 Executed.csv'
 
     df = pd.read_csv(filename)
     df = df[['Par#', 'Obs Date', 'Filter']]
@@ -780,6 +777,7 @@ def get_passage_filter_dict(args=None, filename=None):
     df = df[~ df['Obs Date'].str.contains('SKIPPED')]
 
     dictionary = {item: np.unique(df[df['Par#'] == item]['Filter']).tolist() for item in np.unique(df['Par#'])}
+    dictionary.update({'glass-a2744':['F115W', 'F150W', 'F120W']})
 
     return dictionary
 
@@ -1201,7 +1199,4 @@ def compare_SNR(filename, line_label, radius_arcsec = 0.25):
 
     return line_int, line_map_seg, line_map_center
 
-
 # --------------------------------------------------------------------------------------------------
-args = parse_args()
-available_filters_for_field_dict = get_passage_filter_dict(args)

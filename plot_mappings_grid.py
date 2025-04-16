@@ -144,7 +144,7 @@ def plot_ratio_model(df_ratios, ax, args):
     style_arr = ['solid', 'dashed', 'dotted']
     thickness_arr = [1.2, 0.7, 0.3]  # len(style_arr) \times len(tickness_arr) = at least as many as "quantity2" values
     thickness_arr = np.tile(np.repeat(thickness_arr, len(thickness_arr)), 2)
-    if args.phot_models.lower() in ['mappings', 'map']: line_names_dict = smart_dict({'OIII':'[OIII]5007', 'OII':'[OII]3727,29', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31', 'NeIII':'[NeIII]3869'}) # to map between user input line labels and line labels used in ratio_list.txt file
+    if args.phot_models.lower() in ['mappings', 'map']: line_names_dict = smart_dict({'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31', 'NeIII':'[NeIII]3869'}) # to map between user input line labels and line labels used in ratio_list.txt file
     elif args.phot_models.lower() in ['nebulabayes', 'nb']: line_names_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'})
 
     # ------------getting the line ratio names------------------
@@ -164,8 +164,8 @@ def plot_ratio_model(df_ratios, ax, args):
 
         for j, quant3 in enumerate(np.unique(df_sub[args.quantity3])):
             df_sub_sub = df_sub[df_sub[args.quantity3] == quant3]
-            label_root = f'{args.quantity2} = {quant2}, {args.quantity3} = '
-            label = f'{quant3:>{len(label_root)}}' if j else f'{label_root}{quant3}'
+            label_root = f'{args.quantity2} = {quant2:.2f},'
+            label = f'{label_root} {args.quantity3} = {quant3:.2f}' if j == 0 and i == 0 else f'{args.quantity3:>{len(label_root)}} = {quant3:.2f}' if j > 0 and i == 0 else f'{args.quantity2} = {quant2:.2f}' if j == 0 and i > 0 else None
             ax.plot(df_sub_sub[args.quantity1], np.log10(df_sub_sub[ratio_name]), color=col_arr[i], linestyle=style_arr[j % len(style_arr)], linewidth=thickness_arr[j], label=label)
 
     return ax, ratio_name
@@ -327,7 +327,7 @@ if __name__ == "__main__":
         else: print(f'Reading in existing grid from {grid_filename}')
         df_ratios = pd.read_table(grid_filename, delim_whitespace=True)
 
-    elif args.phot_models.lower() in ['nebulabayes', 'nb']:
+    elif args.phot_models.lower() in ['nebulabayes', 'nb', 'neb']:
         import NebulaBayes
         grid_filename = Path(NebulaBayes.__path__[0]) / 'grids' / 'NB_HII_grid.fits.gz'
         print(f'Reading in existing grid from {grid_filename}')

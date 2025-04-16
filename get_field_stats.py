@@ -38,12 +38,11 @@ def make_set(df, condition, label, set_arr, label_arr, silent=False):
     return set_arr, label_arr
 
 # -----------------------------------------------------------------------------------------------
-def is_line_within_filter(line, redshift, filters=None, field=None, trim_factor=0.):
+def is_line_within_filter(line, redshift, filters, trim_factor=0.):
     '''
     Determines whether a given line is within the "good" part of a given list of filters' wavelength range
     Returns boolean
     '''
-    if filters is None: filters = available_filters_for_field_dict[field]
 
     line_obs_wave = rest_wave_dict[line] * (1 + redshift) / 1e3 # factor 1e3 to convert nm to microns
     all_wave_ranges = [filter_waverange_dict[item] for item in filters] # "good" part of wavelength ranges for each filter, in microns
@@ -69,7 +68,7 @@ def plot_venn(df, args, silent=False):
     line_list = args.line_list
 
     for line in line_list:
-        condition1 = df.apply(lambda x: is_line_within_filter(line, x['redshift'], field=x['field'], trim_factor=args.trim_filter_by_wavelength_factor), axis=1)
+        condition1 = df.apply(lambda x: is_line_within_filter(line, x['redshift'], filters=args.available_filters_for_field_dict[x['field']], trim_factor=args.trim_filter_by_wavelength_factor), axis=1)
         set_arr, label_arr = make_set(df, condition1, f'{line} available', set_arr, label_arr, silent=silent)
 
         if 'present' in args.plot_conditions or 'SNR' in args.plot_conditions or 'EW' in args.plot_conditions:
@@ -645,7 +644,7 @@ if __name__ == "__main__":
             # ---------looping over fields-----------
             for index, args.field in enumerate(available_fields):
                 print(f'Doing field {args.field} which is {index+1} of {len(available_fields)}..')
-                args.filters = available_filters_for_field_dict[args.field]
+                args.filters = args.available_filters_for_field_dict[args.field]
 
                 # ---------determining filename suffixes-------------------------------
                 output_dir = args.output_dir / args.field
@@ -690,7 +689,7 @@ if __name__ == "__main__":
         # ------------adding some common columns before crossmatching--------------------
         df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype(str)  # making a unique combination of field and object id
         df = df.drop_duplicates('par_obj', keep='last')
-        df['filters'] = df['field'].map(lambda x: ', '.join(available_filters_for_field_dict[x]))
+        df['filters'] = df['field'].map(lambda x: ', '.join(args.available_filters_for_field_dict[x]))
         df['n_filters'] = df['filters'].map(lambda x: len(x.split(',')))
         EW_cols = [item for item in df.columns if 'EW' in item]
 

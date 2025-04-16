@@ -3,7 +3,7 @@
     Notes: Compares spatially resolved metallicity map across different diagnostics for a given set of galaxies
     Author : Ayan
     Created: 02-04-25
-    Example: run compare_metallicities.py --field Par028 --id 300,1303,1634,1849,2171,2727,2867 --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --AGN_diag Ne3O2 --Zdiag O3O2,R3,P25,NB --use_original_NB_grid --colorcol radius --debug_Zdiag
+    Example: run compare_metallicities.py --field Par028 --id 300,1303,1849,2171,2727,2867 --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --AGN_diag Ne3O2 --Zdiag O3O2,R3,P25,NB --use_original_NB_grid --colorcol radius --debug_Zdiag
              run compare_metallicities.py --field Par028 --id 300 --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --AGN_diag Ne3O2 --Zdiag O3O2,R3,NB --Zbranch low --colorcol radius --debug_Zdiag --exclude_line SII
 '''
 from make_diagnostic_maps import plot_2D_map, plot_radial_profile
@@ -88,11 +88,11 @@ if __name__ == "__main__":
 
                 # ----getting the integrated values-------
                 header = hdul['log_OH'].header
-                if header['LOG_OH_INT'] is None:
+                if header['log_oh_int'] is None:
                     print(f'Integrated logOH not found for ID {args.id} diag {Zdiag}')
                     this_logOH_int = ufloat(np.nan, np.nan)
                 else:
-                    this_logOH_int = ufloat(header['LOG_OH_INT'], header['LOG_OH_INT_ERR'])
+                    this_logOH_int = ufloat(header['log_oh_int'], header['log_oh_int_err'])
                 log_int_array.append(this_logOH_int)
 
                 # -------plotting metallicity map----------

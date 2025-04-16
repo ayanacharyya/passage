@@ -3,7 +3,7 @@
     Notes: Makes ALL plots related to PASSAGE metallicity gradient paper and saves them separately; some intentional hard-coding and reduction of flexibility in this script, for posterity
     Author : Ayan
     Created: 09-04-25
-    Example: run plots_for_zgrad_paper.py --do_not_correct_pixel --voronoi_line NeIII-3867 --voronoi_snr 4 --colorcol radius --phot_models nb
+    Example: run plots_for_zgrad_paper.py --do_not_correct_pixel --voronoi_line NeIII-3867 --voronoi_snr 4 --phot_models nb --debug_Zsfr
 '''
 from header import *
 from util import *
@@ -11,7 +11,7 @@ from util import *
 from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
 from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso22, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
-from make_diagnostic_maps import get_emission_line_map, annotate_PAs, plot_linelist, trim_image, get_EB_V_int, get_voronoi_bin_IDs, get_AGN_func_methods, AGN_func, take_safe_log_ratio, annotate_BPT_axes, get_distance_map, compute_SFR
+from make_diagnostic_maps import get_emission_line_map, annotate_PAs, plot_linelist, trim_image, get_EB_V, get_voronoi_bin_IDs, get_AGN_func_methods, AGN_func, take_safe_log_ratio, annotate_BPT_axes, get_distance_map, compute_SFR
 
 plt.rcParams['ytick.direction'] = 'in'
 plt.rcParams['ytick.right'] = True
@@ -55,15 +55,15 @@ def load_full_df(objlist, args, cosmos_name='web'):
     df = pd.DataFrame()
     # ---------looping over fields-----------
     for index, args.field in enumerate(fields):
-        args.filters = available_filters_for_field_dict[args.field]
+        args.filters = args.available_filters_for_field_dict[args.field]
         output_dir = get_output_path(args.field, args)
         df_filename = output_dir / f'{args.field}_all_diag_results.csv'
         thisdf = read_stats_df(df_filename, args)  # read in the stats dataframe
+        thisdf['filters'] = ', '.join(args.filters)
         df = pd.concat([df, thisdf], ignore_index=True)
 
     df['par_obj'] = df['field'].astype(str) + '-' + df['objid'].astype( str)  # making a unique combination of field and object id
     df = df.drop_duplicates('par_obj', keep='last')
-    df['filters'] = df['field'].map(lambda x: ', '.join(available_filters_for_field_dict[x]))
     df['n_filters'] = df['filters'].map(lambda x: len(x.split(',')))
 
     conditions_from_cosmos = ['mass', 'sfr', 'sSFR']
@@ -343,7 +343,7 @@ def get_photoionisation_model_grid(args):
         quant_names_dict = {'Z':'12 + log O/H', 'log(q)':'log q', 'log(P/k)':'log P/k', 'log(U)':'log U'}
 
         quant_names = [quant_names_dict[quant] for quant in [args.quantity1, args.quantity2, args.quantity3]]
-        df = df[quant_names].sort_values(by=quant_names)
+        df = df.sort_values(by=quant_names)
         df = df.rename(columns={v: k for k, v in quant_names_dict.items()})
 
     print(f'Reading in existing grid from {grid_filename}')
@@ -511,12 +511,12 @@ def load_object_specific_args(full_hdu, args):
     args.segmentation_map = trim_image(segmentation_map, args)
 
     # ---------------dust value---------------
-    try: args.EB_V = get_EB_V_int(full_hdu, args, verbose=False, silent=True)
+    try: _, args.EB_V, _ = get_EB_V(full_hdu, args, verbose=False, silent=True)
     except: args.EB_V = 0.
 
     # ---------------voronoi binning stuff---------------
     if args.vorbin and args.voronoi_line is not None:
-        line_map, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True, silent=True)
+        line_map, _, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True, silent=True)
         args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr, plot=False, quiet=True, args=args)
 
     return args
@@ -732,8 +732,8 @@ def plot_line_ratio_maps(full_hdu, ratio_labels, axes, args, cmap='cividis', vmi
     for index, ax in enumerate(axes):
         ratio = ratio_labels[index]
         num_line, den_line = ratio.split('/')
-        line_map_num, _, _, _ = get_emission_line_map(num_line, full_hdu, args, dered=True, silent=True)
-        line_map_den, _, _, _ = get_emission_line_map(den_line, full_hdu, args, dered=True, silent=True)
+        line_map_num, _, _, _, _ = get_emission_line_map(num_line, full_hdu, args, dered=True, silent=True)
+        line_map_den, _, _, _, _ = get_emission_line_map(den_line, full_hdu, args, dered=True, silent=True)
 
         bad_mask = unp.nominal_values(line_map_den.data) == 0
         line_map_den[bad_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
@@ -753,7 +753,7 @@ def plot_line_maps(full_hdu, line_labels, axes, args, cmap='cividis', vmin=None,
     print(f'Plotting the line maps {line_labels}..')
     for index, ax in enumerate(axes):
         line = line_labels[index]
-        line_map, _, _, _ = get_emission_line_map(line, full_hdu, args, dered=True, silent=True)
+        line_map, _, _, _, _ = get_emission_line_map(line, full_hdu, args, dered=True, silent=True)
         ax = plot_2D_map(line_map, ax, line, args, cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
 
     return axes
@@ -792,15 +792,15 @@ def plot_galaxy_example_fig(objid, field, args):
     ax_1dspec = plot_1D_spectra(od_hdu, ax_1dspec, args)
 
     # ----------plotting line flux maps--------------
-    axes_line_maps = plot_line_maps(full_hdu, args.line_list, axes_line_maps, args, cmap='RdPu_r', vmin=-20, vmax=-18, hide_xaxis=args.plot_ratio_maps, hide_cbar=True)
+    axes_line_maps = plot_line_maps(full_hdu, args.line_list, axes_line_maps, args, cmap='pink', vmin=-20, vmax=-18, hide_xaxis=args.plot_ratio_maps, hide_cbar=True)
 
     # ----------plotting line ratio image--------------
     if args.plot_ratio_maps:
-        axes_ratio_maps = plot_line_ratio_maps(full_hdu, ratios_to_plot, axes_ratio_maps, args, cmap='GnBu_r', vmin=-1, vmax=1, hide_xaxis=False, hide_cbar=True)
+        axes_ratio_maps = plot_line_ratio_maps(full_hdu, ratios_to_plot, axes_ratio_maps, args, cmap='bone', vmin=-1, vmax=1, hide_xaxis=False, hide_cbar=True)
 
     # ----------annotating and saving figure--------------
-    fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
-    figname = f'{args.field}_{args.id}_example.png'
+    fig.text(0.05, 0.98, f'{field}: ID {objid}', fontsize=args.fontsize, c='k', ha='left', va='top')
+    figname = f'{field}_{objid}_example.png'
     save_fig(fig, figname, args)
 
     return
@@ -867,11 +867,11 @@ def plot_AGN_demarcation_figure(full_hdu, args, marker='o'):
     dist_method = theoretical_lines[0]
 
     # -----------getting the fluxes------------------
-    ynum_map, _, ynum_int, _ = get_emission_line_map(args.ynum_line, full_hdu, args, silent=True)
-    yden_map, _, yden_int, _ = get_emission_line_map(args.yden_line, full_hdu, args, silent=True)
+    ynum_map, _, ynum_int, _, _ = get_emission_line_map(args.ynum_line, full_hdu, args, silent=True)
+    yden_map, _, yden_int, _, _ = get_emission_line_map(args.yden_line, full_hdu, args, silent=True)
 
-    xnum_map, _, xnum_int, _ = get_emission_line_map(args.xnum_line, full_hdu, args, silent=True)
-    xden_map, _, xden_int, _ = get_emission_line_map(args.xden_line, full_hdu, args, silent=True)
+    xnum_map, _, xnum_int, _, _ = get_emission_line_map(args.xnum_line, full_hdu, args, silent=True)
+    xden_map, _, xden_int, _, _ = get_emission_line_map(args.xden_line, full_hdu, args, silent=True)
 
     if not args.do_not_correct_flux and args.AGN_diag in ['H21', 'B22'] and args.xden_line == 'Ha': # special treatment for H-alpha line, in order to add the NII 6584 component back
         factor = 0.823  # from grizli source code
@@ -917,6 +917,11 @@ def load_metallicity_map(field, objid, Zdiag, args):
     if 'Par' in field: survey = 'passage'
     elif 'glass' in field: survey = 'glass'
     output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{exclude_text}.fits'
+    ####################################
+    if 'glass' in field:
+        output_fitsname = Path(str(output_fitsname).replace('SNR_4.0', 'SNR_2.0'))
+        print(f'\nWARNING: Actually choosing metallicity map corresponding to vorbin SNR=2 for {field}-{objid}') ##
+    ####################################
 
     # ------reading in existing outputfile--------------
     print(f'\nReading metallicity map from existing fits file {output_fitsname}')
@@ -925,8 +930,10 @@ def load_metallicity_map(field, objid, Zdiag, args):
     logOH_map = np.ma.masked_where(np.isnan(hdu.data), unp.uarray(hdu.data, hdul['log_OH_u'].data))
     if hdu.header['LOG_OH_INT'] is None: logOH_int = ufloat(np.nan, np.nan)
     else: logOH_int = ufloat(hdu.header['LOG_OH_INT'], hdu.header['LOG_OH_INT_ERR'])
+    if hdu.header['log_oh_sum'] is None: logOH_sum = ufloat(np.nan, np.nan)
+    else: logOH_sum = ufloat(hdu.header['log_oh_sum'], hdu.header['log_oh_sum_err'])
 
-    return logOH_map, logOH_int
+    return logOH_map, logOH_int, logOH_sum
 
 # --------------------------------------------------------------------------------------------------------------------
 def load_metallicity_df(field, objid, Zdiag, args):
@@ -934,21 +941,31 @@ def load_metallicity_df(field, objid, Zdiag, args):
     Loads the pre-computed list of spatially resolved metallicity values for a given object as a dataframe
     Returns dataframe
     '''
-    Zbranch_text = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
-    exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and Zdiag == 'NB' else ''
+
     if 'Par' in field: survey = 'passage'
     elif 'glass' in field: survey = 'glass'
+    Zbranch_text = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
+    exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and Zdiag == 'NB' else ''
     output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{exclude_text}.fits'
+    ####################################
+    if 'glass' in field:
+        output_fitsname = Path(str(output_fitsname).replace('SNR_4.0', 'SNR_2.0'))
+        print(f'\nWARNING: Actually choosing metallicity map corresponding to vorbin SNR=2 for {field}-{objid}') ##
+    ####################################
 
     # ------reading in existing outputfile--------------
     print(f'\nReading metallicity map from existing fits file {output_fitsname}')
     hdul = fits.open(output_fitsname)
     logOH_df = Table(hdul['tab'].data).to_pandas()
 
-    return logOH_df
+    hdu = hdul['log_OH']
+    if hdu.header['LOG_OH_INT'] is None: logOH_int = ufloat(np.nan, np.nan)
+    else: logOH_int = ufloat(hdu.header['LOG_OH_INT'], hdu.header['LOG_OH_INT_ERR'])
+
+    return logOH_df, logOH_int
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_metallicity_fig(full_hdu, Zdiag, args):
+def plot_metallicity_fig(full_hdu, field, Zdiag, args):
     '''
     Plots and saves a single figure with the direct image, 2D metallicity map and metallicity radial profile for a given object
     '''
@@ -956,7 +973,7 @@ def plot_metallicity_fig(full_hdu, Zdiag, args):
     print(f'Plotting metallicity ({Zdiag}) figure for {objid}..')
 
     # -----------loading the data---------------
-    logOH_map, logOH_int = load_metallicity_map(field, objid, Zdiag, args)
+    logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
 
     # --------setting up the figure------------
     fig, axes = plt.subplots(1, 3, figsize=(9, 3))
@@ -980,7 +997,7 @@ def plot_metallicity_fig(full_hdu, Zdiag, args):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_metallicity_sfr_fig(full_hdu, Zdiag, args):
+def plot_metallicity_sfr_fig(full_hdu, field, Zdiag, args):
     '''
     Plots and saves a single figure with the direct image, 2D metallicity map, metallicity radial profile, SFR map, metallicity vs SFR plot for a given object
     '''
@@ -988,24 +1005,23 @@ def plot_metallicity_sfr_fig(full_hdu, Zdiag, args):
     print(f'Plotting metallicity-SFR figure for {objid}..')
 
     # -----------loading the data---------------
-    logOH_map, logOH_int = load_metallicity_map(field, objid, Zdiag, args)
+    logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
     distance = cosmo.comoving_distance(args.z)
     Zlim = [7.1, 8.1]
     log_sfr_lim = [-3, -2]
 
     # --------setting up the figure------------
-    fig, axes = plt.subplots(1, 5 if args.debug_Zsfr else 3, figsize=(14, 3) if args.debug_Zsfr else (9, 3))
+    fig, axes = plt.subplots(2 if args.debug_Zsfr else 1, 3, figsize=(9, 5) if args.debug_Zsfr else (9, 3))
     fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.5, hspace=0.3)
 
     # -------deriving H-alpha map-----------
-    N2_plus_Ha_map, _, _, _ = get_emission_line_map('Ha', full_hdu, args, silent=True)
+    N2_plus_Ha_map, _, _, _, _ = get_emission_line_map('Ha', full_hdu, args, silent=True)
 
     # ------plotting native Ha and SFR maps------------
     if args.debug_Zsfr:
-        axes[0] = plot_2D_map(N2_plus_Ha_map, axes[0], r'H$\alpha$', args, takelog=True, cmap='RdPu_r', vmin=-20, vmax=-18, hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
+        axes[0][0] = plot_2D_map(N2_plus_Ha_map, axes[0][0], r'H$\alpha$ (orig)', args, takelog=True, cmap='RdPu_r', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=False, hide_cbar=False)
         sfr_map = compute_SFR(N2_plus_Ha_map, distance) # N2_plus_Ha_map here is really Ha_map, because the correction has not been undone yet
-        axes[1] = plot_2D_map(sfr_map, axes[1], f'log SFR', args, takelog=True, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=True, hide_cbar=False)
-        axes = axes[2:]
+        axes[0][1] = plot_2D_map(sfr_map, axes[0][1], f'log SFR (orig)', args, takelog=True, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=True, hide_yaxis=True, hide_cbar=False)
 
     # ----------correcting Ha map------------
     if not args.do_not_correct_flux:
@@ -1027,16 +1043,20 @@ def plot_metallicity_sfr_fig(full_hdu, Zdiag, args):
 
     Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask | N2Ha_map.mask, N2_plus_Ha_map.data / (1 + N2Ha_map.data))
 
+    if args.debug_Zsfr:
+        axes[0][2] = plot_2D_map(Ha_map, axes[0][2], r'H$\alpha$ (corrected)', args, takelog=True, cmap='RdPu_r', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=True, hide_cbar=False)
+        axes = axes[1]
+
     # -------deriving SFR map-----------
     sfr_map = compute_SFR(Ha_map, distance)
     log_sfr_map = np.ma.masked_where(sfr_map.mask, unp.log10(sfr_map.data))
 
     # -----plotting 2D metallicity map-----------
-    axes[0] = plot_2D_map(logOH_map, axes[0], f'log O/H + 12 ({Zdiag})', args, takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=False, hide_yaxis=args.debug_Zsfr, hide_cbar=False)
+    axes[0] = plot_2D_map(logOH_map, axes[0], f'log O/H + 12 ({Zdiag})', args, takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
 
     # -----plotting 2D SFR map-----------
     log_sfr_lim = [-3, -2]
-    axes[1] = plot_2D_map(log_sfr_map, axes[1], f'log SFR', args, takelog=False, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=True, hide_cbar=False)
+    axes[1] = plot_2D_map(log_sfr_map, axes[1], f'log SFR (corrected)' if args.debug_Zsfr else f'log SFR', args, takelog=False, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=True, hide_cbar=False)
 
     # ------plotting metallicity vs SFR-----------
     df = pd.DataFrame({'logOH': unp.nominal_values(np.ma.compressed(logOH_map)), 'logOH_u': unp.std_devs(np.ma.compressed(logOH_map)), 'log_sfr':unp.nominal_values(np.ma.compressed(log_sfr_map)), 'log_sfr_u': unp.std_devs(np.ma.compressed(log_sfr_map))})
@@ -1063,19 +1083,94 @@ def plot_metallicity_sfr_fig(full_hdu, Zdiag, args):
 
     # -----------saving figure------------
     axes[2].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[2].transAxes)
-    figname = f'metallicity-sfr_{objid:05d}.png'
+    debug_text = '_debug' if args.debug_Zsfr else ''
+    figname = f'metallicity-sfr_{objid:05d}{debug_text}.png'
     save_fig(fig, figname, args)
 
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_metallicity_comparison_fig(objlist, Zdiag_list, args):
+def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low'):
     '''
     Plots and saves a single figure with corner plots for comparisons across a given list of different metallicity diagnostics for a given list of objects
     Repeats that for both high and low metallicity branch solutions
     '''
-    print(f'Plotting metallicity diagnostics comparison for {Zdiag_list}..')
-    
+    print(f'Plotting metallicity diagnostics comparison for {Zdiag_arr}..')
+    args.Zbranch = Zbranch
+
+    # -------setting limits and colors-----------
+    Z_limits = [7.1, 9.1]
+    color_lim_dict = {'color':[None, None, '', ''], 'bin_ID':[None, None, 'Voronoi bin ID', 'rainbow'], 'radius':[0, 5, 'Galactocentric distance (kpc)', 'cividis'], 'agn_dist':[-1, 1, f'Distance from {args.AGN_diag} SF line', args.diverging_cmap]}
+    color = 'goldenrod'
+
+    # --------setting up full figure----------------------------------
+    Zbranch_text = '' if np.array([item in ['NB', 'P25'] for item in Zdiag_arr]).all() else f'-{args.Zbranch}'
+    nrow, ncol = len(Zdiag_arr) - 1, len(Zdiag_arr) - 1
+    fig, axes = plt.subplots(nrow, ncol, figsize=(8, 7), layout='tight')  # layout = 'tight' or 'constrained'
+    axes = np.atleast_2d(axes)
+
+    # --------looping over objects---------------------
+    for index, obj in enumerate(objlist):
+        field = obj[0]
+        objid = obj[1]
+        markersize = 100
+        marker='o' if 'Par' in field else 's'
+        log_int_array = []
+
+        # --------looping over diagnostics---------------------
+        for index2, Zdiag in enumerate(Zdiag_arr):
+            this_df, this_logOH_int = load_metallicity_df(field, objid, Zdiag, args)
+            if index2 == 0:
+                df = this_df
+            else:
+                df = pd.merge(df, this_df, on = ['radius', 'bin_ID', 'agn_dist'])
+            df = df.rename(columns={'log_OH': f'log_OH_{Zdiag}', 'log_OH_u': f'log_OH_{Zdiag}_err'})
+            log_int_array.append(this_logOH_int)
+
+       # ------now plotting for every diag combination--------------
+        df['color'] = color
+        for col_index in range(ncol):
+            for row_index in range(nrow):
+                ax = axes[row_index][col_index]
+                if row_index < col_index:
+                    try: fig.delaxes(ax)
+                    except: pass
+                else:
+                    Z1_index, Z2_index = col_index, row_index + 1
+                    Zdiag1 = Zdiag_arr[Z1_index]
+                    Zdiag2 = Zdiag_arr[Z2_index]
+
+                    if f'log_OH_{Zdiag1}' in df and f'log_OH_{Zdiag2}' in df:
+                        # ---plotting integrated--
+                        ax.scatter(log_int_array[Z1_index].n, log_int_array[Z2_index].n, s=markersize, c=color, lw=1, edgecolor='k', marker=marker)
+                        ax.errorbar(log_int_array[Z1_index].n, log_int_array[Z2_index].n, xerr=log_int_array[Z1_index].s, yerr=log_int_array[Z2_index].s, c='grey', fmt='none', lw=0.5, alpha=0.5)
+
+                        # ---plotting spatially resolved--
+                        p = ax.scatter(df[f'log_OH_{Zdiag1}'], df[f'log_OH_{Zdiag2}'], s=markersize/4, c=df[args.colorcol], lw=0, marker=marker, cmap=color_lim_dict[args.colorcol][3], vmin=color_lim_dict[args.colorcol][0], vmax=color_lim_dict[args.colorcol][1])
+                        ax.errorbar(df[f'log_OH_{Zdiag1}'], df[f'log_OH_{Zdiag2}'], xerr=df[f'log_OH_{Zdiag1}_err'], yerr=df[f'log_OH_{Zdiag2}_err'], c='grey', fmt='none', lw=0.1, alpha=0.5)
+
+                        ax.plot(Z_limits, Z_limits, ls='dotted', lw=0.1, c='k')
+
+                        # ----annotate axis----------
+                        if index == len(objlist) - 1:
+                            ax.set_xlim(Z_limits)
+                            ax.set_ylim(Z_limits)
+                            ax = annotate_axes(ax, Zdiag1, Zdiag2, args, hide_xaxis=Z2_index < nrow, hide_yaxis=Z1_index)
+                    else:
+                        print(f'Cannot plot {Zdiag1} vs {Zdiag2} comparison for object {objid}')
+
+        # ------making colorbar----------------------
+        if 'p' in locals() and args.colorcol != 'color' and index == len(objlist) - 1:
+            fig.subplots_adjust(right=0.8)
+            cbar_ax = fig.add_axes([0.45, 0.95, 0.3, 0.02]) # left, bottom, width, height
+            cbar = fig.colorbar(p, cax=cbar_ax, orientation='horizontal')
+            cbar.set_label(color_lim_dict[args.colorcol][2], fontsize=args.fontsize)
+
+    # ------------saving the full figure--------------------------
+    colorby_text = f'_colorby_{args.colorcol}' if args.colorcol != 'color' else ''
+    figname = f'Zdiag{Zbranch_text}_comparison{colorby_text}{args.vorbin_text}.png'
+    save_fig(fig, figname, args)
+
     return
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -1109,6 +1204,7 @@ if __name__ == "__main__":
     args.fontfactor = 1.5
     args.only_seg = True
     args.vorbin = True
+    args.plot_ratio_maps = True
     args.AGN_diag = 'Ne3O2'
     args.exclude_lines = 'SII'
     primary_Zdiag = 'NB'
@@ -1117,11 +1213,12 @@ if __name__ == "__main__":
 
     args.plot_conditions = 'SNR,mass'.split(',')
     args.line_list = 'OII,NeIII-3867,Hb,OIII'.split(',')
-    args.Zdiag = 'O3O2,R3,R23,NB'.split(',')
     args.SNR_thresh = 2
+    args.Zdiag = 'O3O2,R2,R3,R23,NB'.split(',')
+    args.colorcol = 'radius'
 
     # -------setting up objects to plot--------------
-    Par28_objects = [300, 1303, 1634, 1849, 2171, 2727, 2867]
+    Par28_objects = [300, 1303, 1849, 2171, 2727, 2867]
     glass_objects = [1333, 1721, 1983, 2128]
 
     passage_objlist = [['Par028', item] for item in Par28_objects]
@@ -1133,31 +1230,30 @@ if __name__ == "__main__":
     args.only_seg_text = '_onlyseg' if args.only_seg else ''
     args.vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
 
-    '''
     # ---------loading full dataframe for all relevant PASSAGE fields------------
-    df_all = load_full_df(passage_objlist, args, cosmos_name=cosmos_name)
+    #df_all = load_full_df(passage_objlist, args, cosmos_name=cosmos_name)
 
     # ---------venn diagram plot----------------------
-    plot_passage_venn(df_all, args)
+    #plot_passage_venn(df_all, args)
 
     # ---------loading master dataframe with only objects in objlist------------
-    df = make_master_df(df_all, objlist, args)
+    #df = make_master_df(df_all, objlist, args)
 
     # ---------photoionisation model plots----------------------
-    plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True)
-    plot_photoionisation_models('OIII/Hb', 'Z', args)
+    #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True)
+    #plot_photoionisation_models('OIII/Hb', 'Z', args)
 
     # ---------full population plots----------------------
-    plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR')
-    plot_MEx(df, args, mass_col='lp_mass')
-    plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB')
+    #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR')
+    #plot_MEx(df, args, mass_col='lp_mass')
+    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB')
 
     # ---------metallicity latex table for paper----------------------
-    df_latex = make_latex_table(df, args)
-
-    # ---------individual galaxy plot: example galaxy----------------------
-    plot_galaxy_example_fig(1303, 'Par028', args)
+    #df_latex = make_latex_table(df, args)
     
+    # ---------individual galaxy plot: example galaxy----------------------
+    #plot_galaxy_example_fig(1303, 'Par028', args)
+    '''
     # ---------individual galaxy plots: looping over objects----------------------
     objlist = objlist[:1] ##
     for index, obj in enumerate(objlist):
@@ -1168,15 +1264,16 @@ if __name__ == "__main__":
         full_hdu = load_full_fits(objid, field, args)
         args = load_object_specific_args(full_hdu, args)
 
-        plot_AGN_demarcation_figure(full_hdu, args, marker='o' if 'Par' in field else 's')
-        plot_metallicity_fig(full_hdu, primary_Zdiag, args)
+        #plot_AGN_demarcation_figure(full_hdu, args, marker='o' if 'Par' in field else 's')
+        #plot_metallicity_fig(full_hdu, field, primary_Zdiag, args, Zbranch=args.Zbranch)
         try:
-            plot_metallicity_sfr_fig(full_hdu, primary_Zdiag, args)
+            plot_metallicity_sfr_fig(full_hdu, field, primary_Zdiag, args)
         except:
             print(f'Could not plot SFR figure for ID# {objid}, so skipping this object..')
             pass
     '''
     # ---------metallicity comparison plots----------------------
-    plot_metallicity_comparison_fig(objlist, args.Zdiag, args)
+    plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low')
+    plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high')
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

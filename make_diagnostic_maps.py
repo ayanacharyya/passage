@@ -45,8 +45,8 @@
              run make_diagnostic_maps.py --field glass-a2744 --plot_snr --plot_ratio_maps --plot_radial_profiles --plot_AGN_frac --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 2 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.25 --AGN_diag Ne3O2 --Zdiag R3 --mask_agn --fontsize 5 --id 5184,1407,629,1504,1622,2273,2926,3422,2891,562,1300,2928,600 --output_subdir diagnostics_OIII,OII,Hb,NeIII-3867,SNR>2.0
              run make_diagnostic_maps.py --field Par28 --id 1303 --plot_DIG --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag P25 --plot_circle_at_arcsec 0.5 --plot_snr
 
-             run make_diagnostic_maps.py --field Par28 --id 300,1303,1634,1849,2171,2727,2867 --plot_ratio_maps --plot_snr --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 2 --drv 0.5 --do_not_correct_pixel --Zdiag R3 --AGN_diag Ne3O2 --mask_agn --fontsize 5
-             run make_diagnostic_maps.py --field Par28 --id 300,1303,1634,1849,2171,2727,2867 --plot_metallicity --plot_radial_profile --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --do_not_correct_pixel --Zdiag R3,R2,R23,O3O2,P25,NB --AGN_diag Ne3O2 --mask_agn --exclude_line SII
+             run make_diagnostic_maps.py --field Par28 --id 300,1303,1849,2171,2727,2867 --plot_ratio_maps --plot_snr --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 2 --drv 0.5 --do_not_correct_pixel --Zdiag R3 --AGN_diag Ne3O2 --mask_agn --fontsize 5
+             run make_diagnostic_maps.py --field Par28 --id 300,1303,1849,2171,2727,2867 --plot_metallicity --plot_radial_profile --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --do_not_correct_pixel --Zdiag R3,R2,R23,O3O2,P25,NB --AGN_diag Ne3O2 --mask_agn --exclude_line SII
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -639,14 +639,27 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
     Retrieve the emission map for a given line from the HDU
     Returns the 2D line image
     '''
+    # -----------getting the integrated flux value from grizli-----------------
+    line_int = get_emission_line_int(line, full_hdu, args, dered=dered, silent=silent)
 
+    # -----------getting the integrated EW value-----------------
+    line_index = np.where(args.available_lines == line)[0][0]
+    try:
+        line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
+        line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}'] # rest-frame EW
+        line_ew_err = full_hdu[2].header[f'EWHW_{line_index_in_cov:03d}'] # rest-frame EW uncertainty
+        line_ew = ufloat(line_ew, line_ew_err)
+    except KeyError:
+        line_ew = ufloat(np.nan, np.nan)
+
+    # ---------getting the spatially resolved line flux map----------------
     try:
         line_hdu = full_hdu['LINE', line]
-        line_map_err = 1e-17 / (full_hdu['LINEWHT', line].data ** 0.5)  # 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
+        line_map_err = 1e-17 / (full_hdu['LINEWHT', line].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
     except KeyError:
         if line == 'OIII':
             line_hdu = full_hdu['LINE', 'OIII-5007']
-            line_map_err = 1e-17 / (full_hdu['LINEWHT', 'OIII-5007'].data ** 0.5)  # 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
+            line_map_err = 1e-17 / (full_hdu['LINEWHT', 'OIII-5007'].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
 
     line_map = line_hdu.data * 1e-17 # in units of ergs/s/cm^2
     line_wave = line_hdu.header['RESTWAVE'] # in Angstrom
@@ -685,78 +698,71 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
 
     line_seg_mask = line_map.mask if np.ma.isMaskedArray(line_map) else False
 
-    # -----------discarding low-snr pixels AFTER vorbin, if any-----------------
-    if args.snr_cut is not None:
-        snr_map = line_map / line_map_err
-        mask = (~np.isfinite(snr_map)) | (snr_map < args.snr_cut)
-        line_map = np.ma.masked_where(mask, line_map.data)
-        line_map_err = np.ma.masked_where(mask, line_map_err.data)
-
     # -----------getting the dereddened flux value-----------------
     if dered:
         line_map_quant = get_dereddened_flux(unp.uarray(line_map, line_map_err), line_wave, args.EB_V)
         line_map = unp.nominal_values(line_map_quant)
         line_map_err = unp.std_devs(line_map_quant)
 
-    # -----------voronoi binning the flux and err maps-----------------
-    if args.vorbin and not for_vorbin:
-        if args.voronoi_line is None: # No reference emission line specified, so Voronoi IDs need to be computed now
-            bin_IDs = get_voronoi_bin_IDs(unp.uarray(line_map, line_map_err), args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
-        else: # Reference emission line specified for Voronoi binning, so bin IDs have been pre-computed
-            bin_IDs = args.voronoi_bin_IDs
-
-        if args.debug_vorbin:
-            fig, axes = plt.subplots(1, 7, figsize=(14, 3))
-            fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.1, wspace=0.5)
-            cmap = 'viridis'
-            fig.text(0.05, 0.8, f'{args.field}: ID {args.id}: line {line}', fontsize=args.fontsize, c='k', ha='left', va='top')
-            plot_2D_map(line_map, axes[0], args, takelog=False, label='map', cmap=cmap, hide_yaxis=True)
-            plot_2D_map(line_map_err, axes[1], args, takelog=False, label='map err', cmap=cmap, hide_yaxis=True)
-            snr = line_map / line_map_err
-            combined_cmap = make_combined_cmap(cmap, 'Grays', np.min(snr), np.max(snr), args.snr_cut)
-            plot_2D_map(snr, axes[2], args, takelog=False, label='snr', cmap=combined_cmap, hide_yaxis=True)
-            plot_2D_map(bin_IDs, axes[3], args, takelog=False, label='bin IDs', cmap=cmap, hide_yaxis=False)
-
-        line_map, line_map_err = bin_2D(line_map, bin_IDs, map_err=line_map_err)
-
-        if args.debug_vorbin:
-            plot_2D_map(line_map, axes[4], args, takelog=False, label='binned map', cmap=cmap, hide_yaxis=True)
-            plot_2D_map(line_map_err, axes[5], args, takelog=False, label='binned map err', cmap=cmap, hide_yaxis=True)
-            snr = line_map / line_map_err
-            combined_cmap = make_combined_cmap(cmap, 'Grays', np.nanmin(snr), np.nanmax(snr), args.snr_cut)
-            plot_2D_map(snr, axes[6], args, takelog=False, label='binned snr', cmap=combined_cmap, hide_yaxis=True)
-            plt.show(block=False)
-
-    line_map = np.ma.masked_where(line_seg_mask, line_map)
-    line_map_err = np.ma.masked_where(line_seg_mask, line_map_err)
-
-    # -----------discarding low-snr pixels AFTER vorbin, if any-----------------
-    if args.snr_cut is not None:
-        snr_map = line_map.data / line_map_err.data
-        mask = (~np.isfinite(snr_map)) | (snr_map < args.snr_cut)
-        line_map = np.ma.masked_where(line_map.mask | mask, line_map.data)
-        line_map_err = np.ma.masked_where(line_map_err.mask | mask, line_map_err.data)
-
-    line_map = np.ma.masked_where(line_map.mask | line_map_err.mask, unp.uarray(line_map.data, line_map_err.data))
-
     # -----------getting the integrated flux value by summing the 2D map-----------------
-    line_sum = np.sum(line_map) # ergs/s/cm^2
+    line_sum = np.sum(np.ma.masked_where(line_seg_mask | ~np.isfinite(line_map.data), unp.uarray(line_map.data, line_map_err.data))) # ergs/s/cm^2
     if not silent: print(f'Summed up {line} flux for object {args.id} is {line_sum/1e-17: .3f} x 10^-17 ergs/s/cm^2.')
 
-    # -----------getting the integrated flux value from grizli-----------------
-    line_int = get_emission_line_int(line, full_hdu, args, dered=dered, silent=silent)
+    if args.only_integrated:
+        line_int = line_sum
+        print(f'\nIntegrated {line} flux for object {args.id} is {line_int/1e-17: .3f} x 10^-17 ergs/s/cm^2.')
+        line_map = None
+    else:
+        # -----------voronoi binning the flux and err maps-----------------
+        if args.vorbin and not for_vorbin:
 
-    # -----------getting the integrated EW value-----------------
-    line_index = np.where(args.available_lines == line)[0][0]
-    try:
-        line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
-        line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}'] # rest-frame EW
-        line_ew_err = full_hdu[2].header[f'EWHW_{line_index_in_cov:03d}'] # rest-frame EW uncertainty
-        line_ew = ufloat(line_ew, line_ew_err)
-    except KeyError:
-        line_ew = ufloat(np.nan, np.nan)
+            # -----------discarding low-snr pixels BEFORE vorbin, if any-----------------
+            if args.snr_cut is not None:
+                snr_map = line_map / line_map_err
+                mask = (~np.isfinite(snr_map)) | (snr_map < args.snr_cut)
+                line_map = np.ma.masked_where(mask, line_map.data)
+                line_map_err = np.ma.masked_where(mask, line_map_err.data)
 
-    return line_map, line_wave, line_int, line_ew
+            if args.voronoi_line is None: # No reference emission line specified, so Voronoi IDs need to be computed now
+                bin_IDs = get_voronoi_bin_IDs(unp.uarray(line_map, line_map_err), args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
+            else: # Reference emission line specified for Voronoi binning, so bin IDs have been pre-computed
+                bin_IDs = args.voronoi_bin_IDs
+
+            if args.debug_vorbin:
+                fig, axes = plt.subplots(1, 7, figsize=(14, 3))
+                fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.1, wspace=0.5)
+                cmap = 'viridis'
+                fig.text(0.05, 0.8, f'{args.field}: ID {args.id}: line {line}', fontsize=args.fontsize, c='k', ha='left', va='top')
+                plot_2D_map(line_map, axes[0], args, takelog=False, label='map', cmap=cmap, hide_yaxis=True)
+                plot_2D_map(line_map_err, axes[1], args, takelog=False, label='map err', cmap=cmap, hide_yaxis=True)
+                snr = line_map / line_map_err
+                combined_cmap = make_combined_cmap(cmap, 'Grays', np.min(snr), np.max(snr), args.snr_cut)
+                plot_2D_map(snr, axes[2], args, takelog=False, label='snr', cmap=combined_cmap, hide_yaxis=True)
+                plot_2D_map(bin_IDs, axes[3], args, takelog=False, label='bin IDs', cmap=cmap, hide_yaxis=False)
+
+            line_map, line_map_err = bin_2D(line_map, bin_IDs, map_err=line_map_err)
+
+            if args.debug_vorbin:
+                plot_2D_map(line_map, axes[4], args, takelog=False, label='binned map', cmap=cmap, hide_yaxis=True)
+                plot_2D_map(line_map_err, axes[5], args, takelog=False, label='binned map err', cmap=cmap, hide_yaxis=True)
+                snr = line_map / line_map_err
+                combined_cmap = make_combined_cmap(cmap, 'Grays', np.nanmin(snr), np.nanmax(snr), args.snr_cut)
+                plot_2D_map(snr, axes[6], args, takelog=False, label='binned snr', cmap=combined_cmap, hide_yaxis=True)
+                plt.show(block=False)
+
+        line_map = np.ma.masked_where(line_seg_mask, line_map)
+        line_map_err = np.ma.masked_where(line_seg_mask, line_map_err)
+
+        # -----------discarding low-snr pixels AFTER vorbin, if any-----------------
+        if args.snr_cut is not None:
+            snr_map = line_map.data / line_map_err.data
+            mask = (~np.isfinite(snr_map)) | (snr_map < args.snr_cut)
+            line_map = np.ma.masked_where(line_map.mask | mask, line_map.data)
+            line_map_err = np.ma.masked_where(line_map_err.mask | mask, line_map_err.data)
+
+        line_map = np.ma.masked_where(line_map.mask | line_map_err.mask, unp.uarray(line_map.data, line_map_err.data))
+
+    return line_map, line_wave, line_int, line_sum, line_ew
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, snr_ax=None, radprof_ax=None):
@@ -765,7 +771,7 @@ def plot_emission_line_map(line, full_hdu, ax, args, cmap='cividis', EB_V=None, 
     Returns the axes handle
     '''
 
-    line_map, line_wave, line_int, line_ew = get_emission_line_map(line, full_hdu, args, dered=True)
+    line_map, line_wave, line_int, _, line_ew = get_emission_line_map(line, full_hdu, args, dered=True)
     ax, _ = plot_2D_map(line_map, ax, args, label=r'%s$_{\rm int}$ = %.1e' % (line, line_int.n), cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, snr_ax=snr_ax, radprof_ax=radprof_ax)
     if args.arcsec_limit >= 1 and not args.no_text_on_plot: ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[0] * 0.88, f'EW = {line_ew:.1f}', c='k', fontsize=args.fontsize, ha='left', va='bottom', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
 
@@ -778,8 +784,8 @@ def plot_line_ratio_map(line_num, line_den, full_hdu, ax, args, cmap='cividis', 
     Returns the axes handle
     '''
 
-    num_map, _, num_int, _ = get_emission_line_map('Ha' if line_num == 'NII' else line_num, full_hdu, args, dered=True)
-    den_map, _, den_int, _ = get_emission_line_map('Ha' if line_den == 'NII' else line_den, full_hdu, args, dered=True)
+    num_map, _, num_int, _, _ = get_emission_line_map('Ha' if line_num == 'NII' else line_num, full_hdu, args, dered=True)
+    den_map, _, den_int, _, _ = get_emission_line_map('Ha' if line_den == 'NII' else line_den, full_hdu, args, dered=True)
 
     # ----------deblending flux--------------------
     if not args.do_not_correct_flux:
@@ -913,33 +919,20 @@ def compute_EB_V(Ha_flux, Hb_flux,verbose=False):
     return EB_V
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_EB_V_map(full_hdu, args, verbose=False, silent=False):
+def get_EB_V(full_hdu, args, verbose=False, silent=False):
     '''
     Computes and returns the spatially resolved as well as integrated dust extinction map from a given HDU
     Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
     '''
 
-    Ha_map, Ha_wave, Ha_int, _ = get_emission_line_map('Ha', full_hdu, args, dered=False, silent=silent) # do not need to deredden the lines when we are fetching the flux in order to compute reddening
-    Hb_map, Hb_wave, Hb_int, _ = get_emission_line_map('Hb', full_hdu, args, dered=False, silent=silent)
+    Ha_map, Ha_wave, Ha_int, Ha_sum, _ = get_emission_line_map('Ha', full_hdu, args, dered=False, silent=silent) # do not need to deredden the lines when we are fetching the flux in order to compute reddening
+    Hb_map, Hb_wave, Hb_int, Hb_sum, _ = get_emission_line_map('Hb', full_hdu, args, dered=False, silent=silent)
 
     EB_V_map = compute_EB_V(Ha_map, Hb_map)
     EB_V_int = compute_EB_V(Ha_int, Hb_int, verbose=verbose)
+    EB_V_sum = compute_EB_V(Ha_sum, Hb_sum, verbose=verbose)
 
-    return EB_V_map, EB_V_int
-
-# -------------------------------------------------------------------------------------------------------------------
-def get_EB_V_int(full_hdu, args, verbose=False, silent=False):
-    '''
-    Computes and returns the integrated dust extinction value from a given HDU
-    Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
-    '''
-    Ha_int = get_emission_line_int('Ha', full_hdu, args, dered=False, silent=silent)
-    Hb_int = get_emission_line_int('Hb', full_hdu, args, dered=False, silent=silent)
-
-    if np.isnan(Ha_int.n) or np.isnan(Hb_int.n): EB_V_int = 0.
-    else: EB_V_int = compute_EB_V(Ha_int, Hb_int, verbose=verbose)
-
-    return EB_V_int
+    return EB_V_map, EB_V_int, EB_V_sum
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_EB_V_map(full_hdu, ax, args, radprof_ax=None):
@@ -949,7 +942,7 @@ def plot_EB_V_map(full_hdu, ax, args, radprof_ax=None):
     '''
     lim, label = [0, 1], 'E(B-V)'
 
-    EB_V_map, EB_V_int = get_EB_V(full_hdu, args)
+    EB_V_map, EB_V_int, EB_V_sum = get_EB_V(full_hdu, args)
     ax, EB_V_radfit = plot_2D_map(EB_V_map, ax, args, takelog=False, label=r'%s$_{\rm int}$ = %.1f' % (label, EB_V_int.n), cmap='YlOrBr', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, EB_V_map, EB_V_radfit, EB_V_int
@@ -980,12 +973,13 @@ def get_SFR(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated SFR from a given HDU
     '''
-    Ha_map, Ha_wave, Ha_int, _ = get_emission_line_map('Ha', full_hdu, args)
+    Ha_map, Ha_wave, Ha_int, Ha_sum, _ = get_emission_line_map('Ha', full_hdu, args)
 
     SFR_map = compute_SFR(Ha_map, args.distance)
     SFR_int = compute_SFR(Ha_int, args.distance)
+    SFR_sum = compute_SFR(Ha_sum, args.distance)
 
-    return SFR_map, SFR_int
+    return SFR_map, SFR_int, SFR_sum
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_SFR_map(full_hdu, ax, args, radprof_ax=None, snr_ax=None):
@@ -994,7 +988,7 @@ def plot_SFR_map(full_hdu, ax, args, radprof_ax=None, snr_ax=None):
     Returns the axes handles and the 2D SFR density map just produced
     '''
     lim, label = [-3, -1], 'SFR'
-    SFR_map, SFR_int = get_SFR(full_hdu, args)
+    SFR_map, SFR_int, SFR_sum = get_SFR(full_hdu, args)
     ax, SFR_radfit = plot_2D_map(SFR_map, ax, args, label=r'log %s$_{\rm int}$ = %.1f' % (label, SFR_int.n), cmap='viridis', radprof_ax=radprof_ax, snr_ax=snr_ax, vmin=lim[0], vmax=lim[1], hide_yaxis=True, hide_xaxis=True)
 
     return ax, SFR_map, SFR_radfit, SFR_int
@@ -1042,13 +1036,14 @@ def get_Te(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated Te from a given HDU
     '''
-    OIII4363_map, OIII4363_wave, OIII4363_int, _ = get_emission_line_map('OIII-4363', full_hdu, args)
-    OIII5007_map, OIII5007_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    OIII4363_map, OIII4363_wave, OIII4363_int, OIII4363_sum, _ = get_emission_line_map('OIII-4363', full_hdu, args)
+    OIII5007_map, OIII5007_wave, OIII5007_int, OIII5007_sum, _ = get_emission_line_map('OIII', full_hdu, args)
 
     Te_map = compute_Te(OIII4363_map, OIII5007_map)
     Te_int = compute_Te(OIII4363_int, OIII5007_int)
+    Te_sum = compute_Te(OIII4363_sum, OIII5007_sum)
 
-    return Te_map, Te_int
+    return Te_map, Te_int, Te_sum
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_Te_map(full_hdu, ax, args, radprof_ax=None):
@@ -1057,7 +1052,7 @@ def plot_Te_map(full_hdu, ax, args, radprof_ax=None):
     Returns the axes handles and the 2D T_e map just produced
     '''
     lim, label = [1, 7], r'T$_e$'
-    Te_map, Te_int = get_Te(full_hdu, args)
+    Te_map, Te_int, Te_sum = get_Te(full_hdu, args)
     ax, Te_radfit = plot_2D_map(Te_map, ax, args, label=r'log %s$_{\rm int}$ = %.1e' % (label, Te_int.n), cmap='OrRd_r', radprof_ax=radprof_ax, hide_yaxis=True, vmin=lim[0], vmax=lim[1])
 
     return ax, Te_map, Te_radfit, Te_int
@@ -1124,16 +1119,17 @@ def get_Z_Te(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated Te metallicity from a given HDU
     '''
-    OII3727_map, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
-    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
-    Hbeta_map, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
+    OII3727_map, line_wave, OII3727_int, OII3727_sum, _ = get_emission_line_map('OII', full_hdu, args)
+    OIII5007_map, line_wave, OIII5007_int, OIII5007_sum, _ = get_emission_line_map('OIII', full_hdu, args)
+    Hbeta_map, line_wave, Hbeta_int, Hbeta_sum, _ = get_emission_line_map('Hb', full_hdu, args)
 
-    Te_map, Te_int = get_Te(full_hdu, args)
+    Te_map, Te_int, Te_sum = get_Te(full_hdu, args)
 
     logOH_map = compute_Z_Te(OII3727_map, OIII5007_map, Hbeta_map, Te_map)
     logOH_int = compute_Z_Te(OII3727_int, OIII5007_int, Hbeta_int, Te_int)
+    logOH_sum = compute_Z_Te(OII3727_sum, OIII5007_sum, Hbeta_sum, Te_sum)
 
-    return logOH_map, logOH_int
+    return logOH_map, logOH_int, logOH_sum
 
 # --------------------------------------------------------------------------------------------------------------------
 def compute_Z_P25_SFR(O3S2, N2S2):
@@ -1221,9 +1217,9 @@ def get_Z_P25(full_hdu, args, branch='low'):
     '''
     Computes and returns the spatially resolved as well as intregrated Peluso+2025 metallicity from a given HDU
     '''
-    SII6717_map, line_wave, SII6717_int, _ = get_emission_line_map('SII', full_hdu, args)
-    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
-    Halpha_map, line_wave, Halpha_int, _ = get_emission_line_map('Ha', full_hdu, args)
+    SII6717_map, line_wave, SII6717_int, SII6717_sum, _ = get_emission_line_map('SII', full_hdu, args)
+    OIII5007_map, line_wave, OIII5007_int, OIII5007_sum, _ = get_emission_line_map('OIII', full_hdu, args)
+    Halpha_map, line_wave, Halpha_int, Halpha_sum, _ = get_emission_line_map('Ha', full_hdu, args)
 
     if not args.do_not_correct_flux:
         # special treatment for H-alpha line, in order to account for NII 6584 component
@@ -1233,11 +1229,13 @@ def get_Z_P25(full_hdu, args, branch='low'):
 
     NII6584_map = np.ma.masked_where(Halpha_map.mask, Halpha_map.data * (1 - 0.823) / factor)
     NII6584_int = Halpha_int * (1 - 0.823) / factor
+    NII6584_sum = Halpha_sum * (1 - 0.823) / factor
 
     logOH_map = compute_Z_P25(OIII5007_map, NII6584_map, SII6717_map, args.distance_from_AGN_line_map)
     logOH_int = compute_Z_P25(OIII5007_int, NII6584_int, SII6717_int, args.distance_from_AGN_line_int)
+    logOH_sum = compute_Z_P25(OIII5007_sum, NII6584_sum, SII6717_sum, args.distance_from_AGN_line_int)
 
-    return logOH_map, logOH_int
+    return logOH_map, logOH_int, logOH_sum
 
 # ----------------------------------------------------------------------------------------------------
 def get_nearest(value, array):
@@ -1333,9 +1331,9 @@ def get_Z_KD02_R23(full_hdu, args, branch='low'):
     '''
     Computes and returns the spatially resolved as well as intregrated R23 metallicity from a given HDU
     '''
-    OII3727_map, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
-    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
-    Hbeta_map, line_wave, Hbeta_int, _ = get_emission_line_map('Hb', full_hdu, args)
+    OII3727_map, line_wave, OII3727_int, OII3727_sum, _ = get_emission_line_map('OII', full_hdu, args)
+    OIII5007_map, line_wave, OIII5007_int, OIII5007_sum, _ = get_emission_line_map('OIII', full_hdu, args)
+    Hbeta_map, line_wave, Hbeta_int, Hbeta_sum, _ = get_emission_line_map('Hb', full_hdu, args)
 
     if not args.do_not_correct_flux:
         # special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back
@@ -1344,11 +1342,13 @@ def get_Z_KD02_R23(full_hdu, args, branch='low'):
         print(f'Un-correcting OIII to include the 4959 component, for computing R23 metallicity, by factor of {factor:.3f}')
         OIII5007_map = np.ma.masked_where(OIII5007_map.mask, OIII5007_map.data / factor)
         OIII5007_int = OIII5007_int / factor
+        OIII5007_sum = OIII5007_sum  / factor
 
     logOH_map = compute_Z_R23(OII3727_map, OIII5007_map, Hbeta_map, branch=branch)
     logOH_int = compute_Z_R23(OII3727_int, OIII5007_int, Hbeta_int, branch=branch)
+    logOH_sum = compute_Z_R23(OII3727_sum, OIII5007_sum, Hbeta_sum, branch=branch)
 
-    return logOH_map, logOH_int
+    return logOH_map, logOH_int, logOH_sum
 
 # --------------------------------------------------------------------------------------------------------------------
 def compute_Z_NB(line_label_array, line_flux_array):
@@ -1422,15 +1422,22 @@ def compute_Z_NB(line_label_array, line_flux_array):
 
             # -------estimating the resulting logOH, and associated uncertainty-----------
             df_estimates = Result.Posterior.DF_estimates # pandas DataFrame
-            logOH_est = df_estimates.loc["12 + log O/H", "Estimate"]
-            logOH_low = df_estimates.loc["12 + log O/H", "CI68_low"]
-            logOH_high = df_estimates.loc["12 + log O/H", "CI68_high"]
+            logOH_est = df_estimates.loc['12 + log O/H', 'Estimate']
+            logOH_low = df_estimates.loc['12 + log O/H', 'CI68_low']
+            logOH_high = df_estimates.loc['12 + log O/H', 'CI68_high']
             logOH_err = np.mean([logOH_est - logOH_low, logOH_high - logOH_est])
             logOH = ufloat(logOH_est, logOH_err)
 
             counter += 1
             logOH_dict_unique_IDs.update({this_ID: logOH}) # updating to unique ID dictionary once logOH has been calculated for this unique ID
             print(f'Ran NB for unique ID {this_ID}, which is {counter} out of {len(unique_IDs_array)} in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
+
+            if args.only_integrated: ##
+                print('\n') ##
+                Hb_flux = obs_fluxes[np.where(np.array(line_label_array)=='Hbeta')[0][0]]
+                for index, line in enumerate(line_label_array): print(f'{args.id}: {line}={obs_fluxes[index]/Hb_flux: .1f}+/-{obs_errs[index]/Hb_flux: .1f}')  ##
+                print(f'{args.id}: log O/H + 12={logOH: .1f}')
+
         logOH_array.append(logOH)
     print(f'\nRan NB for total {counter} unique pixels out of {len(obs_flux_array[0])}, in {timedelta(seconds=(datetime.now() - start_time3).seconds)}\n')
 
@@ -1452,9 +1459,9 @@ def get_Z_NB(full_hdu, args):
     else: line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
                        'Ha':'NII6583_Halpha', 'SII':'SII6716_31', 'NeIII-3867':'NeIII3869'}
 
-    line_map_array, line_int_array, line_label_array = [], [], []
+    line_map_array, line_int_array, line_sum_array, line_label_array = [], [], [], []
     for line in args.available_lines:
-        line_map, line_wave, line_int, _ = get_emission_line_map(line, full_hdu, args, dered=False)
+        line_map, line_wave, line_int, line_sum, _ = get_emission_line_map(line, full_hdu, args, dered=False, silent=args.only_integrated)
         factor = 1.
         if not args.do_not_correct_flux:
             if args.use_original_NB_grid:
@@ -1469,19 +1476,25 @@ def get_Z_NB(full_hdu, args):
                 if line == 'Ha':
                     factor = 0.823  # from grizli source code
                     print(f'Un-correcting Ha to include the NII component back, i.e. dividing by factor {factor:.3f} because NB can use line summation')
-            line_map = np.ma.masked_where(line_map.mask, line_map.data / factor)
+            if line_map is not None: line_map = np.ma.masked_where(line_map.mask, line_map.data / factor)
+            line_int = line_int / factor
+
         line_int = line_int / factor
         line_snr = line_int.n / line_int.s
 
         if line_snr > 2 and line in line_label_dict.keys() and line not in args.exclude_lines:
             line_map_array.append(line_map)
             line_int_array.append(line_int)
+            line_sum_array.append(line_sum)
             line_label_array.append(line_label_dict[line])
 
-    logOH_map = compute_Z_NB(line_label_array, line_map_array)
-    logOH_int = compute_Z_NB(line_label_array, line_int_array)
+    logOH_map = compute_Z_NB(line_label_array, line_map_array) if not args.only_integrated else None
+    if (np.array(line_int_array) > 0).all(): logOH_int = compute_Z_NB(line_label_array, line_int_array)
+    else: logOH_int = ufloat(np.nan, np.nan)
+    if (np.array(line_sum_array) > 0).all(): logOH_sum = compute_Z_NB(line_label_array, line_sum_array)
+    else: logOH_sum = ufloat(np.nan, np.nan)
 
-    return logOH_map, logOH_int, line_label_array
+    return logOH_map, logOH_int, logOH_sum, line_label_array
 
 # --------------------------------------------------------------------------------------------------------------------
 def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
@@ -1543,7 +1556,7 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
     return log_OH
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_emission_line_maps(full_hdu, line_labels, args):
+def get_emission_line_maps(full_hdu, line_labels, args, silent=False):
     '''
     Computes and returns the spatially resolved as well as intregrated metallicity based on a given Curti+2019 calibration, from a given HDU
     '''
@@ -1551,9 +1564,9 @@ def get_emission_line_maps(full_hdu, line_labels, args):
         print(f'All lines in {line_labels} not available in object {args.id}')
         return None, None
 
-    line_map_arr, line_int_arr = [], []
+    line_map_arr, line_int_arr, line_sum_arr = [], [], []
     for line in line_labels:
-        line_map, line_wave, line_int, _ = get_emission_line_map(line, full_hdu, args)
+        line_map, line_wave, line_int, line_sum, _ = get_emission_line_map(line, full_hdu, args, silent=silent)
 
         if not args.do_not_correct_flux:
             factor = 1.
@@ -1562,14 +1575,16 @@ def get_emission_line_maps(full_hdu, line_labels, args):
                 factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
                 print(f'Un-correcting OIII to include the 4959 component, for computing R23 metallicity, by factor of {factor:.3f}')
 
-            line_map = np.ma.masked_where(line_map.mask, line_map.data / factor)
+            if line_map is not None: line_map = np.ma.masked_where(line_map.mask, line_map.data / factor)
             line_int = line_int / factor
+            line_sum = line_sum / factor
 
         line_map_arr.append(line_map)
         line_int_arr.append(line_int)
+        line_sum_arr.append(line_sum)
 
 
-    return line_map_arr, line_int_arr
+    return line_map_arr, line_int_arr, line_sum_arr
 
 # --------------------------------------------------------------------------------------------------------------------
 def get_Z_C19(full_hdu, args):
@@ -1578,70 +1593,84 @@ def get_Z_C19(full_hdu, args):
     '''
     # ------getting appropriate emission lines and calibration coefficients--------------
     if args.Zdiag == 'O3O2':
-        line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OIII', 'OII'], args)
+        line_map_arr, line_int_arr, line_sum_arr = get_emission_line_maps(full_hdu, ['OIII', 'OII'], args, silent=args.only_integrated)
         if line_map_arr is None: return None, ufloat(np.nan, np.nan)
         ratio_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1])
         try: ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
         except ValueError: ratio_int = ufloat(np.nan, np.nan)
+        try: ratio_sum = unp.log10(line_sum_arr[0] / line_sum_arr[1])
+        except ValueError: ratio_sum = ufloat(np.nan, np.nan)
         coeff = [-0.691, -2.944, -1.308]  # c0-2 parameters from Table 2 of Curti+19 3rd row (O3O2)
 
     elif args.Zdiag == 'R3':
-        line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OIII', 'Hb'], args)
+        line_map_arr, line_int_arr, line_sum_arr = get_emission_line_maps(full_hdu, ['OIII', 'Hb'], args, silent=args.only_integrated)
         if line_map_arr is None: return None, ufloat(np.nan, np.nan)
         ratio_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1])
         try: ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
         except ValueError: ratio_int = ufloat(np.nan, np.nan)
+        try: ratio_sum = unp.log10(line_sum_arr[0] / line_sum_arr[1])
+        except ValueError: ratio_sum = ufloat(np.nan, np.nan)
         coeff = [-0.277, -3.549, -3.593, -0.981]  # c0-3 parameters from Table 2 of Curti+19 2nd row (R3)
 
     elif args.Zdiag == 'R23':
-        line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OIII', 'OII', 'Hb'], args)
+        line_map_arr, line_int_arr, line_sum_arr = get_emission_line_maps(full_hdu, ['OIII', 'OII', 'Hb'], args, silent=args.only_integrated)
         if line_map_arr is None: return None, ufloat(np.nan, np.nan)
         R1_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[2], skip_log=True)
         R2_map = take_safe_log_ratio(line_map_arr[1], line_map_arr[2], skip_log=True)
         ratio_map = take_safe_log_sum(R1_map, R2_map)
         try: ratio_int = unp.log10((line_int_arr[0] + line_int_arr[1]) / line_int_arr[2])
         except ValueError: ratio_int = ufloat(np.nan, np.nan)
+        try: ratio_sum = unp.log10((line_sum_arr[0] + line_sum_arr[1]) / line_sum_arr[2])
+        except ValueError: ratio_sum = ufloat(np.nan, np.nan)
         coeff = [0.527, -1.569, -1.652, -0.421]  # c0-3 parameters from Table 2 of Curti+19 4th row (R23)
 
     elif args.Zdiag == 'O3S2':
-        line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OIII', 'Hb', 'SII', 'Ha'], args)
+        line_map_arr, line_int_arr, line_sum_arr = get_emission_line_maps(full_hdu, ['OIII', 'Hb', 'SII', 'Ha'], args, silent=args.only_integrated)
         if line_map_arr is None: return None, ufloat(np.nan, np.nan)
         R1_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1], skip_log=True)
         R2_map = take_safe_log_ratio(line_map_arr[2], line_map_arr[3], skip_log=True)
         ratio_map = take_safe_log_ratio(R1_map, R2_map)
         try: ratio_int = unp.log10((line_int_arr[0] / line_int_arr[1]) / (line_int_arr[2] / line_int_arr[3]))
         except ValueError: ratio_int = ufloat(np.nan, np.nan)
+        try: ratio_sum = unp.log10((line_sum_arr[0] / line_sum_arr[1]) / (line_sum_arr[2] / line_sum_arr[3]))
+        except ValueError: ratio_sum = ufloat(np.nan, np.nan)
         coeff = [0.191, -4.292, -2.538, 0.053, 0.332]  # c0-4 parameters from Table 2 of Curti+19 last row (O3S2)
 
     elif args.Zdiag == 'S2':
-        line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['SII', 'Ha'], args)
+        line_map_arr, line_int_arr, line_sum_arr = get_emission_line_maps(full_hdu, ['SII', 'Ha'], args, silent=args.only_integrated)
         if line_map_arr is None: return None, ufloat(np.nan, np.nan)
         ratio_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1])
         try: ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
         except ValueError: ratio_int = ufloat(np.nan, np.nan)
+        try: ratio_sum = unp.log10(line_sum_arr[0] / line_sum_arr[1])
+        except ValueError: ratio_sum = ufloat(np.nan, np.nan)
         coeff = [-0.442, -0.360, -6.271, -8.339, -3.559]  # c0-3 parameters from Table 2 of Curti+19 3rd-to-last row (S2)
 
     elif args.Zdiag == 'RS32':
-        line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OIII', 'Hb', 'SII', 'Ha'], args)
+        line_map_arr, line_int_arr, line_sum_arr = get_emission_line_maps(full_hdu, ['OIII', 'Hb', 'SII', 'Ha'], args, silent=args.only_integrated)
         if line_map_arr is None: return None, ufloat(np.nan, np.nan)
         R1_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1], skip_log=True)
         R2_map = take_safe_log_ratio(line_map_arr[2], line_map_arr[3], skip_log=True)
         ratio_map = take_safe_log_sum(R1_map, R2_map)
         try: ratio_int = unp.log10((line_int_arr[0] / line_int_arr[1]) + (line_int_arr[2] / line_int_arr[3]))
         except ValueError: ratio_int = ufloat(np.nan, np.nan)
+        try: ratio_sum = unp.log10((line_sum_arr[0] / line_sum_arr[1]) + (line_sum_arr[2] / line_sum_arr[3]))
+        except ValueError: ratio_sum = ufloat(np.nan, np.nan)
         coeff = [-0.054, -2.546, -1.970, 0.082, 0.222]  # c0-3 parameters from Table 2 of Curti+19 2nd-to-last row (RS32)
 
     elif args.Zdiag == 'R2':
-        line_map_arr, line_int_arr = get_emission_line_maps(full_hdu, ['OII', 'Hb'], args)
+        line_map_arr, line_int_arr, line_sum_arr = get_emission_line_maps(full_hdu, ['OII', 'Hb'], args, silent=args.only_integrated)
         if line_map_arr is None: return None, ufloat(np.nan, np.nan)
         ratio_map = take_safe_log_ratio(line_map_arr[0], line_map_arr[1])
         try: ratio_int = unp.log10(line_int_arr[0] / line_int_arr[1])
         except ValueError: ratio_int = ufloat(np.nan, np.nan)
+        try: ratio_sum = unp.log10(line_sum_arr[0] / line_sum_arr[1])
+        except ValueError: ratio_sum = ufloat(np.nan, np.nan)
         coeff = [0.435, -1.362, -5.655, -4.851, -0.478, 0.736]  # c0-3 parameters from Table 2 of Curti+19 1st row (R2)
 
     else:
         print(f'Could not apply any of the metallicity diagnostics, so returning NaN metallicities')
-        return None, ufloat(np.nan, np.nan)
+        return None, ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)
 
     coeff = coeff[::-1] # because in Curti+2019 the coefficients are listed in the reverse order compared to what np.poly1d prefers
 
@@ -1666,9 +1695,11 @@ def get_Z_C19(full_hdu, args):
         ax = None
 
     # -------estimating the metallicities---------------
-    logOH_map = compute_Z_C19(ratio_map, coeff, ax=ax, branch=args.Zbranch)
+    logOH_map = compute_Z_C19(ratio_map, coeff, ax=ax, branch=args.Zbranch) if not args.only_integrated else None
     logOH_int = compute_Z_C19(ratio_int, coeff, ax=ax, branch=args.Zbranch)
     logOH_int = ufloat(unp.nominal_values(np.atleast_1d(logOH_int))[0], unp.std_devs(np.atleast_1d(logOH_int))[0])
+    logOH_sum = compute_Z_C19(ratio_sum, coeff, ax=ax, branch=args.Zbranch)
+    logOH_sum = ufloat(unp.nominal_values(np.atleast_1d(logOH_sum))[0], unp.std_devs(np.atleast_1d(logOH_sum))[0])
 
     # -------saving the debugging plots---------------
     if ax is not None:
@@ -1677,7 +1708,7 @@ def get_Z_C19(full_hdu, args):
         fig.savefig(figname, transparent=args.fortalk, dpi=200)
         print(f'\nSaved figure at {figname}')
 
-    return logOH_map, logOH_int
+    return logOH_map, logOH_int, logOH_sum
 
 # --------------------------------------------------------------------------------------------------------------------
 def get_Z(full_hdu, args):
@@ -1697,28 +1728,29 @@ def get_Z(full_hdu, args):
         hdul = fits.open(output_fitsname)
         hdu = hdul['log_OH']
         logOH_map = np.ma.masked_where(np.isnan(hdu.data), unp.uarray(hdu.data, hdul['log_OH_u'].data))
-        if hdu.header['LOG_OH_INT'] is None: logOH_int = ufloat(np.nan, np.nan)
-        else: logOH_int = ufloat(hdu.header['LOG_OH_INT'], hdu.header['LOG_OH_INT_ERR'])
+        if hdu.header['log_oh_int'] is None: logOH_int = ufloat(np.nan, np.nan)
+        else: logOH_int = ufloat(hdu.header['log_oh_int'], hdu.header['log_oh_int_err'])
+        if hdu.header['log_oh_sum'] is None: logOH_sum = ufloat(np.nan, np.nan)
+        else: logOH_sum = ufloat(hdu.header['log_oh_sum'], hdu.header['log_oh_sum_err'])
         if args.Zdiag == 'NB': line_label_array = hdu.header['LINES'].split(',')
 
     else:
         # --------deriving the metallicity map-------------
         if args.Zdiag == 'NB':
-            logOH_map, logOH_int, line_label_array = get_Z_NB(full_hdu, args)
+            logOH_map, logOH_int, logOH_sum, line_label_array = get_Z_NB(full_hdu, args)
         elif args.Zdiag == 'KD02_R23' and all([line in args.available_lines for line in ['OIII', 'OII', 'Hb']]):
-            logOH_map, logOH_int = get_Z_KD02_R23(full_hdu, args, branch=args.Zbranch)
+            logOH_map, logOH_int, logOH_sum = get_Z_KD02_R23(full_hdu, args, branch=args.Zbranch)
         elif args.Zdiag == 'Te' and all([line in args.available_lines for line in ['OIII', 'OIII-4363', 'OII', 'Hb']]):
-            logOH_map, logOH_int = get_Z_Te(full_hdu, args)
+            logOH_map, logOH_int, logOH_sum = get_Z_Te(full_hdu, args)
         elif args.Zdiag == 'P25' and all([line in args.available_lines for line in ['OIII', 'Ha', 'SII']]):
-            logOH_map, logOH_int = get_Z_P25(full_hdu, args)
+            logOH_map, logOH_int, logOH_sum = get_Z_P25(full_hdu, args)
         else:
-            logOH_map, logOH_int = get_Z_C19(full_hdu, args)
+            logOH_map, logOH_int, logOH_sum = get_Z_C19(full_hdu, args)
 
         # ---------saving the metallicity maps as fits files-------------
         if logOH_map is not None:
             NB_text = '_orig_grid' if args.use_original_NB_grid and args.Zdiag == 'NB' else ''
-            exclude_text = f'_without_{args.exclude_lines}' if len(
-                args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
+            exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
             Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
             output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{NB_text}{exclude_text}.fits'
             logOH_map_val = np.where(logOH_map.mask, np.nan, unp.nominal_values(logOH_map.data))
@@ -1727,34 +1759,33 @@ def get_Z(full_hdu, args):
             if args.vorbin:  # getting how many unique IDs present, so that NB does not have to run unnecessary repeats
                 bin_IDs_map = np.where(args.voronoi_bin_IDs.mask, np.nan, args.voronoi_bin_IDs.data)
             else:
-                bin_IDs_map = np.arange(np.shape(logOH_map_val)[0] * np.shape(logOH_map_val)[1]).reshape(
-                    np.shape(logOH_map_val))
+                bin_IDs_map = np.arange(np.shape(logOH_map_val)[0] * np.shape(logOH_map_val)[1]).reshape(np.shape(logOH_map_val))
 
             distance_map = get_distance_map(np.shape(logOH_map_val), args)
-            df = pd.DataFrame({'radius': distance_map.flatten(), 'log_OH': logOH_map_val.flatten(),
-                               'log_OH_u': logOH_map_err.flatten(), 'bin_ID': bin_IDs_map.flatten()})
-            if args.distance_from_AGN_line_map is not None: df[
-                'agn_dist'] = args.distance_from_AGN_line_map.data.flatten()
+            df = pd.DataFrame({'radius': distance_map.flatten(), 'log_OH': logOH_map_val.flatten(),'log_OH_u': logOH_map_err.flatten(), 'bin_ID': bin_IDs_map.flatten()})
+            if args.distance_from_AGN_line_map is not None: df['agn_dist'] = args.distance_from_AGN_line_map.data.flatten()
             df = df.dropna().reset_index(drop=True)
             df['bin_ID'] = df['bin_ID'].astype(int)
             df = df.groupby(['bin_ID'], as_index=False).agg(np.mean)
 
             hdr1, hdr2 = fits.Header(), fits.Header()
-            hdr1['FIELD'] = args.field
-            hdr1['OBJECT'] = args.id
+            hdr1['field'] = args.field
+            hdr1['object'] = args.id
             primary_hdu = fits.PrimaryHDU(header=hdr1)
 
-            hdr2['Z_DIAG'] = args.Zdiag
-            hdr2['ZBRANCH'] = args.Zbranch
-            hdr2['AGN_DIAG'] = args.AGN_diag
-            hdr2['VORBIN_LINE'] = args.voronoi_line if args.vorbin else None
-            hdr2['VORBIN_SNR'] = args.voronoi_snr if args.vorbin else None
-            hdr2['LOG_OH_INT'] = None if np.isnan(logOH_int.n) else logOH_int.n
-            hdr2['LOG_OH_INT_ERR'] = None if np.isnan(logOH_int.s) else logOH_int.s
-            hdr2['NB_OLD_GRID'] = True if args.use_original_NB_grid and args.Zdiag == 'NB' else False
+            hdr2['z_diag'] = args.Zdiag
+            hdr2['zbranch'] = args.Zbranch
+            hdr2['agn_diag'] = args.AGN_diag
+            hdr2['vorbin_line'] = args.voronoi_line if args.vorbin else None
+            hdr2['vorbin_snr'] = args.voronoi_snr if args.vorbin else None
+            hdr2['log_oh_int'] = None if np.isnan(logOH_int.n) else logOH_int.n
+            hdr2['log_oh_int_err'] = None if np.isnan(logOH_int.s) else logOH_int.s
+            hdr2['log_oh_sum'] = None if np.isnan(logOH_sum.n) else logOH_sum.n
+            hdr2['log_oh_sum_err'] = None if np.isnan(logOH_sum.s) else logOH_sum.s
+            hdr2['nb_old_grid'] = True if args.use_original_NB_grid and args.Zdiag == 'NB' else False
             if 'NB' in args.Zdiag:
-                hdr2['LINES'] = ','.join(line_label_array)
-                hdr2['NLINES'] = len(line_label_array)
+                hdr2['lines'] = ','.join(line_label_array)
+                hdr2['nlines'] = len(line_label_array)
 
             logOH_val_hdu = fits.ImageHDU(data=logOH_map_val, name='log_OH', header=hdr2)
             logOH_err_hdu = fits.ImageHDU(data=logOH_map_err, name='log_OH_u')
@@ -1767,8 +1798,8 @@ def get_Z(full_hdu, args):
 
     if logOH_map is not None and args.mask_agn: logOH_map = np.ma.masked_where((args.distance_from_AGN_line_map > 0) | logOH_map.mask, logOH_map)
 
-    if 'line_label_array' in locals(): return logOH_map, logOH_int, line_label_array
-    else: return logOH_map, logOH_int
+    if 'line_label_array' in locals(): return logOH_map, logOH_int, logOH_sum, line_label_array
+    else: return logOH_map, logOH_int, logOH_sum
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_Z_map(full_hdu, ax, args, radprof_ax=None, snr_ax=None):
@@ -1776,8 +1807,8 @@ def plot_Z_map(full_hdu, ax, args, radprof_ax=None, snr_ax=None):
     Plots the metallicity map in the given axes
     Returns the axes handles and the 2D metallicity map just produced
     '''
-    if args.Zdiag == 'NB': logOH_map, logOH_int, line_label_array = get_Z(full_hdu, args)
-    else: logOH_map, logOH_int = get_Z(full_hdu, args)
+    if args.Zdiag == 'NB': logOH_map, logOH_int, logOH_sum, line_label_array = get_Z(full_hdu, args)
+    else: logOH_map, logOH_int, logOH_sum = get_Z(full_hdu, args)
 
     if logOH_map is not None:
         lim = [7, 9]
@@ -1841,8 +1872,8 @@ def get_q_O32(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated O32 ionisation parameter from a given HDU
     '''
-    OII3727_map, line_wave, OII3727_int, _ = get_emission_line_map('OII', full_hdu, args)
-    OIII5007_map, line_wave, OIII5007_int, _ = get_emission_line_map('OIII', full_hdu, args)
+    OII3727_map, line_wave, OII3727_int, _, _ = get_emission_line_map('OII', full_hdu, args)
+    OIII5007_map, line_wave, OIII5007_int, _, _ = get_emission_line_map('OIII', full_hdu, args)
 
     logq_map = compute_q_O32(OII3727_map, OIII5007_map)
     logq_int = compute_q_O32(OII3727_int, OIII5007_int)
@@ -2054,7 +2085,7 @@ def plot_starburst_map(full_hdu, axes, args, radprof_axes=None, vorbin_axes=None
     Returns the axis handle and the ratio map just produced
     '''
     # ---------getting the Ha map-------------
-    ha_map, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=True)
+    ha_map, _, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=True)
 
     # ---------getting the direct image-------------
     filter = 'F115W'
@@ -2178,8 +2209,8 @@ def plot_metallicity_fig(full_hdu, args):
     fig.subplots_adjust(left=fig_size_dict[ncols][2], right=fig_size_dict[ncols][3], bottom=fig_size_dict[ncols][4], top=fig_size_dict[ncols][5], wspace=fig_size_dict[ncols][6], hspace=fig_size_dict[ncols][7])
 
     # --------deriving the metallicity map-------------
-    if args.Zdiag == 'NB': logOH_map, logOH_int, line_label_array = get_Z(full_hdu, args)
-    else: logOH_map, logOH_int = get_Z(full_hdu, args)
+    if args.Zdiag == 'NB': logOH_map, logOH_int, logOH_sum, line_label_array = get_Z(full_hdu, args)
+    else: logOH_map, logOH_int, logOH_sum = get_Z(full_hdu, args)
 
     # --------deriving the ionisation parameter map-------------
     if args.plot_ionisation_parameter: logq_map, logq_int = get_q_O32(full_hdu, args)
@@ -2189,13 +2220,14 @@ def plot_metallicity_fig(full_hdu, args):
         lim = [7.5, 8.2] if args.Zdiag == 'KD02_R23' and args.Zbranch == 'low' else [7.1, 9.1]
         ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
         if args.plot_snr:
-            logOH_map_err = np.ma.masked_where(logOH_map.mask, unp.std_devs(logOH_map.data))
-            logOH_map_snr = np.ma.masked_where(logOH_map.mask, unp.nominal_values(10 ** logOH_map.data)) / np.ma.masked_where(logOH_map.mask, unp.std_devs(10 ** logOH_map.data))
+            OH_map = 10 ** logOH_map.data
+            logOH_map_snr = np.ma.masked_where(logOH_map.mask, unp.nominal_values(OH_map) / unp.std_devs(OH_map))
             snr_ax, _ = plot_2D_map(logOH_map_snr, snr_ax, args, takelog=False, hide_yaxis=True, label=r'Z (%s) SNR' % (args.Zdiag), cmap='cividis', vmin=0, vmax=6)
         if args.plot_ionisation_parameter:
             ip_ax, _ = plot_2D_map(logq_map, ip_ax, args, takelog=False, hide_yaxis=False, label=r'log q$_{\rm int}$ = %.1f $\pm$ %.1f' % (logq_int.n, logq_int.s), cmap='viridis', vmin=6.5, vmax=8.5)
     else:
         logOH_radfit = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
+        plt.close(fig)
 
     return fig, logOH_map, logOH_int, logOH_radfit
 
@@ -2358,17 +2390,18 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
     dist_method = theoretical_lines[0] if len(theoretical_lines) > 0 else None
 
     # -----------getting the fluxes------------------
-    ynum_map, _, ynum_int, _ = get_emission_line_map(args.ynum_line, full_hdu, args)
-    yden_map, _, yden_int, _ = get_emission_line_map(args.yden_line, full_hdu, args)
+    ynum_map, _, ynum_int, ynum_sum, _ = get_emission_line_map(args.ynum_line, full_hdu, args)
+    yden_map, _, yden_int, yden_sum, _ = get_emission_line_map(args.yden_line, full_hdu, args)
 
-    xnum_map, _, xnum_int, _ = get_emission_line_map(args.xnum_line, full_hdu, args)
-    xden_map, _, xden_int, _ = get_emission_line_map(args.xden_line, full_hdu, args)
+    xnum_map, _, xnum_int, xnum_sum, _ = get_emission_line_map(args.xnum_line, full_hdu, args)
+    xden_map, _, xden_int, xden_sum, _ = get_emission_line_map(args.xden_line, full_hdu, args)
 
     if not args.do_not_correct_flux and args.AGN_diag in ['H21', 'B22'] and args.xden_line == 'Ha': # special treatment for H-alpha line, in order to add the NII 6584 component back
         factor = 0.823  # from grizli source code
         print(f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
         xden_map = np.ma.masked_where(xden_map.mask, xden_map.data / factor)
         xden_int = xden_int / factor
+        xden_sum = xden_sum / factor
 
     # -----------integrated-----------------------
     try:
@@ -2397,8 +2430,37 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
     except ValueError:
         print(f'Galaxy {args.id} in {args.field} has a negative integrated flux in one of the following lines, hence skipping this.')
         print(f'OIII = {ynum_int}\nHb = {yden_int}\nSII = {xnum_int}\nHa = {xden_int}\n')
-        scatter_plot_handle = None
         distance_from_AGN_line_int = None
+        pass
+
+    # -----------summed-----------------------
+    try:
+        color = mpl_cm.get_cmap(cmap)(0.5)
+
+        y_ratio_sum = unp.log10(ynum_sum / yden_sum)
+        x_ratio_sum = unp.log10(xnum_sum / xden_sum)
+
+        # ------distance of integrated value from AGN line--------------
+        if dist_method is not None:
+            sign = (unp.nominal_values(y_ratio_sum) > AGN_func(unp.nominal_values(x_ratio_sum), dist_method)).astype(int)
+            if sign == 0: sign = -1
+            distance_from_AGN_line_sum = sign * get_distance_from_line(unp.nominal_values(x_ratio_sum), unp.nominal_values(y_ratio_sum), AGN_func, dist_method)
+        else:
+            print(f'\nFor the given combination of BPT line ratios {args.ynum_line}/{args.yden_line} vs {args.xnum_line}/{args.xden_line}, no AGN demarcation line method was found, so distance from AGN line will not be computed or plotted.\n')
+            distance_from_AGN_line_sum = None
+
+        if not hide_plot:
+            p = ax.scatter(unp.nominal_values(x_ratio_sum), unp.nominal_values(y_ratio_sum), c=color, marker='s', s=200 / args.fig_scale_factor, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
+            ax.errorbar(unp.nominal_values(x_ratio_sum), unp.nominal_values(y_ratio_sum), xerr=unp.std_devs(x_ratio_sum), yerr=unp.std_devs(y_ratio_sum), c=color, fmt='none', lw=2)
+
+            if args.plot_separately:
+                p = ax_indiv.scatter(unp.nominal_values(x_ratio_sum), unp.nominal_values(y_ratio_sum), c=color, marker='s', s=200 / args.fig_scale_factor, lw=2, edgecolor='w' if args.fortalk else 'k', zorder=10)
+                ax_indiv.errorbar(unp.nominal_values(x_ratio_sum), unp.nominal_values(y_ratio_sum), xerr=unp.std_devs(x_ratio_sum), yerr=unp.std_devs(y_ratio_sum), c=color, fmt='none', lw=2)
+
+    except ValueError:
+        print(f'Galaxy {args.id} in {args.field} has a negative summed flux in one of the following lines, hence skipping this.')
+        print(f'OIII = {ynum_sum}\nHb = {yden_sum}\nSII = {xnum_sum}\nHa = {xden_sum}\n')
+        distance_from_AGN_line_sum = None
         pass
 
     # -----------spatially_resolved-----------------------
@@ -2495,8 +2557,8 @@ def plot_DIG_maps(full_hdu, axes, args, radprof_axes=None, snr_axes=None):
     '''
     print(f'Plotting DIG diagnostics..')
     # ---------getting the Ha and SII maps-------------
-    ha_map, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=True)
-    sii_map, _, _, _ = get_emission_line_map('SII', full_hdu, args, dered=True)
+    ha_map, _, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=True)
+    sii_map, _, _, _, _ = get_emission_line_map('SII', full_hdu, args, dered=True)
 
     # ---------getting the S2Ha ratio map-------------
     S2Ha_map = take_safe_log_ratio(sii_map, ha_map, skip_log=True)
@@ -2752,7 +2814,7 @@ if __name__ == "__main__":
 
             # ---------lotting metallicity profiles and gradients----------------------
             if args.plot_metallicity:
-                df_logOH_radfit = pd.DataFrame(columns=['field', 'objid', 'logOH_int', 'log_OH_int_u', 'logOH_slope', 'logOH_slope_u', 'logOH_cen', 'logOH_cen_u', 'logOH_diagnostic', 'logOH_branch'])
+                df_logOH_radfit = pd.DataFrame(columns=['field', 'objid', 'logOH_int', 'logOH_int_u', 'logOH_slope', 'logOH_slope_u', 'logOH_cen', 'logOH_cen_u', 'logOH_diagnostic', 'logOH_branch'])
 
             # ------------looping over the provided object IDs-----------------------
             for index, args.id in enumerate(args.id_arr):
@@ -2820,13 +2882,13 @@ if __name__ == "__main__":
 
                 # ---------------dust value---------------
                 if all([line in args.available_lines for line in ['Ha', 'Hb']]) and not args.test_cutout:
-                    try: args.EB_V = get_EB_V_int(full_hdu, args, verbose=True)
+                    try: _, args.EB_V, _ = get_EB_V(full_hdu, args, verbose=True, silent=args.only_integrated)
                     except: args.EB_V = 0.
 
                 # ---------------voronoi binning stuff---------------
-                if args.vorbin and args.voronoi_line is not None:
+                if args.vorbin and args.voronoi_line is not None and not args.only_integrated:
                     if args.voronoi_line in args.available_lines:
-                        line_map, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True)
+                        line_map, _, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True)
                         args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
                         if args.debug_vorbin:
                             print(f'Running in --debug_vorbin mode, hence not proceeding further.')
@@ -2875,7 +2937,7 @@ if __name__ == "__main__":
 
                 # ---------initialising the metallicity figure------------------------------
                 elif args.plot_metallicity:
-                    if args.mask_agn or args.Zdiag == 'P25': _, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_AGN_line map, without actually plotting the BPT diagram
+                    if not args.only_integrated and (args.mask_agn or args.Zdiag == 'P25'): _, args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = plot_BPT(full_hdu, None, args, cmap=None, hide_plot=True) # just to get the distance_from_AGN_line map, without actually plotting the BPT diagram
                     else: args.distance_from_AGN_line_map, args.distance_from_AGN_line_int = None, None
                     fig, logOH_map, logOH_int, logOH_radfit = plot_metallicity_fig(full_hdu, args)
                     df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_int.n, logOH_int.s, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s, args.Zdiag, args.Zbranch]
@@ -3088,7 +3150,7 @@ if __name__ == "__main__":
                     figname = fig_dir / f'{args.field}_{args.id:05d}_{description_text}{vorbin_text}.png'
 
                 # --------for talk plots--------------
-                if not args.plot_BPT:
+                if not args.plot_BPT and not args.only_integrated:
                     if args.fortalk:
                         mplcyberpunk.add_glow_effects()
                         try: mplcyberpunk.make_lines_glow()
@@ -3159,7 +3221,7 @@ if __name__ == "__main__":
                 print(f'Completed id {args.id} in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(args.id_arr) - index - 1} to go!')
 
             # ------------------writing out Z gradient fits, for making MZGR plot later--------------------------
-            if args.plot_metallicity:
+            if args.plot_metallicity and not args.only_integrated:
                 outfilename = args.output_dir / 'catalogs' / f'logOHgrad_df{snr_text}{only_seg_text}{vorbin_text}.txt'
                 df_logOH_radfit.to_csv(outfilename, index=None, mode='a', header=not os.path.exists(outfilename))
                 print(f'Appended metallicity gradient fits to catalog file {outfilename}')
