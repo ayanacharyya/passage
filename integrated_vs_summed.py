@@ -90,7 +90,7 @@ def overplot_on_photoionisation_models(df, ratio_list, parameter_x, args, col_in
     return fig_arr
 
 # --------------------------------------------------------------------------------------------------------------------
-def compare_line_fluxes(df, line_list, args, col_arr=None, lim=[-17, -15.5]):
+def compare_line_fluxes(df, line_list, args, lim=[-17, -15.5]):
     '''
     Plots and saves the integrated vs summed line fluxes from a given dataframe
     Returns the figure handle
@@ -101,21 +101,11 @@ def compare_line_fluxes(df, line_list, args, col_arr=None, lim=[-17, -15.5]):
 
     # -----------plotting the line ratios-------------
     for line, ax in zip(line_list, axes):
-        color = col_arr[: len(df)] if col_arr is not None else 'brown'
-        line_name_int = f'{line}_int'
-        line_name_sum = f'{line}_sum'
+        line_name_int = f'log_{line}_int'
+        line_name_sum = f'log_{line}_sum'
 
-        line_int = unp.uarray(df[line_name_int], df[line_name_int + '_u'])
-        line_sum = unp.uarray(df[line_name_sum], df[line_name_sum + '_u'])
-
-        line_int[line_int <= 0] = ufloat(np.nan, np.nan)
-        line_sum[line_sum <= 0] = ufloat(np.nan, np.nan)
-
-        log_line_int = unp.log10(line_int)
-        log_line_sum = unp.log10(line_sum)
-
-        ax.scatter(unp.nominal_values(log_line_int), unp.nominal_values(log_line_sum), c=color, lw=0.5)
-        ax.errorbar(unp.nominal_values(log_line_int), unp.nominal_values(log_line_sum), xerr=unp.std_devs(log_line_int), yerr=unp.std_devs(log_line_sum), fmt='none', c='gray', lw=0.5)
+        for index in range(len(df)): ax.scatter(df[line_name_int][index], df[line_name_sum][index], c=df['color'][index], marker=df['marker'][index], s=50, edgecolor='k', lw=0.5)
+        ax.errorbar(df[line_name_int][index], df[line_name_sum][index], xerr=df[line_name_int + '_u'][index], yerr=df[line_name_sum + '_u'][index], fmt='none', c='gray', lw=0.5)
 
         # --------annotating the figure-----------
         ax.set_xlabel(f'log {line} (int)', fontsize=args.fontsize)
@@ -123,8 +113,8 @@ def compare_line_fluxes(df, line_list, args, col_arr=None, lim=[-17, -15.5]):
 
         ax.plot([lim[0], lim[1]], [lim[0], lim[1]], c='k', ls='dotted', lw=1)
 
-    ax.set_xlim(lim[0], lim[1])
-    ax.set_ylim(lim[0], lim[1])
+        ax.set_xlim(lim[0], lim[1])
+        ax.set_ylim(lim[0], lim[1])
 
     # ----------saving the figure-----------------
     figname = args.output_dir / 'plots' / f'sum_vs_int_line_flux_comparison_{args.snr_text}{args.only_seg_text}_{",".join(line_list)}.png'
@@ -135,22 +125,44 @@ def compare_line_fluxes(df, line_list, args, col_arr=None, lim=[-17, -15.5]):
     return fig
 
 # --------------------------------------------------------------------------------------------------------------------
-def compare_line_ratios(df, ratio_list, args, col_arr=None, lim=[-2, 2]):
+def compare_line_ratios(df, ratio_list, args, lim=[-2, 2]):
     '''
     Plots and saves the integrated vs summed line ratio from a given dataframe
     Returns the figure handle
     '''
+    # -------------photoionisation models-----------
+    if args.phot_models.lower() in ['mappings', 'map']:
+        line_label_dict = smart_dict({'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'NeIII':'[NeIII]3869', 'NeIII-3867':'[NeIII]3869', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31'}) # to map between user input line labels and line labels used in ratio_list.txt file
+        phot_model_text = 'Mappings'
+    elif args.phot_models.lower() in ['nebulabayes', 'nb']:
+        line_label_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'})
+        phot_model_text = 'NebulaBayes'
+
+    df_model = get_photoionisation_model_grid(args)
+    model_color = 'salmon'
+
     # ------setting up the figure-------------
     fig, axes = plt.subplots(1, len(ratio_list), figsize=(14, 4), sharey=True)
     fig.subplots_adjust(left=0.06, right=0.98, bottom=0.15, top=0.95, wspace=0.2)
 
     # -----------plotting the line ratios-------------
     for ratio, ax in zip(ratio_list, axes):
-        color = col_arr[: len(df)] if col_arr is not None else 'brown'
+
+        # -------------gettinug max and min model ratios-----------
+        ynum_line, yden_line = ratio.split('/')
+        if ynum_line == 'NeIII-3867': ynum_line = 'NeIII'
+        if yden_line == 'NeIII-3867': yden_line = 'NeIII'
+        ratio_name = f'{line_label_dict[ynum_line]}/{line_label_dict[yden_line]}'
+        if ratio_name not in df_model: df_model[ratio_name] = df_model[line_label_dict[ynum_line]] / df_model[line_label_dict[yden_line]]
+        log_model_ratio = np.log10(df_model[ratio_name])
+        max_model_ratio = np.max(log_model_ratio)
+        min_model_ratio = np.min(log_model_ratio)
+
+        # --------starting the plot-----------
         ratio_name_int = 'log_' + ratio.replace('/', '_') + '_int'
         ratio_name_sum = 'log_' + ratio.replace('/', '_') + '_sum'
 
-        ax.scatter(df[ratio_name_int], df[ratio_name_sum], c=color, lw=0.5)
+        for index in range(len(df)): ax.scatter(df[ratio_name_int][index], df[ratio_name_sum][index], c=df['color'][index], marker=df['marker'][index], s=50, edgecolor='k', lw=0.5)
         ax.errorbar(df[ratio_name_int], df[ratio_name_sum], xerr=df[ratio_name_int + '_u'], yerr=df[ratio_name_sum + '_u'], fmt='none', c='gray', lw=0.5)
 
         # --------annotating the figure-----------
@@ -159,8 +171,11 @@ def compare_line_ratios(df, ratio_list, args, col_arr=None, lim=[-2, 2]):
 
         ax.plot([lim[0], lim[1]], [lim[0], lim[1]], c='k', ls='dotted', lw=1)
 
-    ax.set_xlim(lim[0], lim[1])
-    ax.set_ylim(lim[0], lim[1])
+        ax.add_patch(plt.Rectangle((min_model_ratio, min_model_ratio), max_model_ratio - min_model_ratio, max_model_ratio - min_model_ratio, lw=0, fc=model_color, alpha=0.2, zorder=-5))
+        ax.text(0.05, 0.05, f'{phot_model_text}\nmodel coverage', c=model_color, fontsize=args.fontsize, va='bottom', ha='left', transform=ax.transAxes)
+
+        ax.set_xlim(lim[0], lim[1])
+        ax.set_ylim(lim[0], lim[1])
 
     # ----------saving the figure-----------------
     figname = args.output_dir / 'plots' / f'sum_vs_int_line_ratio_comparison_{args.snr_text}{args.only_seg_text}_{",".join(ratio_list).replace("/", "-")}.png'
@@ -171,7 +186,7 @@ def compare_line_ratios(df, ratio_list, args, col_arr=None, lim=[-2, 2]):
     return fig
 
 # --------------------------------------------------------------------------------------------------------------------
-def compare_metallicities(df, Zdiag_arr, args, col_arr=None, lim=[7, 9]):
+def compare_metallicities(df, Zdiag_arr, args, lim=[7, 9]):
     '''
     Plots and saves the integrated vs summed metallicities from a given dataframe
     Returns the figure handle
@@ -182,11 +197,10 @@ def compare_metallicities(df, Zdiag_arr, args, col_arr=None, lim=[7, 9]):
 
     # -----------plotting the line ratios-------------
     for Zdiag, ax in zip(Zdiag_arr, axes):
-        color = col_arr[: len(df)] if col_arr is not None else 'brown'
         Zdiag_name_int = f'Z_{Zdiag}_int'
         Zdiag_name_sum = f'Z_{Zdiag}_sum'
 
-        ax.scatter(df[Zdiag_name_int], df[Zdiag_name_sum], c=color, lw=0.5)
+        for index in range(len(df)): ax.scatter(df[Zdiag_name_int][index], df[Zdiag_name_sum][index], c=df['color'][index], marker=df['marker'][index], s=50, edgecolor='k', lw=0.5)
         ax.errorbar(df[Zdiag_name_int], df[Zdiag_name_sum], xerr=df[Zdiag_name_int + '_u'], yerr=df[Zdiag_name_sum + '_u'], fmt='none', c='gray', lw=0.5)
 
         # --------annotating the figure-----------
@@ -195,8 +209,8 @@ def compare_metallicities(df, Zdiag_arr, args, col_arr=None, lim=[7, 9]):
 
         ax.plot([lim[0], lim[1]], [lim[0], lim[1]], c='k', ls='dotted', lw=1)
 
-    ax.set_xlim(lim[0], lim[1])
-    ax.set_ylim(lim[0], lim[1])
+        ax.set_xlim(lim[0], lim[1])
+        ax.set_ylim(lim[0], lim[1])
 
     # ----------saving the figure-----------------
     figname = args.output_dir / 'plots' / f'sum_vs_int_metallicity_comparison_{args.snr_text}{args.only_seg_text}_{",".join(Zdiag_arr)}_Zbranch-{args.Zbranch}_AGNdiag_{args.AGN_diag}{exclude_text}.png'
@@ -288,6 +302,30 @@ if __name__ == "__main__":
         print(f'Reading comparison df from existing {output_dfname}')
         df = pd.read_csv(output_dfname)
 
+    # --------------prepare dataframe---------------
+    df['marker'] = df['field'].map(lambda x: 's' if 'glass' in x else 'o')
+    #df['color'] = np.tile(['brown'], len(df))
+    df['color'] = col_arr[: len(df)]
+
+    for line in args.line_list:
+        line_name_int = f'{line}_int'
+        line_name_sum = f'{line}_sum'
+
+        line_int = unp.uarray(df[line_name_int], df[line_name_int + '_u'])
+        line_sum = unp.uarray(df[line_name_sum], df[line_name_sum + '_u'])
+
+        line_int[line_int <= 0] = ufloat(np.nan, np.nan)
+        line_sum[line_sum <= 0] = ufloat(np.nan, np.nan)
+
+        log_line_int = unp.log10(line_int)
+        log_line_sum = unp.log10(line_sum)
+
+        df['log_' + line_name_int] = unp.nominal_values(log_line_int)
+        df['log_' + line_name_int + '_u'] = unp.std_devs(log_line_int)
+
+        df['log_' + line_name_sum] = unp.nominal_values(log_line_sum)
+        df['log_' + line_name_sum + '_u'] = unp.std_devs(log_line_sum)
+
     # -----------taking the ratios-------------------------
     for ratio in ratio_list:
         num, den = ratio.split('/')
@@ -308,8 +346,8 @@ if __name__ == "__main__":
 
     # -------making the comparison figurse--------------
     #fig_models_arr = overplot_on_photoionisation_models(df, ratio_list, 'Z', args, col_int='sandybrown', col_sum='cornflowerblue')
-    fig_flux = compare_line_fluxes(df, args.line_list, args, lim=[-19, -15.5], col_arr=col_arr)
-    #fig_ratio = compare_line_ratios(df, ratio_list, args, lim=[-2, 2], col_arr=col_arr)
-    #fig_Z = compare_metallicities(df, args.Zdiag, args, lim=[7, 9], col_arr=col_arr)
+    #fig_flux = compare_line_fluxes(df, args.line_list, args, lim=[-19, -15.5])
+    fig_ratio = compare_line_ratios(df, ratio_list, args, lim=[-2, 2])
+    #fig_Z = compare_metallicities(df, args.Zdiag, args, lim=[7, 9])
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
