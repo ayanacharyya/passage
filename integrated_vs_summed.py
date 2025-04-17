@@ -54,12 +54,85 @@ def plot_photoionisation_models(ratio_y, parameter_x, args):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_ratio_label(label):
+def overplot_on_photoionisation_models(df, ratio_list, parameter_x, args, col_int='sandybrown', col_sum='cornflowerblue'):
     '''
-    Returns the appropriate (pretty-fied) label for a given ratio name
+    Plots and saves photoionisation models overplotted with given observed ratios from a dataframe
+    Returns figure handle
     '''
-    arr = label.split('_')
-    return f'{arr[0]} {arr[1]}/{arr[2]} ({arr[3]})'
+    fig_arr = []
+    # ---------------looping over different ratios-------------
+    for ratio in ratio_list:
+        ratio_name_int = 'log_' + ratio.replace('/', '_') + '_int'
+        ratio_name_sum = 'log_' + ratio.replace('/', '_') + '_sum'
+
+        ax = plot_photoionisation_models(ratio, parameter_x, args)
+        for index, row in df.iterrows():
+            ax.axhline(row[ratio_name_int], ls='solid', c=col_int, lw=0.5, alpha=1)
+            ax.fill_between([ax.get_xlim()[0], ax.get_xlim()[1]], row[ratio_name_int] - row[ratio_name_int + '_u'] / 2, row[ratio_name_int] + row[ratio_name_int + '_u'] / 2, lw=0, color=col_int, alpha=0.1)
+
+            ax.axhline(row[ratio_name_sum], ls='dashed', c=col_sum, lw=0.5, alpha=1)
+            ax.fill_between([ax.get_xlim()[0], ax.get_xlim()[1]], row[ratio_name_sum] - row[ratio_name_sum + '_u'] / 2, row[ratio_name_sum] + row[ratio_name_sum + '_u'] / 2, lw=0, color=col_sum, alpha=0.1)
+
+        ax.text(0.98, 0.05, 'Integrated (Grizli) ratio', c=col_int, fontsize=args.fontsize, va='bottom', ha='right', transform=ax.transAxes)
+        ax.text(0.98, 0.15, 'Summed ratio', c=col_sum, fontsize=args.fontsize, va='bottom', ha='right', transform=ax.transAxes)
+
+        if args.phot_models.lower() in ['mappings', 'map']: phot_model_text = 'mappings'
+        elif args.phot_models.lower() in ['nebulabayes', 'nb', 'neb']: phot_model_text = 'NebulaBayes'
+        figname = args.output_dir / 'plots' / f'{phot_model_text}_model_{ratio.replace("/", "-")}_vs_Z_withobs.png'
+
+        fig = ax.figure
+        fig.savefig(figname, transparent=args.fortalk)
+        print(f'Saved figure as {figname}')
+        plt.show(block=False)
+
+        fig_arr.append(fig)
+
+    return fig_arr
+
+# --------------------------------------------------------------------------------------------------------------------
+def compare_line_fluxes(df, line_list, args, col_arr=None, lim=[-17, -15.5]):
+    '''
+    Plots and saves the integrated vs summed line fluxes from a given dataframe
+    Returns the figure handle
+    '''
+    # ------setting up the figure-------------
+    fig, axes = plt.subplots(1, len(ratio_list), figsize=(14, 4), sharey=True)
+    fig.subplots_adjust(left=0.06, right=0.98, bottom=0.15, top=0.95, wspace=0.2)
+
+    # -----------plotting the line ratios-------------
+    for line, ax in zip(line_list, axes):
+        color = col_arr[: len(df)] if col_arr is not None else 'brown'
+        line_name_int = f'{line}_int'
+        line_name_sum = f'{line}_sum'
+
+        line_int = unp.uarray(df[line_name_int], df[line_name_int + '_u'])
+        line_sum = unp.uarray(df[line_name_sum], df[line_name_sum + '_u'])
+
+        line_int[line_int <= 0] = ufloat(np.nan, np.nan)
+        line_sum[line_sum <= 0] = ufloat(np.nan, np.nan)
+
+        log_line_int = unp.log10(line_int)
+        log_line_sum = unp.log10(line_sum)
+
+        ax.scatter(unp.nominal_values(log_line_int), unp.nominal_values(log_line_sum), c=color, lw=0.5)
+        ax.errorbar(unp.nominal_values(log_line_int), unp.nominal_values(log_line_sum), xerr=unp.std_devs(log_line_int), yerr=unp.std_devs(log_line_sum), fmt='none', c='gray', lw=0.5)
+
+        # --------annotating the figure-----------
+        ax.set_xlabel(f'log {line} (int)', fontsize=args.fontsize)
+        ax.set_ylabel(f'log {line} (sum)', fontsize=args.fontsize)
+
+        ax.plot([lim[0], lim[1]], [lim[0], lim[1]], c='k', ls='dotted', lw=1)
+
+    ax.set_xlim(lim[0], lim[1])
+    ax.set_ylim(lim[0], lim[1])
+
+    # ----------saving the figure-----------------
+    figname = args.output_dir / 'plots' / f'sum_vs_int_line_flux_comparison_{args.snr_text}{args.only_seg_text}_{",".join(line_list)}.png'
+    ax.figure.savefig(figname, transparent=args.fortalk)
+    print(f'Saved figure as {figname}')
+    plt.show(block=False)
+
+    return fig
 
 # --------------------------------------------------------------------------------------------------------------------
 def compare_line_ratios(df, ratio_list, args, col_arr=None, lim=[-2, 2]):
@@ -81,8 +154,8 @@ def compare_line_ratios(df, ratio_list, args, col_arr=None, lim=[-2, 2]):
         ax.errorbar(df[ratio_name_int], df[ratio_name_sum], xerr=df[ratio_name_int + '_u'], yerr=df[ratio_name_sum + '_u'], fmt='none', c='gray', lw=0.5)
 
         # --------annotating the figure-----------
-        ax.set_xlabel(get_ratio_label(ratio_name_int), fontsize=args.fontsize)
-        ax.set_ylabel(get_ratio_label(ratio_name_sum), fontsize=args.fontsize)
+        ax.set_xlabel(f'log {ratio} (int)', fontsize=args.fontsize)
+        ax.set_ylabel(f'log {ratio} (sum)', fontsize=args.fontsize)
 
         ax.plot([lim[0], lim[1]], [lim[0], lim[1]], c='k', ls='dotted', lw=1)
 
@@ -96,14 +169,6 @@ def compare_line_ratios(df, ratio_list, args, col_arr=None, lim=[-2, 2]):
     plt.show(block=False)
 
     return fig
-
-# --------------------------------------------------------------------------------------------------------------------
-def get_metallicity_label(label):
-    '''
-    Returns the appropriate (pretty-fied) label for a given ratio name
-    '''
-    arr = label.split('_')
-    return f'{arr[0].replace("Z", "log O/H + 12")}: {arr[1]} ({arr[2]})'
 
 # --------------------------------------------------------------------------------------------------------------------
 def compare_metallicities(df, Zdiag_arr, args, col_arr=None, lim=[7, 9]):
@@ -125,8 +190,8 @@ def compare_metallicities(df, Zdiag_arr, args, col_arr=None, lim=[7, 9]):
         ax.errorbar(df[Zdiag_name_int], df[Zdiag_name_sum], xerr=df[Zdiag_name_int + '_u'], yerr=df[Zdiag_name_sum + '_u'], fmt='none', c='gray', lw=0.5)
 
         # --------annotating the figure-----------
-        ax.set_xlabel(get_metallicity_label(Zdiag_name_int), fontsize=args.fontsize)
-        ax.set_ylabel(get_metallicity_label(Zdiag_name_sum), fontsize=args.fontsize)
+        ax.set_xlabel(f'log O/H + 12: {Zdiag} (int)', fontsize=args.fontsize)
+        ax.set_ylabel(f'log O/H + 12: {Zdiag} (sum)', fontsize=args.fontsize)
 
         ax.plot([lim[0], lim[1]], [lim[0], lim[1]], c='k', ls='dotted', lw=1)
 
@@ -241,31 +306,10 @@ if __name__ == "__main__":
         df[ratio_name_sum] = unp.nominal_values(quant)
         df[ratio_name_sum + '_u'] = unp.std_devs(quant)
 
-        # ------plotting and saving photoionisation model with observed ratios----------
-        ax = plot_photoionisation_models(ratio, 'Z', args)
-        for index, row in df.iterrows():
-            col_int, col_sum = 'sandybrown', 'cornflowerblue'
-            #col_int, col_sum = col_arr[index], col_arr[index]
-
-            ax.axhline(row[ratio_name_int], ls='solid', c=col_int, lw=0.5, alpha=1)
-            ax.fill_between([ax.get_xlim()[0], ax.get_xlim()[1]], row[ratio_name_int] - row[ratio_name_int + '_u'] / 2, row[ratio_name_int] + row[ratio_name_int + '_u'] / 2, lw=0, color=col_int, alpha=0.1)
-
-            ax.axhline(row[ratio_name_sum], ls='dashed', c=col_sum, lw=0.5, alpha=1)
-            ax.fill_between([ax.get_xlim()[0], ax.get_xlim()[1]], row[ratio_name_sum] - row[ratio_name_sum + '_u'] / 2, row[ratio_name_sum] + row[ratio_name_sum + '_u'] / 2, lw=0, color=col_sum, alpha=0.1)
-
-        ax.text(0.98, 0.05, 'Integrated (Grizli)', c=col_int, fontsize=args.fontsize, va='bottom', ha='right', transform=ax.transAxes)
-        ax.text(0.98, 0.15, 'Summed', c=col_sum, fontsize=args.fontsize, va='bottom', ha='right', transform=ax.transAxes)
-
-        if args.phot_models.lower() in ['mappings', 'map']: phot_model_text = 'mappings'
-        elif args.phot_models.lower() in ['nebulabayes', 'nb', 'neb']: phot_model_text = 'NebulaBayes'
-        figname = args.output_dir / 'plots' / f'{phot_model_text}_model_{ratio.replace("/", "-")}_vs_Z_withobs.png'
-
-        ax.figure.savefig(figname, transparent=args.fortalk)
-        print(f'Saved figure as {figname}')
-        plt.show(block=False)
-
     # -------making the comparison figurse--------------
-    fig_ratio = compare_line_ratios(df, ratio_list, args, lim=[-2, 2], col_arr=col_arr)
-    fig_Z = compare_metallicities(df, args.Zdiag, args, lim=[7, 9], col_arr=col_arr)
+    #fig_models_arr = overplot_on_photoionisation_models(df, ratio_list, 'Z', args, col_int='sandybrown', col_sum='cornflowerblue')
+    fig_flux = compare_line_fluxes(df, args.line_list, args, lim=[-19, -15.5], col_arr=col_arr)
+    #fig_ratio = compare_line_ratios(df, ratio_list, args, lim=[-2, 2], col_arr=col_arr)
+    #fig_Z = compare_metallicities(df, args.Zdiag, args, lim=[7, 9], col_arr=col_arr)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
