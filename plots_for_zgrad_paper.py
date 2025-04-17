@@ -1023,8 +1023,8 @@ def plot_metallicity_sfr_fig(full_hdu, field, Zdiag, args):
     log_sfr_lim = [-3, -2]
 
     # --------setting up the figure------------
-    fig, axes = plt.subplots(2 if args.debug_Zsfr else 1, 3, figsize=(9, 5) if args.debug_Zsfr else (9, 3))
-    fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.5, hspace=0.3)
+    fig, axes = plt.subplots(3 if args.debug_Zsfr else 1, 2, figsize=(5.7, 7) if args.debug_Zsfr else (7, 3))
+    fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.15, wspace=0.5, hspace=0.3)
 
     # -------deriving H-alpha map-----------
     N2_plus_Ha_map, _, _, _, _ = get_emission_line_map('Ha', full_hdu, args, silent=True)
@@ -1055,20 +1055,19 @@ def plot_metallicity_sfr_fig(full_hdu, field, Zdiag, args):
 
     Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask | N2Ha_map.mask, N2_plus_Ha_map.data / (1 + N2Ha_map.data))
 
+    # -----plotting 2D metallicity map and corrected Halpha map-----------
     if args.debug_Zsfr:
-        axes[0][2] = plot_2D_map(Ha_map, axes[0][2], r'H$\alpha$ (corrected)', args, takelog=True, cmap='RdPu_r', vmin=-20, vmax=-18, hide_xaxis=True, hide_yaxis=True, hide_cbar=False)
-        axes = axes[1]
+        axes[1][0] = plot_2D_map(logOH_map, axes[1][0], f'log O/H + 12 ({Zdiag})', args, takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=True, hide_yaxis=False, hide_cbar=False)
+        axes[1][1] = plot_2D_map(Ha_map, axes[1][1], r'H$\alpha$ (corrected)', args, takelog=True, cmap='RdPu_r', vmin=-20, vmax=-18, hide_xaxis=False, hide_yaxis=True, hide_cbar=False)
+        axes = axes[2]
 
     # -------deriving SFR map-----------
     sfr_map = compute_SFR(Ha_map, distance)
     log_sfr_map = np.ma.masked_where(sfr_map.mask, unp.log10(sfr_map.data))
 
-    # -----plotting 2D metallicity map-----------
-    axes[0] = plot_2D_map(logOH_map, axes[0], f'log O/H + 12 ({Zdiag})', args, takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
-
     # -----plotting 2D SFR map-----------
     log_sfr_lim = [-3, -2]
-    axes[1] = plot_2D_map(log_sfr_map, axes[1], f'log SFR (corrected)' if args.debug_Zsfr else f'log SFR', args, takelog=False, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=True, hide_cbar=False)
+    axes[0] = plot_2D_map(log_sfr_map, axes[0], f'log SFR (corrected)' if args.debug_Zsfr else f'log SFR', args, takelog=False, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
 
     # ------plotting metallicity vs SFR-----------
     df = pd.DataFrame({'logOH': unp.nominal_values(np.ma.compressed(logOH_map)), 'logOH_u': unp.std_devs(np.ma.compressed(logOH_map)), 'log_sfr':unp.nominal_values(np.ma.compressed(log_sfr_map)), 'log_sfr_u': unp.std_devs(np.ma.compressed(log_sfr_map))})
@@ -1076,25 +1075,25 @@ def plot_metallicity_sfr_fig(full_hdu, field, Zdiag, args):
         df['bin_ID'] = np.ma.compressed(np.ma.masked_where(log_sfr_map.mask, args.voronoi_bin_IDs.data))
         df = df.groupby('bin_ID', as_index=False).agg(np.mean)
 
-    axes[2].scatter(df['log_sfr'], df['logOH'], c='grey', s=20, alpha=1)
-    axes[2].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
+    axes[1].scatter(df['log_sfr'], df['logOH'], c='grey', s=20, alpha=1)
+    axes[1].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
 
     # -------radial fitting-------------
     fit_color = 'salmon'
     linefit, linecov = np.polyfit(df['log_sfr'], df['logOH'], 1, cov=True, w=1. / (df['logOH_u']) ** 2)
     y_fitted = np.poly1d(linefit)(df['log_sfr'])
-    axes[2].plot(df['log_sfr'], y_fitted, color=fit_color, lw=1, ls='dashed')
+    axes[1].plot(df['log_sfr'], y_fitted, color=fit_color, lw=1, ls='dashed')
     linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
-    axes[2].text(0.05, 0.05, f'Slope = {linefit[0]: .2f} dex/kpc', c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=axes[2].transAxes)
+    axes[1].text(0.05, 0.05, f'Slope = {linefit[0]: .2f} dex/kpc', c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=axes[1].transAxes)
 
     # --------annotating axis--------------
-    axes[2].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
-    axes[2].set_ylim(Zlim[0], Zlim[1])
-    axes[2].set_box_aspect(1)
-    axes[2] = annotate_axes(axes[2], 'log SFR (Msun/yr)', 'log (O/H) + 12', args)
+    axes[1].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
+    axes[1].set_ylim(Zlim[0], Zlim[1])
+    axes[1].set_box_aspect(1)
+    axes[1] = annotate_axes(axes[1], 'log SFR (Msun/yr)', 'log (O/H) + 12', args)
 
     # -----------saving figure------------
-    axes[2].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[2].transAxes)
+    axes[1].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
     debug_text = '_debug' if args.debug_Zsfr else ''
     figname = f'metallicity-sfr_{objid:05d}{debug_text}.png'
     save_fig(fig, figname, args)
@@ -1271,7 +1270,7 @@ if __name__ == "__main__":
     #plot_galaxy_example_fig(1303, 'Par028', args)
 
     # ---------individual galaxy plots: looping over objects----------------------
-    objlist = objlist[3:4] ##
+    objlist =[objlist[np.where(np.array(objlist)[:,1].astype(int) == 2867)[0][0]]] ## for debugging
     for index, obj in enumerate(objlist):
         field = obj[0]
         objid = obj[1]
