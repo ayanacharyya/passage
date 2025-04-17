@@ -119,7 +119,7 @@ def compare_line_fluxes(df, line_list, args, lim=[-17, -15.5]):
         ax.set_ylim(lim[0], lim[1])
 
     # --------making colorbar if needed-------------
-    if not args.nocolorcoding or args.colorcol != 'ez_z_phot':
+    if not args.nocolorcoding and args.colorcol != 'ez_z_phot':
         cax = fig.add_axes([0.8, 0.27, 0.15, 0.01])
         cbar = matplotlib.colorbar.ColorbarBase(cax, orientation='horizontal', cmap=args.cmap, norm=mplcolors.Normalize(args.clim[0], args.clim[1]), label=args.colorcol)
 
@@ -189,7 +189,7 @@ def compare_line_ratios(df, ratio_list, args, lim=[-2, 2]):
         ax.set_ylim(lim[0], lim[1])
 
     # --------making colorbar if needed-------------
-    if not args.nocolorcoding or args.colorcol != 'ez_z_phot':
+    if not args.nocolorcoding and args.colorcol != 'ez_z_phot':
         cax = fig.add_axes([0.93, 0.3, 0.005, 0.5])
         cbar = matplotlib.colorbar.ColorbarBase(cax, orientation='vertical', cmap=args.cmap, norm=mplcolors.Normalize(args.clim[0], args.clim[1]), label=args.colorcol)
 
@@ -232,7 +232,7 @@ def compare_metallicities(df, Zdiag_arr, args, lim=[7, 9]):
         ax.set_ylim(lim[0], lim[1])
 
     # --------making colorbar if needed-------------
-    if not args.nocolorcoding or args.colorcol != 'ez_z_phot':
+    if not args.nocolorcoding and args.colorcol != 'ez_z_phot':
         cax = fig.add_axes([0.832, 0.92, 0.15, 0.01])
         cbar = matplotlib.colorbar.ColorbarBase(cax, orientation='horizontal', cmap=args.cmap, norm=mplcolors.Normalize(args.clim[0], args.clim[1]), label=args.colorcol)
 

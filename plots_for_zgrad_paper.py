@@ -307,13 +307,14 @@ def make_latex_table(df, args):
     for thiscol in base_cols + cols_with_errors:
         try:
             if thiscol in cols_with_errors: # special treatment for columns with +/-
-                tex_df[thiscol] = [f'{data: .{decimal_dict[thiscol]}} \pm {err: .{decimal_dict[thiscol]}}' for (data, err) in zip(df[thiscol], df[thiscol + '_u'])]
-            elif 'logOH_int' in thiscol:
-                tex_df[thiscol] = df[thiscol].map(lambda x: '$%.2f$' % x if x < 0 else '$\phantom{-}%.2f$' % x)
+                #tex_df[thiscol] = [r'$' + f'{data: .{decimal_dict[thiscol]}} \pm {err: .{decimal_dict[thiscol]}}' + r'$' for (data, err) in zip(df[thiscol], df[thiscol + '_u'])]
+                tex_df[thiscol] = df.apply(lambda row: r'$' + f'{row[thiscol]: .{decimal_dict[thiscol]}f} \pm {row[thiscol + "_u"]: .{decimal_dict[thiscol]}f}' + r'$' if np.isfinite(row[thiscol]) else '-', axis=1)
+            # elif 'logOH_int' in thiscol:
+            #     tex_df[thiscol] = df[thiscol].map(lambda x: '$%.2f$' % x if x < 0 else '$\phantom{-}%.2f$' % x if np.isfinite(x) else '-')
             elif thiscol in ['field', 'objid']:
                 tex_df[thiscol] = df[thiscol]
             else:
-                tex_df[thiscol] = df[thiscol].map(('${:,.' + str(decimal_dict[thiscol]) + 'f}$').format)
+                tex_df[thiscol] = df[thiscol].map(lambda x:  r'$' + f'{x: .{decimal_dict[thiscol]}f}' + r'$' if np.isfinite(x) else '-')
         except ValueError: # columns that do not have numbers
             continue
 
@@ -1246,13 +1247,16 @@ if __name__ == "__main__":
     args.vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
 
     # ---------loading full dataframe for all relevant PASSAGE fields------------
-    #df_all = load_full_df(passage_objlist, args, cosmos_name=cosmos_name)
+    df_all = load_full_df(passage_objlist, args, cosmos_name=cosmos_name)
 
     # ---------venn diagram plot----------------------
     #plot_passage_venn(df_all, args)
 
     # ---------loading master dataframe with only objects in objlist------------
-    #df = make_master_df(df_all, objlist, args)
+    df = make_master_df(df_all, objlist, args)
+
+    # ---------metallicity latex table for paper----------------------
+    df_latex = make_latex_table(df, args)
 
     # ---------photoionisation model plots----------------------
     #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True)
@@ -1263,30 +1267,27 @@ if __name__ == "__main__":
     #plot_MEx(df, args, mass_col='lp_mass')
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB')
 
-    # ---------metallicity latex table for paper----------------------
-    #df_latex = make_latex_table(df, args)
-    
     # ---------individual galaxy plot: example galaxy----------------------
     #plot_galaxy_example_fig(1303, 'Par028', args)
 
-    # ---------individual galaxy plots: looping over objects----------------------
-    objlist =[objlist[np.where(np.array(objlist)[:,1].astype(int) == 2867)[0][0]]] ## for debugging
-    for index, obj in enumerate(objlist):
-        field = obj[0]
-        objid = obj[1]
-        print(f'Doing object {field}-{objid} which is {index + 1} of {len(objlist)} objects..')
-
-        full_hdu = load_full_fits(objid, field, args)
-        args = load_object_specific_args(full_hdu, args)
-        args.fontsize = 10
-
-        #plot_AGN_demarcation_figure(full_hdu, args, marker='o' if 'Par' in field else 's')
-        #plot_metallicity_fig(full_hdu, field, primary_Zdiag, args)
-        try:
-            plot_metallicity_sfr_fig(full_hdu, field, primary_Zdiag, args)
-        except:
-            print(f'Could not plot SFR figure for ID# {objid}, so skipping this object..')
-            pass
+    # # ---------individual galaxy plots: looping over objects----------------------
+    # objlist =[objlist[np.where(np.array(objlist)[:,1].astype(int) == 2867)[0][0]]] ## for debugging
+    # for index, obj in enumerate(objlist):
+    #     field = obj[0]
+    #     objid = obj[1]
+    #     print(f'Doing object {field}-{objid} which is {index + 1} of {len(objlist)} objects..')
+    #
+    #     full_hdu = load_full_fits(objid, field, args)
+    #     args = load_object_specific_args(full_hdu, args)
+    #     args.fontsize = 10
+    #
+    #     #plot_AGN_demarcation_figure(full_hdu, args, marker='o' if 'Par' in field else 's')
+    #     #plot_metallicity_fig(full_hdu, field, primary_Zdiag, args)
+    #     try:
+    #         plot_metallicity_sfr_fig(full_hdu, field, primary_Zdiag, args)
+    #     except:
+    #         print(f'Could not plot SFR figure for ID# {objid}, so skipping this object..')
+    #         pass
 
     # ---------metallicity comparison plots----------------------
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low')
