@@ -104,8 +104,10 @@ def compare_line_fluxes(df, line_list, args, lim=[-17, -15.5]):
         line_name_int = f'log_{line}_int'
         line_name_sum = f'log_{line}_sum'
 
-        for index in range(len(df)): ax.scatter(df[line_name_int][index], df[line_name_sum][index], c=df['color'][index], marker=df['marker'][index], s=50, edgecolor='k', lw=0.5)
-        ax.errorbar(df[line_name_int][index], df[line_name_sum][index], xerr=df[line_name_int + '_u'][index], yerr=df[line_name_sum + '_u'][index], fmt='none', c='gray', lw=0.5)
+        for marker in pd.unique(df['marker']):
+            df_sub = df[df['marker'] == marker]
+            ax.scatter(df_sub[line_name_int], df_sub[line_name_sum], c=df_sub['color'], marker=marker, s=50, edgecolor='k', lw=0.5, cmap=args.cmap, vmin=args.clim[0], vmax=args.clim[1])
+        ax.errorbar(df[line_name_int], df[line_name_sum], xerr=df[line_name_int + '_u'], yerr=df[line_name_sum + '_u'], fmt='none', c='gray', lw=0.5, zorder=-2)
 
         # --------annotating the figure-----------
         ax.set_xlabel(f'log {line} (int)', fontsize=args.fontsize)
@@ -116,8 +118,13 @@ def compare_line_fluxes(df, line_list, args, lim=[-17, -15.5]):
         ax.set_xlim(lim[0], lim[1])
         ax.set_ylim(lim[0], lim[1])
 
+    # --------making colorbar if needed-------------
+    if not args.nocolorcoding or args.colorcol != 'ez_z_phot':
+        cax = fig.add_axes([0.8, 0.27, 0.15, 0.01])
+        cbar = matplotlib.colorbar.ColorbarBase(cax, orientation='horizontal', cmap=args.cmap, norm=mplcolors.Normalize(args.clim[0], args.clim[1]), label=args.colorcol)
+
     # ----------saving the figure-----------------
-    figname = args.output_dir / 'plots' / f'sum_vs_int_line_flux_comparison_{args.snr_text}{args.only_seg_text}_{",".join(line_list)}.png'
+    figname = args.output_dir / 'plots' / f'sum_vs_int_line_flux_comparison_{args.snr_text}{args.only_seg_text}_{",".join(line_list)}{args.colorby_text}.png'
     ax.figure.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
@@ -162,23 +169,33 @@ def compare_line_ratios(df, ratio_list, args, lim=[-2, 2]):
         ratio_name_int = 'log_' + ratio.replace('/', '_') + '_int'
         ratio_name_sum = 'log_' + ratio.replace('/', '_') + '_sum'
 
-        for index in range(len(df)): ax.scatter(df[ratio_name_int][index], df[ratio_name_sum][index], c=df['color'][index], marker=df['marker'][index], s=50, edgecolor='k', lw=0.5)
-        ax.errorbar(df[ratio_name_int], df[ratio_name_sum], xerr=df[ratio_name_int + '_u'], yerr=df[ratio_name_sum + '_u'], fmt='none', c='gray', lw=0.5)
+        for marker in pd.unique(df['marker']):
+            df_sub = df[df['marker'] == marker]
+            ax.scatter(df_sub[ratio_name_int], df_sub[ratio_name_sum], c=df_sub['color'], marker=marker, s=50, edgecolor='k', lw=0.5, cmap=args.cmap, vmin=args.clim[0], vmax=args.clim[1])
+        ax.errorbar(df[ratio_name_int], df[ratio_name_sum], xerr=df[ratio_name_int + '_u'], yerr=df[ratio_name_sum + '_u'], fmt='none', c='gray', lw=0.5, zorder=-2)
 
         # --------annotating the figure-----------
         ax.set_xlabel(f'log {ratio} (int)', fontsize=args.fontsize)
         ax.set_ylabel(f'log {ratio} (sum)', fontsize=args.fontsize)
 
-        ax.plot([lim[0], lim[1]], [lim[0], lim[1]], c='k', ls='dotted', lw=1)
+        ax.plot([lim[0], lim[1]], [lim[0], lim[1]], c='k', ls='dotted', lw=1, zorder=-5)
 
+        # -------adding the model limits-----------
         ax.add_patch(plt.Rectangle((min_model_ratio, min_model_ratio), max_model_ratio - min_model_ratio, max_model_ratio - min_model_ratio, lw=0, fc=model_color, alpha=0.2, zorder=-5))
+        #ax.scatter(log_model_ratio, log_model_ratio, c=df_model['Z'], s=5, lw=0, marker='d', cmap='cividis', vmin=8, vmax=9, zorder=-4) ##
         ax.text(0.05, 0.05, f'{phot_model_text}\nmodel coverage', c=model_color, fontsize=args.fontsize, va='bottom', ha='left', transform=ax.transAxes)
 
         ax.set_xlim(lim[0], lim[1])
         ax.set_ylim(lim[0], lim[1])
 
+    # --------making colorbar if needed-------------
+    if not args.nocolorcoding or args.colorcol != 'ez_z_phot':
+        cax = fig.add_axes([0.93, 0.3, 0.005, 0.5])
+        cbar = matplotlib.colorbar.ColorbarBase(cax, orientation='vertical', cmap=args.cmap, norm=mplcolors.Normalize(args.clim[0], args.clim[1]), label=args.colorcol)
+
     # ----------saving the figure-----------------
-    figname = args.output_dir / 'plots' / f'sum_vs_int_line_ratio_comparison_{args.snr_text}{args.only_seg_text}_{",".join(ratio_list).replace("/", "-")}.png'
+    colorby_text = '' if args.nocolorcoding or args.colorcol == 'ez_z_phot' else f'_colby_{args.colorcol}'
+    figname = args.output_dir / 'plots' / f'sum_vs_int_line_ratio_comparison_{args.snr_text}{args.only_seg_text}_{",".join(ratio_list).replace("/", "-")}{args.colorby_text}.png'
     ax.figure.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
@@ -200,8 +217,10 @@ def compare_metallicities(df, Zdiag_arr, args, lim=[7, 9]):
         Zdiag_name_int = f'Z_{Zdiag}_int'
         Zdiag_name_sum = f'Z_{Zdiag}_sum'
 
-        for index in range(len(df)): ax.scatter(df[Zdiag_name_int][index], df[Zdiag_name_sum][index], c=df['color'][index], marker=df['marker'][index], s=50, edgecolor='k', lw=0.5)
-        ax.errorbar(df[Zdiag_name_int], df[Zdiag_name_sum], xerr=df[Zdiag_name_int + '_u'], yerr=df[Zdiag_name_sum + '_u'], fmt='none', c='gray', lw=0.5)
+        for marker in pd.unique(df['marker']):
+            df_sub = df[df['marker'] == marker]
+            ax.scatter(df_sub[Zdiag_name_int], df_sub[Zdiag_name_sum], c=df_sub['color'], marker=marker, s=50, edgecolor='k', lw=0.5, cmap=args.cmap, vmin=args.clim[0], vmax=args.clim[1])
+        ax.errorbar(df[Zdiag_name_int], df[Zdiag_name_sum], xerr=df[Zdiag_name_int + '_u'], yerr=df[Zdiag_name_sum + '_u'], fmt='none', c='gray', lw=0.5, zorder=-2)
 
         # --------annotating the figure-----------
         ax.set_xlabel(f'log O/H + 12: {Zdiag} (int)', fontsize=args.fontsize)
@@ -212,8 +231,13 @@ def compare_metallicities(df, Zdiag_arr, args, lim=[7, 9]):
         ax.set_xlim(lim[0], lim[1])
         ax.set_ylim(lim[0], lim[1])
 
+    # --------making colorbar if needed-------------
+    if not args.nocolorcoding or args.colorcol != 'ez_z_phot':
+        cax = fig.add_axes([0.832, 0.92, 0.15, 0.01])
+        cbar = matplotlib.colorbar.ColorbarBase(cax, orientation='horizontal', cmap=args.cmap, norm=mplcolors.Normalize(args.clim[0], args.clim[1]), label=args.colorcol)
+
     # ----------saving the figure-----------------
-    figname = args.output_dir / 'plots' / f'sum_vs_int_metallicity_comparison_{args.snr_text}{args.only_seg_text}_{",".join(Zdiag_arr)}_Zbranch-{args.Zbranch}_AGNdiag_{args.AGN_diag}{exclude_text}.png'
+    figname = args.output_dir / 'plots' / f'sum_vs_int_metallicity_comparison_{args.snr_text}{args.only_seg_text}_{",".join(Zdiag_arr)}_Zbranch-{args.Zbranch}_AGNdiag_{args.AGN_diag}{args.exclude_text}{args.colorby_text}.png'
     ax.figure.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
@@ -240,6 +264,8 @@ if __name__ == "__main__":
     ratio_list = ['OIII/Hb', 'OII/Hb', 'OIII/OII', 'NeIII-3867/OII']
 
     col_arr = np.tile(['salmon', 'sienna', 'cornflowerblue', 'darkolivegreen', 'darkgoldenrod', 'darkorchid', 'darkcyan', 'hotpink', 'rosybrown', 'peru', 'darkorange'], 30)
+    args.cmap = 'cividis'
+    args.clim = [7, 9] if 'Z' in args.colorcol else [None, None]
 
     # -------setting up objects to plot--------------
     Par28_objects = [300, 1303, 1849, 2171, 2727, 2867]
@@ -253,10 +279,11 @@ if __name__ == "__main__":
     args.snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
     args.only_seg_text = '_onlyseg' if args.only_seg else ''
     args.vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
+    args.colorby_text = '' if args.nocolorcoding or args.colorcol == 'ez_z_phot' else f'_colby_{args.colorcol}'
+    args.exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 else ''
 
     # -------loading the dataframe------------------
-    exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 else ''
-    output_dfname = args.output_dir / 'catalogs' / f'sum_vs_int_comparison_{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zbranch-{args.Zbranch}_AGNdiag_{args.AGN_diag}{exclude_text}.csv'
+    output_dfname = args.output_dir / 'catalogs' / f'sum_vs_int_comparison_{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zbranch-{args.Zbranch}_AGNdiag_{args.AGN_diag}{args.exclude_text}.csv'
 
     if not os.path.exists(output_dfname) or args.clobber:
         # ---------setting up the dataframe---------------
@@ -304,8 +331,9 @@ if __name__ == "__main__":
 
     # --------------prepare dataframe---------------
     df['marker'] = df['field'].map(lambda x: 's' if 'glass' in x else 'o')
-    #df['color'] = np.tile(['brown'], len(df))
-    df['color'] = col_arr[: len(df)]
+    if args.nocolorcoding: df['color'] = np.tile(['brown'], len(df))
+    elif args.colorcol == 'ez_z_phot': df['color'] = col_arr[: len(df)]
+    else: df['color'] = df[args.colorcol]
 
     for line in args.line_list:
         line_name_int = f'{line}_int'

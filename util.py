@@ -235,6 +235,9 @@ def parse_args():
     # ------- args added for plots_for_zgrad_paper.py ------------------------------
     parser.add_argument('--debug_Zsfr', dest='debug_Zsfr', action='store_true', default=False, help='Debug the metallicity-sfr plots? Default is no.')
 
+    # ------- args added for integrated_vs_summed.py ------------------------------
+    parser.add_argument('--nocolorcoding', dest='nocolorcoding', action='store_true', default=False, help='No color-coding for scatter plots? Default is no.')
+
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
