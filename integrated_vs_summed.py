@@ -339,8 +339,8 @@ if __name__ == "__main__":
         line_name_int = f'{line}_int'
         line_name_sum = f'{line}_sum'
 
-        line_int = unp.uarray(df[line_name_int], df[line_name_int + '_u'])
-        line_sum = unp.uarray(df[line_name_sum], df[line_name_sum + '_u'])
+        line_int = unp.uarray(df[line_name_int].astype(float), df[line_name_int + '_u'].astype(float))
+        line_sum = unp.uarray(df[line_name_sum].astype(float), df[line_name_sum + '_u'].astype(float))
 
         line_int[line_int <= 0] = ufloat(np.nan, np.nan)
         line_sum[line_sum <= 0] = ufloat(np.nan, np.nan)
@@ -353,6 +353,8 @@ if __name__ == "__main__":
 
         df['log_' + line_name_sum] = unp.nominal_values(log_line_sum)
         df['log_' + line_name_sum + '_u'] = unp.std_devs(log_line_sum)
+
+    #df = df[df['objid'].isin([2171])]
 
     # -----------taking the ratios-------------------------
     for ratio in ratio_list:
@@ -375,7 +377,7 @@ if __name__ == "__main__":
     # -------making the comparison figurse--------------
     #fig_models_arr = overplot_on_photoionisation_models(df, ratio_list, 'Z', args, col_int='sandybrown', col_sum='cornflowerblue')
     #fig_flux = compare_line_fluxes(df, args.line_list, args, lim=[-19, -15.5])
-    fig_ratio = compare_line_ratios(df, ratio_list, args, lim=[-2, 2])
-    #fig_Z = compare_metallicities(df, args.Zdiag, args, lim=[7, 9])
+    #fig_ratio = compare_line_ratios(df, ratio_list, args, lim=[-2, 2])
+    fig_Z = compare_metallicities(df, args.Zdiag, args, lim=[7, 9])
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

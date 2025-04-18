@@ -927,7 +927,7 @@ def get_distance_from_line(xdata, ydata, func, method='K01'):
     Computes distance of each object in the given xdata and ydata (line ratios) arrays, from a given line func(x)
     Returns the distance as an array
     '''
-    print(f'Computing distance form Kewley+2001 line on the BPT diagram..')
+    print(f'Computing distance from {method} line on the BPT diagram..')
     x = np.linspace(-2, 1, 100)
     y = func(x, method)
 

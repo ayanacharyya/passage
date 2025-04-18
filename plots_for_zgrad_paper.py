@@ -97,23 +97,25 @@ def plot_passage_venn(df, args):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_logOH_df(df, args, survey='passage'):
+def get_logOH_df(objlist, args, survey='passage'):
     '''
     Loads and returns a dataframe that holds all the metallicity-related properties for a given list of objects
     Returns dataframe
     '''
+    df = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
+
     filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOHgrad_df{args.snr_text}{args.only_seg_text}{args.vorbin_text}.txt'
     df_logOH = pd.read_csv(filename)
-    df_logOH = df_logOH.drop_duplicates(subset=['field', 'objid', 'logOH_diagnostic'], keep='last')
-    df_logOH = pd.merge(df[['field', 'objid']], df_logOH, on=['field', 'objid'], how='inner')
+    df_logOH = df_logOH.drop_duplicates(subset=['field', 'objid', 'logOH_branch', 'logOH_diagnostic'], keep='last')
+    df_logOH = pd.merge(df, df_logOH, on=['field', 'objid'], how='inner')
 
-    logOH_cols = ['logOH_int', 'logOH_slope', 'logOH_cen']
+    logOH_cols = ['logOH_sum', 'logOH_int', 'logOH_slope', 'logOH_cen']
     Zdiag_arr = np.hstack([[item] if item in ['NB', 'P25'] else [item + '_low', item + '_high'] for item in args.Zdiag])
 
     for Zdiag in Zdiag_arr:
         if 'low' in Zdiag: df_sub = df_logOH[(df_logOH['logOH_diagnostic'] == Zdiag[:-4]) & (df_logOH['logOH_branch'] == 'low')]
         elif 'high' in Zdiag: df_sub = df_logOH[(df_logOH['logOH_diagnostic'] == Zdiag[:-5]) & (df_logOH['logOH_branch'] == 'high')]
-        else: df_sub = df_logOH[(df_logOH['logOH_diagnostic'] == Zdiag) & (df_logOH['logOH_branch'] == 'low')]
+        else: df_sub = df_logOH[(df_logOH['logOH_diagnostic'] == Zdiag)]
 
         df_sub = df_sub.drop(['logOH_diagnostic', 'logOH_branch'], axis=1)
         df_sub = df_sub.rename(columns={'log_OH_int_u':'logOH_int_u'})
@@ -158,8 +160,11 @@ def make_master_df(df_all, objlist, args):
         if col in df_short: df[col] = df_short[col]
         else: df[col] = np.nan
 
-    df = get_logOH_df(df, args, survey='passage')
-    df = get_logOH_df(df, args, survey='glass')
+    # --------get metallicity info----------
+    df_logOH_passage = get_logOH_df(passage_objlist, args, survey='passage')
+    df_logOH_glass = get_logOH_df(glass_objlist, args, survey='glass')
+    df_logOH = pd.concat([df_logOH_passage, df_logOH_glass])
+    df = pd.merge(df, df_logOH, on=['field', 'objid'])
 
     df['marker'] = df['field'].apply(lambda x: get_marker_type(x))
 
@@ -298,25 +303,19 @@ def make_latex_table(df, args):
     Makes and saves a latex table for with metallicity and other columns, given a dataframe with list of objects and properties
     Returns the latex table as pandas dataframe
     '''
-    column_dict = {'field':'Field', 'objid':'ID', 'redshift':r'$z$', 'lp_mass':r'$\log$ M$_{\star}$/M$_{\odot}$', 'lp_SFR':r'SFR (M$_{\odot}$/yr)', 'logOH_int_NB':'$\log$ O/H + 12$_{total}$', 'logOH_slope_NB':r'$\nabla Z$ (dex/kpc)'}
+    column_dict = {'field':'Field', 'objid':'ID', 'redshift':r'$z$', 'lp_mass':r'$\log$ M$_{\star}$/M$_{\odot}$', 'lp_SFR':r'SFR (M$_{\odot}$/yr)', 'logOH_int_NB':'$\log$ O/H + 12$_{total}$', 'logOH_sum_NB':'$\log$ O/H + 12$_{total}$', 'logOH_slope_NB':r'$\nabla Z$ (dex/kpc)'}
     decimal_dict = defaultdict(lambda: 2, redshift=1, lp_mass=1)
     base_cols = ['field', 'objid', 'redshift', 'lp_mass', 'lp_SFR']
-    cols_with_errors = ['logOH_int_NB', 'logOH_slope_NB']
+    cols_with_errors = ['logOH_sum_NB', 'logOH_slope_NB']
 
     tex_df = pd.DataFrame()
     for thiscol in base_cols + cols_with_errors:
-        try:
-            if thiscol in cols_with_errors: # special treatment for columns with +/-
-                #tex_df[thiscol] = [r'$' + f'{data: .{decimal_dict[thiscol]}} \pm {err: .{decimal_dict[thiscol]}}' + r'$' for (data, err) in zip(df[thiscol], df[thiscol + '_u'])]
-                tex_df[thiscol] = df.apply(lambda row: r'$' + f'{row[thiscol]: .{decimal_dict[thiscol]}f} \pm {row[thiscol + "_u"]: .{decimal_dict[thiscol]}f}' + r'$' if np.isfinite(row[thiscol]) else '-', axis=1)
-            # elif 'logOH_int' in thiscol:
-            #     tex_df[thiscol] = df[thiscol].map(lambda x: '$%.2f$' % x if x < 0 else '$\phantom{-}%.2f$' % x if np.isfinite(x) else '-')
-            elif thiscol in ['field', 'objid']:
-                tex_df[thiscol] = df[thiscol]
-            else:
-                tex_df[thiscol] = df[thiscol].map(lambda x:  r'$' + f'{x: .{decimal_dict[thiscol]}f}' + r'$' if np.isfinite(x) else '-')
-        except ValueError: # columns that do not have numbers
-            continue
+        if thiscol in cols_with_errors: # special treatment for columns with +/-
+            tex_df[thiscol] = df.apply(lambda row: r'$' + f'{row[thiscol]: .{decimal_dict[thiscol]}f} \pm {row[thiscol + "_u"]: .{decimal_dict[thiscol]}f}' + r'$' if np.isfinite(row[thiscol]) else '-', axis=1)
+        elif thiscol in ['field', 'objid']:
+            tex_df[thiscol] = df[thiscol]
+        else:
+            tex_df[thiscol] = df[thiscol].map(lambda x:  r'$' + f'{x: .{decimal_dict[thiscol]}f}' + r'$' if np.isfinite(x) else '-')
 
     tex_df = tex_df.rename(columns=column_dict) # change column names to nice ones
     tabname = args.root_dir / 'zgrad_paper_plots' / 'paper_table.tex'
@@ -613,7 +612,7 @@ def plot_1D_spectra(od_hdu, ax, args):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def annotate_axes(ax, xlabel, ylabel, args, label='', hide_xaxis=False, hide_yaxis=False, hide_cbar=True, p=None):
+def annotate_axes(ax, xlabel, ylabel, args, label='', clabel='', hide_xaxis=False, hide_yaxis=False, hide_cbar=True, p=None):
     '''
     Annotates the axis of a given 2D image
     Returns the axis handle
@@ -638,6 +637,7 @@ def annotate_axes(ax, xlabel, ylabel, args, label='', hide_xaxis=False, hide_yax
         cax = divider.append_axes('right', size='5%', pad='2%')
         cbar = plt.colorbar(p, cax=cax, orientation='vertical')
         cbar.ax.tick_params(labelsize=args.fontsize)
+        cbar.set_label(clabel, fontsize=args.fontsize)
 
     return ax
 
@@ -711,7 +711,7 @@ def plot_rgb_image(full_hdu, filters, ax, args):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_2D_map(image, ax, label, args, cmap='cividis', takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True):
+def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True):
     '''
     Plots a given 2D image in a given axis
     Returns the axis handle
@@ -727,12 +727,12 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', takelog=True, vmin=None,
     ax.scatter(0, 0, marker='x', s=10, c='grey')
 
     if 'segmentation_map' in args: ax.contour(args.segmentation_map != args.id, levels=0, colors='w' if args.fortalk else 'k', extent=args.extent, linewidths=0.5) # demarcating the segmentation map zone
-    ax = annotate_axes(ax, 'arcsec', 'arcsec', args, label=label, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p)
+    ax = annotate_axes(ax, 'arcsec', 'arcsec', args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p)
 
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_line_ratio_maps(full_hdu, ratio_labels, axes, args, cmap='cividis', vmin=None, vmax=None, hide_xaxis=False, hide_cbar=True):
+def plot_line_ratio_maps(full_hdu, ratio_labels, axes, args, cmap='cividis', vmin=None, vmax=None, hide_xaxis=False):
     '''
     Plots the 2D line ratio maps for a given list of lines for a given object, in a given axis
     Returns the axis handle
@@ -749,12 +749,12 @@ def plot_line_ratio_maps(full_hdu, ratio_labels, axes, args, cmap='cividis', vmi
         line_map_den = np.ma.masked_where(line_map_den.mask | bad_mask, line_map_den.data)
 
         ratio_map = np.ma.masked_where(line_map_num.mask | line_map_den.mask, line_map_num.data / line_map_den.data)
-        ax = plot_2D_map(ratio_map, ax, ratio, args, cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
+        ax = plot_2D_map(ratio_map, ax, ratio, args, clabel='log flux ratio', cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
 
     return axes
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_line_maps(full_hdu, line_labels, axes, args, cmap='cividis', vmin=None, vmax=None, hide_xaxis=False, hide_cbar=True):
+def plot_line_maps(full_hdu, line_labels, axes, args, cmap='cividis', vmin=None, vmax=None, hide_xaxis=False):
     '''
     Plots the 2D line flux maps for a given list of lines for a given object, in a given axis
     Returns the axis handle
@@ -763,7 +763,7 @@ def plot_line_maps(full_hdu, line_labels, axes, args, cmap='cividis', vmin=None,
     for index, ax in enumerate(axes):
         line = line_labels[index]
         line_map, _, _, _, _ = get_emission_line_map(line, full_hdu, args, dered=True, silent=True)
-        ax = plot_2D_map(line_map, ax, line, args, cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
+        ax = plot_2D_map(line_map, ax, line, args, clabel='log flux (ergs/s/cm^2)', cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
 
     return axes
 
@@ -779,7 +779,7 @@ def plot_galaxy_example_fig(objid, field, args):
 
     # -------setting up the figure layout-------------
     fig = plt.figure(figsize=(10, 7) if args.plot_ratio_maps else (10, 5))
-    fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.08, wspace=0.18, hspace=0.3)
+    fig.subplots_adjust(left=0.05, right=0.93, top=0.9, bottom=0.08, wspace=0.18, hspace=0.3)
     ax_dirimg = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 0), colspan=1)
     ax_1dspec = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 1), colspan=ncol - 1)
 
@@ -801,11 +801,11 @@ def plot_galaxy_example_fig(objid, field, args):
     ax_1dspec = plot_1D_spectra(od_hdu, ax_1dspec, args)
 
     # ----------plotting line flux maps--------------
-    axes_line_maps = plot_line_maps(full_hdu, args.line_list, axes_line_maps, args, cmap='pink', vmin=-20, vmax=-18, hide_xaxis=args.plot_ratio_maps, hide_cbar=True)
+    axes_line_maps = plot_line_maps(full_hdu, args.line_list, axes_line_maps, args, cmap='pink', vmin=-20, vmax=-18, hide_xaxis=args.plot_ratio_maps)
 
     # ----------plotting line ratio image--------------
     if args.plot_ratio_maps:
-        axes_ratio_maps = plot_line_ratio_maps(full_hdu, ratios_to_plot, axes_ratio_maps, args, cmap='bone', vmin=-1, vmax=1, hide_xaxis=False, hide_cbar=True)
+        axes_ratio_maps = plot_line_ratio_maps(full_hdu, ratios_to_plot, axes_ratio_maps, args, cmap='bone', vmin=-1, vmax=1, hide_xaxis=False)
 
     # ----------annotating and saving figure--------------
     fig.text(0.05, 0.98, f'{field}: ID {objid}', fontsize=args.fontsize, c='k', ha='left', va='top')
@@ -1247,16 +1247,16 @@ if __name__ == "__main__":
     args.vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
 
     # ---------loading full dataframe for all relevant PASSAGE fields------------
-    df_all = load_full_df(passage_objlist, args, cosmos_name=cosmos_name)
+    #df_all = load_full_df(passage_objlist, args, cosmos_name=cosmos_name)
 
     # ---------venn diagram plot----------------------
     #plot_passage_venn(df_all, args)
 
     # ---------loading master dataframe with only objects in objlist------------
-    df = make_master_df(df_all, objlist, args)
+    #df = make_master_df(df_all, objlist, args)
 
     # ---------metallicity latex table for paper----------------------
-    df_latex = make_latex_table(df, args)
+    #df_latex = make_latex_table(df, args)
 
     # ---------photoionisation model plots----------------------
     #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True)
@@ -1268,10 +1268,10 @@ if __name__ == "__main__":
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB')
 
     # ---------individual galaxy plot: example galaxy----------------------
-    #plot_galaxy_example_fig(1303, 'Par028', args)
+    plot_galaxy_example_fig(1303, 'Par028', args)
 
-    # # ---------individual galaxy plots: looping over objects----------------------
-    # objlist =[objlist[np.where(np.array(objlist)[:,1].astype(int) == 2867)[0][0]]] ## for debugging
+    # ---------individual galaxy plots: looping over objects----------------------
+    #objlist =[objlist[np.where(np.array(objlist)[:,1].astype(int) == 2867)[0][0]]] ## for debugging
     # for index, obj in enumerate(objlist):
     #     field = obj[0]
     #     objid = obj[1]
@@ -1281,8 +1281,8 @@ if __name__ == "__main__":
     #     args = load_object_specific_args(full_hdu, args)
     #     args.fontsize = 10
     #
-    #     #plot_AGN_demarcation_figure(full_hdu, args, marker='o' if 'Par' in field else 's')
-    #     #plot_metallicity_fig(full_hdu, field, primary_Zdiag, args)
+    #     plot_AGN_demarcation_figure(full_hdu, args, marker='o' if 'Par' in field else 's')
+    #     plot_metallicity_fig(full_hdu, field, primary_Zdiag, args)
     #     try:
     #         plot_metallicity_sfr_fig(full_hdu, field, primary_Zdiag, args)
     #     except:

@@ -25,8 +25,8 @@ if __name__ == "__main__":
 
     # -----figuring out the array fo diagnostics to use------------
     Zdiag_arr = args.Zdiag.split(',')
-    if 'NB' in args.Zdiag and args.use_original_NB_grid: Zdiag_arr += ['NB_orig_grid']
-    if 'NB' in args.Zdiag and len(args.exclude_lines) > 0: Zdiag_arr += [f'NB_without_{args.exclude_lines}']
+    if args.use_original_NB_grid: Zdiag_arr = ['NB_orig_grid' if item == 'NB' else item for item in Zdiag_arr]
+    if len(args.exclude_lines) > 0: Zdiag_arr = [f'NB_without_{args.exclude_lines}' if item == 'NB' else item for item in Zdiag_arr]
 
     args.id_arr = np.atleast_1d(args.id)
     args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
@@ -66,8 +66,7 @@ if __name__ == "__main__":
     for index, args.id in enumerate(args.id_arr):
         print(f'\nDoing object {args.id} which is {index + 1} out of {len(args.id_arr)} objects..')
         markersize = (400 - index * 300 / len(args.id_arr)) / len(Zdiag_arr)
-        df = pd.DataFrame()
-        log_int_array = []
+        log_int_array, log_sum_array = [], []
         # --------looping over diagnostics---------------------
         for index2, Zdiag in enumerate(Zdiag_arr):
             if Zdiag == 'NB_orig_grid':
@@ -95,6 +94,15 @@ if __name__ == "__main__":
                     this_logOH_int = ufloat(header['log_oh_int'], header['log_oh_int_err'])
                 log_int_array.append(this_logOH_int)
 
+                # ----getting the summed values-------
+                if header['log_oh_sum'] is None:
+                    print(f'Summed logOH not found for ID {args.id} diag {Zdiag}')
+                    this_logOH_sum = ufloat(np.nan, np.nan)
+                else:
+                    this_logOH_sum = ufloat(header['log_oh_sum'], header['log_oh_sum_err'])
+
+                log_sum_array.append(this_logOH_sum)
+
                 # -------plotting metallicity map----------
                 if args.debug_Zdiag:
                     logOH_map = hdul['log_OH'].data
@@ -103,6 +111,7 @@ if __name__ == "__main__":
 
             else:
                 log_int_array.append(ufloat(np.nan, np.nan))
+                log_sum_array.append(ufloat(np.nan, np.nan))
                 if args.debug_Zdiag: fig2.delaxes(axes2[index * offset][index2])
                 print(f'{fitsname} not found, so skipping this diagnostic {Zdiag}')
 
@@ -127,8 +136,12 @@ if __name__ == "__main__":
 
                     if f'log_OH_{Zdiag1}' in df and f'log_OH_{Zdiag2}' in df:
                         # ---plotting integrated--
-                        ax.scatter(log_int_array[Z1_index].n, log_int_array[Z2_index].n, s=markersize, c=col_arr[index], lw=0.5, edgecolor='k', marker='s')
-                        ax.errorbar(log_int_array[Z1_index].n, log_int_array[Z2_index].n, xerr=log_int_array[Z1_index].s, yerr=log_int_array[Z2_index].s, c=col_arr[index], fmt='none', lw=0.5, alpha=0.5)
+                        #ax.scatter(log_int_array[Z1_index].n, log_int_array[Z2_index].n, s=markersize, c=col_arr[index], lw=0.5, edgecolor='k', marker='s')
+                        #ax.errorbar(log_int_array[Z1_index].n, log_int_array[Z2_index].n, xerr=log_int_array[Z1_index].s, yerr=log_int_array[Z2_index].s, c=col_arr[index], fmt='none', lw=0.5, alpha=0.5)
+
+                        # ---plotting summed--
+                        ax.scatter(log_sum_array[Z1_index].n, log_sum_array[Z2_index].n, s=markersize, c=col_arr[index], lw=0.5, edgecolor='k', marker='o', zorder=10)
+                        ax.errorbar(log_sum_array[Z1_index].n, log_sum_array[Z2_index].n, xerr=log_sum_array[Z1_index].s, yerr=log_sum_array[Z2_index].s, c=col_arr[index], fmt='none', lw=0.5, alpha=0.5)
 
                         # ---plotting spatially resolved--
                         p = ax.scatter(df[f'log_OH_{Zdiag1}'], df[f'log_OH_{Zdiag2}'], s=markersize/3, c=df[args.colorcol], lw=0, cmap=color_lim_dict[args.colorcol][3], vmin=color_lim_dict[args.colorcol][0], vmax=color_lim_dict[args.colorcol][1])
@@ -177,5 +190,13 @@ if __name__ == "__main__":
     fig.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
+
+    # --------for debugging-------------
+    if len(args.id_arr) == 1:
+        print(f'\nDeb197: metallicities for object {args.id}:\n')
+        dftot = pd.DataFrame(np.array([unp.nominal_values(log_int_array), unp.nominal_values(log_sum_array)]), columns=Zdiag_arr, index=['int', 'sum'])
+        dfbins = df[[item for item in df.columns if '_err' not in item and 'color' not in item]]
+        print(dftot, '\n')
+        print(dfbins, '\n')
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
