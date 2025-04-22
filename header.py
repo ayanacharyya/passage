@@ -66,7 +66,7 @@ from astropy.coordinates import SkyCoord, angular_separation
 from astropy.nddata.utils import Cutout2D
 from astropy import wcs as pywcs
 from astropy.io import fits
-from astropy.cosmology import Planck18 as cosmo
+from astropy.cosmology import Planck18
 from astropy.cosmology import FlatLambdaCDM
 from astropy.convolution import convolve, Gaussian1DKernel, Box1DKernel
 
@@ -109,12 +109,15 @@ import NebulaBayes
 import matplotlib
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import matplotlib.image as mpimg
 from matplotlib import colors as mplcolors
 from matplotlib import colormaps as mplcolormaps
 from matplotlib import cm as mpl_cm
 from matplotlib.backends.backend_pdf import PdfPages
 import mplcyberpunk
+import matplotlib.gridspec as gridspec
+import matplotlib.ticker as ticker
 
 from matplotlib import pyplot as plt
 plt.rcParams['ytick.direction'] = 'in'
@@ -158,3 +161,5 @@ passage_fields_in_cosmos = [3, 5, 6, 17, 20, 23, 24, 25, 26, 28, 29, 46, 47, 48,
 
 fields_uploaded_by_nuo = [17, 23, 24, 25, 26, 49, 53]
 
+# Set up necessary variables for cosmological calculations.
+cosmo = FlatLambdaCDM(H0=69.5, Om0=0.285, Ob0=0.0461)

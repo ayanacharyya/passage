@@ -386,7 +386,6 @@ def get_kpc_from_arc_at_redshift(arcseconds, redshift):
     '''
     Function to convert arcseconds on sky to physical kpc, at a given redshift
     '''
-    cosmo = FlatLambdaCDM(H0=67.8, Om0=0.308)
     d_A = cosmo.angular_diameter_distance(z=redshift)
     kpc = (d_A * arcseconds * u.arcsec).to(u.kpc, u.dimensionless_angles()).value # in kpc
     print('%.2f arcseconds corresponds to %.2F kpc at target redshift of %.2f' %(arcseconds, kpc, redshift))

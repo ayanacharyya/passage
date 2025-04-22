@@ -11,7 +11,7 @@ from util import *
 from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
 from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso22, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
-from make_diagnostic_maps import get_emission_line_map, annotate_PAs, plot_linelist, trim_image, get_EB_V, get_voronoi_bin_IDs, get_AGN_func_methods, AGN_func, take_safe_log_ratio, annotate_BPT_axes, get_distance_map, compute_SFR
+from make_diagnostic_maps import get_emission_line_map, annotate_PAs, get_linelist, trim_image, get_EB_V, get_voronoi_bin_IDs, get_AGN_func_methods, AGN_func, take_safe_log_ratio, annotate_BPT_axes, get_distance_map, compute_SFR
 
 plt.rcParams['ytick.direction'] = 'in'
 plt.rcParams['ytick.right'] = True
@@ -567,6 +567,30 @@ def plot_radial_profile(image, ax, args, ylim=None, xlim=None):
     return ax, linefit
 
 # --------------------------------------------------------------------------------------------------------------------
+def plot_linelist(ax, fontsize=10, line_list_file=None):
+    '''
+    Plots a list of emission line wavelengths on the given axis
+    Returns axis handle
+    '''
+    lines_df = get_linelist(wave_lim=ax.get_xlim(), line_list_file=line_list_file)
+    previous_wave = np.min(lines_df['restwave']) * 0.1 # very small value, so that it is far left (blue-ward) of the actual plot
+    last_flipped = False # flip switch for determining if last label was placed to the left or right of the vertical line
+
+    for index in range(len(lines_df)):
+        this_wave = lines_df.iloc[index]['restwave']
+        ax.axvline(this_wave, c='cornflowerblue', lw=1)
+        if this_wave - previous_wave < 100 or last_flipped:
+            xpos = this_wave + np.diff(ax.get_xlim())[0] * 0.01
+            last_flipped = not last_flipped
+        else:
+            xpos = this_wave - np.diff(ax.get_xlim())[0] * 0.02
+        ypos = ax.get_ylim()[1] * 0.98
+        ax.text(xpos, ypos, lines_df.iloc[index]['LineID'].strip(), rotation=90, va='top', ha='left', fontsize=fontsize)
+        previous_wave = this_wave
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_1D_spectra(od_hdu, ax, args):
     '''
     Plots the 1D spectra for a given object, in a given axis
@@ -617,7 +641,6 @@ def annotate_axes(ax, xlabel, ylabel, args, label='', clabel='', hide_xaxis=Fals
     Annotates the axis of a given 2D image
     Returns the axis handle
     '''
-
     ax.text(0.1, 0.9, label, c='k', fontsize=args.fontsize/args.fontfactor, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9), transform=ax.transAxes)
 
     if hide_xaxis:
@@ -631,13 +654,16 @@ def annotate_axes(ax, xlabel, ylabel, args, label='', clabel='', hide_xaxis=Fals
     else:
         ax.set_ylabel(ylabel, fontsize=args.fontsize)
         ax.tick_params(axis='y', which='major', labelsize=args.fontsize)
+        ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=4, prune='both'))
 
     if not hide_cbar and p is not None:
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes('right', size='5%', pad='2%')
+        cax = inset_axes(ax, width="5%", height="100%", loc='right', bbox_to_anchor=(0.05, 0, 1, 1), bbox_transform=ax.transAxes, borderpad=0)
         cbar = plt.colorbar(p, cax=cax, orientation='vertical')
         cbar.ax.tick_params(labelsize=args.fontsize)
         cbar.set_label(clabel, fontsize=args.fontsize)
+
+        cbar.locator = ticker.MaxNLocator(integer=True, nbins=4)#, prune='both')
+        cbar.update_ticks()
 
     return ax
 
@@ -773,20 +799,23 @@ def plot_galaxy_example_fig(objid, field, args):
     Plots and saves a single figure with the direct image, 1D spectra, emission line maps and emission line ratio maps for a given object
     '''
     print(f'\nPlotting example galaxy {field}:{objid}..')
-    nrow = 2 # 2 rows: one for direct image + 1D spectra, one for flux maps
-    if args.plot_ratio_maps: nrow += 1 # additional row for ratio maps
     ncol = len(args.line_list) # one each for OII, OIII, Hb and NeIII line
 
     # -------setting up the figure layout-------------
     fig = plt.figure(figsize=(10, 7) if args.plot_ratio_maps else (10, 5))
-    fig.subplots_adjust(left=0.05, right=0.93, top=0.9, bottom=0.08, wspace=0.18, hspace=0.3)
-    ax_dirimg = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 0), colspan=1)
-    ax_1dspec = plt.subplot2grid(shape=(nrow, ncol), loc=(0, 1), colspan=ncol - 1)
+    fig.subplots_adjust(left=0.05, right=0.95, top=0.94, bottom=0.06, wspace=0.1, hspace=0.2)
+    outer_gs = gridspec.GridSpec(2, 1, height_ratios=[1, 2 if args.plot_ratio_maps else 1], figure=fig) # Outer GridSpec: 2 rows – top (loose), bottom (tight)
 
-    # ---------setting up emission line map axes----------------
-    axes_line_maps = [plt.subplot2grid(shape=(nrow, ncol), loc=(1, item), colspan=1) for item in np.arange(ncol)]
+    # ---------setting up direct image (1x1 square) and 1D spectra (1x3 wide) subplots----------------
+    top_gs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=outer_gs[0], width_ratios=[1, ncol - 1], wspace=0.1)
+    ax_dirimg = fig.add_subplot(top_gs[0, 0])
+    ax_1dspec = fig.add_subplot(top_gs[0, 1])
+
+    # ---------setting up emission line map axes: ncol x 2 (or ncol x 1) tight subplots with shared axes----------------
+    bottom_gs = gridspec.GridSpecFromSubplotSpec(2 if args.plot_ratio_maps else 1, ncol, subplot_spec=outer_gs[1], wspace=0.0, hspace=0.02) # Use sub-GridSpec with tight spacing
+    axes_line_maps = [fig.add_subplot(bottom_gs[0, item]) for item in np.arange(ncol)]
     if args.plot_ratio_maps:
-        axes_ratio_maps = [plt.subplot2grid(shape=(nrow, ncol), loc=(2, item), colspan=1) for item in np.arange(ncol)]
+        axes_ratio_maps = [fig.add_subplot(bottom_gs[1, item]) for item in np.arange(ncol)]
         ratios_to_plot = ['OII/NeIII-3867', 'OIII/OII', 'OII/Hb', 'OIII/Hb']
 
     # ----------loading the full.fits and 1D.fits files--------------
@@ -801,7 +830,7 @@ def plot_galaxy_example_fig(objid, field, args):
     ax_1dspec = plot_1D_spectra(od_hdu, ax_1dspec, args)
 
     # ----------plotting line flux maps--------------
-    axes_line_maps = plot_line_maps(full_hdu, args.line_list, axes_line_maps, args, cmap='pink', vmin=-20, vmax=-18, hide_xaxis=args.plot_ratio_maps)
+    axes_line_maps = plot_line_maps(full_hdu, args.line_list, axes_line_maps, args, cmap='pink', vmin=-20-0.2, vmax=-18+0.2, hide_xaxis=args.plot_ratio_maps)
 
     # ----------plotting line ratio image--------------
     if args.plot_ratio_maps:
@@ -989,15 +1018,20 @@ def plot_metallicity_fig(full_hdu, field, Zdiag, args):
     logOH_map, _, _ = load_metallicity_map(field, objid, Zdiag, args)
 
     # --------setting up the figure------------
-    fig, axes = plt.subplots(1, 3, figsize=(9, 3))
-    fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.5, hspace=0.3)
+    fig = plt.figure(figsize=(9, 3))
+    fig.subplots_adjust(left=0.07, right=0.99, top=0.96, bottom=0.12, wspace=0.3)
+    outer_gs = gridspec.GridSpec(1, 2, width_ratios=[2, 1], figure=fig)
+
+    left_gs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=outer_gs[0], wspace=0.1)
+    right_gs = gridspec.GridSpecFromSubplotSpec(1, 1, subplot_spec=outer_gs[1])
+    axes = [fig.add_subplot(left_gs[0, 0]), fig.add_subplot(left_gs[0, 1]), fig.add_subplot(right_gs[0, 0])]
 
     # -----plotting direct image-----------------
     axes[0] = plot_rgb_image(full_hdu, ['F115W', 'F150W', 'F200W'], axes[0], args)
 
     # -----plotting 2D metallicity map-----------
     Zlim = [7.1, 8.1]
-    axes[1] = plot_2D_map(logOH_map, axes[1], f'log O/H + 12 ({Zdiag})', args, takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=False, hide_yaxis=True, hide_cbar=False)
+    axes[1] = plot_2D_map(logOH_map, axes[1], f'log O/H + 12 ({Zdiag})', args, clabel='', takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=False, hide_yaxis=True, hide_cbar=False)
 
     # ------plotting metallicity radial profile-----------
     axes[2], _ = plot_radial_profile(logOH_map, axes[2], args, ylim=Zlim, xlim=[0, 5])
@@ -1025,7 +1059,7 @@ def plot_metallicity_sfr_fig(full_hdu, field, Zdiag, args):
 
     # --------setting up the figure------------
     fig, axes = plt.subplots(3 if args.debug_Zsfr else 1, 2, figsize=(5.7, 7) if args.debug_Zsfr else (7, 3))
-    fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.15, wspace=0.5, hspace=0.3)
+    fig.subplots_adjust(left=0.1, right=0.98, top=0.95, bottom=0.15, wspace=0.5, hspace=0.3)
 
     # -------deriving H-alpha map-----------
     N2_plus_Ha_map, _, _, _, _ = get_emission_line_map('Ha', full_hdu, args, silent=True)
@@ -1068,7 +1102,7 @@ def plot_metallicity_sfr_fig(full_hdu, field, Zdiag, args):
 
     # -----plotting 2D SFR map-----------
     log_sfr_lim = [-3, -2]
-    axes[0] = plot_2D_map(log_sfr_map, axes[0], f'log SFR (corrected)' if args.debug_Zsfr else f'log SFR', args, takelog=False, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
+    axes[0] = plot_2D_map(log_sfr_map, axes[0], f'log SFR (corrected)' if args.debug_Zsfr else f'log SFR', args, clabel=r'log SFR (M$_{\odot}$/yr)', takelog=False, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
 
     # ------plotting metallicity vs SFR-----------
     df = pd.DataFrame({'logOH': unp.nominal_values(np.ma.compressed(logOH_map)), 'logOH_u': unp.std_devs(np.ma.compressed(logOH_map)), 'log_sfr':unp.nominal_values(np.ma.compressed(log_sfr_map)), 'log_sfr_u': unp.std_devs(np.ma.compressed(log_sfr_map))})
@@ -1216,7 +1250,7 @@ if __name__ == "__main__":
 
     # -----------setting up hard-coded values-------------------
     args.fontsize = 10
-    args.fontfactor = 1.5
+    args.fontfactor = 1.
     args.only_seg = True
     args.vorbin = True
     args.plot_ratio_maps = True
@@ -1271,7 +1305,7 @@ if __name__ == "__main__":
     plot_galaxy_example_fig(1303, 'Par028', args)
 
     # ---------individual galaxy plots: looping over objects----------------------
-    #objlist =[objlist[np.where(np.array(objlist)[:,1].astype(int) == 2867)[0][0]]] ## for debugging
+    # objlist =[objlist[np.where(np.array(objlist)[:,1].astype(int) == 2867)[0][0]]] ## for debugging
     # for index, obj in enumerate(objlist):
     #     field = obj[0]
     #     objid = obj[1]

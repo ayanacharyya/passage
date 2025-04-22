@@ -717,8 +717,6 @@ def generate_fit_params(obj_z, z_range = 0.01, num_age_bins = 5, min_age_bin = 3
     if (z_range == 0.0) or (type(obj_z) is ArrayLike): fit_params['redshift'] = obj_z
     else: fit_params['redshift'] = (obj_z - z_range / 2, obj_z + z_range / 2)
 
-    # Set up necessary variables for cosmological calculations.
-    cosmo = FlatLambdaCDM(H0=70.0, Om0=0.3)
     age_at_z = cosmo.age(np.nanmax(fit_params['redshift'])).value
 
     age_bins = np.geomspace(min_age_bin, age_at_z * 1e3, num=num_age_bins)
