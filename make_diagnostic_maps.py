@@ -1342,9 +1342,9 @@ def get_Z_KD02_R23(full_hdu, args, branch='low'):
         OIII5007_int = OIII5007_int / factor
         OIII5007_sum = OIII5007_sum  / factor
 
-    logOH_map = compute_Z_R23(OII3727_map, OIII5007_map, Hbeta_map, branch=branch)
-    logOH_int = compute_Z_R23(OII3727_int, OIII5007_int, Hbeta_int, branch=branch)
-    logOH_sum = compute_Z_R23(OII3727_sum, OIII5007_sum, Hbeta_sum, branch=branch)
+    logOH_map = compute_Z_KD02_R23(OII3727_map, OIII5007_map, Hbeta_map, branch=branch)
+    logOH_int = compute_Z_KD02_R23(OII3727_int, OIII5007_int, Hbeta_int, branch=branch)
+    logOH_sum = compute_Z_KD02_R23(OII3727_sum, OIII5007_sum, Hbeta_sum, branch=branch)
 
     return logOH_map, logOH_int, logOH_sum
 
@@ -1515,10 +1515,11 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
     ratio_turnover = model(logOH_turnover - 8.69)
 
     if ax is not None:
-        for ax1 in ax:
-            ax1.axvline(logOH_turnover, ls='--', c='k', lw=1)
+        for index, ax1 in enumerate(ax):
+            ax1.axvline(logOH_turnover, ls='--', c='k', lw=1, label='Turnover location' if index == 0 else None)
             ax1.axhline(ratio_turnover, ls='--', c='k', lw=1)
-            ax1.fill_betweenx([-5, 5], reasonable_Z_limit[0], reasonable_Z_limit[1], color='cyan', alpha=0.1, lw=0)
+            #ax1.fill_betweenx([-5, 5], reasonable_Z_limit[0], reasonable_Z_limit[1], color='cyan', alpha=0.1, lw=0)
+        ax[0].legend(loc='lower left')
 
     # --------determining data and masks------------
     if np.ma.isMaskedArray(ratio):
@@ -1548,8 +1549,9 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
                     this_log_OH = np.min(possible_roots)
                 log_OH.append(ufloat(this_log_OH, 0.))
                 if ax is not None:
-                    for real_root,col in zip(real_roots, ['r', 'g', 'b']): ax[0].scatter(real_root, this_ratio, lw=0, s=5, c=col)
-                    ax[1].scatter(this_log_OH, this_ratio, lw=0, s=5)
+                    col_arr = ['k', 'g', 'b']
+                    for index, real_root in enumerate(real_roots): ax[0].scatter(real_root, this_ratio, lw=0, s=10, c=col_arr[index] if len(real_roots) > 1 else 'r')
+                    ax[1].scatter(this_log_OH, this_ratio, lw=0, s=10, c='brown')
             except:
                 log_OH.append(ufloat(np.nan, np.nan))
                 if ax is not None: ax[1].axhline(this_ratio, lw=0.5, c='grey', alpha=0.3)
@@ -1572,7 +1574,7 @@ def get_emission_line_maps(full_hdu, line_labels, args, silent=False):
     for line in line_labels:
         line_map, line_wave, line_int, line_sum, _ = get_emission_line_map(line, full_hdu, args, silent=silent)
 
-        if not args.do_not_correct_flux:
+        if not args.do_not_correct_flux and args.Zdiag == 'R23':
             factor = 1.
             if line == 'OIII': # special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back
                 ratio_5007_to_4959 = 2.98  # from grizli source code
@@ -1681,16 +1683,16 @@ def get_Z_C19(full_hdu, args):
     # ----setting up Z diag debugging plots---------
     if args.debug_Zdiag:
         fig, ax = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
-        ax[0].set_xlabel('Solution[i] + 8.69')
-        if args.Zbranch == 'high': ax[1].set_xlabel('log(O/H)+12 = max(solution) + 8.69')
-        elif args.Zbranch == 'low': ax[1].set_xlabel('log(O/H)+12 = min(solution) + 8.69')
-        ax[0].set_ylabel(f'Observed {args.Zdiag}')
+        ax[0].set_xlabel('Solution[i] + 8.69', fontsize=args.fontsize)
+        if args.Zbranch == 'high': ax[1].set_xlabel('log(O/H)+12 = max(solution) + 8.69', fontsize=args.fontsize)
+        elif args.Zbranch == 'low': ax[1].set_xlabel('log(O/H)+12 = min(solution) + 8.69', fontsize=args.fontsize)
+        ax[0].set_ylabel(f'Observed {args.Zdiag}', fontsize=args.fontsize)
         Z_limits = [5, 10]
-        ratio_limits = [-2, 2]
+        ratio_limits = [-0.5, 1.2]
 
         xarr = np.linspace(Z_limits[0], Z_limits[1], 100)
-        ax[0].plot(xarr, np.poly1d(coeff)(xarr - 8.69), lw=0.5, c='k', ls='dotted')
-        ax[1].plot(xarr, np.poly1d(coeff)(xarr - 8.69), lw=0.5, c='k', ls='dotted')
+        ax[0].plot(xarr, np.poly1d(coeff)(xarr - 8.69), lw=1, c='k', ls='dotted', label='C20 calibration')
+        ax[1].plot(xarr, np.poly1d(coeff)(xarr - 8.69), lw=1, c='k', ls='dotted')
 
         ax[0].set_ylim(ratio_limits[0], ratio_limits[1])
         ax[0].set_xlim(Z_limits[0], Z_limits[1])
@@ -1700,9 +1702,9 @@ def get_Z_C19(full_hdu, args):
 
     # -------estimating the metallicities---------------
     logOH_map = compute_Z_C19(ratio_map, coeff, ax=ax, branch=args.Zbranch) if not args.only_integrated else None
-    logOH_int = compute_Z_C19(ratio_int, coeff, ax=ax, branch=args.Zbranch)
+    logOH_int = compute_Z_C19(ratio_int, coeff, branch=args.Zbranch)
     logOH_int = ufloat(unp.nominal_values(np.atleast_1d(logOH_int))[0], unp.std_devs(np.atleast_1d(logOH_int))[0])
-    logOH_sum = compute_Z_C19(ratio_sum, coeff, ax=ax, branch=args.Zbranch)
+    logOH_sum = compute_Z_C19(ratio_sum, coeff, branch=args.Zbranch)
     logOH_sum = ufloat(unp.nominal_values(np.atleast_1d(logOH_sum))[0], unp.std_devs(np.atleast_1d(logOH_sum))[0])
 
     # -------saving the debugging plots---------------

@@ -73,10 +73,11 @@ def load_full_df(objlist, args, cosmos_name='web'):
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_passage_venn(df, args):
+def plot_passage_venn(df, args, fontsize=10):
     '''
     Plots and saves the Venn diagram given a set of conditions
     '''
+    args.fontsize = fontsize
     print(f'Plotting Venn diagram..')
     df_int, ax = plot_venn(df, args, silent=True)
 
@@ -172,7 +173,7 @@ def make_master_df(df_all, objlist, args):
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR'):
+def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     '''
     Plots and saves the SF-main sequence diagram given a dataframe with list of objects and properties
     '''
@@ -214,7 +215,7 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR'):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_MEx(df, args, mass_col='lp_mass'):
+def plot_MEx(df, args, mass_col='lp_mass', fontsize=10):
     '''
     Plots and saves the mass-excitation diagram given a dataframe with list of objects and properties
     '''
@@ -261,7 +262,7 @@ def plot_MEx(df, args, mass_col='lp_mass'):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB'):
+def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsize=10):
     '''
     Plots and saves the mass-metallicity gradient plot given a dataframe with list of objects and properties
     '''
@@ -351,10 +352,11 @@ def get_photoionisation_model_grid(args):
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False):
+def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False, fontsize=10):
     '''
     Plots and saves the ratio vs ratio parameter space and, optionally, a fit to its envelope, for a given photoionisation model grid
     '''
+    args.fontsize = fontsize
     print(f'Plotting photoionisation grid for {ratio_y} vs {ratio_x}..')
     if args.phot_models.lower() in ['mappings', 'map']: line_label_dict = smart_dict({'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'NeIII':'[NeIII]3869', 'NeIII-3867':'[NeIII]3869', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31'}) # to map between user input line labels and line labels used in ratio_list.txt file
     elif args.phot_models.lower() in ['nebulabayes', 'nb']: line_label_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'})
@@ -417,10 +419,11 @@ def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_photoionisation_models(ratio_y, parameter_x, args):
+def plot_photoionisation_models(ratio_y, parameter_x, args, fontsize=10):
     '''
     Plots and saves the ratio vs parameter for a given photoionisation model grid and parameter
     '''
+    args.fontsize = fontsize
     print(f'Plotting photoionisation models for {ratio_y} vs {parameter_x}..')
     if args.phot_models.lower() in ['mappings', 'map']: line_label_dict = smart_dict({'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'NeIII':'[NeIII]3869', 'NeIII-3867':'[NeIII]3869', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31'}) # to map between user input line labels and line labels used in ratio_list.txt file
     elif args.phot_models.lower() in ['nebulabayes', 'nb']: line_label_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'})
@@ -794,10 +797,11 @@ def plot_line_maps(full_hdu, line_labels, axes, args, cmap='cividis', vmin=None,
     return axes
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_galaxy_example_fig(objid, field, args):
+def plot_galaxy_example_fig(objid, field, args, fontsize=10):
     '''
     Plots and saves a single figure with the direct image, 1D spectra, emission line maps and emission line ratio maps for a given object
     '''
+    args.fontsize = fontsize
     print(f'\nPlotting example galaxy {field}:{objid}..')
     ncol = len(args.line_list) # one each for OII, OIII, Hb and NeIII line
 
@@ -896,10 +900,11 @@ def plot_AGN_demarcation_ax(x_num, x_den, y_num, y_den, ax, args, color=None, ma
     return ax, p
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_AGN_demarcation_figure(full_hdu, args, marker='o'):
+def plot_AGN_demarcation_figure(full_hdu, args, marker='o', fontsize=10):
     '''
     Plots and saves the spatially resolved AGN demarcation for a given object
     '''
+    args.fontsize = fontsize
     print(f'Plotting AGN demarcation diagram for ID: {full_hdu[0].header["ID"]}..')
     theoretical_lines, line_labels = get_AGN_func_methods(args)
     dist_method = theoretical_lines[0]
@@ -1007,10 +1012,11 @@ def load_metallicity_df(field, objid, Zdiag, args):
     return logOH_df, logOH_int, logOH_sum
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_metallicity_fig(full_hdu, field, Zdiag, args):
+def plot_metallicity_fig(full_hdu, field, Zdiag, args, fontsize=10):
     '''
     Plots and saves a single figure with the direct image, 2D metallicity map and metallicity radial profile for a given object
     '''
+    args.fontsize = fontsize
     objid = full_hdu[0].header["ID"]
     print(f'Plotting metallicity ({Zdiag}) figure for {objid}..')
 
@@ -1044,10 +1050,11 @@ def plot_metallicity_fig(full_hdu, field, Zdiag, args):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_metallicity_sfr_fig(full_hdu, field, Zdiag, args):
+def plot_metallicity_sfr_fig(full_hdu, field, Zdiag, args, fontsize=10):
     '''
     Plots and saves a single figure with the direct image, 2D metallicity map, metallicity radial profile, SFR map, metallicity vs SFR plot for a given object
     '''
+    args.fontsize = fontsize
     objid = full_hdu[0].header["ID"]
     print(f'Plotting metallicity-SFR figure for {objid}..')
 
@@ -1136,11 +1143,12 @@ def plot_metallicity_sfr_fig(full_hdu, field, Zdiag, args):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low'):
+def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fontsize=10):
     '''
     Plots and saves a single figure with corner plots for comparisons across a given list of different metallicity diagnostics for a given list of objects
     Repeats that for both high and low metallicity branch solutions
     '''
+    args.fontsize = fontsize
     print(f'Plotting metallicity diagnostics comparison for {Zdiag_arr}..')
     args.Zbranch = Zbranch
 
@@ -1284,7 +1292,7 @@ if __name__ == "__main__":
     #df_all = load_full_df(passage_objlist, args, cosmos_name=cosmos_name)
 
     # ---------venn diagram plot----------------------
-    #plot_passage_venn(df_all, args)
+    #plot_passage_venn(df_all, args, fontsize=20)
 
     # ---------loading master dataframe with only objects in objlist------------
     #df = make_master_df(df_all, objlist, args)
@@ -1293,16 +1301,16 @@ if __name__ == "__main__":
     #df_latex = make_latex_table(df, args)
 
     # ---------photoionisation model plots----------------------
-    #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True)
-    #plot_photoionisation_models('OIII/Hb', 'Z', args)
+    #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True, fontsize=10)
+    #plot_photoionisation_models('OIII/Hb', 'Z', args, fontsize=10)
 
     # ---------full population plots----------------------
-    #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR')
-    #plot_MEx(df, args, mass_col='lp_mass')
-    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB')
+    #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=20)
+    #plot_MEx(df, args, mass_col='lp_mass', fontsize=20)
+    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsize=20)
 
     # ---------individual galaxy plot: example galaxy----------------------
-    plot_galaxy_example_fig(1303, 'Par028', args)
+    plot_galaxy_example_fig(1303, 'Par028', args, fontsize=10)
 
     # ---------individual galaxy plots: looping over objects----------------------
     # objlist =[objlist[np.where(np.array(objlist)[:,1].astype(int) == 2867)[0][0]]] ## for debugging
@@ -1315,16 +1323,16 @@ if __name__ == "__main__":
     #     args = load_object_specific_args(full_hdu, args)
     #     args.fontsize = 10
     #
-    #     plot_AGN_demarcation_figure(full_hdu, args, marker='o' if 'Par' in field else 's')
-    #     plot_metallicity_fig(full_hdu, field, primary_Zdiag, args)
+    #     plot_AGN_demarcation_figure(full_hdu, args, marker='o' if 'Par' in field else 's', fontsize=20)
+    #     plot_metallicity_fig(full_hdu, field, primary_Zdiag, args, fontsize=20)
     #     try:
-    #         plot_metallicity_sfr_fig(full_hdu, field, primary_Zdiag, args)
+    #         plot_metallicity_sfr_fig(full_hdu, field, primary_Zdiag, args, fontsize=20)
     #     except:
     #         print(f'Could not plot SFR figure for ID# {objid}, so skipping this object..')
     #         pass
 
     # ---------metallicity comparison plots----------------------
-    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low')
-    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high')
+    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
+    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=10)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
