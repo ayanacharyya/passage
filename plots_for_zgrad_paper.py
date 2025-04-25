@@ -199,7 +199,8 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     # ----------plotting theoretical diagrams----------
     ax = plot_SFMS_Popesso22(ax, 2.0, color='cornflowerblue')
     ax = plot_SFMS_Shivaei15(ax, color='salmon')
-    ax = plot_SFMS_Whitaker14(ax, 2.0, color='yellowgreen')
+    #ax = plot_SFMS_Whitaker14(ax, 2.0, color='yellowgreen')
+    ax = plot_SFMS_Popesso22(ax, 3.0, color='royalblue')
 
     # ---------annotate axes and save figure-------
     plt.legend(fontsize=args.fontsize)
@@ -320,7 +321,7 @@ def make_latex_table(df, args):
 
     tex_df = tex_df.rename(columns=column_dict) # change column names to nice ones
     tabname = args.root_dir / 'zgrad_paper_plots' / 'paper_table.tex'
-    tex_df.to_latex(tabname, index=None, escape=False)
+    tex_df.to_latex(tabname, index=False, escape=False)
     print('Saved latex table at', tabname)
 
     return tex_df
@@ -1082,13 +1083,15 @@ def plot_metallicity_sfr_fig(full_hdu, field, Zdiag, args, fontsize=10):
         factor = 0.823 # from James et al. 2023?
         N2_plus_Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask, N2_plus_Ha_map.data / factor)
 
-    log_N2Ha_logOH_poly_coeff = [1, -10] # from approx fit to MAPPINGS models
+    #log_N2Ha_logOH_poly_coeff = [1, -10] # from approx fit to MAPPINGS models
+    log_N2Ha_logOH_poly_coeff = [-0.489, 1.513, -2.554, -5.293, -2.867][::-1] # from Table 2 N2 row of Curti+2019
 
     logOH_arr = logOH_map.data.flatten()
     log_N2Ha_arr = []
     for logOH in logOH_arr:
         try:
-            log_N2Ha = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH)
+            #log_N2Ha = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH)
+            log_N2Ha = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH - 8.69) # because using C19 N2 calibration
             log_N2Ha_arr.append(log_N2Ha)
         except:
             log_N2Ha_array.append(np.nan)
@@ -1289,16 +1292,16 @@ if __name__ == "__main__":
     args.vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
 
     # ---------loading full dataframe for all relevant PASSAGE fields------------
-    #df_all = load_full_df(passage_objlist, args, cosmos_name=cosmos_name)
+    df_all = load_full_df(passage_objlist, args, cosmos_name=cosmos_name)
 
     # ---------venn diagram plot----------------------
     #plot_passage_venn(df_all, args, fontsize=20)
 
     # ---------loading master dataframe with only objects in objlist------------
-    #df = make_master_df(df_all, objlist, args)
+    df = make_master_df(df_all, objlist, args)
 
     # ---------metallicity latex table for paper----------------------
-    #df_latex = make_latex_table(df, args)
+    df_latex = make_latex_table(df, args)
 
     # ---------photoionisation model plots----------------------
     #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True, fontsize=10)
@@ -1310,23 +1313,23 @@ if __name__ == "__main__":
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsize=20)
 
     # ---------individual galaxy plot: example galaxy----------------------
-    plot_galaxy_example_fig(1303, 'Par028', args, fontsize=10)
+    #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=10)
 
-    # ---------individual galaxy plots: looping over objects----------------------
+    # # ---------individual galaxy plots: looping over objects----------------------
     # objlist =[objlist[np.where(np.array(objlist)[:,1].astype(int) == 2867)[0][0]]] ## for debugging
     # for index, obj in enumerate(objlist):
     #     field = obj[0]
     #     objid = obj[1]
     #     print(f'Doing object {field}-{objid} which is {index + 1} of {len(objlist)} objects..')
-    #
+    
     #     full_hdu = load_full_fits(objid, field, args)
     #     args = load_object_specific_args(full_hdu, args)
     #     args.fontsize = 10
-    #
-    #     plot_AGN_demarcation_figure(full_hdu, args, marker='o' if 'Par' in field else 's', fontsize=20)
-    #     plot_metallicity_fig(full_hdu, field, primary_Zdiag, args, fontsize=20)
+    
+    #     #plot_AGN_demarcation_figure(full_hdu, args, marker='o' if 'Par' in field else 's', fontsize=20)
+    #     #plot_metallicity_fig(full_hdu, field, primary_Zdiag, args, fontsize=20)
     #     try:
-    #         plot_metallicity_sfr_fig(full_hdu, field, primary_Zdiag, args, fontsize=20)
+    #         plot_metallicity_sfr_fig(full_hdu, field, primary_Zdiag, args, fontsize=10)
     #     except:
     #         print(f'Could not plot SFR figure for ID# {objid}, so skipping this object..')
     #         pass

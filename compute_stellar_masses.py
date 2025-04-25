@@ -36,6 +36,8 @@
 
              run compute_stellar_masses.py --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --fit_sed --include_cosmoswebb --run include_nircam --plot_restframe --ncpus 2 --use_only_good
              run compute_stellar_masses.py --do_field Par028 --drv 0.5 --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --plot_filter_cutouts --plot_cutout_errors
+
+             run compute_stellar_masses.py --do_field Par028 --drv 0.5 --plot_conditions SNR,mass --line_list OII,NeIII-3867,Hb,OIII --SNR_thresh 2 --include_cosmoswebb --use_only_bands acs,niriss,nircam,miri --run for_paper_only_st --plot_restframe --ncpus 2 --use_only_good --fit_sed
 '''
 from header import *
 from util import *
@@ -543,7 +545,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
                 cosmos2020_photcat_for_thisfield_filename = args.input_dir / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
                 cosmos2020_photcat_for_thisfield = read_COSMOS2020_catalog(args=None, filename=cosmos2020_photcat_for_thisfield_filename)
                 cosmos2020_photcat_for_thisfield = cosmos2020_photcat_for_thisfield.rename(columns={'id': 'cosmos_id'})
-                df_cosmos_thisfield = pd.merge(df_int[['field', 'objid', 'redshift', 'passage_id']], cosmos2020_photcat_for_thisfield, on='passage_id', how='inner')
+                df_cosmos_thisfield = pd.merge(df_int[['field', 'objid', 'redshift', 'passage_id']], cosmos2020_photcat_for_thisfield, on='passage_id', how='left')
                 df_fluxes = pd.concat([df_fluxes, df_cosmos_thisfield])
 
             # -------reading in cosmoswebb fluxes-------
@@ -568,7 +570,7 @@ def get_flux_catalog(photcat_filename, df_int, args):
                     cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns={'id': 'COSMOSWebb_ID'})
                     cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, filter_intrument_dict[item.split('_')[-1]] + '_' + item[-5:] + '_FLUXERR') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_ERR_APER' in item]))
                     cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, filter_intrument_dict[item.split('_')[-1]] + '_' + item[-5:] + '_FLUX') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_APER' in item]))
-                    df_fluxes = pd.merge(df_fluxes, cosmoswebb_photcat_for_thisfield, on='passage_id', how='left' if args.do_field is None else 'inner')
+                    df_fluxes = pd.merge(df_fluxes, cosmoswebb_photcat_for_thisfield, on='passage_id', how='left')
 
             # -------writing cosmos fluxes df into file-------
             df_fluxes.to_csv(filename, index=None)
@@ -797,8 +799,8 @@ if __name__ == "__main__":
         else:
             sys.exit(f'{df_int_filename} does not exist')
     df_int = pd.read_csv(df_int_filename)
-    if args.use_only_good and args.drv == 'v0.5' and set(args.plot_conditions) == set(['SNR']) and set(args.line_list) == set(['OIII', 'Ha', 'OII', 'Hb', 'SII']):
-        df_int = df_int[df_int['objid'].isin([1303, 1934, 2734, 2867, 300, 2903])].reset_index(drop=True)  # only choosing the pre-determined good galaxies
+    if args.use_only_good and args.drv == 'v0.5':
+        df_int = df_int[df_int['objid'].isin([300, 1303, 1849, 2171, 2727, 2867])].reset_index(drop=True)  # only choosing the pre-determined good galaxies
         print(f'Using only the pre-determined good galaxies, and there are {len(df_int)} of them..')
 
     df_fluxes = get_flux_catalog(photcat_filename, df_int, args)
@@ -821,7 +823,7 @@ if __name__ == "__main__":
         if args.use_only_bands is not None:
             print(f'\nSelecting only bands with {args.use_only_bands} in the filter name..')
             use_bands = args.use_only_bands.split(',')
-            useless_fluxcols = [col for col in fluxcols if np.array([band not in col for band in use_bands]).all()]
+            useless_fluxcols = [col for col in fluxcols if np.array([band.lower() not in col.lower() for band in use_bands]).all()]
             print(f'Therefore, dropping {useless_fluxcols} bands..\n\n..and keeping {list(set(fluxcols) - set(useless_fluxcols))} bands\n')
             useless_errcols = [item.replace('_sci', '_err') for item in useless_fluxcols]
             df_fluxes.drop(useless_fluxcols, axis=1, inplace=True)

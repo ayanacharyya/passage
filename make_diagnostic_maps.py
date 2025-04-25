@@ -958,8 +958,8 @@ def compute_SFR(Ha_flux, distance):
     else:
         net_mask = False
 
-    Ha_flux = Ha_flux * 4 * np.pi * (distance.to('cm').value) ** 2 # converting to ergs/s
-    sfr = Ha_flux * 7.9e-42 # line_map in args/s; SFR in Msun/yr
+    Ha_lum = Ha_flux * 4 * np.pi * (distance.to('cm').value) ** 2 # converting to ergs/s (luminosity)
+    sfr = Ha_lum * 7.9e-42 # luminosity in ergs/s; SFR in Msun/yr
 
     if hasattr(Ha_flux, "__len__"): # if it is an array
         sfr = np.ma.masked_where(net_mask, sfr)
@@ -1683,11 +1683,11 @@ def get_Z_C19(full_hdu, args):
     # ----setting up Z diag debugging plots---------
     if args.debug_Zdiag:
         fig, ax = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
-        ax[0].set_xlabel('Solution[i] + 8.69', fontsize=args.fontsize)
-        if args.Zbranch == 'high': ax[1].set_xlabel('log(O/H)+12 = max(solution) + 8.69', fontsize=args.fontsize)
-        elif args.Zbranch == 'low': ax[1].set_xlabel('log(O/H)+12 = min(solution) + 8.69', fontsize=args.fontsize)
-        ax[0].set_ylabel(f'Observed {args.Zdiag}', fontsize=args.fontsize)
-        Z_limits = [5, 10]
+        ax[0].set_xlabel('Possible values of log(O/H)+12', fontsize=args.fontsize)
+        if args.Zbranch == 'high': ax[1].set_xlabel('log(O/H)+12 = max(solution)', fontsize=args.fontsize)
+        elif args.Zbranch == 'low': ax[1].set_xlabel('log(O/H)+12 = min(solution)', fontsize=args.fontsize)
+        ax[0].set_ylabel(f'Observed log {args.Zdiag}', fontsize=args.fontsize)
+        Z_limits = [7, 9.5]
         ratio_limits = [-0.5, 1.2]
 
         xarr = np.linspace(Z_limits[0], Z_limits[1], 100)
