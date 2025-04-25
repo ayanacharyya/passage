@@ -294,6 +294,7 @@ def parse_args():
         setup_plots_for_talks()
 
     args.diverging_cmap = get_custom_cmap(args.diverging_cmap)
+    args.Zdiag_arr = args.Zdiag.split(',')
 
     return args
 
@@ -707,7 +708,7 @@ def split_COSMOSWebb_table_by_par(args, filename=None):
     for index, thisfield in enumerate(field_list):
         print(f'Starting {index+1} of {len(field_list)} fields..')
         # -------determining path to photometric catalog------
-        product_dir = args.input_dir / args.drv / thisfield / 'Products'
+        product_dir = args.input_dir / thisfield / 'Products'
         catalog_file = product_dir / f'{thisfield}_photcat.fits'
 
         if os.path.exists(catalog_file):
@@ -723,7 +724,7 @@ def split_COSMOSWebb_table_by_par(args, filename=None):
             if len(df_crossmatch) > 0:
                 table_crossmatch = Table.from_pandas(df_crossmatch)
                 table_cosmos_thisfield = join(table_cosmos, table_crossmatch, keys='ID_SE++')
-                outfilename = args.input_dir / 'COSMOS' /  args.drv / f'cosmoswebb_objects_in_{thisfield}.fits'
+                outfilename = args.input_dir / 'COSMOS' / f'cosmoswebb_objects_in_{thisfield}.fits'
                 table_cosmos_thisfield.write(outfilename, overwrite=True)
                 print(f'Saved subset table as {outfilename}')
             else:

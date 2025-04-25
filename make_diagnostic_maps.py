@@ -2191,10 +2191,8 @@ def plot_metallicity_fig(full_hdu, args):
     df_logOH_radfit = pd.DataFrame(columns=['field', 'objid', 'logOH_int', 'logOH_int_u', 'logOH_sum', 'logOH_sum_u', 'logOH_slope', 'logOH_slope_u', 'logOH_cen', 'logOH_cen_u', 'logOH_diagnostic', 'logOH_branch'])
 
     # -------looping over all Zdiagnostics-----------
-    Zdiag_arr = args.Zdiag.split(',')
-
-    for index, args.Zdiag in enumerate(Zdiag_arr):
-        print(f'\n\nCommencing Zdiag {args.Zdiag} which is {index + 1} of {len(Zdiag_arr)}..')
+    for index, args.Zdiag in enumerate(args.Zdiag_arr):
+        print(f'\n\nCommencing Zdiag {args.Zdiag} which is {index + 1} of {len(args.Zdiag_arr)}..')
 
         # ---------setting up figure--------------
         ncols = 1
@@ -2279,7 +2277,7 @@ def get_AGN_func_methods(args):
     elif args.AGN_diag == 'O2Hb':
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OII', 'Hb', 'OIII', 'Hb', []
     elif args.AGN_diag == 'Ne3O2':
-        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'NeIII-3867', 'OII', ['NB', 'MAPPINGS', 'F24', 'B22_Ne3O2']
+        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'NeIII-3867', 'OII', ['NB', 'F24', 'B22_Ne3O2']
     else:
         sys.exit('Choose AGN_diag to be one among VO87,H21,O2O3,O2Hb,Ne3O2')
 
@@ -2314,15 +2312,15 @@ def AGN_func(x, theoretical_line):
     return y
 
 # --------------------------------------------------------------------------------------------------------------------
-def overplot_AGN_line_on_BPT(ax, theoretical_line, label, color='k', fontsize=10, lw=2):
+def overplot_AGN_line_on_BPT(ax, theoretical_line, label, color='k', fontsize=10, lw=2, ls='dashed'):
     '''
     Overplots a given AGN demarcation line on R3 vs S2 ratio BPT, on an existing axis
     Returns axis handle
     '''
     x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
     y = AGN_func(x, theoretical_line)
-    ax.plot(x, y, c=color, ls='dashed', lw=lw, label=label)
-    ax.legend(loc='lower left', fontsize=fontsize)
+    ax.plot(x, y, c=color, ls=ls, lw=lw, label=label)
+    if label is not None: ax.legend(loc='lower left', fontsize=fontsize)
 
     return ax
 
@@ -2405,7 +2403,7 @@ def annotate_BPT_axes(scatter_plot_handle, ax, args, theoretical_lines=[], line_
 
     # ---------adding literature AGN demarcation lines----------
     color_arr = ['brown', 'darkgreen', 'dodgerblue', 'cyan', 'sienna']
-    for index, (theoretical_line, line_label) in enumerate(zip(theoretical_lines, line_labels)): overplot_AGN_line_on_BPT(ax, theoretical_line=theoretical_line, label=line_label, color=color_arr[index], fontsize=args.fontsize, lw=0.5 if index else 2)
+    for index, (theoretical_line, line_label) in enumerate(zip(theoretical_lines, line_labels)): overplot_AGN_line_on_BPT(ax, theoretical_line=theoretical_line, label=line_label, color=color_arr[index], fontsize=args.fontsize, lw=0.5 if index else 1, ls='dashed' if index else 'solid')
 
     return ax
 

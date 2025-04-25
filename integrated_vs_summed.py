@@ -11,6 +11,7 @@ from util import *
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
 from make_diagnostic_maps import get_emission_line_maps
 from plots_for_zgrad_paper import load_full_fits, load_metallicity_map, get_photoionisation_model_grid, load_object_specific_args
+from plots_for_zgrad_paper import get_ratio_labels
 
 start_time = datetime.now()
 
@@ -175,18 +176,19 @@ def compare_line_ratios(df, ratio_list, args, lim=[-2, 2]):
         ax.errorbar(df[ratio_name_int], df[ratio_name_sum], xerr=df[ratio_name_int + '_u'], yerr=df[ratio_name_sum + '_u'], fmt='none', c='gray', lw=0.5, zorder=-2)
 
         # --------annotating the figure-----------
-        ax.set_xlabel(f'log {ratio} (int)', fontsize=args.fontsize)
-        ax.set_ylabel(f'log {ratio} (sum)', fontsize=args.fontsize)
+        ax.set_xlabel(f'Log {get_ratio_labels(ratio)} (Grizli)', fontsize=args.fontsize)
+        ax.set_ylabel(f'Log {get_ratio_labels(ratio)} (Sum)', fontsize=args.fontsize)
 
         ax.plot([lim[0], lim[1]], [lim[0], lim[1]], c='k', ls='dotted', lw=1, zorder=-5)
 
         # -------adding the model limits-----------
         ax.add_patch(plt.Rectangle((min_model_ratio, min_model_ratio), max_model_ratio - min_model_ratio, max_model_ratio - min_model_ratio, lw=0, fc=model_color, alpha=0.2, zorder=-5))
         #ax.scatter(log_model_ratio, log_model_ratio, c=df_model['Z'], s=5, lw=0, marker='d', cmap='cividis', vmin=8, vmax=9, zorder=-4) ##
-        ax.text(0.05, 0.05, f'{phot_model_text}\nmodel coverage', c=model_color, fontsize=args.fontsize, va='bottom', ha='left', transform=ax.transAxes)
+        if ax == axes[0]: ax.text(0.05, 0.05, f'H II region\nmodel coverage', c=model_color, fontsize=args.fontsize, va='bottom', ha='left', transform=ax.transAxes)
 
         ax.set_xlim(lim[0], lim[1])
         ax.set_ylim(lim[0], lim[1])
+        ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     # --------making colorbar if needed-------------
     if not args.nocolorcoding and args.colorcol != 'ez_z_phot':
@@ -250,7 +252,7 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
 
     # -----------setting up hard-coded values-------------------
-    args.fontsize = 10
+    args.fontsize = 15
     args.only_seg = True
     args.vorbin = True
     args.AGN_diag = 'Ne3O2'
@@ -377,7 +379,7 @@ if __name__ == "__main__":
     # -------making the comparison figurse--------------
     #fig_models_arr = overplot_on_photoionisation_models(df, ratio_list, 'Z', args, col_int='sandybrown', col_sum='cornflowerblue')
     #fig_flux = compare_line_fluxes(df, args.line_list, args, lim=[-19, -15.5])
-    #fig_ratio = compare_line_ratios(df, ratio_list, args, lim=[-2, 2])
-    fig_Z = compare_metallicities(df, args.Zdiag, args, lim=[7, 9])
+    fig_ratio = compare_line_ratios(df, ratio_list, args, lim=[-2, 2])
+    #fig_Z = compare_metallicities(df, args.Zdiag, args, lim=[7, 9])
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
