@@ -1590,7 +1590,7 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
     # -------setting limits and colors-----------
     Z_limits = [7.1, 9.1]
     color_lim_dict = {'color':[None, None, '', ''], 'bin_ID':[None, None, 'Voronoi bin ID', 'rainbow'], 'radius':[0, 5, 'Galactocentric distance (kpc)', 'cividis'], 'agn_dist':[-1, 1, f'Distance from {args.AGN_diag} SF line', args.diverging_cmap]}
-    color = 'goldenrod'
+    color = 'brown'
 
     # --------setting up full figure----------------------------------
     Zbranch_text = '' if np.array([item in ['NB', 'P25'] for item in Zdiag_arr]).all() else f'-{args.Zbranch}'
@@ -1677,7 +1677,7 @@ def plot_nb_comparison_sii(objlist, args, fontsize=10):
     # -------setting limits and colors-----------
     Z_limits = [7.1, 9.1]
     color_lim_dict = {'color':[None, None, '', ''], 'bin_ID':[None, None, 'Voronoi bin ID', 'rainbow'], 'radius':[0, 5, 'Galactocentric distance (kpc)', 'cividis'], 'agn_dist':[-1, 1, f'Distance from {args.AGN_diag} SF line', args.diverging_cmap]}
-    color = 'goldenrod'
+    color = 'brown'
     counter = 0
 
     # --------setting up full figure----------------------------------
@@ -1803,7 +1803,7 @@ if __name__ == "__main__":
     #df_latex = make_latex_table(df, args, sum=True)
 
     # ---------photoionisation model plots----------------------
-    plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True, fontsize=15)
+    #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True, fontsize=15)
     #plot_photoionisation_models('OIII/Hb', 'Z', args, fontsize=15)
 
     # ---------full population plots----------------------
