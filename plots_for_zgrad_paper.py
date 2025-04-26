@@ -111,6 +111,35 @@ def plot_passage_venn(fields, args, fontsize=10):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
+def get_sfr_df(objlist, args, Zdiag, Zdiag_branch='low', survey='passage', sum=True):
+    '''
+    Loads and returns a dataframe that holds all the sfr-related properties for a given list of objects
+    Returns dataframe
+    '''
+    df = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
+
+    filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
+    ####################################
+    if 'glass' in survey:
+        filename = Path(str(filename).replace('SNR_4.0', 'SNR_2.0'))
+        print(f'\nWARNING: Actually choosing sfr df corresponding to vorbin SNR=2 for {survey}')
+    ####################################
+    
+    df_sfr = pd.read_csv(filename)
+    df_sfr = df_sfr.drop_duplicates(subset=['field', 'objid', 'Zdiag', 'Zdiag_branch', 'AGN_diag'], keep='last')
+    df_sfr = df_sfr[(df_sfr['Zdiag'] == Zdiag) & (df_sfr['Zdiag_branch'] == Zdiag_branch) & (df_sfr['AGN_diag'] == args.AGN_diag)]
+    df_sfr = df_sfr.drop(['Zdiag', 'Zdiag_branch', 'AGN_diag'], axis=1)
+    df_sfr = pd.merge(df, df_sfr, on=['field', 'objid'], how='left')
+
+    cols_to_extract = ['field', 'objid', 'Z_SFR_slope', 'Z_SFR_slope_u']
+    if sum: cols_to_extract += ['SFR_sum', 'SFR_sum_u']
+    else: cols_to_extract += ['SFR_int', 'SFR_int_u']
+    df_sfr = df_sfr[cols_to_extract]
+    df_sfr = df_sfr.rename(columns = {'SFR_sum': 'SFR', 'SFR_sum_u': 'SFR_u', 'SFR_int': 'SFR', 'SFR_int_u': 'SFR_u'})
+ 
+    return df_sfr
+
+# --------------------------------------------------------------------------------------------------------------------
 def get_logOH_df(objlist, args, survey='passage'):
     '''
     Loads and returns a dataframe that holds all the metallicity-related properties for a given list of objects
@@ -135,7 +164,7 @@ def get_logOH_df(objlist, args, survey='passage'):
     for Zdiag in Zdiag_arr:
         if 'low' in Zdiag: df_sub = df_logOH[(df_logOH['logOH_diagnostic'] == Zdiag[:-4]) & (df_logOH['logOH_branch'] == 'low')]
         elif 'high' in Zdiag: df_sub = df_logOH[(df_logOH['logOH_diagnostic'] == Zdiag[:-5]) & (df_logOH['logOH_branch'] == 'high')]
-        else: df_sub = df_logOH[(df_logOH['logOH_diagnostic'] == Zdiag)]
+        else: df_sub = df_logOH[(df_logOH['logOH_diagnostic'] == Zdiag)].drop_duplicates(subset=['field', 'objid', 'logOH_diagnostic'], keep='last')
 
         df_sub = df_sub.drop(['logOH_diagnostic', 'logOH_branch'], axis=1)
         df_sub = df_sub.rename(columns={'log_OH_int_u':'logOH_int_u'})
@@ -232,33 +261,11 @@ def make_master_df(objlist, args, sum=True):
         df = pd.merge(df, df_logOH, on=['field', 'objid'])
 
         # -------getting SFR info--------------
-        for col in ['SFR', 'SFR_u']: df[col] = np.nan # creating provision for the new columns
-        if not args.do_not_correct_flux:
-            factor = 0.823 # from James et al. 2023?
-            df['Ha'] /= factor
-            df['Ha_u'] /= factor
-
-        log_N2Ha_logOH_poly_coeff = [-0.489, 1.513, -2.554, -5.293, -2.867][::-1] # from Table 2 N2 row of Curti+2019
-        for index, row in df.iterrows():
-            print(f'\nComputing SFR for object {field}:{objid} which is {index + 1} of {len(df)}..')
-            if np.isnan(row['Ha']):
-                sfr = ufloat(np.nan, np.nan)
-            else:
-                if sum: logOH = ufloat(row['logOH_sum_NB'], row['logOH_sum_NB_u'])
-                else: logOH = ufloat(row['logOH_int_NB'], row['logOH_int_NB_u'])  # choose the grizli reported integrated values
-                
-                try: log_N2Ha = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH - 8.69) # because using C19 N2 calibration
-                except: log_N2Ha = ufloat(np.nan, np.nan)
-                N2Ha = 10 ** log_N2Ha
-                Ha_corrected = ufloat(row['Ha'], row['Ha_u']) / (1 + N2Ha)
-                df.loc[index, 'Ha'] = Ha_corrected.n
-                df.loc[index, 'Ha_u'] = Ha_corrected.s
-
-                distance = cosmo.comoving_distance(row['redshift'])
-                sfr = compute_SFR(Ha_corrected, distance)
-            df.loc[index, 'SFR'] = sfr.n
-            df.loc[index, 'SFR_u'] = sfr.s           
-
+        df_sfr_passage = get_sfr_df(passage_objlist, args, 'NB', survey='passage', sum=sum)
+        df_sfr_glass = get_sfr_df(glass_objlist, args, 'NB', survey='glass', sum=sum)
+        df_sfr = pd.concat([df_sfr_passage, df_sfr_glass])
+        df = pd.merge(df, df_sfr, on=['field', 'objid'])
+        
         # -------writing out dataframe--------------
         df.to_csv(filename, index=False)
         print(f'Saved df as {filename}')
@@ -450,6 +457,45 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     ax.set_ylim(-0.5, 0.1)
 
     figname = f'MZgrad_colorby_redshift.png'
+    save_fig(fig, figname, args)
+
+    return
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='Z_SFR_slope', fontsize=10):
+    '''
+    Plots and saves the mass vs metallicity-SFR slope given a dataframe with list of objects and properties
+    '''
+    args.fontsize = fontsize
+    print(f'Plotting MZ-SFR...')
+
+    # ----------setting up the diagram----------
+    fig, ax = plt.subplots(1, figsize=(8, 6))
+    fig.subplots_adjust(left=0.12, right=0.99, bottom=0.1, top=0.95)
+
+    # ----------plotting----------
+    for m in pd.unique(df['marker']):
+        df_sub = df[df['marker'] == m]
+        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub['logOH_sum_NB'], plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', vmin=7.5, vmax=9.1)
+    if zgrad_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], yerr=df[zgrad_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+    if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+    
+    ax.axhline(0, ls='--', c='k', lw=0.5)
+
+    # ----------making colorbar----------
+    cbar = plt.colorbar(p, pad=0.01)
+    cbar.set_label(r'$\log$ (O/H) + 12 [NB]', fontsize=args.fontsize)
+    cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
+
+    # ---------annotate axes and save figure-------
+    ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
+    ax.set_ylabel(r'Z-SFR slope', fontsize=args.fontsize)
+    ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+
+    ax.set_xlim(6.5, 11)
+    ax.set_ylim(-0.3, 1.4)
+
+    figname = f'MZsfr_colorby_Z.png'
     save_fig(fig, figname, args)
 
     return
@@ -1390,7 +1436,7 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_corrected_sfr(full_hdu, logOH_map, args):
+def get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=None, logOH_sum=None):
     '''
     Computes the corrected SFR map given the metallicity map and full_hdu (from whic it obtains the uncorrected Halpha map)
     Returns corrected and uncorrcted Ha and SFR maps
@@ -1398,7 +1444,7 @@ def get_corrected_sfr(full_hdu, logOH_map, args):
     distance = cosmo.comoving_distance(args.z)
 
     # -------deriving H-alpha map-----------
-    N2_plus_Ha_map, _, _, _, _ = get_emission_line_map('Ha', full_hdu, args, silent=True)
+    N2_plus_Ha_map, _, N2_plus_Ha_int, N2_plus_Ha_sum, _ = get_emission_line_map('Ha', full_hdu, args, silent=True)
     sfr_map = compute_SFR(N2_plus_Ha_map, distance) # N2_plus_Ha_map here is really Ha_map, because the correction has not been undone yet
 
     # ----------correcting Ha map------------
@@ -1423,10 +1469,28 @@ def get_corrected_sfr(full_hdu, logOH_map, args):
 
     Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask | N2Ha_map.mask, N2_plus_Ha_map.data / (1 + N2Ha_map.data))
 
-   # -------deriving SFR map-----------
+    # -------deriving SFR map-----------
     sfr_map_corrected = compute_SFR(Ha_map, distance)
+
+    # -------deriving the integrated SFR------------
+    if logOH_int is not None:
+        log_N2Ha_int = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH_int - 8.69)
+        N2Ha_int = 10 ** log_N2Ha_int
+        Ha_int = N2_plus_Ha_int / (1 + N2Ha_int)
+        sfr_int_corrected = compute_SFR(Ha_int, distance)
+    else:
+        sfr_int_corrected = ufloat(np.nan, np.nan)
+
+    if logOH_sum is not None:
+        log_N2Ha_sum = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH_sum - 8.69)
+        N2Ha_sum = 10 ** log_N2Ha_sum
+        Ha_sum = N2_plus_Ha_sum / (1 + N2Ha_sum)
+        sfr_sum_corrected = compute_SFR(Ha_sum, distance)
+    else:
+        sfr_sum_corrected = ufloat(np.nan, np.nan)
+
  
-    return N2_plus_Ha_map, Ha_map, sfr_map, sfr_map_corrected
+    return N2_plus_Ha_map, Ha_map, sfr_map, sfr_map_corrected, sfr_int_corrected, sfr_sum_corrected
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
@@ -1439,7 +1503,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     # -----------loading the data---------------
     full_hdu = load_full_fits(objid, field, args)
     args = load_object_specific_args(full_hdu, args, field=field)
-    logOH_map, _, _ = load_metallicity_map(field, objid, Zdiag, args)
+    logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
     Zlim = [7.1, 8.1]
     log_sfr_lim = [-3, -2]
 
@@ -1448,7 +1512,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     fig.subplots_adjust(left=0.1, right=0.98, top=0.95, bottom=0.15, wspace=0.5, hspace=0.3)
 
     # ----------getting the SFR maps------------------
-    N2_plus_Ha_map, Ha_map, sfr_map, sfr_map_corrected = get_corrected_sfr(full_hdu, logOH_map, args)
+    N2_plus_Ha_map, Ha_map, sfr_map, sfr_map_corrected, sfr_int, sfr_sum = get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=logOH_int, logOH_sum=logOH_sum)
     log_sfr_map = np.ma.masked_where(sfr_map_corrected.mask, unp.log10(sfr_map_corrected.data))
    
     # ------plotting native Ha and SFR maps------------
@@ -1489,7 +1553,20 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     axes[1].set_box_aspect(1)
     axes[1] = annotate_axes(axes[1], 'log SFR (Msun/yr)', 'log (O/H) + 12', args)
 
-    # -----------saving figure------------
+    # ----------append fit to dataframe and save-----------
+    if 'Par' in field: survey = 'passage'
+    elif 'glass' in field: survey = 'glass'
+    output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
+    ####################################
+    if 'glass' in field:
+        output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
+        print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
+    ####################################
+    df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'Z_SFR_cen': linefit[1].n, 'Z_SFR_cen_u': linefit[1].s, 'Z_SFR_slope': linefit[0].n, 'Z_SFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag}, index=[0])
+    df_Zsfr_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
+    print(f'Appended metallicity-sfr fit to catalog file {output_dfname}')
+
+# -----------saving figure------------
     axes[1].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
     debug_text = '_debug' if args.debug_Zsfr else ''
     figname = f'metallicity-sfr_{objid:05d}{debug_text}.png'
@@ -1526,13 +1603,13 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10):
         # -----------loading the data---------------
         full_hdu = load_full_fits(objid, field, args)
         args = load_object_specific_args(full_hdu, args, field=field)
-        logOH_map, _, _ = load_metallicity_map(field, objid, Zdiag, args)
+        logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
         Zlim = [7.1, 8.1]
         log_sfr_lim = [-3, -2]
 
         # ----------getting the SFR maps------------------
-        _, _, _, sfr_map_corrected = get_corrected_sfr(full_hdu, logOH_map, args)
-        log_sfr_map = np.ma.masked_where(sfr_map_corrected.mask, unp.log10(sfr_map_corrected.data))
+        _, _, _, sfr_map, sfr_int, sfr_sum = get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=logOH_int, logOH_sum=logOH_sum)
+        log_sfr_map = np.ma.masked_where(sfr_map.mask, unp.log10(sfr_map.data))
     
         # -----plotting 2D SFR map-----------
         log_sfr_lim, cmap = [-3, -2], 'winter'
@@ -1563,6 +1640,19 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10):
         axes[1] = annotate_axes(axes[1], r'$\log$ SFR (M$_{\odot}$/yr)', r'$\log$ (O/H) + 12', args, hide_xaxis=index < nrow - 1, hide_yaxis=False, hide_cbar=True)
         axes[1].yaxis.set_label_position('right')
         axes[1].yaxis.tick_right()
+
+        # ----------append fit to dataframe and save-----------
+        if 'Par' in field: survey = 'passage'
+        elif 'glass' in field: survey = 'glass'
+        output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
+        ####################################
+        if 'glass' in field:
+            output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
+            print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
+        ####################################
+        df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'Z_SFR_cen': linefit[1].n, 'Z_SFR_cen_u': linefit[1].s, 'Z_SFR_slope': linefit[0].n, 'Z_SFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag}, index=[0])
+        df_Zsfr_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
+        print(f'Appended metallicity-sfr fit to catalog file {output_dfname}')
 
    # -------making colorbars for the entire fig----------
     cax = fig.add_axes([0.07, 0.96, 0.93 - 0.07, 0.01])    
@@ -1810,13 +1900,17 @@ if __name__ == "__main__":
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsize=15)
+    plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='Z_SFR_slope', fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
     #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12)
 
-    # --------single galaxy plot: AGN demarcation------------------
-    #plot_AGN_demarcation_figure_single(1303, 'Par028', args, fontsize=15)
+    # --------single galaxy plots-----------------
+    #plot_AGN_demarcation_figure_single(1303, 'Par028', args, fontsize=15) # AGN demarcation
+    #plot_metallicity_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
+    #plot_metallicity_sfr_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
 
+    # --------single galaxy plot
     # --------multi-panel AGN demarcation plots------------------
     #plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10)
 
