@@ -402,7 +402,7 @@ def plot_MEx(df, args, mass_col='lp_mass', fontsize=10):
 
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub['O3Hb'], c=df_sub['redshift'], s=100, edgecolor='k', lw=1, cmap='cividis', vmin=1.7, vmax=3.1)
+        p = ax.scatter(df_sub[mass_col], df_sub['O3Hb'], c=df_sub['redshift'], marker=m, s=100, edgecolor='k', lw=1, cmap='cividis', vmin=1.7, vmax=3.1)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df['O3Hb'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 
     # ----------making colorbar----------
@@ -471,7 +471,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     # ----------plotting----------
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub['redshift'], plotnonfinite=True, s=100, lw=1, edgecolor='k', vmin=1.7, vmax=3.1, cmap='viridis')
+        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub['redshift'], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', vmin=1.7, vmax=3.1, cmap='viridis')
     if zgrad_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], yerr=df[zgrad_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 
@@ -533,7 +533,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='Z_SFR_slope', fontsize=1
     # ----------plotting----------
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub['logOH_sum_NB'], plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', vmin=7.5, vmax=9.1)
+        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub['logOH_sum_NB'], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', vmin=7.5, vmax=9.1)
     if zgrad_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], yerr=df[zgrad_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     
@@ -2089,6 +2089,7 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
         # ---------plotting the histogram--------------
         if args.histbycol is None:
             average, bins = np.histogram(df_spaxels[f'log_{ratio}'], bins=30)
+            histcol_int = 'dummy'
         else:
             if args.histbycol.lower() == 'snr':
                 df_spaxels[f'log_{ratio}_snr'] = df_spaxels[f'log_{ratio}'] / df_spaxels[f'log_{ratio}_u']
@@ -2116,22 +2117,20 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
 
         # ---------plotting the integrated measurements--------------
         if full_df_int is not None:
-            for index2, row in df_int.iterrows():
-                log_ratio_int, log_ratio_int_u, log_ratio_sum, log_ratio_sum_u = row[f'{ratio}_int'], row[f'{ratio}_int_u'], row[f'{ratio}_sum'], row[f'{ratio}_sum_u']
+            df_int['marker'] = df_int['field'].apply(lambda x: get_marker_type(x))
 
-                try:
-                    yval_sum = row[f'{histcol_int}_sum']
-                    yval_int = row[f'{histcol_int}_int']
-                except:
-                    yextent = np.diff(ax.get_ylim())[0]
-                    yval_sum = ax.get_ylim()[0] + 0.3 * yextent
-                    yval_int = yval_sum + 0.1 * yextent
+            if args.histbycol is None or f'{histcol_int}_int' not in df_int:
+                yextent = np.diff(ax.get_ylim())[0]
+                df_int[f'{histcol_int}_sum'] = ax.get_ylim()[0] + 0.3 * yextent
+                df_int[f'{histcol_int}_int'] = df_int[f'{histcol_int}_sum'] + 0.1 * yextent
                 
-                ax.scatter(log_ratio_int, yval_int, c='navy', s=50, ec='k', lw=0.5, label='Grizli-integrated' if index == 0 and index2 == 0 else None)
-                ax.errorbar(log_ratio_int, yval_int, xerr = log_ratio_int_u, color='grey', alpha=0.5, lw=0.5, fmt='none')
+            for index2, m in enumerate(pd.unique(df['marker'])):
+                df_sub = df_int[df_int['marker'] == m]                
+                ax.scatter(df_sub[f'{ratio}_int'], df_sub[f'{histcol_int}_int'], c='navy', marker=m, s=50, ec='k', lw=0.5, label='Grizli-integrated' if index == 0 and index2 == 0 else None)
+                ax.scatter(df_sub[f'{ratio}_sum'], df_sub[f'{histcol_int}_sum'], c='brown', marker=m, s=50, ec='k', lw=0.5, label='2D map summed' if index == 0 and index2 == 0 else None)
             
-                ax.scatter(log_ratio_sum, yval_sum, c='brown', s=50, ec='k', lw=0.5, label='2D map summed' if index == 0 and index2 == 0 else None)
-                ax.errorbar(log_ratio_sum, yval_sum, xerr = log_ratio_sum_u, color='grey', alpha=0.5, lw=0.5, fmt='none')
+            ax.errorbar(df_int[f'{ratio}_int'], df_int[f'{histcol_int}_int'], xerr = df_int[f'{ratio}_int_u'], color='grey', alpha=0.5, lw=0.5, fmt='none')     
+            ax.errorbar(df_int[f'{ratio}_sum'], df_int[f'{histcol_int}_sum'], xerr = df_int[f'{ratio}_sum_u'], color='grey', alpha=0.5, lw=0.5, fmt='none')
 
         # ---------plotting the different zones--------------
         shade_alpha = 0.2
@@ -2145,18 +2144,17 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
             ax.fill_betweenx([-50, 50], ax.get_xlim()[0], monosolution_uplim_dict[ratio], color='salmon', alpha=shade_alpha, lw=0, label='_no_legend_', zorder=-10)
             patches.append(matplotlib.patches.Patch(facecolor='salmon', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Only high-Z branch\n(one solution)' if index == len(ratios) - 1 else None))
 
-        # ---------annotating the plot--------------
-        if index == 0:    
-            if len(objlist) == 1: ax.text(0.05, 0.95, f'{len(df_spaxels)} spaxels\nfrom ID #{objlist[0][1]}', fontsize=args.fontsize, c='k', ha='left', va='top', transform=ax.transAxes, zorder=250)
-            else: ax.text(0.05, 0.95, f'{len(df_spaxels)} spaxels\nfrom {len(objlist)} objects', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=ax.transAxes, zorder=250)
-            ax.set_ylabel('Counts' if args.histbycol is None else f'Average {args.histbycol}', fontsize=args.fontsize)
-
-        if index == 0: ax.legend(fontsize=args.fontsize / args.fontfactor, loc='upper right', framealpha=1)
-        elif index == len(ratios) - 1: ax.legend(handles=patches, fontsize=args.fontsize / args.fontfactor, loc='upper right', framealpha=1)
-
         ax.set_ylim(ylim)
         ax.set_xlabel(f'Log {ratio.replace(",", "+")}', fontsize=args.fontsize)
         ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+
+    # ---------annotating the plot--------------
+    if len(objlist) == 1: axes[0].text(0.05, 0.95, f'{len(df_spaxels)} spaxels\nfrom ID #{objlist[0][1]}', fontsize=args.fontsize, c='k', ha='left', va='top', transform=axes[0].transAxes, zorder=250)
+    else: axes[0].text(0.05, 0.95, f'{len(df_spaxels)} spaxels\nfrom {len(objlist)} objects', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[0].transAxes, zorder=250)
+    axes[0].set_ylabel('Counts' if args.histbycol is None else f'Average {args.histbycol}', fontsize=args.fontsize)
+
+    axes[0].legend(fontsize=args.fontsize / args.fontfactor, loc='upper right', framealpha=1)
+    axes[-1].legend(handles=patches, fontsize=args.fontsize / args.fontfactor, loc='upper right', framealpha=1)
 
     # ---------saving the fig--------------
     histbycol_text = '' if args.histbycol is None else f'_histby_{args.histbycol.lower()}'
