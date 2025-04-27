@@ -26,11 +26,11 @@ from util import *
 start_time = datetime.now()
 
 # -------------------------------------------------------------------------------------------------------
-def make_set(df, condition, label, set_arr, label_arr, silent=False):
+def make_set(df, condition, label, set_arr, label_arr, colname='par_obj', silent=False):
     '''
     Applies the given condition on given df and appends the ID list into a set and assigns a label
     '''
-    id_list = df[condition]['par_obj'].values
+    id_list = df[condition][colname].values
     if not silent: print(f'{len(id_list)} objects meet the {label} condition')
     set_arr.append(set(id_list))
     label_arr.append(label)

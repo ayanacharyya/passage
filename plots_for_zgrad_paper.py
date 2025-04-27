@@ -4,11 +4,12 @@
     Author : Ayan
     Created: 09-04-25
     Example: run plots_for_zgrad_paper.py --phot_models nb --debug_Zsfr
+             run plots_for_zgrad_paper.py --histbycol SNR
 '''
 from header import *
 from util import *
 
-from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df
+from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df, make_set
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
 from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso22, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
 from make_diagnostic_maps import get_emission_line_map, annotate_PAs, get_linelist, trim_image, get_EB_V, get_voronoi_bin_IDs, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
@@ -83,12 +84,67 @@ def load_full_df(fields, args, cosmos_name='web'):
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_passage_venn(fields, args, fontsize=10):
+def plot_glass_venn(args, fontsize=10):
     '''
-    Plots and saves the Venn diagram given a set of conditions
+    Plots and saves the Venn diagram for GLASS-NIRISS given a set of conditions
     '''
     args.fontsize = fontsize
-    print(f'Plotting Venn diagram..')
+    print(f'Plotting Venn diagram for GLASS-NIRISS..')
+    ID_col = 'ID_NIRISS'
+
+    # -------loading the data--------------
+    glass_catalog_filename = args.root_dir / 'glass_data' / 'a2744_spec_cat_niriss_20250401.fits'
+    df = Table(fits.open(glass_catalog_filename)[1].data).to_pandas()
+    #df = df[df['Z_FLAG'] == 4] # only dealing with secure redshifts
+
+    # ---------making the SNR columns for availabel lines-------
+    set_arr = []
+    label_arr = []
+    line_list = []
+    for line in args.line_list:
+        if f'flux_{line}' in df.columns:
+            df[f'SNR_{line}'] = df[f'flux_{line}'] / df[f'err_{line}']
+            line_list.append(line)
+    
+    # -----------creating the conditions for Venn diagram--------------
+    for line in line_list:
+        condition = df[f'SNR_{line}'] > args.SNR_thresh
+        set_arr, label_arr = make_set(df, condition, f'{line} SNR > {args.SNR_thresh}', set_arr, label_arr, colname=ID_col, silent=True)
+ 
+    # --------adding the secure redshift condition------------
+    condition = df['Z_FLAG'] == 4
+    set_arr, label_arr = make_set(df, condition, f'Secure redshift', set_arr, label_arr, colname=ID_col, silent=True)
+
+    # ----------plot the venn diagrams----------
+    cmap = 'plasma'
+    dataset_dict = dict(zip(label_arr, set_arr))
+
+    # ---------manually calling draw_venn() so as to modify petal labels (for 0 counts)----------
+    petal_labels = generate_petal_labels(dataset_dict.values(), fmt="{size}")
+    petal_labels = {logic: value if int(value) > 0 else '' for logic, value in petal_labels.items()}
+    colors = generate_colors(cmap=cmap, n_colors=len(label_arr))
+    ax = draw_venn(petal_labels=petal_labels, dataset_labels=dataset_dict.keys(), hint_hidden=False, colors=colors, figsize=(8, 6), fontsize=args.fontsize, legend_loc='lower left', ax=None)
+
+    # ----------annotate and save the diagram----------
+    fig = ax.figure
+    fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
+    fig.text(0.9, 0.9, f'Total {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes, fontsize=args.fontsize)
+
+    plot_conditions_text = ''
+    if np.array(['snr' in item.lower() for item in label_arr]).any(): plot_conditions_text += ','.join(args.line_list) + f',SNR>{args.SNR_thresh}'
+    if np.array(['secure' in item.lower() for item in label_arr]).any(): plot_conditions_text += '_zsecure'
+    figname = f'GLASSvenn_diagram_{plot_conditions_text}.png'
+    save_fig(fig, figname, args)
+
+    return
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_passage_venn(fields, args, fontsize=10):
+    '''
+    Plots and saves the Venn diagram of a list of PASSAGE fields given a set of conditions
+    '''
+    args.fontsize = fontsize
+    print(f'Plotting Venn diagram for {fields}..')
     
     # ---------loading full dataframe for all relevant PASSAGE fields------------
     df_passage = load_full_df(fields, args, cosmos_name=cosmos_name)
@@ -97,6 +153,7 @@ def plot_passage_venn(fields, args, fontsize=10):
     # ----------annotate and save the diagram----------
     fig = ax.figure
     fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
+    fig.text(0.9, 0.9, f'Total {len(df_passage)} objects', c='k', ha='right', va='top', transform=ax.transAxes, fontsize=args.fontsize)
 
     has_fields = [str(int(item[3:])) for item in pd.unique(df_passage['field'])]
     has_fields.sort(key=natural_keys)
@@ -920,28 +977,37 @@ def annotate_kpc_scale_bar(kpc, ax, args, label=None, color='k', loc='lower left
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_direct_image(full_hdu, filter, ax, args, cmap='Greens'):
+def get_direct_image(full_hdu, filter, args):
     '''
-    Plots the direct image for a given filter for a given object, in a given axis
-    Returns the axis handle
+    Loads the direct image for a given filter for a given object
+    Returns the image
     '''
     filter_dummy = 'F140W'
     try:
         hdu = full_hdu['DSCI', filter.upper()]
     except:
         try:
-            hdu = full_hdu['DSCI', filter_dummy.upper()]
-            print(f'WARNING: Plotting direct image for filter {filter_dummy} instead of {filter}..')
+            hdu = full_hdu['DSCI', f'{filter.upper()}-{filter.upper()}-CLEAR']
         except:
             try:
-                hdu = full_hdu['DSCI', f'{filter.upper()}-{filter.upper()}-CLEAR']
+                hdu = full_hdu['DSCI', filter_dummy.upper()]
                 print(f'WARNING: Plotting direct image for filter {filter_dummy} instead of {filter}..')
             except:
                 sys.exit(f'Neither {filter} nor {filter_dummy} available')
 
     image = hdu.data
     image = trim_image(image, args)
-    p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, alpha=1)  # , vmin=0, vmax=0.03)
+    
+    return image
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_direct_image(full_hdu, filter, ax, args, cmap='Greens'):
+    '''
+    Plots the direct image for a given filter for a given object, in a given axis
+    Returns the axis handle
+    '''
+    image = get_direct_image(full_hdu, filter, args)
+    p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, alpha=1)
     ax.set_aspect('auto')    
     
     return ax
@@ -953,13 +1019,16 @@ def plot_rgb_image(full_hdu, filters, ax, args, hide_xaxis=False, hide_yaxis=Fal
     Returns the axis handle
     '''
     print(f'Plotting the RGB images with filters {filters}..')
-    cmap_arr = ['Blues', 'Greens', 'Reds']
 
-    # -------plot direct image for each filter---------
+    # -------get image for each filter---------
+    image_arr = []
     for index, filter in enumerate(filters):
-        ax = plot_direct_image(full_hdu, filter, ax, args, cmap=cmap_arr[index])
-        textcolor = mpl_cm.get_cmap(cmap_arr[index])(0.9)
-        if not hide_filter_names: ax.text(0.05, 0.98 - index * 0.1, filter, c=textcolor, fontsize=args.fontsize / args.fontfactor, ha='left', va='top', transform=ax.transAxes)
+        image = get_direct_image(full_hdu, filter, args)
+        image_arr.append(image)
+
+    # -------create and plot RGB image---------
+    rgb_image = np.dstack((image_arr[0], image_arr[1], image_arr[2]))
+    p = ax.imshow(rgb_image, origin='lower', extent=args.extent, alpha=1)
 
     ax.scatter(0, 0, marker='x', s=10, c='grey')
     ax.text(0.05, 0.05, f'z={args.z:.2f}', c='k', fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
@@ -1843,6 +1912,260 @@ def get_output_path(field, args):
     return args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / f'{field}'
 
 # --------------------------------------------------------------------------------------------------------------------
+def get_line_ratio_df(objlist, ratios, args):
+    '''
+    Creates (or loads from existing) a dataframe for all objects with line fluxes and ratios for a given list of ratios for all spaxels and saves it as a fits file
+    Returns dataframe
+    '''
+    outfitsname = args.root_dir / 'zgrad_paper_plots' / f'line_ratios_df{args.snr_text}{args.only_seg_text}{args.vorbin_text}.fits'
+    
+    if not os.path.exists(outfitsname) or args.clobber:
+        print(f'Making df of {ratios} for {len(objlist)} objects..')
+
+        all_obj_df = pd.DataFrame()
+        all_obj_df_int = pd.DataFrame()
+        
+        # --------looping over all objects-------------------------
+        for index2, obj in enumerate(objlist):
+            field = obj[0]
+            objid = obj[1]
+            print(f'\nDoing object {field}-{objid} which is {index2 + 1} of {len(objlist)} objects..')
+    
+            # ---------loading the data--------------
+            full_hdu = load_full_fits(objid, field, args)
+            args = load_object_specific_args(full_hdu, args, field=field)
+
+            # -------loop over all ratios---------------
+            ratios = np.atleast_1d(ratios)
+            all_ratio_df = pd.DataFrame()
+            all_ratio_int_arr, all_ratio_sum_arr = [], []
+
+            for index, ratio in enumerate(ratios):
+                # ---------getting the ratio maps--------------
+                num_lines, den_lines = ratio.split('/')
+                num_lines_arr = num_lines.split(',')
+                den_lines_arr = den_lines.split(',')
+                dummy_map, _, _, _, _ = get_emission_line_map('OII', full_hdu, args, silent=True)
+                num_map = np.ma.masked_where(False, np.zeros(np.shape(dummy_map)))
+                den_map = np.ma.masked_where(False, np.zeros(np.shape(dummy_map)))
+                num_int, num_sum, den_int, den_sum = 0, 0, 0, 0
+
+                # ------getting numerator fluxes--------
+                for num_line in num_lines_arr:
+                    this_map, _, this_int, this_sum, _ = get_emission_line_map(num_line, full_hdu, args, silent=True)
+                    
+                    # --------special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back----------
+                    if ('OII' in num_lines_arr and 'Hb' in den_lines_arr) or ('OII' in den_lines_arr and 'OIII' in den_lines_arr):
+                        if not args.do_not_correct_flux and num_line == 'OIII':
+                            ratio_5007_to_4959 = 2.98  # from grizli source code
+                            factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
+                            print(f'For ratio {ratio}: un-correcting OIII numerator to include the 4959 component, by factor of {factor:.3f}')
+                            this_map = np.ma.masked_where(this_map.mask, this_map.data / factor)
+                            this_int /= factor
+                            this_sum /= factor
+                    
+                    num_map = np.ma.masked_where(num_map.mask | this_map.mask, np.sum([num_map.data, this_map.data], axis=0))
+                    num_int += this_int
+                    num_sum += this_sum
+
+                # ------getting denominator fluxes--------
+                for den_line in den_lines_arr:
+                    this_map, _, this_int, this_sum, _ = get_emission_line_map(den_line, full_hdu, args, silent=True)
+
+                    # --------special treatment for OIII 5007 line, in order to account for and ADD the OIII 4959 component back----------
+                    if ('OII' in den_lines_arr and 'OIII' in den_lines_arr):
+                        if not args.do_not_correct_flux and den_line == 'OIII':
+                            ratio_5007_to_4959 = 2.98  # from grizli source code
+                            factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
+                            print(f'For ratio {ratio}: un-correcting OIII denominator to include the 4959 component, by factor of {factor:.3f}')
+                            this_map = np.ma.masked_where(this_map.mask, this_map.data / factor)
+                            this_int /= factor
+                            this_sum /= factor
+
+                    den_map = np.ma.masked_where(den_map.mask | this_map.mask, np.sum([den_map.data, this_map.data], axis=0))
+                    den_int += this_int
+                    den_sum += this_sum
+
+                # --------getting the other relevant maps--------------
+                net_mask = num_map.mask | den_map.mask
+                num_map = np.ma.masked_where(net_mask, num_map.data)
+                den_map = np.ma.masked_where(net_mask, den_map.data)
+                
+                if args.vorbin: vorbin_id_map = np.ma.masked_where(net_mask, args.voronoi_bin_IDs.data)
+                else: vorbin_id_map = np.ma.masked_where(net_mask, np.arange(np.shape(distance_map)[0] * np.shape(distance_map)[1]).reshape(np.shape(distance_map)))
+
+                # --------making the dataframe--------------
+                df = pd.DataFrame({'bin_ID': np.ma.compressed(vorbin_id_map), \
+                                f'{num_lines}': unp.nominal_values(np.ma.compressed(num_map)), f'{num_lines}_u': unp.std_devs(np.ma.compressed(num_map)), \
+                                f'{den_lines}': unp.nominal_values(np.ma.compressed(den_map)), f'{den_lines}_u': unp.std_devs(np.ma.compressed(den_map)), \
+                                })
+                if index == 0: # doing the distance only the first time, as it should be the same every time really
+                    distance_map = get_distance_map(np.shape(dummy_map), args)
+                    distance_map = np.ma.masked_where(net_mask, distance_map)
+                    df['radius'] = np.ma.compressed(distance_map)
+                
+                df = df.groupby('bin_ID', as_index=False).agg(np.mean)
+                df['field'] = field
+                df['objid'] = objid
+
+                log_ratio = unp.log10(unp.uarray(df[f'{num_lines}'], df[f'{num_lines}_u']) / unp.uarray(df[f'{den_lines}'], df[f'{den_lines}_u']))
+                df[f'log_{ratio}'] = unp.nominal_values(log_ratio)
+                df[f'log_{ratio}_u'] = unp.std_devs(log_ratio)
+
+                # -----computing integrated ratios------------
+                try: log_ratio_int = unp.log10(num_int / den_int).tolist()
+                except: log_ratio_int = ufloat(np.nan, np.nan)
+                try: log_ratio_sum = unp.log10(num_sum / den_sum).tolist()
+                except: log_ratio_sum = ufloat(np.nan, np.nan)
+
+                # ------appending df and integrated arrays-------
+                all_ratio_int_arr.append(log_ratio_int)
+                all_ratio_sum_arr.append(log_ratio_sum)
+                if index: all_ratio_df = pd.merge(all_ratio_df, df, on=['field', 'objid', 'bin_ID'], how='outer')
+                else: all_ratio_df = df
+        
+            # --------appending df and integrated arrays---------
+            all_obj_df = pd.concat([all_obj_df, all_ratio_df])
+            
+            columns_dict = {'field': field, 'objid':objid}
+            columns_dict.update(dict(zip([f'{item}_sum' for item in ratios], unp.nominal_values(all_ratio_sum_arr))))
+            columns_dict.update(dict(zip([f'{item}_sum_u' for item in ratios], unp.std_devs(all_ratio_sum_arr))))
+            columns_dict.update(dict(zip([f'{item}_int' for item in ratios], unp.nominal_values(all_ratio_int_arr))))
+            columns_dict.update(dict(zip([f'{item}_int_u' for item in ratios], unp.std_devs(all_ratio_int_arr))))
+            df_int = pd.DataFrame(columns_dict, index=[0])
+            all_obj_df_int = pd.concat([all_obj_df_int, df_int])
+
+        # -------saving the fits file-----------
+        hdr1 = fits.Header()
+        hdr1['field'] = args.field
+        hdr1['object'] = args.id
+        hdr1['redshift'] = args.z
+        primary_hdu = fits.PrimaryHDU(header=hdr1)
+
+        spaxels_df_hdu = fits.BinTableHDU(Table.from_pandas(all_obj_df), name='spaxels')
+        int_df_hdu = fits.BinTableHDU(Table.from_pandas(all_obj_df_int), name='int')
+        hdul = fits.HDUList([primary_hdu, spaxels_df_hdu, int_df_hdu])
+        hdul.writeto(outfitsname, overwrite=True)
+        print(f'Saved line ratio dataframes in {outfitsname}')
+    
+    else:
+        print(f'Reading from existing {outfitsname}')
+    
+    data = fits.open(outfitsname)
+    spaxels_df = Table(data['spaxels'].data).to_pandas()
+    int_df = Table(data['int'].data).to_pandas()
+
+    return spaxels_df, int_df
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsize=10, full_df_int=None):
+    '''
+    Plots and saves the histogram for a given list of ratios for a given list of objects and appropriate dataframes
+    Returns a datafrmae
+    '''
+    args.fontsize = fontsize
+    print(f'Plotting histogram of {Zdiag_arr} for {len(objlist)} objects..')
+    turnover_ratio_dict = {'OII/Hb':[0.4, 0.53], 'OIII/Hb':[0.7, 0.78], 'OII,OIII/Hb':[0.9, 0.96], 'OIII/OII':[0.8, 0.96]}
+    monosolution_uplim_dict = {'OII/Hb':-0.2, 'OIII/Hb':0.2, 'OII,OIII/Hb':0.4}
+    Zdiag_ratios_dict = {'R2':'OII/Hb', 'R3':'OIII/Hb', 'R23':'OII,OIII/Hb', 'O3O2':'OIII/OII'}
+    
+    if np.array(['/' in item for item in np.atleast_1d(Zdiag_arr)]).any(): ratios = np.atleast_1d(Zdiag_arr)
+    else: ratios = [Zdiag_ratios_dict[item] for item in np.atleast_1d(Zdiag_arr)]
+
+    # ----------filtering the dataframes-----------      
+    df_base = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
+    if full_df_int is not None: df_int = pd.merge(df_base, full_df_int.dropna(axis=0), on=['field', 'objid'], how='left')
+    df_spaxels = pd.merge(df_base, full_df_spaxels.dropna(axis=0), on=['field', 'objid'], how='left')
+    
+    # ---------setting up the fig--------------
+    fig, axes = plt.subplots(1, len(ratios), figsize=(14, 5), sharey=True)
+    fig.subplots_adjust(left=0.07, right=0.98, top=0.95, bottom=0.13, wspace=0.)
+    label = 'Voronoi bins' if args.vorbin else 'Pixels'
+    
+    # ---------looping over ratios----------
+    for index, ratio in enumerate(ratios):  
+        ax = axes[index]
+        
+        # ---------plotting the histogram--------------
+        if args.histbycol is None:
+            average, bins = np.histogram(df_spaxels[f'log_{ratio}'], bins=30)
+        else:
+            if args.histbycol.lower() == 'snr':
+                df_spaxels[f'log_{ratio}_snr'] = df_spaxels[f'log_{ratio}'] / df_spaxels[f'log_{ratio}_u']
+                if full_df_int is not None:
+                    df_int[f'{ratio}_snr_sum'] = df_int[f'{ratio}_sum'] / df_int[f'{ratio}_sum_u']
+                    df_int[f'{ratio}_snr_int'] = df_int[f'{ratio}_int'] / df_int[f'{ratio}_int_u']
+                histcol = f'log_{ratio}_snr'
+                histcol_int = f'{ratio}_snr'
+            else:
+                histcol, histcol_int = args.histbycol, args.histbycol
+            bin_lolim, bin_uplim = np.min(df_spaxels[f'log_{ratio}']), np.max(df_spaxels[f'log_{ratio}'])
+            if full_df_int is not None:
+                bin_lolim, bin_uplim = min(bin_lolim, np.min(df_int[f'{ratio}_int'] - df_int[f'{ratio}_int_u'])), max(bin_uplim, np.max(df_int[f'{ratio}_int'] + df_int[f'{ratio}_int_u']))
+                bin_lolim, bin_uplim = min(bin_lolim, np.min(df_int[f'{ratio}_sum'] - df_int[f'{ratio}_sum_u'])), max(bin_uplim, np.max(df_int[f'{ratio}_sum'] + df_int[f'{ratio}_sum_u']))
+            bins = np.linspace(bin_lolim, bin_uplim, 30)
+            sum_values, _ = np.histogram(df_spaxels[f'log_{ratio}'], bins=bins, weights=df_spaxels[histcol])
+            count_entries, _ = np.histogram(df_spaxels[f'log_{ratio}'], bins=bins)
+            average = np.zeros_like(sum_values)
+            nonzero = count_entries > 0
+            average[nonzero] = sum_values[nonzero] / count_entries[nonzero]
+        
+        bin_centers = 0.5 * (bins[1:] + bins[:-1])
+        ax.plot(bin_centers, average, drawstyle='steps-mid', color='cornflowerblue', label=label if index == 0 else None, lw=2, zorder=200) 
+        ylim = [0, ax.get_ylim()[1]] if args.histbycol is None else [-2, 10]
+
+        # ---------plotting the integrated measurements--------------
+        if full_df_int is not None:
+            for index2, row in df_int.iterrows():
+                log_ratio_int, log_ratio_int_u, log_ratio_sum, log_ratio_sum_u = row[f'{ratio}_int'], row[f'{ratio}_int_u'], row[f'{ratio}_sum'], row[f'{ratio}_sum_u']
+
+                try:
+                    yval_sum = row[f'{histcol_int}_sum']
+                    yval_int = row[f'{histcol_int}_int']
+                except:
+                    yextent = np.diff(ax.get_ylim())[0]
+                    yval_sum = ax.get_ylim()[0] + 0.3 * yextent
+                    yval_int = yval_sum + 0.1 * yextent
+                
+                ax.scatter(log_ratio_int, yval_int, c='navy', s=50, ec='k', lw=0.5, label='Grizli-integrated' if index == 0 and index2 == 0 else None)
+                ax.errorbar(log_ratio_int, yval_int, xerr = log_ratio_int_u, color='grey', alpha=0.5, lw=0.5, fmt='none')
+            
+                ax.scatter(log_ratio_sum, yval_sum, c='brown', s=50, ec='k', lw=0.5, label='2D map summed' if index == 0 and index2 == 0 else None)
+                ax.errorbar(log_ratio_sum, yval_sum, xerr = log_ratio_sum_u, color='grey', alpha=0.5, lw=0.5, fmt='none')
+
+        # ---------plotting the different zones--------------
+        shade_alpha = 0.2
+        patches = []
+        if ratio in turnover_ratio_dict:
+            ax.fill_betweenx([-50, 50], turnover_ratio_dict[ratio][0], turnover_ratio_dict[ratio][1], color='cyan', alpha=shade_alpha, lw=0, label='_nolegend_', zorder=-10)
+            patches.append(matplotlib.patches.Patch(facecolor='cyan', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Turnover zone\n(uncertain solution)' if index == len(ratios) - 1 else None))
+            ax.fill_betweenx([-50, 50], turnover_ratio_dict[ratio][1], ax.get_xlim()[1], color='limegreen', alpha=shade_alpha, lw=0, label='_no_legend', zorder=-10)
+            patches.append(matplotlib.patches.Patch(facecolor='limegreen', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Outside model\n(no solution)' if index == len(ratios) - 1 else None))
+        if ratio in monosolution_uplim_dict:
+            ax.fill_betweenx([-50, 50], ax.get_xlim()[0], monosolution_uplim_dict[ratio], color='salmon', alpha=shade_alpha, lw=0, label='_no_legend_', zorder=-10)
+            patches.append(matplotlib.patches.Patch(facecolor='salmon', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Only high-Z branch\n(one solution)' if index == len(ratios) - 1 else None))
+
+        # ---------annotating the plot--------------
+        if index == 0:    
+            if len(objlist) == 1: ax.text(0.05, 0.95, f'{len(df_spaxels)} spaxels\nfrom ID #{objlist[0][1]}', fontsize=args.fontsize, c='k', ha='left', va='top', transform=ax.transAxes, zorder=250)
+            else: ax.text(0.05, 0.95, f'{len(df_spaxels)} spaxels\nfrom {len(objlist)} objects', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=ax.transAxes, zorder=250)
+            ax.set_ylabel('Counts' if args.histbycol is None else f'Average {args.histbycol}', fontsize=args.fontsize)
+
+        if index == 0: ax.legend(fontsize=args.fontsize / args.fontfactor, loc='upper right', framealpha=1)
+        elif index == len(ratios) - 1: ax.legend(handles=patches, fontsize=args.fontsize / args.fontfactor, loc='upper right', framealpha=1)
+
+        ax.set_ylim(ylim)
+        ax.set_xlabel(f'Log {ratio.replace(",", "+")}', fontsize=args.fontsize)
+        ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+
+    # ---------saving the fig--------------
+    histbycol_text = '' if args.histbycol is None else f'_histby_{args.histbycol.lower()}'
+    figname = f'histogram_ratios_{"_".join(ratios).replace("/", "-")}{histbycol_text}.png'
+    save_fig(fig, figname, args)
+
+    return
+
+# --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
@@ -1850,7 +2173,7 @@ if __name__ == "__main__":
 
     # -----------setting up hard-coded values-------------------
     args.fontsize = 10
-    args.fontfactor = 1.
+    args.fontfactor = 1.3
     args.only_seg = True
     args.vorbin = True
     args.plot_ratio_maps = True
@@ -1883,11 +2206,17 @@ if __name__ == "__main__":
     args.only_seg_text = '_onlyseg' if args.only_seg else ''
     args.vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
 
+    # ------additional variables, for clarity-------------
+    all_ratios = ['OII/Hb', 'OIII/Hb', 'OII,OIII/Hb', 'OIII/OII', 'NeIII-3867/OII', 'OIII/OII,OIII']
+    SEL_Zdiags = [item for item in args.Zdiag if 'NB' not in item]
+
     # ---------venn diagram plot----------------------
     #plot_passage_venn(['Par028'], args, fontsize=10)
+    #plot_glass_venn(args, fontsize=10)
 
     # ---------loading master dataframe with only objects in objlist------------
     df = make_master_df(objlist, args, sum=True)
+    full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)
 
     # ---------metallicity latex table for paper----------------------
     #df_latex = make_latex_table(df, args, sum=True)
@@ -1900,7 +2229,7 @@ if __name__ == "__main__":
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsize=15)
-    plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='Z_SFR_slope', fontsize=15)
+    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='Z_SFR_slope', fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
     #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12)
@@ -1926,5 +2255,9 @@ if __name__ == "__main__":
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=10)
     #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
+
+    # -----------other diagnostics--------------
+    #plot_line_ratio_histogram(full_df_spaxels, objlist, SEL_Zdiags, args, fontsize=15, full_df_int=full_df_int)
+    #plot_line_ratio_histogram(full_df_spaxels, objlist, ['OIII/OII,OIII', 'OIII/OII'], args, fontsize=15, full_df_int=full_df_int)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
