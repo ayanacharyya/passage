@@ -2264,7 +2264,8 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
     fig, axes = plt.subplots(1, len(ratios), figsize=(14, 5), sharey=True)
     fig.subplots_adjust(left=0.07, right=0.98, top=0.95, bottom=0.13, wspace=0.)
     label = 'Voronoi bins' if args.vorbin else 'Pixels'
-    
+    axes = np.atleast_1d(axes)
+
     # ---------looping over ratios----------
     for index, ratio in enumerate(ratios):  
         ax = axes[index]
@@ -2275,18 +2276,21 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
             histcol_int = 'dummy'
         else:
             if args.histbycol.lower() == 'snr':
-                df_spaxels[f'log_{ratio}_snr'] = df_spaxels[f'log_{ratio}'] / df_spaxels[f'log_{ratio}_u']
+                df_spaxels[f'{ratio}_snr'] = 10 ** df_spaxels[f'log_{ratio}'] / 10 ** df_spaxels[f'log_{ratio}_u']
                 if full_df_int is not None:
-                    df_int[f'{ratio}_snr_sum'] = df_int[f'{ratio}_sum'] / df_int[f'{ratio}_sum_u']
-                    df_int[f'{ratio}_snr_int'] = df_int[f'{ratio}_int'] / df_int[f'{ratio}_int_u']
-                histcol = f'log_{ratio}_snr'
-                histcol_int = f'{ratio}_snr'
+                    df_int[f'{ratio}_snr_sum'] = 10 ** df_int[f'{ratio}_sum'] / 10 ** df_int[f'{ratio}_sum_u']
+                    df_int[f'{ratio}_snr_int'] = 10 ** df_int[f'{ratio}_int'] / 10 ** df_int[f'{ratio}_int_u']
+                
+                histcol, histcol_int = f'{ratio}_snr', f'{ratio}_snr'
             else:
                 histcol, histcol_int = args.histbycol, args.histbycol
+            
             bin_lolim, bin_uplim = np.min(df_spaxels[f'log_{ratio}']), np.max(df_spaxels[f'log_{ratio}'])
+            
             if full_df_int is not None:
                 bin_lolim, bin_uplim = min(bin_lolim, np.min(df_int[f'{ratio}_int'] - df_int[f'{ratio}_int_u'])), max(bin_uplim, np.max(df_int[f'{ratio}_int'] + df_int[f'{ratio}_int_u']))
                 bin_lolim, bin_uplim = min(bin_lolim, np.min(df_int[f'{ratio}_sum'] - df_int[f'{ratio}_sum_u'])), max(bin_uplim, np.max(df_int[f'{ratio}_sum'] + df_int[f'{ratio}_sum_u']))
+            
             bins = np.linspace(bin_lolim, bin_uplim, 30)
             sum_values, _ = np.histogram(df_spaxels[f'log_{ratio}'], bins=bins, weights=df_spaxels[histcol])
             count_entries, _ = np.histogram(df_spaxels[f'log_{ratio}'], bins=bins)
@@ -2296,7 +2300,7 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
         
         bin_centers = 0.5 * (bins[1:] + bins[:-1])
         ax.plot(bin_centers, average, drawstyle='steps-mid', color='cornflowerblue', label=label if index == 0 else None, lw=2, zorder=200) 
-        ylim = [0, ax.get_ylim()[1]] if args.histbycol is None else [-2, 10]
+        ylim = [-0.2, 10] if args.histbycol is not None and args.histbycol.lower() == 'snr' else [0, ax.get_ylim()[1]]
 
         # ---------plotting the integrated measurements--------------
         if full_df_int is not None:
@@ -2307,7 +2311,7 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
                 df_int[f'{histcol_int}_sum'] = ax.get_ylim()[0] + 0.3 * yextent
                 df_int[f'{histcol_int}_int'] = df_int[f'{histcol_int}_sum'] + 0.1 * yextent
                 
-            for index2, m in enumerate(pd.unique(df['marker'])):
+            for index2, m in enumerate(pd.unique(df_int['marker'])):
                 df_sub = df_int[df_int['marker'] == m]                
                 ax.scatter(df_sub[f'{ratio}_int'], df_sub[f'{histcol_int}_int'], c='navy', marker=m, s=50, ec='k', lw=0.5, label='Grizli-integrated' if index == 0 and index2 == 0 else None)
                 ax.scatter(df_sub[f'{ratio}_sum'], df_sub[f'{histcol_int}_sum'], c='brown', marker=m, s=50, ec='k', lw=0.5, label='2D map summed' if index == 0 and index2 == 0 else None)
@@ -2332,12 +2336,13 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
         ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     # ---------annotating the plot--------------
-    if len(objlist) == 1: axes[0].text(0.05, 0.95, f'{len(df_spaxels)} spaxels\nfrom ID #{objlist[0][1]}', fontsize=args.fontsize, c='k', ha='left', va='top', transform=axes[0].transAxes, zorder=250)
-    else: axes[0].text(0.05, 0.95, f'{len(df_spaxels)} spaxels\nfrom {len(objlist)} objects', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[0].transAxes, zorder=250)
+    if len(objlist) == 1: label = f'{len(df_spaxels)} spaxels\nfrom ID #{objlist[0][1]}'
+    else: label = f'{len(df_spaxels)} spaxels\nfrom {len(objlist)} objects'
+    axes[0].text(0.05 if args.histbycol is None else 0.95, 0.95, label, fontsize=args.fontsize / args.fontfactor, c='k', ha='left' if args.histbycol is None else 'right', va='top', transform=axes[0].transAxes, zorder=250)
     axes[0].set_ylabel('Counts' if args.histbycol is None else f'Average {args.histbycol}', fontsize=args.fontsize)
 
-    axes[0].legend(fontsize=args.fontsize / args.fontfactor, loc='upper right', framealpha=1)
-    axes[-1].legend(handles=patches, fontsize=args.fontsize / args.fontfactor, loc='upper right', framealpha=1)
+    axes[0].legend(fontsize=args.fontsize / args.fontfactor, loc='upper right' if args.histbycol is None else 'upper left', framealpha=1)
+    axes[-1].legend(handles=patches, fontsize=args.fontsize / args.fontfactor, loc='upper right' if args.histbycol is None else 'upper left', framealpha=1)
 
     # ---------saving the fig--------------
     histbycol_text = '' if args.histbycol is None else f'_histby_{args.histbycol.lower()}'
@@ -2397,9 +2402,9 @@ if __name__ == "__main__":
     #plot_glass_venn(args, fontsize=10)
 
     # ---------loading master dataframe with only objects in objlist------------
-    df = make_master_df(objlist, args, sum=True)
-    #full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)
-
+    #df = make_master_df(objlist, args, sum=True)
+    full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)
+    
     # ---------metallicity latex table for paper----------------------
     #df_latex = make_latex_table(df, args, sum=True)
 
@@ -2431,8 +2436,8 @@ if __name__ == "__main__":
     #plot_metallicity_sfr_radial_profile_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=13)
 
     # --------multi-panel SFR-Z plots------------------
-    df_ha = df[df['redshift'] < 2.5] # to make sure Halpha is available
-    objlist_ha = [[row['field'], row['objid']] for index, row in df_ha.iterrows()]
+    #df_ha = df[df['redshift'] < 2.5] # to make sure Halpha is available
+    #objlist_ha = [[row['field'], row['objid']] for index, row in df_ha.iterrows()]
     #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
 
     # ---------metallicity comparison plots----------------------
