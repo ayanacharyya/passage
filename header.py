@@ -69,7 +69,7 @@ from astropy.io import fits
 from astropy.cosmology import Planck18
 from astropy.cosmology import FlatLambdaCDM
 from astropy.convolution import convolve, Gaussian1DKernel, Box1DKernel
-
+from astropy.visualization import make_lupton_rgb, MinMaxInterval, ManualInterval, LogStretch, LinearStretch, SqrtStretch
 
 # grizli stuff
 import grizli

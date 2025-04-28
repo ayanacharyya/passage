@@ -12,7 +12,7 @@ from util import *
 from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df, make_set
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
 from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso22, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
-from make_diagnostic_maps import get_emission_line_map, annotate_PAs, get_linelist, trim_image, get_EB_V, get_voronoi_bin_IDs, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
+from make_diagnostic_maps import get_cutout, get_emission_line_map, annotate_PAs, get_linelist, trim_image, get_EB_V, get_voronoi_bin_IDs, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
 
 plt.rcParams['ytick.direction'] = 'in'
 plt.rcParams['ytick.right'] = True
@@ -247,6 +247,32 @@ def get_marker_type(field):
     return marker_dict[survey]
 
 # --------------------------------------------------------------------------------------------------------------------
+def get_glass_masses(df, mass_col='lp_mass', id_col='objid', field_col='field'):
+    '''
+    Derives stellar masses of GLASS galaxies present in the given dataframe from He+2024 catalog
+    Returns dataframe
+    '''
+    glass_watson_catalog_filename = args.root_dir / 'glass_data' / 'a2744_spec_cat_niriss_20250401.fits'
+    watson_id_col = 'ID_NIRISS'
+    df_glass_watson = Table(fits.open(glass_watson_catalog_filename)[1].data).to_pandas().rename(columns={'RA':'ra', 'DEC':'dec'})
+    df_glass_watson = df_glass_watson[df_glass_watson[watson_id_col].isin(df[df[field_col]=='glass-a2744'][id_col])]
+
+    glass_he_catalog_filename = args.root_dir / 'glass_data' / 'He2024_table_indivi.tex'
+    he_id_col = 'ID Grism'
+    df_glass_he = Table.read(glass_he_catalog_filename).to_pandas().rename(columns={'RA':'ra', 'DEC':'dec', 'log_mass':mass_col})
+    
+    df_crossmatch = get_crossmatch(df_glass_watson, df_glass_he, sep_threshold=1., df1_idcol=watson_id_col, df2_idcol=he_id_col)
+    df_glass_he_crossmatched = df_glass_he[df_glass_he[he_id_col].isin(df_crossmatch['df2_id'])][[he_id_col, mass_col]].reset_index(drop=True)
+    df_glass_watson_crossmatched = df_glass_watson[df_glass_watson[watson_id_col].isin(df_crossmatch['df1_id'])][[watson_id_col]].reset_index(drop=True)
+    df_crossmatched = pd.concat([df_glass_watson_crossmatched, df_glass_he_crossmatched], axis=1)
+    df_crossmatched[[mass_col, f'{mass_col}_u']] = df_crossmatched[mass_col].apply(lambda x: pd.Series(parse_latex_value(x)))
+
+    df = df.set_index(id_col).combine_first(df_crossmatched[[watson_id_col, mass_col]].set_index(watson_id_col)).reset_index().rename(columns={'index': id_col})
+    df = df[df.columns].sort_values(by=field_col)
+
+    return df
+
+# --------------------------------------------------------------------------------------------------------------------
 def make_master_df(objlist, args, sum=True):
     '''
     Creates and returns a dataframe that holds all the relevant global properties for a given list of objects
@@ -285,7 +311,8 @@ def make_master_df(objlist, args, sum=True):
                 df = df.drop(f'lp_{item}_med_max68', axis=1)
         df = df.drop('passage_id', axis=1)
 
-        # --------get GLASS stellar masses from XXX catalog----------
+        # --------get GLASS stellar masses from He+2024 catalog----------
+        df = get_glass_masses(df)
      
         # -------getting redshift and integrated line flux info: looping through objects--------------
         line_list = ['OIII', 'Hb', 'Ha']
@@ -301,7 +328,7 @@ def make_master_df(objlist, args, sum=True):
             
             args = load_object_specific_args(full_hdu, args, skip_vorbin=True)
             df.loc[index, 'redshift'] = args.z
-            df.loc[index, 'EB_V'] = args.EB_V.s
+            df.loc[index, 'EB_V'] = args.EB_V.n
 
             for line in line_list:
                 try: _, _, line_int, line_sum, _ = get_emission_line_map(line, full_hdu, args, silent=True)
@@ -332,6 +359,9 @@ def make_master_df(objlist, args, sum=True):
         print(f'Reading in existing {filename}')
         df = pd.read_csv(filename)
 
+    # --------selecting only necessary objects------------
+    df_base = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
+    df = df_base.merge(df, on=['field', 'objid'], how='left')
     df['marker'] = df['field'].apply(lambda x: get_marker_type(x))
     
     return df
@@ -402,7 +432,8 @@ def plot_MEx(df, args, mass_col='lp_mass', fontsize=10):
 
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub['O3Hb'], c=df_sub['redshift'], marker=m, s=100, edgecolor='k', lw=1, cmap='cividis', vmin=1.7, vmax=3.1)
+        p = ax.scatter(df_sub[mass_col], df_sub['O3Hb'], c=df_sub['redshift'], marker=m, s=100, edgecolor='k', lw=1, cmap='viridis', vmin=1.7, vmax=3.1)
+    ax.errorbar(df[mass_col], df['O3Hb'], yerr=df['O3Hb_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df['O3Hb'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 
     # ----------making colorbar----------
@@ -416,7 +447,7 @@ def plot_MEx(df, args, mass_col='lp_mass', fontsize=10):
     ax.set_ylabel(r'log O III/H$\beta$', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
-    ax.set_xlim(6.5, 11)
+    ax.set_xlim(7, 11)
     ax.set_ylim(-1, 1.5)
 
     # ---------adding literature lines from Juneau+2014 (https://iopscience.iop.org/article/10.1088/0004-637X/788/1/88/pdf)----------
@@ -463,28 +494,32 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     '''
     args.fontsize = fontsize
     print(f'Plotting MZgrad...')
-
+    colorcol = 'redshift' # choose from ['redshift', 'SFR', 'Z_SFR_slope', 'logOH_sum_NB', 'logOH_int_NB', 'O3Hb', 'EB_V']
+    lim_dict = defaultdict(lambda: [None, None], redshift=[1.7, 3.1])
+    
     # ----------setting up the diagram----------
     fig, ax = plt.subplots(1, figsize=(8, 6))
     fig.subplots_adjust(left=0.12, right=0.99, bottom=0.1, top=0.95)
+    label_dict = smart_dict({'redshift': 'Redshift'})
 
     # ----------plotting----------
+    if colorcol == 'O3Hb': df['O3Hb'] =np.log10(df['OIII'] / df['Hb'])
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub['redshift'], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', vmin=1.7, vmax=3.1, cmap='viridis')
+        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub[colorcol], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', vmin=lim_dict[colorcol][0], vmax=lim_dict[colorcol][1], cmap='viridis')
     if zgrad_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], yerr=df[zgrad_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 
     # ----------making colorbar----------
     cbar = plt.colorbar(p, pad=0.01)
-    cbar.set_label('Redshift', fontsize=args.fontsize)
+    cbar.set_label(label_dict[colorcol], fontsize=args.fontsize)
     cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
 
     ax.axhline(0, ls='--', c='k', lw=0.5)
 
     # --------plotting FOGGIE filled region----------
     xcol, ycol = 'log_mass', 'Zgrad'
-    foggie_filename = filename = args.root_dir / 'zgrad_paper_plots' / 'FOGGIE_allhalos.csv'
+    foggie_filename = args.root_dir / 'zgrad_paper_plots' / 'literature' / 'FOGGIE_allhalos.csv'
     df_foggie = pd.read_csv(foggie_filename)
     df_foggie = df_foggie[(df_foggie['log_mass'].between(8.5, 11.5)) & ~(df_foggie['halo'] == 8508)]
     #ax.plot(df_foggie[xcol], df_foggie[ycol], c='salmon', lw=0.1, zorder=-2, alpha=0.5)
@@ -501,8 +536,26 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     
     ax = plot_filled_region(new_df, xcol, ycol, ax, color='salmon', noscatter=True, label='FOGGIE')
 
-    # --------plotting literature data----------
+    # --------plotting Sharda+21 data----------
+    legend_dict = {'sami': 'SAMI', 'manga': 'MaNGA', 'califa': 'CALIFA', 'sharda_scaling1': 'S21 scaling 1', 'sharda_scaling2': 'S21 scaling 2'}
+    marker_dict = {'sami': '+', 'manga': 'x', 'califa': '1', 'sharda_scaling1': 'v', 'sharda_scaling2': '^'}
+    ls_dict = {'sami': 'dotted', 'manga': 'dotted', 'califa': 'dotted', 'sharda_scaling1': 'solid', 'sharda_scaling2': 'dashed'}
+    color_dict = {'sami': 'firebrick', 'manga': 'chocolate', 'califa': 'darkgoldenrod', 'sharda_scaling1': 'k', 'sharda_scaling2': 'k'}
+    
+    literature_files = glob.glob(str(args.root_dir / 'zgrad_paper_plots' / 'literature' / 'mzgr_*.csv'))
+    literature_files.sort(key=natural_keys)
 
+    for index,this_file in enumerate(literature_files):
+        sample = Path(this_file).stem.split('mzgr_')[1]
+        df_lit = pd.read_csv(this_file, names=['log_mass', 'Zgrad'], sep=', ')
+        if 'scaling' in sample: ax.plot(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=1, ls=ls_dict[sample], label=legend_dict[sample])
+        else: ax.scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], ec='k', s=50, lw=2, marker=marker_dict[sample], label=legend_dict[sample])
+
+    # --------plotting other literature data----------
+    coeff = [-0.199, 0.199 * 10 - 0.432] # Franchetto+21 eq 6
+    xarr = [7, 11]
+    ax.plot(xarr, np.poly1d(coeff)(xarr), color='limegreen', ls='dotted', label='F21 forbidden')
+    #ax.fill_between(xarr, -5, np.poly1d(coeff)(xarr), color='limegreen', alpha=0.2, label='F21 forbidden')
 
     # ---------annotate axes and save figure-------
     plt.legend(fontsize=args.fontsize)
@@ -510,10 +563,10 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     ax.set_ylabel(r'log $\nabla$Z$_r$ (dex/kpc)', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
-    ax.set_xlim(6.5, 11)
+    ax.set_xlim(7, 11)
     ax.set_ylim(-0.5, 0.1)
 
-    figname = f'MZgrad_colorby_redshift.png'
+    figname = f'MZgrad_colorby_{colorcol}.png'
     save_fig(fig, figname, args)
 
     return
@@ -549,7 +602,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='Z_SFR_slope', fontsize=1
     ax.set_ylabel(r'Z-SFR slope', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
-    ax.set_xlim(6.5, 11)
+    ax.set_xlim(7, 11)
     ax.set_ylim(-0.3, 1.4)
 
     figname = f'MZsfr_colorby_Z.png'
@@ -788,6 +841,7 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None):
     # ----------loading object specific things into args---------------------
     args.z = full_hdu[0].header['REDSHIFT']
     args.id = full_hdu[0].header['ID']
+    args.field = field
     line_wcs = pywcs.WCS(full_hdu['DSCI'].header)
     args.pix_size_arcsec = utils.get_wcs_pscale(line_wcs)
     args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
@@ -818,17 +872,18 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None):
     return args
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_radial_profile(image, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, short_label=False):
+def plot_radial_profile(image, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, short_label=False, quant='logOH'):
     '''
     Plots and fits the radial profile from a given 2D image in a given axis
     Returns the axis handle and the linefit
     '''
+    label_dict = smart_dict({'SFR': r'$\log$ SFR (M$_{\odot}$/yr)', 'logOH': r'$\log$ (O/H) + 12', 'Z': r'$\log$ (O/H) + 12'})
     # ----------getting the distance map--------
     distance_map = get_distance_map(np.shape(image), args)
     distance_map = np.ma.masked_where(image.mask, distance_map)
 
     # ----making the dataframe before radial profile plot--------------
-    df = pd.DataFrame({'radius': np.ma.compressed(distance_map), 'logOH': unp.nominal_values(np.ma.compressed(image)), 'logOH_u': unp.std_devs(np.ma.compressed(image))})
+    df = pd.DataFrame({'radius': np.ma.compressed(distance_map), 'quant': unp.nominal_values(np.ma.compressed(image)), 'quant_u': unp.std_devs(np.ma.compressed(image))})
 
     # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
     if args.vorbin:
@@ -839,18 +894,22 @@ def plot_radial_profile(image, ax, args, ylim=None, xlim=None, hide_xaxis=False,
     df = df.sort_values(by='radius').reset_index(drop=True)
 
     # -------plotting--------
-    ax.scatter(df['radius'], df['logOH'], c='grey', s=20, alpha=1)
-    ax.errorbar(df['radius'], df['logOH'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
+    ax.scatter(df['radius'], df['quant'], c='grey', s=20, alpha=1)
+    ax.errorbar(df['radius'], df['quant'], yerr=df['quant_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
     ax.set_aspect('auto') 
 
     # -------radial fitting-------------
     try:
         fit_color = 'salmon'
-        linefit, linecov = np.polyfit(df['radius'], df['logOH'], 1, cov=True, w=1. / (df['logOH_u']) ** 2)
+        linefit, linecov = np.polyfit(df['radius'], df['quant'], 1, cov=True, w=1. / (df['quant_u']) ** 2)
         y_fitted = np.poly1d(linefit)(df['radius'])
         ax.plot(df['radius'], y_fitted, color=fit_color, lw=1, ls='dashed')
         linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
-        ax.text(0.05, 0.05, r'$\nabla$Z$_r$' + f' = {linefit[0].s: .2f}' if short_label else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc', c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
+        if quant in ['logOH', 'Z']:
+            label = r'$\nabla$Z$_r$' + f' = {linefit[0].s: .2f}' if short_label else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc'
+        else:
+            label = r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0].s: .2f}' if short_label else r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0]: .2f} dex/kpc'
+        ax.text(0.1, 0.05, label, c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
     except:
         print(f'WARNING: Could not fit radial profile, returning nan fit parameters')
         linefit = np.array([ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)])
@@ -858,7 +917,7 @@ def plot_radial_profile(image, ax, args, ylim=None, xlim=None, hide_xaxis=False,
     # --------annotating axis--------------
     if xlim is not None: ax.set_xlim(xlim[0], xlim[1]) # kpc
     if ylim is not None: ax.set_ylim(ylim[0], ylim[1])
-    if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)', 'log (O/H) + 12', args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+    if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)', label_dict[quant], args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
     
     return ax, linefit
 
@@ -932,35 +991,40 @@ def plot_1D_spectra(od_hdu, ax, args):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def annotate_axes(ax, xlabel, ylabel, args, label='', clabel='', hide_xaxis=False, hide_yaxis=False, hide_cbar=True, p=None):
+def annotate_axes(ax, xlabel, ylabel, args, label='', clabel='', hide_xaxis=False, hide_yaxis=False, hide_cbar=True, p=None, hide_cbar_ticks=False, cticks_integer=True):
     '''
     Annotates the axis of a given 2D image
     Returns the axis handle
     '''
     ax.text(0.1, 0.9, label, c='k', fontsize=args.fontsize/args.fontfactor, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9), transform=ax.transAxes)
 
+    ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=4, prune='both'))
+    ax.xaxis.set_minor_locator(ticker.AutoMinorLocator(4))
     if hide_xaxis:
         ax.set_xticklabels([])
     else:
         ax.set_xlabel(xlabel, fontsize=args.fontsize)
         ax.tick_params(axis='x', which='major', labelsize=args.fontsize)
-        ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=4, prune='both'))
 
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=4, prune='both'))
+    ax.yaxis.set_minor_locator(ticker.AutoMinorLocator(4))
     if hide_yaxis:
         ax.set_yticklabels([])
     else:
         ax.set_ylabel(ylabel, fontsize=args.fontsize)
         ax.tick_params(axis='y', which='major', labelsize=args.fontsize)
-        ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=4, prune='both'))
 
     if not hide_cbar and p is not None:
         cax = inset_axes(ax, width="5%", height="100%", loc='right', bbox_to_anchor=(0.05, 0, 1, 1), bbox_transform=ax.transAxes, borderpad=0)
         cbar = plt.colorbar(p, cax=cax, orientation='vertical')
-        cbar.ax.tick_params(labelsize=args.fontsize)
         cbar.set_label(clabel, fontsize=args.fontsize)
 
-        cbar.locator = ticker.MaxNLocator(integer=True, nbins=4)#, prune='both')
+        cbar.locator = ticker.MaxNLocator(integer=cticks_integer, nbins=4)#, prune='both')
         cbar.update_ticks()
+        if hide_cbar_ticks:
+            cbar.ax.set_yticklabels([])
+        else:
+            cbar.ax.tick_params(labelsize=args.fontsize)
 
     return ax
 
@@ -982,23 +1046,32 @@ def get_direct_image(full_hdu, filter, args):
     Loads the direct image for a given filter for a given object
     Returns the image
     '''
-    filter_dummy = 'F140W'
     try:
         hdu = full_hdu['DSCI', filter.upper()]
+        image = hdu.data
+        exptime = 1
     except:
         try:
             hdu = full_hdu['DSCI', f'{filter.upper()}-{filter.upper()}-CLEAR']
+            image = hdu.data
+            exptime = full_hdu[0].header[f'T_{filter.upper()}']
         except:
-            try:
-                hdu = full_hdu['DSCI', filter_dummy.upper()]
-                print(f'WARNING: Plotting direct image for filter {filter_dummy} instead of {filter}..')
-            except:
-                sys.exit(f'Neither {filter} nor {filter_dummy} available')
+            full_field_filename = get_data_path(args.field, args) / f'{args.field}_{filter.lower()}-clear_drz_sci.fits'
+            print(f'{filter.upper()} not found in full_hdu extension. Therefore trying to get cutout from full field image {full_field_filename}')
+            
+            exptime = fits.open(full_field_filename)[0].header['EXPTIME']
+            pos = SkyCoord(full_hdu[0].header['RA'], full_hdu[0].header['DEC'], unit = 'deg')
+            size = 2 * args.arcsec_limit * u.arcsec
+            target_header = full_hdu['DSCI', 'F140W'].header
+            
+            temp1, temp2 = args.only_seg, args.vorbin
+            args.only_seg, args.vorbin = False, False
+            image = get_cutout(full_field_filename, pos, size, target_header, args, plot_test_axes=None)
+            args.only_seg, args.vorbin = temp1, temp2
 
-    image = hdu.data
     image = trim_image(image, args)
     
-    return image
+    return image, exptime
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_direct_image(full_hdu, filter, ax, args, cmap='Greens'):
@@ -1006,7 +1079,7 @@ def plot_direct_image(full_hdu, filter, ax, args, cmap='Greens'):
     Plots the direct image for a given filter for a given object, in a given axis
     Returns the axis handle
     '''
-    image = get_direct_image(full_hdu, filter, args)
+    image, _ = get_direct_image(full_hdu, filter, args)
     p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, alpha=1)
     ax.set_aspect('auto')    
     
@@ -1021,22 +1094,36 @@ def plot_rgb_image(full_hdu, filters, ax, args, hide_xaxis=False, hide_yaxis=Fal
     print(f'Plotting the RGB images with filters {filters}..')
 
     # -------get image for each filter---------
-    image_arr = []
+    image_arr, exptime_arr = [], []
     for index, filter in enumerate(filters):
-        image = get_direct_image(full_hdu, filter, args)
+        image, exptime = get_direct_image(full_hdu, filter, args)
         image_arr.append(image)
+        exptime_arr.append(exptime)
+        if not hide_filter_names: ax.text(0.05, 0.95 - index * 0.1, f'{filter}', c=['r', 'lightgreen', 'cornflowerblue'][index], fontsize=args.fontsize / args.fontfactor, ha='left', va='top', transform=ax.transAxes, zorder=10)
 
-    # -------create and plot RGB image---------
-    rgb_image = np.dstack((image_arr[0], image_arr[1], image_arr[2]))
+    # -------normalising each image to exptime---------
+    for index in range(len(exptime_arr)):
+        image_arr[index] = image_arr[index] * exptime_arr[0] / exptime_arr[index]
+
+    # -------create RGB image---------
+    pctl, maximum = 99.9, 0.
+    for img in image_arr:
+        val = np.percentile(img, pctl)
+        if val > maximum: maximum = val
+
+    rgb_image = make_rgb(image_arr[0], image_arr[1], image_arr[2], interval=ManualInterval(vmin=0, vmax=maximum), stretch=SqrtStretch())
+
+    # -------plot RGB image---------
     p = ax.imshow(rgb_image, origin='lower', extent=args.extent, alpha=1)
+    ax.set_aspect('auto') 
 
     ax.scatter(0, 0, marker='x', s=10, c='grey')
-    ax.text(0.05, 0.05, f'z={args.z:.2f}', c='k', fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
+    ax.text(0.05, 0.05, f'z={args.z:.2f}', c='w', fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
 
     # ----------annotate axis---------------
     if not hide_pa:
         pa_arr = np.unique([full_hdu[0].header[item] for item in list(full_hdu[0].header.keys()) if 'PA00' in item])
-        ax = annotate_PAs(pa_arr, ax, fontsize=args.fontsize / args.fontfactor)
+        ax = annotate_PAs(pa_arr, ax, fontsize=args.fontsize / args.fontfactor, color='w')
 
     ax.set_xlim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
     ax.set_ylim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
@@ -1047,7 +1134,7 @@ def plot_rgb_image(full_hdu, filters, ax, args, hide_xaxis=False, hide_yaxis=Fal
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False):
+def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, hide_cbar_ticks=False, cticks_integer=True):
     '''
     Plots a given 2D image in a given axis
     Returns the axis handle
@@ -1064,7 +1151,7 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True,
     ax.set_aspect('auto') 
     
     if 'segmentation_map' in args: ax.contour(args.segmentation_map != args.id, levels=0, colors='w' if args.fortalk else 'k', extent=args.extent, linewidths=0.5) # demarcating the segmentation map zone
-    if not skip_annotate: ax = annotate_axes(ax, 'arcsec', 'arcsec', args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p)
+    if not skip_annotate: ax = annotate_axes(ax, 'arcsec', 'arcsec', args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
 
     return ax
 
@@ -1136,8 +1223,8 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10):
     args = load_object_specific_args(full_hdu, args, field=field)
 
     # ----------plotting direct image--------------
-    ax_dirimg = plot_rgb_image(full_hdu, ['F115W', 'F150W', 'F200W'], ax_dirimg, args)
-    ax_dirimg = annotate_kpc_scale_bar(2, ax_dirimg, args, label='2 kpc', loc='lower right')
+    ax_dirimg = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], ax_dirimg, args)
+    ax_dirimg = annotate_kpc_scale_bar(2, ax_dirimg, args, label='2 kpc', color='w', loc='lower right')
 
     # ----------plotting 1D spectra--------------
     ax_1dspec = plot_1D_spectra(od_hdu, ax_1dspec, args)
@@ -1285,18 +1372,19 @@ def plot_AGN_demarcation_figure_single(objid, field, args, fontsize=10):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10):
+def plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10, exclude_ids=[]):
     '''
     Plots and saves the spatially resolved AGN demarcation for a single object
     '''
     args.fontsize = fontsize
+    objlist = [item for item in objlist if not item[1] in exclude_ids]
     print(f'Plotting multi-panel AGN demarcation diagram for {len(objlist)} objects..')
     theoretical_lines, line_labels = get_AGN_func_methods(args)        
     color_arr = ['brown', 'darkgreen', 'dodgerblue', 'cyan', 'sienna']
 
     # -------setting up the figure--------------------
-    nrow, ncol = 2, 5
-    fig, axes = plt.subplots(nrow, ncol, figsize=(12, 5), sharex=True, sharey=True)
+    nrow, ncol = 2, 4
+    fig, axes = plt.subplots(nrow, ncol, figsize=(11, 5), sharex=True, sharey=True)
     fig.subplots_adjust(left=0.07, right=0.92, bottom=0.1, top=0.98, wspace=0., hspace=0.)
 
     # --------looping over all objects-------------------------
@@ -1429,10 +1517,10 @@ def plot_metallicity_fig_single(objid, field, Zdiag, args, fontsize=10):
     axes = [fig.add_subplot(left_gs[0, 0]), fig.add_subplot(left_gs[0, 1]), fig.add_subplot(right_gs[0, 0])]
 
     # -----plotting direct image-----------------
-    axes[0] = plot_rgb_image(full_hdu, ['F115W', 'F150W', 'F200W'], axes[0], args)
+    axes[0] = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], axes[0], args)
 
     # -----plotting 2D metallicity map-----------
-    Zlim = [7.1, 8.1]
+    Zlim = [7.1, 8.5]
     axes[1] = plot_2D_map(logOH_map, axes[1], f'log O/H + 12 ({Zdiag})', args, clabel='', takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=False, hide_yaxis=True, hide_cbar=False)
     axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', loc='lower right')
 
@@ -1478,11 +1566,11 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
         logOH_map, _, _ = load_metallicity_map(field, objid, Zdiag, args)
 
         # -----plotting direct image-----------------
-        axes[0] = plot_rgb_image(full_hdu, ['F115W', 'F150W', 'F200W'], axes[0], args, hide_xaxis=thisrow < nrow - 1, hide_yaxis=False, hide_cbar=True, hide_filter_names=True, hide_pa=True)
-        axes[0].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[0].transAxes)
+        axes[0] = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], axes[0], args, hide_xaxis=thisrow < nrow - 1, hide_yaxis=False, hide_cbar=True, hide_filter_names=index, hide_pa=True)
+        axes[0].text(0.95, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='w', ha='right', va='top', transform=axes[0].transAxes)
         
         # -----plotting 2D metallicity map-----------
-        Zlim, cmap = [7.1, 8.1], 'cividis'
+        Zlim, cmap = [7.1, 8.5], 'cividis'
         axes[1] = plot_2D_map(logOH_map, axes[1], None, args, clabel='', takelog=False, cmap=cmap, vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=thisrow < nrow - 1, hide_yaxis=True, hide_cbar=True)
         axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', color='brown', loc='lower right')
     
@@ -1564,7 +1652,7 @@ def get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=None, logOH_sum=None)
 # --------------------------------------------------------------------------------------------------------------------
 def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     '''
-    Plots and saves a single figure with the direct image, 2D metallicity map, metallicity radial profile, SFR map, metallicity vs SFR plot for a given object
+    Plots and saves a single figure with the SFR map, metallicity vs SFR plot for a given object
     '''
     args.fontsize = fontsize
     print(f'Plotting metallicity-SFR figure for {objid}..')
@@ -1573,7 +1661,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     full_hdu = load_full_fits(objid, field, args)
     args = load_object_specific_args(full_hdu, args, field=field)
     logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
-    Zlim = [7.1, 8.1]
+    Zlim = [7.1, 8.5]
     log_sfr_lim = [-3, -2]
 
     # --------setting up the figure------------
@@ -1644,17 +1732,18 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10):
+def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude_ids=[]):
     '''
-    Plots and saves a single figure with the direct image, 2D metallicity map, metallicity radial profile, SFR map, metallicity vs SFR plot for a given object
+    Plots and saves a single figure with the SFR map, metallicity vs SFR plot for a given list of objects
     '''
     args.fontsize = fontsize
+    objlist = [item for item in objlist if not item[1] in exclude_ids]
     print(f'Plotting metallicity-SFR figure for {len(objlist)} objects..')
 
    # -------setting up the figure--------------------
-    nrow, ncol = 4, 2
-    fig = plt.figure(figsize=(9, 7.5))
-    fig.subplots_adjust(left=0.07, right=0.93, bottom=0.06, top=0.93, wspace=0., hspace=0.)
+    nrow, ncol = 3, 2
+    fig = plt.figure(figsize=(9, 6))
+    fig.subplots_adjust(left=0.07, right=0.93, bottom=0.08, top=0.9, wspace=0., hspace=0.)
     outer_gs = gridspec.GridSpec(nrow, ncol, figure=fig, wspace=0.4, hspace=0.)
 
     # --------looping over all objects-------------------------
@@ -1673,7 +1762,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10):
         full_hdu = load_full_fits(objid, field, args)
         args = load_object_specific_args(full_hdu, args, field=field)
         logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
-        Zlim = [7.1, 8.1]
+        Zlim = [7.1, 8.5]
         log_sfr_lim = [-3, -2]
 
         # ----------getting the SFR maps------------------
@@ -1724,7 +1813,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10):
         print(f'Appended metallicity-sfr fit to catalog file {output_dfname}')
 
    # -------making colorbars for the entire fig----------
-    cax = fig.add_axes([0.07, 0.96, 0.93 - 0.07, 0.01])    
+    cax = fig.add_axes([0.07, 0.95, 0.93 - 0.07, 0.01])    
     cbar = matplotlib.colorbar.ColorbarBase(cax, cmap=cmap, norm=mplcolors.Normalize(vmin=log_sfr_lim[0], vmax=log_sfr_lim[1]), orientation='horizontal')
     cbar.set_label(r'$\log$ SFR (M$_{\odot}$/yr)', fontsize=args.fontsize)
     cax.xaxis.set_label_position('top')
@@ -1735,6 +1824,100 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10):
     save_fig(fig, figname, args)
 
     return
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fontsize=10):
+    '''
+    Plots and saves a single figure with the 2D metallicity map, metallicity radial profile, SFR map, SFR radial profile and metallicity vs SFR plot for a given object
+    '''
+    args.fontsize = fontsize
+    args.fontfactor = 1.3
+    print(f'Plotting metallicity-SFR radial profile figure for {field}-{objid}..')
+
+    # -------setting up the figure--------------------
+    fig = plt.figure(figsize=(10, 5))
+    fig.subplots_adjust(left=0.07, right=0.99, bottom=0.1, top=0.93, wspace=0., hspace=0.)
+    outer_gs = gridspec.GridSpec(1, 2, width_ratios=[1.5, 1], figure=fig, wspace=0.41, hspace=0.)
+
+    # --------setting up the sub-figure------------
+    map_radprof_gs = outer_gs[0].subgridspec(2, 2, wspace=0., hspace=0.)
+    axes = [fig.add_subplot(map_radprof_gs[0, 0]), fig.add_subplot(map_radprof_gs[0, 1]), fig.add_subplot(map_radprof_gs[1, 0]), fig.add_subplot(map_radprof_gs[1, 1])]
+    Zsfr_gs = outer_gs[1].subgridspec(1, 1, wspace=0., hspace=0.)
+    axes += [fig.add_subplot(Zsfr_gs[0, 0])]
+    
+    # -----------loading the data---------------
+    full_hdu = load_full_fits(objid, field, args)
+    args = load_object_specific_args(full_hdu, args, field=field)
+    logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
+    Zlim = [7.1, 8.5]
+    log_sfr_lim = [-3, -2]
+
+    # ----------getting the SFR maps------------------
+    _, _, _, sfr_map, sfr_int, sfr_sum = get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=logOH_int, logOH_sum=logOH_sum)
+    log_sfr_map = np.ma.masked_where(sfr_map.mask, unp.log10(sfr_map.data))
+
+    # -----plotting 2D metallicity map-----------
+    axes[0] = plot_2D_map(logOH_map, axes[0], 'log(O/H) + 12 [NB]', args, clabel='', takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=True, hide_yaxis=False, hide_cbar=False, hide_cbar_ticks=True, cticks_integer=False)
+    axes[0] = annotate_kpc_scale_bar(2, axes[0], args, label='2 kpc', color='brown', loc='lower right')
+
+    # # ------plotting metallicity radial profile-----------
+    axes[1], _ = plot_radial_profile(logOH_map, axes[1], args, ylim=Zlim, xlim=[0, 5], hide_xaxis=True, hide_yaxis=False, hide_cbar=True, short_label=False)
+    axes[1].yaxis.set_label_position('right')
+    axes[1].yaxis.tick_right()
+    
+    # -----plotting 2D SFR map-----------
+    axes[2] = plot_2D_map(log_sfr_map, axes[2], 'SFR', args, clabel='', takelog=False, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=False, hide_cbar=False, hide_cbar_ticks=True, cticks_integer=False)
+
+    # -----plotting SFR radial profile-----------
+    axes[3], _ = plot_radial_profile(log_sfr_map, axes[3], args, quant='SFR', ylim=log_sfr_lim, xlim=[0, 5], hide_xaxis=False, hide_yaxis=False, hide_cbar=True, short_label=False)
+    axes[3].yaxis.set_label_position('right')
+    axes[3].yaxis.tick_right()
+  
+    # ------plotting metallicity vs SFR-----------
+    df = pd.DataFrame({'logOH': unp.nominal_values(np.ma.compressed(logOH_map)), 'logOH_u': unp.std_devs(np.ma.compressed(logOH_map)), 'log_sfr':unp.nominal_values(np.ma.compressed(log_sfr_map)), 'log_sfr_u': unp.std_devs(np.ma.compressed(log_sfr_map))})
+    if args.vorbin:
+        df['bin_ID'] = np.ma.compressed(np.ma.masked_where(log_sfr_map.mask, args.voronoi_bin_IDs.data))
+        df = df.groupby('bin_ID', as_index=False).agg(np.mean)
+
+    axes[4].scatter(df['log_sfr'], df['logOH'], c='w', lw=1, ec='k', s=20, alpha=1)
+    df = df[~df['logOH'].between(8.3, 8.4)] # artificially excluding the "turnover" metallicity values from the fit
+    
+    axes[4].scatter(df['log_sfr'], df['logOH'], c='grey', s=20, alpha=1)
+    axes[4].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
+
+    # -------radial fitting-------------
+    fit_color = 'salmon'
+    linefit, linecov = np.polyfit(df['log_sfr'], df['logOH'], 1, cov=True, w=1. / (df['logOH_u']) ** 2)
+    y_fitted = np.poly1d(linefit)(df['log_sfr'])
+    axes[4].plot(df['log_sfr'], y_fitted, color=fit_color, lw=1, ls='dashed')
+    linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
+    axes[4].text(0.05, 0.05, f'Slope = {linefit[0]: .2f}', c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=axes[4].transAxes)
+
+    # --------annotating axis--------------
+    axes[4].text(0.95, 0.05, f'ID #{objid}', fontsize=args.fontsize, c='k', ha='right', va='bottom', transform=axes[4].transAxes)
+    axes[4].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
+    axes[4].set_ylim(Zlim[0], Zlim[1])
+    axes[4] = annotate_axes(axes[4], r'$\log$ SFR (M$_{\odot}$/yr)', r'$\log$ (O/H) + 12', args, hide_xaxis=False, hide_yaxis=False, hide_cbar=True)
+    axes[4].set_aspect('equal')
+    # -----------saving figure------------
+    figname = f'metallicity-sfr_radial_profile_{objid:05d}.png'
+    save_fig(fig, figname, args)
+
+    return
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_metallicity_sfr_radial_profile_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude_ids=[]):
+    '''
+    Plots and saves a single figure with the 2D metallicity map, metallicity radial profile, SFR map, SFR radial profile and metallicity vs SFR plot for a given list of objects
+    '''
+    objlist = [item for item in objlist if not item[1] in exclude_ids]
+    print(f'Plotting metallicity-SFR figure for {len(objlist)} objects..')
+
+    # --------looping over all objects-------------------------
+    for index, obj in enumerate(objlist):
+        field = obj[0]
+        objid = obj[1]
+        plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fontsize=fontsize)
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fontsize=10):
@@ -2193,7 +2376,8 @@ if __name__ == "__main__":
 
     # -------setting up objects to plot--------------
     Par28_objects = [300, 1303, 1849, 2171, 2727, 2867]
-    glass_objects = [1333, 1721, 1983, 2128]
+    #glass_objects = [1333, 1721, 1983, 2128]
+    glass_objects = [1721, 1983, 2128]
 
     passage_objlist = [['Par028', item] for item in Par28_objects]
     glass_objlist = [['glass-a2744', item] for item in glass_objects]
@@ -2214,7 +2398,7 @@ if __name__ == "__main__":
 
     # ---------loading master dataframe with only objects in objlist------------
     df = make_master_df(objlist, args, sum=True)
-    full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)
+    #full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)
 
     # ---------metallicity latex table for paper----------------------
     #df_latex = make_latex_table(df, args, sum=True)
@@ -2237,17 +2421,19 @@ if __name__ == "__main__":
     #plot_metallicity_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
     #plot_metallicity_sfr_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
 
-    # --------single galaxy plot
     # --------multi-panel AGN demarcation plots------------------
-    #plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10)
+    #plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10, exclude_ids=[1303])
 
     # --------multi-panel Z map plots------------------
     #plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)
     
+    # --------single galaxy SFR-Z radial profiles plot------------------
+    #plot_metallicity_sfr_radial_profile_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=13)
+
     # --------multi-panel SFR-Z plots------------------
     df_ha = df[df['redshift'] < 2.5] # to make sure Halpha is available
     objlist_ha = [[row['field'], row['objid']] for index, row in df_ha.iterrows()]
-    #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10)
+    #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
 
     # ---------metallicity comparison plots----------------------
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
@@ -2257,5 +2443,6 @@ if __name__ == "__main__":
     # -----------other diagnostics--------------
     #plot_line_ratio_histogram(full_df_spaxels, objlist, SEL_Zdiags, args, fontsize=15, full_df_int=full_df_int)
     #plot_line_ratio_histogram(full_df_spaxels, objlist, ['OIII/OII,OIII', 'OIII/OII'], args, fontsize=15, full_df_int=full_df_int)
+    #plot_metallicity_sfr_radial_profile_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=13, exclude_ids=[1303])
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

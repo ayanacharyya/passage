@@ -1203,4 +1203,60 @@ def compare_SNR(filename, line_label, radius_arcsec = 0.25):
 
     return line_int, line_map_seg, line_map_center
 
+# --------------------------------------------------------------------------------------------------------------------
+def make_rgb(im_r, im_g, im_b, interval=None, stretch=None):
+    """
+    This function was borrowed from ChatGPT
+    Make an RGB image from three input images with customizable interval and stretch.
+    
+    Parameters
+    ----------
+    im_r, im_g, im_b : array-like
+        Input images for red, green, blue channels.
+    interval : instance of astropy.visualization.Interval, optional
+        Interval object to define min/max scaling (e.g., ManualInterval, MinMaxInterval).
+    stretch : instance of astropy.visualization.Stretch, optional
+        Stretch object to define stretching function (e.g., LinearStretch, LogStretch, SqrtStretch).
+    
+    Returns
+    -------
+    rgb : ndarray
+        (M, N, 3) RGB image with values scaled between 0 and 1.
+    """
+    # Default behavior if interval or stretch not provided
+    if interval is None:
+        interval = MinMaxInterval()
+    if stretch is None:
+        stretch = LinearStretch()
+
+    def normalize(im):
+        vmin, vmax = interval.get_limits(im)
+        im_scaled = (im - vmin) / (vmax - vmin)
+        im_scaled = np.clip(im_scaled, 0, 1)
+        return stretch(im_scaled)
+
+    r = normalize(im_r)
+    g = normalize(im_g)
+    b = normalize(im_b)
+
+    rgb = np.stack([r, g, b], axis=-1)
+    rgb = np.clip(rgb, 0, 1)
+    return rgb
+
+# --------------------------------------------------------------------------------------------------
+def parse_latex_value(entry):
+    '''
+    This function was borrowed from ChatGPT
+    Function to parse LaTeX string
+    '''
+    match = re.match(r"\$(?P<val>[\d\.]+)_{-(?P<minus>[\d\.]+)}\^{\+(?P<plus>[\d\.]+)}\$", entry)
+    if match:
+        value = float(match.group('val'))
+        minus = float(match.group('minus'))
+        plus = float(match.group('plus'))
+        symmetric_error = (minus + plus) / 2
+        return value, symmetric_error
+    else:
+        return None, None  # or raise an error if you prefer
+
 # --------------------------------------------------------------------------------------------------

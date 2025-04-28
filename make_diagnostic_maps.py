@@ -60,12 +60,11 @@ from plot_mappings_grid import plot_ratio_grid
 start_time = datetime.now()
 
 # --------------------------------------------------------------------------------------------------------------------
-def annotate_PAs(pa_arr, ax, fontsize=10):
+def annotate_PAs(pa_arr, ax, fontsize=10, color='k'):
     '''
     Annotates a given plot with the PAs of all available filters in the given axis
     Returns the axis handle
     '''
-    color = 'grey'
     x_cen = ax.get_xlim()[1] - 0.15 * np.diff(ax.get_xlim())[0]
     y_cen = ax.get_ylim()[1] - 0.15 * np.diff(ax.get_ylim())[0]
     len = np.diff(ax.get_xlim())[0] * 0.1
@@ -74,7 +73,7 @@ def annotate_PAs(pa_arr, ax, fontsize=10):
         x_comp = len * np.sin(pa * np.pi / 180)
         y_comp = len * np.cos(pa * np.pi / 180)
         ax.plot([x_cen, x_cen - x_comp], [y_cen, y_cen + y_comp], lw=1, c=color)
-        ax.text(x_cen - x_comp - 0.02, y_cen + y_comp + 0.02, r'%d$^\circ$' % pa, fontsize=fontsize, ha='center', va='center', rotation=pa)
+        ax.text(x_cen - x_comp - 0.02, y_cen + y_comp + 0.02, r'%d$^\circ$' % pa, color=color, fontsize=fontsize, ha='center', va='center', rotation=pa)
 
     return ax
 
@@ -620,10 +619,10 @@ def get_emission_line_int(line, full_hdu, args, dered=True, silent=False):
         if line == 'OIII': # special treatment for OIII 5007 line, in order to account for and remove the OIII 4959 component
             ratio_5007_to_4959 = 2.98 # from grizli source code
             factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
-            print(f'Correcting OIII for 4959 component, by factor of {factor:.3f}')
+            if not silent: print(f'Correcting OIII for 4959 component, by factor of {factor:.3f}')
         elif line == 'Ha': # special treatment for Ha line, in order to account for and remove the NII component
             factor = 0.823 # from James et al. 2023?
-            print(f'Correcting Ha for NII component, by factor of {factor:.3f}')
+            if not silent: print(f'Correcting Ha for NII component, by factor of {factor:.3f}')
 
     line_int = line_int * factor
     line_int_err = line_int_err * factor

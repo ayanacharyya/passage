@@ -271,7 +271,8 @@ if __name__ == "__main__":
 
     # -------setting up objects to plot--------------
     Par28_objects = [300, 1303, 1849, 2171, 2727, 2867]
-    glass_objects = [1333, 1721, 1983, 2128]
+    #glass_objects = [1333, 1721, 1983, 2128]
+    glass_objects = [1721, 1983, 2128]
 
     passage_objlist = [['Par028', item] for item in Par28_objects]
     glass_objlist = [['glass-a2744', item] for item in glass_objects]
@@ -332,6 +333,8 @@ if __name__ == "__main__":
         df = pd.read_csv(output_dfname)
 
     # --------------prepare dataframe---------------
+    df_base = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
+    df = df_base.merge(df, on=['field', 'objid'], how='left')
     df['marker'] = df['field'].map(lambda x: 's' if 'glass' in x else 'o')
     if args.nocolorcoding: df['color'] = np.tile(['brown'], len(df))
     elif args.colorcol == 'ez_z_phot': df['color'] = col_arr[: len(df)]

@@ -62,9 +62,12 @@ def read_filter_transmission(filter_dir, filter_arr, args, verbose=False):
 
         if os.path.exists(transmission_filename):
             if 'NIRISS' in filter:
-                df = pd.read_table(transmission_filename, comment='#', names=['wave', 'trans', 'dummy'], header=0, usecols=['wave', 'trans'], delim_whitespace=True)
-                df['wave'] = df['wave'] * 1e4 # converting from microns to Angstroms
-                df = df[df['trans'] > 1e-3]
+                try:
+                    df = pd.read_table(transmission_filename, comment='#', names=['wave', 'trans', 'dummy'], header=0, usecols=['wave', 'trans'], delim_whitespace=True)
+                    df['wave'] = df['wave'] * 1e4 # converting from microns to Angstroms
+                    df = df[df['trans'] > 1e-3]
+                except:
+                    df = pd.read_table(transmission_filename, comment='#', names=['wave', 'trans'], delim_whitespace=True)
             else:
                 df = pd.read_table(transmission_filename, comment='#', names=['wave', 'trans'], delim_whitespace=True)
         elif os.path.exists(str(transmission_filename).replace('SC_IA', 'SC_IB')):
@@ -880,6 +883,7 @@ if __name__ == "__main__":
     print(f'Resultant photcat has {len(filter_list)} filters')
 
     # ----------SED fitting: the following part of the code is heavily borrowed from P J Watson-----------------
+    df_sed = df_sed[df_sed['objid'] == 1303] ##
     if args.fit_sed:
         os.chdir(args.output_dir)
         load_fn = partial(load_photom_bagpipes, phot_cat=photcat_filename_sed, id_colname='objid', zeropoint=28.9)
