@@ -687,6 +687,7 @@ def load_photom_bagpipes(str_id, phot_cat, id_colname = 'bin_id', zeropoint = 28
     bad_values = (~np.isfinite(flux) | (flux <= 0) | ~np.isfinite(flux_err) | (flux_err <= 0))
     flux[bad_values] = 0.0
     flux_err[bad_values] = 1e30
+
     return np.c_[flux, flux_err]
 
 # -------------------------------------------------------------------------------------------------------
@@ -871,6 +872,10 @@ if __name__ == "__main__":
             df_fluxes.drop('NIRCAM_F770W_sci', axis=1, inplace=True)
             df_fluxes.drop('NIRCAM_F770W_err', axis=1, inplace=True)
 
+        # ----------dropping other non-essential (for SED fitting) columns------------------
+        cols_to_retain = ['_sci', '_err', 'id', 'field', 'redshift', 'ra', 'dec']
+        cols_to_drop = [item for item in df_fluxes.columns if not np.array([item2 in item.lower() for item2 in cols_to_retain]).any()]
+        df_fluxes = df_fluxes.drop(cols_to_drop, axis=1)
         df_fluxes.to_csv(photcat_filename_sed, index=None)
         print(f'Written {photcat_filename_sed} with only the reliable flux columns.')
     else:
@@ -883,7 +888,6 @@ if __name__ == "__main__":
     print(f'Resultant photcat has {len(filter_list)} filters')
 
     # ----------SED fitting: the following part of the code is heavily borrowed from P J Watson-----------------
-    df_sed = df_sed[df_sed['objid'] == 1303] ##
     if args.fit_sed:
         os.chdir(args.output_dir)
         load_fn = partial(load_photom_bagpipes, phot_cat=photcat_filename_sed, id_colname='objid', zeropoint=28.9)
@@ -904,8 +908,10 @@ if __name__ == "__main__":
         for index, obj in df_sed.iterrows():
             print(f'\nLooping over object {index + 1} of {len(df_sed)}..')
             fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.01, num_age_bins=5, min_age_bin=30) # Generate the fit parameters
-
+            
             galaxy = bagpipes.galaxy(ID=obj['objid'], load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
+            fig, ax = galaxy.plot(show=True)
+            sys.exit()
 
             fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run=args.run) # Fit this galaxy
             fit.fit(verbose=True, sampler='nautilus', pool=args.ncpus)
