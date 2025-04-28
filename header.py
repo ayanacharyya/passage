@@ -163,3 +163,17 @@ fields_uploaded_by_nuo = [17, 23, 24, 25, 26, 49, 53]
 
 # Set up necessary variables for cosmological calculations.
 cosmo = FlatLambdaCDM(H0=69.5, Om0=0.285, Ob0=0.0461)
+
+# --- Enable autoreload when running in IPython ---
+try:
+    from IPython import get_ipython
+    ipython = get_ipython()
+    if ipython is not None:
+        ipython.run_line_magic('load_ext', 'autoreload')
+        ipython.run_line_magic('autoreload', '2')
+except Exception:
+    pass
+# -----------making a random colorbar, can be used for seg maps anywehre within the project--------------------------------------
+np.random.seed(0)  # For reproducibility
+random_colors = np.random.rand(256, 3)  # 256 RGB colors randomly
+random_cmap = mplcolors.ListedColormap(random_colors)
