@@ -695,7 +695,7 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
         line_map = cut_by_segment(line_map, args)
         line_map_err = cut_by_segment(line_map_err, args)
 
-    line_seg_mask = line_map.mask if np.ma.isMaskedArray(line_map) else False
+    seg_mask = line_map.mask if np.ma.isMaskedArray(line_map) else False
 
     # -----------getting the dereddened flux value-----------------
     if dered:
@@ -704,7 +704,7 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
         line_map_err = unp.std_devs(line_map_quant)
 
     # -----------getting the integrated flux value by summing the 2D map-----------------
-    line_sum = np.sum(np.ma.masked_where(line_seg_mask | ~np.isfinite(line_map.data), unp.uarray(line_map.data, line_map_err.data))) # ergs/s/cm^2
+    line_sum = np.sum(np.ma.masked_where(seg_mask | ~np.isfinite(line_map.data), unp.uarray(line_map.data, line_map_err.data))) # ergs/s/cm^2
     if not silent: print(f'Summed up {line} flux for object {args.id} is {line_sum:.1e} ergs/s/cm^2.')
 
     if args.only_integrated:
@@ -716,9 +716,9 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
             # -----------discarding low-snr pixels BEFORE vorbin, if any-----------------
             if args.snr_cut is not None:
                 snr_map = line_map / line_map_err
-                mask = (~np.isfinite(snr_map)) | (snr_map < args.snr_cut)
-                line_map = np.ma.masked_where(mask, line_map.data)
-                line_map_err = np.ma.masked_where(mask, line_map_err.data)
+                snr_mask = (~np.isfinite(snr_map)) | (snr_map < args.snr_cut)
+                line_map = np.ma.masked_where(snr_mask, line_map.data)
+                line_map_err = np.ma.masked_where(snr_mask, line_map_err.data)
 
             if args.voronoi_line is None: # No reference emission line specified, so Voronoi IDs need to be computed now
                 bin_IDs = get_voronoi_bin_IDs(unp.uarray(line_map, line_map_err), args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
@@ -735,29 +735,27 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
                 snr = line_map / line_map_err
                 combined_cmap = make_combined_cmap(cmap, 'Grays', np.min(snr), np.max(snr), args.snr_cut)
                 plot_2D_map(snr, axes[2], args, takelog=False, label='snr', cmap=combined_cmap, hide_yaxis=True)
-                plot_2D_map(bin_IDs, axes[3], args, takelog=False, label='bin IDs', cmap=cmap, hide_yaxis=False)
+                plot_2D_map(bin_IDs, axes[3], args, takelog=False, label='bin IDs', cmap=random_cmap, hide_yaxis=False, hide_cbar=True)
 
             line_map, line_map_err = bin_2D(line_map, bin_IDs, map_err=line_map_err)
 
-            if args.debug_vorbin:
-                plot_2D_map(line_map, axes[4], args, takelog=False, label='binned map', cmap=cmap, hide_yaxis=True)
-                plot_2D_map(line_map_err, axes[5], args, takelog=False, label='binned map err', cmap=cmap, hide_yaxis=True)
-                snr = line_map / line_map_err
-                combined_cmap = make_combined_cmap(cmap, 'Grays', np.nanmin(snr), np.nanmax(snr), args.snr_cut)
-                plot_2D_map(snr, axes[6], args, takelog=False, label='binned snr', cmap=combined_cmap, hide_yaxis=True)
-                plt.show(block=False)
-
-        line_map = np.ma.masked_where(line_seg_mask, line_map)
-        line_map_err = np.ma.masked_where(line_seg_mask, line_map_err)
-
         # -----------discarding low-snr pixels AFTER vorbin, if any-----------------
         if args.snr_cut is not None:
-            snr_map = line_map.data / line_map_err.data
-            mask = (~np.isfinite(snr_map)) | (snr_map < args.snr_cut)
-            line_map = np.ma.masked_where(line_map.mask | mask, line_map.data)
-            line_map_err = np.ma.masked_where(line_map_err.mask | mask, line_map_err.data)
+            snr_map = line_map / line_map_err
+            snr_mask = (~np.isfinite(snr_map)) | (snr_map < args.snr_cut)
 
-        line_map = np.ma.masked_where(line_map.mask | line_map_err.mask, unp.uarray(line_map.data, line_map_err.data))
+        line_map = np.ma.masked_where(seg_mask | snr_mask, unp.uarray(line_map.data, line_map_err.data))
+
+        if args.vorbin and not for_vorbin and args.debug_vorbin:
+            map = np.ma.masked_where(line_map.mask, unp.nominal_values(line_map.data))
+            map_err = np.ma.masked_where(line_map.mask, unp.std_devs(line_map.data))
+
+            plot_2D_map(map, axes[4], args, takelog=False, label='binned map', cmap=cmap, hide_yaxis=True)
+            plot_2D_map(map_err, axes[5], args, takelog=False, label='binned map err', cmap=cmap, hide_yaxis=True)
+            snr = map / map_err
+            combined_cmap = make_combined_cmap(cmap, 'Grays', np.min(snr), np.max(snr), args.snr_cut)
+            plot_2D_map(snr, axes[6], args, takelog=False, label='binned snr', cmap=combined_cmap, hide_yaxis=True)
+            plt.show(block=False)
 
     return line_map, line_wave, line_int, line_sum, line_ew
 
