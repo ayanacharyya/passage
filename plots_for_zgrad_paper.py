@@ -93,21 +93,19 @@ def plot_glass_venn(args, fontsize=10):
     ID_col = 'ID_NIRISS'
 
     # -------loading the data--------------
-    glass_catalog_filename = args.root_dir / 'glass_data' / 'a2744_spec_cat_niriss_20250401.fits'
-    df = Table(fits.open(glass_catalog_filename)[1].data).to_pandas()
-    #df = df[df['Z_FLAG'] == 4] # only dealing with secure redshifts
+    #glass_catalog_filename = args.root_dir / 'glass_data' / 'a2744_spec_cat_niriss_20250401.fits'
+    glass_catalog_filename = args.root_dir / 'glass_data' / 'full_internal_em_line_data.fits'
+    tab = Table(fits.open(glass_catalog_filename)[1].data)
+    tab.remove_column('cdf_z') # because multi dimension column does not agree well with pandas
+    df = tab.to_pandas()
 
     # ---------making the SNR columns for availabel lines-------
     set_arr = []
     label_arr = []
-    line_list = []
-    for line in args.line_list:
-        if f'flux_{line}' in df.columns:
-            df[f'SNR_{line}'] = df[f'flux_{line}'] / df[f'err_{line}']
-            line_list.append(line)
+    for line in args.line_list: df[f'SNR_{line}'] = df[f'flux_{line}'] / df[f'err_{line}']
     
     # -----------creating the conditions for Venn diagram--------------
-    for line in line_list:
+    for line in args.line_list:
         condition = df[f'SNR_{line}'] > args.SNR_thresh
         set_arr, label_arr = make_set(df, condition, f'{line} SNR > {args.SNR_thresh}', set_arr, label_arr, colname=ID_col, silent=True)
  
@@ -135,6 +133,12 @@ def plot_glass_venn(args, fontsize=10):
     if np.array(['secure' in item.lower() for item in label_arr]).any(): plot_conditions_text += '_zsecure'
     figname = f'GLASSvenn_diagram_{plot_conditions_text}.png'
     save_fig(fig, figname, args)
+
+    # ----------deriving the dataframe corresponding to the innermost intersection----------
+    intersecting_set = set.intersection(*set_arr)
+    intersecting_obj = np.transpose(list(intersecting_set))
+    df_int = pd.DataFrame({'ID_NIRISS':intersecting_obj})
+    df_int = df.merge(df_int, on='ID_NIRISS', how='inner')
 
     return
 
@@ -2402,7 +2406,7 @@ if __name__ == "__main__":
     #plot_glass_venn(args, fontsize=10)
 
     # ---------loading master dataframe with only objects in objlist------------
-    #df = make_master_df(objlist, args, sum=True)
+    df = make_master_df(objlist, args, sum=True)
     full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)
     
     # ---------metallicity latex table for paper----------------------
@@ -2436,8 +2440,8 @@ if __name__ == "__main__":
     #plot_metallicity_sfr_radial_profile_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=13)
 
     # --------multi-panel SFR-Z plots------------------
-    #df_ha = df[df['redshift'] < 2.5] # to make sure Halpha is available
-    #objlist_ha = [[row['field'], row['objid']] for index, row in df_ha.iterrows()]
+    df_ha = df[df['redshift'] < 2.5] # to make sure Halpha is available
+    objlist_ha = [[row['field'], row['objid']] for index, row in df_ha.iterrows()]
     #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
 
     # ---------metallicity comparison plots----------------------
