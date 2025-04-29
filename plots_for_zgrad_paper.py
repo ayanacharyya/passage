@@ -2408,6 +2408,7 @@ if __name__ == "__main__":
     args.line_list = 'OII,NeIII-3867,Hb,OIII'.split(',')
     args.SNR_thresh = 2
     args.Zdiag = 'R2,R3,R23,NB'.split(',')
+    #args.Zdiag = 'R2,R3,R23,O3O2,NB'.split(',')
     args.colorcol = 'radius'
     args.phot_models = 'nb'
 
@@ -2448,6 +2449,7 @@ if __name__ == "__main__":
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsize=15)
+    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_O3O2_high', fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='Z_SFR_slope', fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
