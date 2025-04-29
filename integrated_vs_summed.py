@@ -156,12 +156,13 @@ def compare_line_ratios(df, ratio_list, args, lim=[-2, 2]):
     # -----------plotting the line ratios-------------
     for ratio, ax in zip(ratio_list, axes):
 
-        # -------------gettinug max and min model ratios-----------
+        # -------------getting max and min model ratios-----------
         ynum_line, yden_line = ratio.split('/')
         if ynum_line == 'NeIII-3867': ynum_line = 'NeIII'
         if yden_line == 'NeIII-3867': yden_line = 'NeIII'
         ratio_name = f'{line_label_dict[ynum_line]}/{line_label_dict[yden_line]}'
         if ratio_name not in df_model: df_model[ratio_name] = df_model[line_label_dict[ynum_line]] / df_model[line_label_dict[yden_line]]
+        df_model = df_model[df_model[ratio_name] > 0]
         log_model_ratio = np.log10(df_model[ratio_name])
         max_model_ratio = np.max(log_model_ratio)
         min_model_ratio = np.min(log_model_ratio)

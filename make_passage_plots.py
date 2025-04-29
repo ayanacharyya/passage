@@ -100,9 +100,9 @@ def plot_SFMS_Shivaei15(ax, color='salmon'):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_SFMS_Popesso22(ax, redshift, color='cornflowerblue'):
+def plot_SFMS_Popesso23(ax, redshift, color='cornflowerblue'):
     '''
-    Computes an empirical SFMS based on Popesso+22 (https://arxiv.org/abs/2203.10487) Eq 10, for given redshift
+    Computes an empirical SFMS based on Popesso+23 (https://arxiv.org/abs/2203.10487) Eq 10, for given redshift
     Then overplots this on a given existing axis handle
     Returns axis handle
     '''
@@ -118,7 +118,7 @@ def plot_SFMS_Popesso22(ax, redshift, color='cornflowerblue'):
     log_SFR2 = (a1 * age_at_z + b1) * log_mass2 + b2 * (log_mass2) ** 2 + b0 + a0 * age_at_z
 
     ax.plot(log_mass1, log_SFR1, ls='dashed', c=color, lw=2)
-    ax.plot(log_mass2, log_SFR2, ls='solid', c=color, lw=2, label=f'Popesso+22: z~{redshift}')
+    ax.plot(log_mass2, log_SFR2, ls='solid', c=color, lw=2, label=f'Popesso+23: z~{redshift}')
 
     return ax
 
@@ -542,9 +542,9 @@ if __name__ == "__main__":
 
             # ---------SFMS from literature-------
             if 'mass' in args.xcol and 'sfr' in args.ycol.lower():
-                ax = plot_SFMS_Popesso22(ax, 0.5, color='darkblue')
-                ax = plot_SFMS_Popesso22(ax, 1.2, color='blue')
-                ax = plot_SFMS_Popesso22(ax, 2.0, color='cornflowerblue')
+                ax = plot_SFMS_Popesso23(ax, 0.5, color='darkblue')
+                ax = plot_SFMS_Popesso23(ax, 1.2, color='blue')
+                ax = plot_SFMS_Popesso23(ax, 2.0, color='cornflowerblue')
                 ax = plot_SFMS_Shivaei15(ax, color='salmon')
                 ax = plot_SFMS_Whitaker14(ax, 0.6, color='forestgreen')
                 ax = plot_SFMS_Whitaker14(ax, 1.2, color='limegreen')

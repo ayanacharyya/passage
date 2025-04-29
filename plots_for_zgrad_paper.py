@@ -11,8 +11,8 @@ from util import *
 
 from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df, make_set
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
-from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso22, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
-from make_diagnostic_maps import get_cutout, get_emission_line_map, annotate_PAs, get_linelist, trim_image, get_EB_V, get_voronoi_bin_IDs, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
+from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
+from make_diagnostic_maps import bin_2D, get_cutout, get_emission_line_map, annotate_PAs, get_linelist, trim_image, get_EB_V, get_voronoi_bin_IDs, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
 
 plt.rcParams['ytick.direction'] = 'in'
 plt.rcParams['ytick.right'] = True
@@ -134,11 +134,18 @@ def plot_glass_venn(args, fontsize=10):
     figname = f'GLASSvenn_diagram_{plot_conditions_text}.png'
     save_fig(fig, figname, args)
 
-    # ----------deriving the dataframe corresponding to the innermost intersection----------
+    # ----------deriving the intersecting dataframe----------
     intersecting_set = set.intersection(*set_arr)
     intersecting_obj = np.transpose(list(intersecting_set))
     df_int = pd.DataFrame({'ID_NIRISS':intersecting_obj})
     df_int = df.merge(df_int, on='ID_NIRISS', how='inner')
+
+    # --------writing the dataframe------------
+    plot_conditions_text = ','.join(args.line_list) + ',' + ','.join(args.plot_conditions)
+    plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}')
+    outfilename = get_output_path('glass', args).parent / 'catalogs' / f'glass-a2744_venn_{plot_conditions_text}_df.csv'
+    df_int.to_csv(outfilename, index=None)
+    print(f'Saved intersecting dataframe at {outfilename}')
 
     return
 
@@ -399,8 +406,8 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     # ----------plotting theoretical diagrams----------
     #ax = plot_SFMS_Whitaker14(ax, 2.0, color='yellowgreen')
     ax = plot_SFMS_Shivaei15(ax, color='salmon')
-    ax = plot_SFMS_Popesso22(ax, 2.0, color='cornflowerblue')
-    #ax = plot_SFMS_Popesso22(ax, 3.0, color='royalblue')
+    ax = plot_SFMS_Popesso23(ax, 2.0, color='cornflowerblue')
+    ax = plot_SFMS_Popesso23(ax, 3.0, color='royalblue')
 
     # ---------annotate axes and save figure-------
     plt.legend(fontsize=args.fontsize)
@@ -452,7 +459,7 @@ def plot_MEx(df, args, mass_col='lp_mass', fontsize=10):
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(7, 11)
-    ax.set_ylim(-1, 1.5)
+    ax.set_ylim(-1, 1.7)
 
     # ---------adding literature lines from Juneau+2014 (https://iopscience.iop.org/article/10.1088/0004-637X/788/1/88/pdf)----------
     x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
@@ -562,13 +569,13 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     #ax.fill_between(xarr, -5, np.poly1d(coeff)(xarr), color='limegreen', alpha=0.2, label='F21 forbidden')
 
     # ---------annotate axes and save figure-------
-    plt.legend(fontsize=args.fontsize)
+    plt.legend(fontsize=args.fontsize, loc='upper left')
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
     ax.set_ylabel(r'log $\nabla$Z$_r$ (dex/kpc)', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(7, 11)
-    ax.set_ylim(-0.5, 0.1)
+    ax.set_ylim(-0.5, 0.2)
 
     figname = f'MZgrad_colorby_{colorcol}.png'
     save_fig(fig, figname, args)
@@ -926,7 +933,7 @@ def plot_radial_profile(image, ax, args, ylim=None, xlim=None, hide_xaxis=False,
     return ax, linefit
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_linelist(ax, fontsize=10, line_list_file=None):
+def plot_linelist(ax, fontsize=10, line_list_file=None, show_log_flux=False):
     '''
     Plots a list of emission line wavelengths on the given axis
     Returns axis handle
@@ -943,14 +950,14 @@ def plot_linelist(ax, fontsize=10, line_list_file=None):
             last_flipped = not last_flipped
         else:
             xpos = this_wave - np.diff(ax.get_xlim())[0] * 0.02
-        ypos = ax.get_ylim()[1] * 0.98
+        ypos = ax.get_ylim()[1] * 1.0006 if show_log_flux else ax.get_ylim()[1] * 0.98
         ax.text(xpos, ypos, lines_df.iloc[index]['LineID'].strip(), rotation=90, va='top', ha='left', fontsize=fontsize)
         previous_wave = this_wave
 
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_1D_spectra(od_hdu, ax, args):
+def plot_1D_spectra(od_hdu, ax, args, show_log_flux=False):
     '''
     Plots the 1D spectra for a given object, in a given axis
     Returns the axis handle
@@ -972,13 +979,21 @@ def plot_1D_spectra(od_hdu, ax, args):
         table['norm_flux_u'] = table['err'] / table['flat'] / norm_factor # need to divide all columns with 'flat' to get the right units (ergs/s/cm^2/A)
         table['norm_cont'] = table['cont'] / table['flat'] / norm_factor # need to divide all columns with 'flat' to get the right units (ergs/s/cm^2/A)
 
+        if show_log_flux:
+            table['norm_cont'] = np.log10(table['norm_cont']) + np.log10(norm_factor)
+            log_quant = unp.log10(unp.uarray(table['norm_flux'] * norm_factor, table['norm_flux_u'] * norm_factor))
+            table['norm_flux'] = unp.nominal_values(log_quant)
+            table['norm_flux_u'] = unp.std_devs(log_quant)
+
         ax.fill_between(table['rest_wave'], table['norm_flux'] - table['norm_flux_u']/2, table['norm_flux'] + table['norm_flux_u']/2, lw=0, color=color, alpha=0.5, step='pre')#, drawstyle='steps')
         ax.step(table['rest_wave'], table['norm_flux'], lw=1, c=color, alpha=1, where='pre')
         ax.plot(table['rest_wave'], table['norm_cont'], lw=1, c='grey', alpha=1)
 
     ax.set_xlabel(r'Rest-frame wavelength ($\AA$)', fontsize=args.fontsize)
-    ax.set_ylabel(r'f$_{\lambda}$ ' + '(%.0e ' % norm_factor + r'ergs/s/cm$^2$/A)', fontsize=args.fontsize)
-    ax.set_ylim(0, args.flam_max) # flam_max should be in units of 1e-19 ergs/s/cm^2/A
+    if show_log_flux: ylabel = r'$\log$ f$_{\lambda}$ ergs/s/cm$^2$/A)'
+    else: ylabel = r'f$_{\lambda}$ ' + '(%.0e ' % norm_factor + r'ergs/s/cm$^2$/A)'
+    ax.set_ylabel(ylabel, fontsize=args.fontsize)
+    if not show_log_flux: ax.set_ylim(0, args.flam_max) # flam_max should be in units of 1e-19 ergs/s/cm^2/A
 
     # ---observed wavelength axis-------
     ax2 = ax.twiny()
@@ -988,8 +1003,11 @@ def plot_1D_spectra(od_hdu, ax, args):
     ax2.set_xlabel(r'Observed wavelength ($\mu$)', fontsize=args.fontsize)
 
     # ---vertical lines for emission line wavelengths------
-    ax = plot_linelist(ax, fontsize=args.fontsize / args.fontfactor, line_list_file=HOME / 'Work/astro/Mappings/labframe.passagelinelist')
+    ax = plot_linelist(ax, fontsize=args.fontsize / args.fontfactor, line_list_file=HOME / 'Work/astro/Mappings/labframe.passagelinelist', show_log_flux=show_log_flux)
 
+    # --------decorating axis----------
+    ax.yaxis.set_label_position('right')
+    ax.yaxis.tick_right()
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     return ax
@@ -1132,7 +1150,7 @@ def plot_rgb_image(full_hdu, filters, ax, args, hide_xaxis=False, hide_yaxis=Fal
     ax.set_xlim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
     ax.set_ylim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
 
-    if 'segmentation_map' in args: ax.contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=0.5)
+    if 'segmentation_map' in args: ax.contour(args.segmentation_map != args.id, levels=0, colors='w', extent=args.extent, linewidths=0.5)
     if not skip_annotate: ax = annotate_axes(ax, 'arcsec', 'arcsec', args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
 
     return ax
@@ -1196,7 +1214,7 @@ def plot_line_maps(full_hdu, line_labels, axes, args, cmap='cividis', vmin=None,
     return axes
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_galaxy_example_fig(objid, field, args, fontsize=10):
+def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_flux=False):
     '''
     Plots and saves a single figure with the direct image, 1D spectra, emission line maps and emission line ratio maps for a given object
     '''
@@ -1206,11 +1224,11 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10):
 
     # -------setting up the figure layout-------------
     fig = plt.figure(figsize=(10, 7) if args.plot_ratio_maps else (10, 5))
-    fig.subplots_adjust(left=0.07, right=0.93, top=0.94, bottom=0.06)
+    fig.subplots_adjust(left=0.07, right=0.92, top=0.94, bottom=0.06)
     outer_gs = gridspec.GridSpec(2, 1, height_ratios=[1, 2 if args.plot_ratio_maps else 1], figure=fig, hspace=0.2) # Outer GridSpec: 2 rows – top (loose), bottom (tight)
 
     # ---------setting up direct image (1x1 square) and 1D spectra (1x3 wide) subplots----------------
-    top_gs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=outer_gs[0], width_ratios=[1, ncol - 1], wspace=0.15)
+    top_gs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=outer_gs[0], width_ratios=[1, ncol - 1], wspace=0.03)
     ax_dirimg = fig.add_subplot(top_gs[0, 0])
     ax_1dspec = fig.add_subplot(top_gs[0, 1])
 
@@ -1231,7 +1249,7 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10):
     ax_dirimg = annotate_kpc_scale_bar(2, ax_dirimg, args, label='2 kpc', color='w', loc='lower right')
 
     # ----------plotting 1D spectra--------------
-    ax_1dspec = plot_1D_spectra(od_hdu, ax_1dspec, args)
+    ax_1dspec = plot_1D_spectra(od_hdu, ax_1dspec, args, show_log_flux=show_log_flux)
 
     # ----------plotting line flux maps--------------
     axes_line_maps = plot_line_maps(full_hdu, args.line_list, axes_line_maps, args, cmap='pink', vmin=-20-0.2, vmax=-18+0.2, hide_xaxis=args.plot_ratio_maps)
@@ -1275,6 +1293,14 @@ def plot_AGN_demarcation_ax(x_num, x_den, y_num, y_den, ax, args, color=None, ma
     Plots line ratio vs line ratio on a given axis
     Returns axis handle and the scatter plot handle
     '''
+    if len(np.atleast_1d(x_num).flatten()) > 1:
+        distance_map = get_distance_map(np.shape(y_num), args)
+        distance_map = np.ma.masked_where(False, distance_map)
+        if args.vorbin: distance_map = bin_2D(distance_map, args.voronoi_bin_IDs)
+        distance_map = np.ma.masked_where(y_num.mask, distance_map)
+    else:
+        distance_map = 0
+
     df = pd.DataFrame({'xnum': unp.nominal_values(np.atleast_1d(x_num)).flatten(), \
                        'xnum_u': unp.std_devs(np.atleast_1d(x_num)).flatten(), \
                        'xden': unp.nominal_values(np.atleast_1d(x_den)).flatten(), \
@@ -1283,6 +1309,7 @@ def plot_AGN_demarcation_ax(x_num, x_den, y_num, y_den, ax, args, color=None, ma
                        'ynum_u': unp.std_devs(np.atleast_1d(y_num)).flatten(), \
                        'yden': unp.nominal_values(np.atleast_1d(y_den)).flatten(), \
                        'yden_u': unp.std_devs(np.atleast_1d(y_den)).flatten(), \
+                       'distance': np.atleast_1d(distance_map).flatten()
                        })
     df = df.drop_duplicates().reset_index(drop=True)
     df = df[(df['xnum'] > 0) & (df['xden'] > 0) & (df['ynum'] > 0) & (df['yden'] > 0)]
@@ -1293,6 +1320,7 @@ def plot_AGN_demarcation_ax(x_num, x_den, y_num, y_den, ax, args, color=None, ma
     if color is None: color = get_distance_map_from_AGN_line(df['xnum'], df['xden'], df['ynum'], df['yden'], args).data
 
     p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, cmap=args.diverging_cmap, vmin=-1, vmax=1, marker=marker, s=size, lw=lw, edgecolor='w' if args.fortalk else 'k', zorder=10)
+    #p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=df['distance'], cmap='viridis', vmin=0, vmax=5, marker=marker, s=size, lw=lw, edgecolor='w' if args.fortalk else 'k', zorder=10)
     ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c='gray', fmt='none', lw=lw, alpha=0.5)
 
     return ax, p
@@ -1328,7 +1356,7 @@ def plot_AGN_demarcation_object(full_hdu, args, ax, marker='o', fontsize=10, siz
     ax_inset = ax.inset_axes([0.68, 0.68, 0.3, 0.3])
     distance_from_AGN_line_map = get_distance_map_from_AGN_line(xnum_map, xden_map, ynum_map, yden_map, args)
     ax_inset = plot_2D_map(distance_from_AGN_line_map, ax_inset, '', args, takelog=False, cmap=args.diverging_cmap, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=True, hide_cbar=True)
-
+    
     return ax, scatter_plot_handle, ax_inset
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -2423,7 +2451,7 @@ if __name__ == "__main__":
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='Z_SFR_slope', fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
-    #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12)
+    #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12, show_log_flux=False)
 
     # --------single galaxy plots-----------------
     #plot_AGN_demarcation_figure_single(1303, 'Par028', args, fontsize=15) # AGN demarcation
