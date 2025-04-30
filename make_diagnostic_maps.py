@@ -328,6 +328,7 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
         df  = image
     else:
         distance_map = get_distance_map(np.shape(image), args)
+        #if args.vorbin: distance_map = bin_2D(distance_map, args.voronoi_bin_IDs)
         try: distance_map = np.ma.masked_where(image.mask, distance_map)
         except AttributeError: distance_map = np.ma.masked_where(False, distance_map)
 
@@ -342,14 +343,14 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
             df['bin_ID'] = np.ma.compressed(np.ma.masked_where(image.mask, args.voronoi_bin_IDs.data))
             df = df.groupby('bin_ID', as_index=False).agg(np.mean)
 
-        df = df[df[xcol] <= args.radius_max]
+        if args.radius_max is not None: df = df[df[xcol] <= args.radius_max]
         df = df.sort_values(by=xcol)
 
     # -------proceeding with plotting--------
     ax.scatter(df[xcol], df[ycol], c=df['agn_dist'] if metallicity_multi_color else 'grey', cmap=args.diverging_cmap if metallicity_multi_color else None, s=20 if args.vorbin else 1, alpha=1 if args.vorbin else 0.2)
     if ycol + '_err' in df: ax.errorbar(df[xcol], df[ycol], yerr=df[ycol + '_err'], c='grey', fmt='none', lw=2 if args.vorbin else 0.5, alpha=0.2 if args.vorbin else 0.1)
 
-    if 'radius_max' in args: ax.set_xlim(0, args.radius_max) # kpc
+    if args.radius_max is not None: ax.set_xlim(0, args.radius_max) # kpc
     ax.set_ylim(ymin, ymax)
     ax.set_box_aspect(1)
 
@@ -448,11 +449,11 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
         cbar.ax.tick_params(labelsize=fontsize)
 
     if args.plot_radial_profiles and radprof_ax is not None:
-        radius_pix = args.radius_max * cosmo.arcsec_per_kpc_proper(args.z).value # converting args.radius_max (in kpc) to arcsec
-        if radius_pix <= args.arcsec_limit:
-            circle = plt.Circle((0, 0), radius_pix, color='k', fill=False, lw=0.5)
-            ax.add_patch(circle)
         radprof_ax, radprof_fit = plot_radial_profile(image, radprof_ax, args, label=label.split(r'$_{\rm int}')[0], ymin=vmin, ymax=vmax, image_err=image_err, metallicity_multi_color=metallicity_multi_color, fontsize=fontsize)
+        radius_max_arcsec = radprof_ax.get_xlim()[0] * cosmo.arcsec_per_kpc_proper(args.z).value # converting args.radius_max (in kpc) to arcsec
+        if radius_max_arcsec <= args.arcsec_limit:
+            circle = plt.Circle((0, 0), radius_max_arcsec, color='k', fill=False, lw=0.5)
+            ax.add_patch(circle)
     else:
         radprof_fit = [np.nan, np.nan] # dummy values for when the fit was not performed
 
@@ -2925,7 +2926,7 @@ if __name__ == "__main__":
                 seg_map = full_hdu['SEG'].data
                 distance_map = get_distance_map(np.shape(seg_map), args)
                 distance_map = np.ma.compressed(np.ma.masked_where(seg_map != args.id, distance_map))
-                if args.radius_max is None: args.radius_max = np.max(distance_map)
+                #if args.radius_max is None: args.radius_max = np.max(distance_map)
 
             # ---------initialising the starburst figure------------------------------
             if args.test_cutout or args.plot_direct_filters:

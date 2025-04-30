@@ -505,28 +505,51 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     '''
     args.fontsize = fontsize
     print(f'Plotting MZgrad...')
-    colorcol = 'redshift' # choose from ['redshift', 'SFR', 'Z_SFR_slope', 'logOH_sum_NB', 'logOH_int_NB', 'O3Hb', 'EB_V']
+    colorcol = zgrad_col.replace('slope', 'sum') # choose from ['redshift', 'SFR', 'Z_SFR_slope', 'logOH_sum_NB', 'logOH_int_NB', 'O3Hb', 'EB_V']
     lim_dict = defaultdict(lambda: [None, None], redshift=[1.7, 3.1])
     
     # ----------setting up the diagram----------
     fig, ax = plt.subplots(1, figsize=(8, 6))
     fig.subplots_adjust(left=0.12, right=0.99, bottom=0.1, top=0.95)
-    label_dict = smart_dict({'redshift': 'Redshift'})
+    label_dict = smart_dict({'redshift': 'Redshift', 'logOH_sum_NB': r'$\log$ (O/H) + 12 [NB]'})
 
     # ----------plotting----------
     if colorcol == 'O3Hb': df['O3Hb'] =np.log10(df['OIII'] / df['Hb'])
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub[colorcol], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', vmin=lim_dict[colorcol][0], vmax=lim_dict[colorcol][1], cmap='viridis')
+        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub[colorcol], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', vmin=lim_dict[colorcol][0], vmax=lim_dict[colorcol][1], cmap='viridis', label='GLASS' if m == 's' else 'PASSAGE')
     if zgrad_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], yerr=df[zgrad_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 
     # ----------making colorbar----------
     cbar = plt.colorbar(p, pad=0.01)
-    cbar.set_label(label_dict[colorcol], fontsize=args.fontsize)
+    try:
+        Zgrad = np.array(args.Zdiag)[[item in zgrad_col for item in args.Zdiag]][0]
+        clabel = r'$\$log (O/H) + 12' + f' [{Zgrad}]'
+    except:
+        try:
+            clabel = r'$\$log (O/H) + 12' + f' [{zgrad_col.split("_")[-2:-1][0]}]'
+        except:
+            clabel = label_dict[colorcol]
+    cbar.set_label(clabel, fontsize=args.fontsize)
     cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
 
     ax.axhline(0, ls='--', c='k', lw=0.5)
+
+    # --------plotting Sharda+21 data----------
+    legend_dict = {'sami': 'SAMI', 'manga': 'MaNGA', 'califa': 'CALIFA', 'sharda_scaling1': 'S21 scaling 1', 'sharda_scaling2': 'S21 scaling 2'}
+    marker_dict = {'sami': '+', 'manga': 'x', 'califa': '1', 'sharda_scaling1': 'v', 'sharda_scaling2': '^'}
+    ls_dict = {'sami': 'dotted', 'manga': 'dotted', 'califa': 'dotted', 'sharda_scaling1': 'solid', 'sharda_scaling2': 'dashed'}
+    color_dict = {'sami': 'firebrick', 'manga': 'chocolate', 'califa': 'darkgoldenrod', 'sharda_scaling1': 'k', 'sharda_scaling2': 'k'}
+    
+    literature_files = glob.glob(str(args.root_dir / 'zgrad_paper_plots' / 'literature' / 'mzgr_*.csv'))
+    literature_files.sort(key=natural_keys)
+
+    for index,this_file in enumerate(literature_files):
+        sample = Path(this_file).stem.split('mzgr_')[1]
+        df_lit = pd.read_csv(this_file, names=['log_mass', 'Zgrad'], sep=', ')
+        if 'scaling' in sample: ax.plot(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=1, ls=ls_dict[sample], label=legend_dict[sample])
+        else: ax.scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], ec='k', s=50, lw=2, marker=marker_dict[sample], label=legend_dict[sample])
 
     # --------plotting FOGGIE filled region----------
     xcol, ycol = 'log_mass', 'Zgrad'
@@ -547,21 +570,6 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     
     ax = plot_filled_region(new_df, xcol, ycol, ax, color='salmon', noscatter=True, label='FOGGIE')
 
-    # --------plotting Sharda+21 data----------
-    legend_dict = {'sami': 'SAMI', 'manga': 'MaNGA', 'califa': 'CALIFA', 'sharda_scaling1': 'S21 scaling 1', 'sharda_scaling2': 'S21 scaling 2'}
-    marker_dict = {'sami': '+', 'manga': 'x', 'califa': '1', 'sharda_scaling1': 'v', 'sharda_scaling2': '^'}
-    ls_dict = {'sami': 'dotted', 'manga': 'dotted', 'califa': 'dotted', 'sharda_scaling1': 'solid', 'sharda_scaling2': 'dashed'}
-    color_dict = {'sami': 'firebrick', 'manga': 'chocolate', 'califa': 'darkgoldenrod', 'sharda_scaling1': 'k', 'sharda_scaling2': 'k'}
-    
-    literature_files = glob.glob(str(args.root_dir / 'zgrad_paper_plots' / 'literature' / 'mzgr_*.csv'))
-    literature_files.sort(key=natural_keys)
-
-    for index,this_file in enumerate(literature_files):
-        sample = Path(this_file).stem.split('mzgr_')[1]
-        df_lit = pd.read_csv(this_file, names=['log_mass', 'Zgrad'], sep=', ')
-        if 'scaling' in sample: ax.plot(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=1, ls=ls_dict[sample], label=legend_dict[sample])
-        else: ax.scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], ec='k', s=50, lw=2, marker=marker_dict[sample], label=legend_dict[sample])
-
     # --------plotting other literature data----------
     coeff = [-0.199, 0.199 * 10 - 0.432] # Franchetto+21 eq 6
     xarr = [7, 11]
@@ -569,7 +577,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     #ax.fill_between(xarr, -5, np.poly1d(coeff)(xarr), color='limegreen', alpha=0.2, label='F21 forbidden')
 
     # ---------annotate axes and save figure-------
-    plt.legend(fontsize=args.fontsize, loc='upper left')
+    plt.legend(fontsize=args.fontsize / args.fontfactor, loc='best')
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
     ax.set_ylabel(r'log $\nabla$Z$_r$ (dex/kpc)', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
@@ -577,7 +585,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     ax.set_xlim(7, 11)
     ax.set_ylim(-0.5, 0.2)
 
-    figname = f'MZgrad_colorby_{colorcol}.png'
+    figname = f'MZgrad_colorby_{colorcol}_Zdiag_{zgrad_col}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2449,7 +2457,7 @@ if __name__ == "__main__":
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsize=15)
-    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_O3O2_high', fontsize=15)
+    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_R23_high', fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='Z_SFR_slope', fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
