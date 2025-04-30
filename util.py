@@ -641,7 +641,7 @@ def get_crossmatch(df1, df2, sep_threshold=1., df1_idcol='id', df2_idcol='id'):
     return df_crossmatch
 
 # -------------------------------------------------------------------------------------------------------
-def split_COSMOS_subset_table_by_par(args):
+def split_COSMOS_subset_table_by_par(args, old_dir_format=True, fields=None):
     '''
     Reads in the subset of columns of COSMOS2020 catalog and splits it into smaller tables with only objects that are overlapping with individual PASSAGE fields
     '''
@@ -653,15 +653,19 @@ def split_COSMOS_subset_table_by_par(args):
     df_cosmos = table_cosmos.to_pandas()
     df_cosmos = df_cosmos.rename(columns={'ALPHA_J2000':'ra', 'DELTA_J2000':'dec'})
 
-    field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / args.drv / 'Par*') + '/')]
-    field_list += [f'Par{item:03d}' for item in passage_fields_in_cosmos]
-    field_list = list(np.unique(field_list))
-    field_list.sort(key=natural_keys)
+    if fields is None:
+        field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / args.drv / 'Par*') + '/')]
+        field_list += [f'Par{item:03d}' for item in passage_fields_in_cosmos]
+        field_list = list(np.unique(field_list))
+        field_list.sort(key=natural_keys)
+    else:
+        field_list = fields
 
     for index, thisfield in enumerate(field_list):
         print(f'Starting {index+1} of {len(field_list)} fields..')
         # -------determining path to photometric catalog------
-        product_dir = args.input_dir / args.drv / thisfield / 'Products'
+        if old_dir_format: product_dir = args.input_dir / thisfield / 'Products'
+        else: product_dir = args.input_dir / 'data' / thisfield / 'DATA' / 'DIRECT_GRISM'
         catalog_file = product_dir / f'{thisfield}_photcat.fits'
 
         if os.path.exists(catalog_file):
@@ -671,14 +675,17 @@ def split_COSMOS_subset_table_by_par(args):
             df['passage_id'] = thisfield + '-' + df['id'].astype(str)  # making a unique combination of field and object id
 
             # -------cross-matching RA/DEC of both catalogs------
-            df_crossmatch = get_crossmatch(df, df_cosmos, sep_threshold=1.0, df1_idcol='passage_id', df2_idcol='id')
+            df_crossmatch = get_crossmatch(df, df_cosmos, sep_threshold=1.0, df1_idcol='passage_id', df2_idcol='ID')
             df_crossmatch = df_crossmatch.rename(columns={'df1_id': 'passage_id', 'df2_id': 'ID'})
 
             if len(df_crossmatch) > 0:
                 table_crossmatch = Table.from_pandas(df_crossmatch)
                 table_cosmos_thisfield = join(table_cosmos, table_crossmatch, keys='ID')
 
-                outfilename = args.input_dir / 'COSMOS' /  args.drv / f'cosmos2020_objects_in_{thisfield}.fits'
+                if old_dir_format: outfilepath = args.input_dir / 'COSMOS'
+                else: outfilepath = product_dir
+                outfilename = outfilepath / f'cosmos2020_objects_in_{thisfield}.fits'
+                
                 table_cosmos_thisfield.write(outfilename, overwrite=True)
                 print(f'Saved subset table as {outfilename}')
             else:
@@ -687,7 +694,7 @@ def split_COSMOS_subset_table_by_par(args):
             print(f'{catalog_file} does not exist, so skipping {thisfield}.')
 
 # -------------------------------------------------------------------------------------------------------
-def split_COSMOSWebb_table_by_par(args, filename=None):
+def split_COSMOSWebb_table_by_par(args, filename=None, old_dir_format=True, fields=None):
     '''
     Reads in the COSMOSWebb catalog and splits it into smaller tables with only objects that are overlapping with individual PASSAGE fields
     '''
@@ -699,17 +706,21 @@ def split_COSMOSWebb_table_by_par(args, filename=None):
     df_cosmos = table_cosmos[['ID_SE++', 'RA_DETEC', 'DEC_DETEC']].to_pandas() # using ID_SE++ instead of ID because it turns out that ID is not unique in the COSMOSWeb catalog
     df_cosmos = df_cosmos.rename(columns={'RA_DETEC':'ra', 'DEC_DETEC':'dec'})
 
-    field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / args.drv / 'Par*') + '/')]
-    field_list += [f'Par{item:03d}' for item in passage_fields_in_cosmos]
-    field_list = list(np.unique(field_list))
-    field_list.sort(key=natural_keys)
+    if fields is None:
+        field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / args.drv / 'Par*') + '/')]
+        field_list += [f'Par{item:03d}' for item in passage_fields_in_cosmos]
+        field_list = list(np.unique(field_list))
+        field_list.sort(key=natural_keys)
+    else:
+        field_list = fields
 
     # The following method is slower because it involves cross matching all COSMOS objects with..
     # ..objects in ParXXX, but it leads to an accurate list of objects within ParXXX.
     for index, thisfield in enumerate(field_list):
         print(f'Starting {index+1} of {len(field_list)} fields..')
         # -------determining path to photometric catalog------
-        product_dir = args.input_dir / thisfield / 'Products'
+        if old_dir_format: product_dir = args.input_dir / thisfield / 'Products'
+        else: product_dir = args.input_dir / 'data' / thisfield / 'DATA' / 'DIRECT_GRISM'
         catalog_file = product_dir / f'{thisfield}_photcat.fits'
 
         if os.path.exists(catalog_file):
@@ -725,7 +736,11 @@ def split_COSMOSWebb_table_by_par(args, filename=None):
             if len(df_crossmatch) > 0:
                 table_crossmatch = Table.from_pandas(df_crossmatch)
                 table_cosmos_thisfield = join(table_cosmos, table_crossmatch, keys='ID_SE++')
-                outfilename = args.input_dir / 'COSMOS' / f'cosmoswebb_objects_in_{thisfield}.fits'
+                
+                if old_dir_format: outfilepath = args.input_dir / 'COSMOS'
+                else: outfilepath = product_dir
+                outfilename = outfilepath / f'cosmoswebb_objects_in_{thisfield}.fits'
+                
                 table_cosmos_thisfield.write(outfilename, overwrite=True)
                 print(f'Saved subset table as {outfilename}')
             else:

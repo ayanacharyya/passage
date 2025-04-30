@@ -12,7 +12,7 @@ from util import *
 start_time = datetime.now()
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_cosmos2020_fluxes(df):
+def get_cosmos2020_fluxes(df, cosmos_photcat_dir, idcol='id'):
     '''
     Merges all available flux columns from the COSMOS2020 catalog to a given dataframe
     Returns merged dataframe
@@ -20,9 +20,9 @@ def get_cosmos2020_fluxes(df):
 
     for thisfield in np.unique(df['field']):
         print(f'Merging COSMOS 2020 catalog for field {thisfield}..')
-        cosmos2020_photcat_for_thisfield_filename = Path('/Users/acharyya/Work/astro/passage/passage_data/v0.5') / 'COSMOS' / f'cosmos2020_objects_in_{thisfield}.fits'
+        cosmos2020_photcat_for_thisfield_filename = cosmos_photcat_dir / f'cosmos2020_objects_in_{thisfield}.fits'
         cosmos2020_photcat_for_thisfield = read_COSMOS2020_catalog(args=None, filename=cosmos2020_photcat_for_thisfield_filename)
-        cosmos2020_photcat_for_thisfield = cosmos2020_photcat_for_thisfield.rename(columns={'id': 'COSMOS2020_ID'})
+        cosmos2020_photcat_for_thisfield = cosmos2020_photcat_for_thisfield.rename(columns={idcol: 'COSMOS2020_ID'})
         cosmos2020_photcat_for_thisfield = cosmos2020_photcat_for_thisfield.drop(['ra', 'dec'], axis=1)
         df = pd.merge(df, cosmos2020_photcat_for_thisfield, on='passage_id', how='left')
 
@@ -31,7 +31,7 @@ def get_cosmos2020_fluxes(df):
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_cosmosweb_fluxes(df, aperture=1):
+def get_cosmosweb_fluxes(df, cosmos_photcat_dir, aperture=1, idcol='id'):
     '''
     Merges all available flux columns for a given apeture from the COSMOSWeb catalog to a given dataframe
     Returns merged dataframe
@@ -42,17 +42,17 @@ def get_cosmosweb_fluxes(df, aperture=1):
 
     for thisfield in np.unique(df['field']):
         print(f'Merging COSMOS Webb catalog for field {thisfield}..') 
-        cosmoswebb_photcat_for_thisfield_filename = Path('/Users/acharyya/Work/astro/passage/passage_data/v0.5') / 'COSMOS' / f'cosmoswebb_objects_in_{thisfield}.fits'
+        cosmoswebb_photcat_for_thisfield_filename = cosmos_photcat_dir / f'cosmoswebb_objects_in_{thisfield}.fits'
         cosmoswebb_photcat_for_thisfield = read_COSMOSWebb_catalog(args=None, filename=cosmoswebb_photcat_for_thisfield_filename, aperture=aperture)
         nircam_fluxcols = [item for item in cosmoswebb_photcat_for_thisfield.columns if 'FLUX_APER' in item]
         nircam_errcols = [item for item in cosmoswebb_photcat_for_thisfield.columns if 'FLUX_ERR_APER' in item]
-        cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield[np.hstack([nircam_fluxcols, nircam_errcols, ['passage_id', 'id']])]
+        cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield[np.hstack([nircam_fluxcols, nircam_errcols, ['passage_id', idcol]])]
         cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.replace({-998: np.nan})
         for thiscol in nircam_fluxcols:
             cosmoswebb_photcat_for_thisfield[thiscol] = cosmoswebb_photcat_for_thisfield[thiscol] * ergs_s_cm2_hz_to_ujy_factor # converting from ergs/s/cm^2/Hz to micro Jansky
             cosmoswebb_photcat_for_thisfield[thiscol.replace('FLUX', 'FLUX_ERR')] = cosmoswebb_photcat_for_thisfield[thiscol.replace('FLUX', 'FLUX_ERR')] * ergs_s_cm2_hz_to_ujy_factor  # converting from ergs/s/cm^2/Hz to micro Jansky
 
-        cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns={'id': 'COSMOSWeb_ID'})
+        cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns={idcol: 'COSMOSWeb_ID'})
         cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, filter_intrument_dict[item.split('_')[-1]] + '_' + item[-5:] + '_FLUXERR') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_ERR_APER' in item]))
         cosmoswebb_photcat_for_thisfield = cosmoswebb_photcat_for_thisfield.rename(columns=dict([(item, filter_intrument_dict[item.split('_')[-1]] + '_' + item[-5:] + '_FLUX') for item in cosmoswebb_photcat_for_thisfield.columns if'FLUX_APER' in item]))
         df = pd.merge(df, cosmoswebb_photcat_for_thisfield, on='passage_id', how='inner')
@@ -62,16 +62,37 @@ def get_cosmosweb_fluxes(df, aperture=1):
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_passage_photcat(photcat_filename, aperture=1.0):
+def get_passage_zcat(df, zcat_filename, idcol='objis'):
+    '''
+    Merges all available objects in the given redshift catalog with the given phot catalog
+    Returns merged dataframe
+    '''
+
+    i = str(zcat_filename).find('Par')
+    field = str(zcat_filename)[i:i+6]
+
+
+    print(f'Reading in zcat from {zcat_filename} for {field}..') 
+    dfz = Table(fits.open(zcat_filename)[1].data).to_pandas().rename(columns={idcol: 'PASSAGE_ID'})
+    dfz['PASSAGE_ID'] = dfz['PASSAGE_ID'].astype(int)
+
+    df = df.merge(dfz[['PASSAGE_ID', 'redshift', 'redshift_error']], on='PASSAGE_ID', how='inner')
+
+    return df
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_passage_photcat(photcat_filename, aperture=1.0, idcol='id'):
     '''
     Reads in the PASSAGE photcat, with flux columns corresponding to a given aperture, in to a dataframe
     Returns merged dataframe
     '''
+
+
     i = str(photcat_filename).find('Par')
     field = str(photcat_filename)[i:i+6]
 
     print(f'Reading in photcat from {photcat_filename} for {field}..') 
-    df = Table(fits.open(photcat_filename)[1].data).to_pandas().rename(columns={'id': 'PASSAGE_ID'})
+    df = Table(fits.open(photcat_filename)[1].data).to_pandas().rename(columns={idcol: 'PASSAGE_ID'})
     
     # -------determining flux and fluxerr columns from passage-------
     fluxcols = [item for item in df.columns if '_flux' in item and '_fluxerr' not in item]
@@ -105,12 +126,15 @@ if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
 
-    passage_photcat_filename = args.input_dir / 'data/Par028/DATA/DIRECT_GRISM/Par028_photcat.fits'
+    passage_photcat_dir = args.input_dir / 'data' / args.field / 'DATA' / 'DIRECT_GRISM' 
+    passage_photcat_filename = passage_photcat_dir / f'{args.field}_photcat.fits' # from Vihang's upload on Box
+    passage_zcat_filename = args.input_dir / args.field / 'line-finding' / f'{args.field}lines_catalog_scarlata.fits' # from PJW; improved version of what was from KVN
     aperture = 1.
 
-    df = get_passage_photcat(passage_photcat_filename, aperture=aperture)
-    df = get_cosmosweb_fluxes(df, aperture=aperture)
-    df = get_cosmos2020_fluxes(df)
+    df = get_passage_photcat(passage_photcat_filename, aperture=aperture, idcol='id')
+    df = get_passage_zcat(df, passage_zcat_filename, idcol='objid')
+    df = get_cosmosweb_fluxes(df, passage_photcat_dir, aperture=aperture, idcol='id')
+    df = get_cosmos2020_fluxes(df, passage_photcat_dir, idcol='id')
 
     # ---using only specific bands-------------
     if args.use_only_bands is not None:
@@ -126,7 +150,7 @@ if __name__ == "__main__":
 
     # ------writing out the catalog for SED fitting----------------
     df = df.drop('passage_id', axis=1)
-    photcat_filename_sed = passage_photcat_filename.parent / f'{args.field}_PASSAGE_COSMOS2020_COSMOSWeb_fluxes.csv'
+    photcat_filename_sed = passage_photcat_dir / f'{args.field}_PASSAGE_COSMOS2020_COSMOSWeb_fluxes.csv'
     df.to_csv(photcat_filename_sed, index=None)
     print(f'Saved SED photcat in {photcat_filename_sed}')
 
