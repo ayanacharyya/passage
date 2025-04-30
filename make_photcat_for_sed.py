@@ -91,13 +91,20 @@ def get_passage_photcat(photcat_filename, aperture=1.0, idcol='id'):
     i = str(photcat_filename).find('Par')
     field = str(photcat_filename)[i:i+6]
 
-    print(f'Reading in photcat from {photcat_filename} for {field}..') 
-    df = Table(fits.open(photcat_filename)[1].data).to_pandas().rename(columns={idcol: 'PASSAGE_ID'})
+    print(f'Reading in photcat from {photcat_filename} for {field}..')
+    hdu = fits.open(photcat_filename)[1]
+    df = Table(hdu.data).to_pandas().rename(columns={idcol: 'PASSAGE_ID'})
     
+    # ---------determining the aperture id------------------------
+    for index in range (10):
+        if hdu.header[f'ASEC_{index}'] == aperture:
+            aper_ind = index
+            print(f'Found APER_{aper_ind} to match {aperture}')
+            break
+
     # -------determining flux and fluxerr columns from passage-------
     fluxcols = [item for item in df.columns if '_flux' in item and '_fluxerr' not in item]
     passage_filters = np.unique([item[: item.find('_flux')] for item in fluxcols])
-    aper_ind = np.where(np.array([0.36, 0.5, 0.7, 1, 1.2, 1.5, 3.0]) == aperture)[0][0]
 
     cols_to_extract = np.hstack([[f'{item}_flux_aper_{aper_ind:0d}', f'{item}_fluxerr_aper_{aper_ind:0d}'] for item in passage_filters])
     df = df[np.hstack([['PASSAGE_ID', 'ra', 'dec'], cols_to_extract])]
