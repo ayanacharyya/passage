@@ -328,7 +328,6 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
         df  = image
     else:
         distance_map = get_distance_map(np.shape(image), args)
-        #if args.vorbin: distance_map = bin_2D(distance_map, args.voronoi_bin_IDs)
         try: distance_map = np.ma.masked_where(image.mask, distance_map)
         except AttributeError: distance_map = np.ma.masked_where(False, distance_map)
 
@@ -487,11 +486,11 @@ def bin_2D(map, bin_IDs, map_err=None, debug_vorbin=False):
 
     unique_IDs = np.unique(np.ma.compressed(bin_IDs))
     for id in unique_IDs:
-        candidates = map[bin_IDs == id]
-        candidates_wo_nan = np.ma.compressed(candidates)
-        binned_data = np.mean(candidates_wo_nan)
-        if debug_vorbin: print(f'Deb445: val: id {int(id)} out of {len(unique_IDs)}, ntotal_pix = {len(candidates)}, ngood_pix = {len(candidates_wo_nan)}, assigned val = {binned_data:.2e}')  ##
-        if len(candidates_wo_nan) > 0: binned_map[bin_IDs == id] = binned_data
+        candidate_fluxes = map[bin_IDs == id]
+        candidate_fluxes_wo_nan = np.ma.compressed(candidate_fluxes)
+        binned_data = np.mean(candidate_fluxes_wo_nan) # this is in ergs/s/cm^2
+        if debug_vorbin: print(f'Deb445: val: id {int(id)} out of {len(unique_IDs)}, ntotal_pix = {len(candidate_fluxes)}, ngood_pix = {len(candidate_fluxes_wo_nan)}, assigned val = {binned_data:.2e}')  ##
+        if len(candidate_fluxes_wo_nan) > 0: binned_map[bin_IDs == id] = binned_data
         else: binned_map[bin_IDs == id] = np.nan
 
         if map_err is not None:
@@ -739,6 +738,11 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
                 plot_2D_map(bin_IDs, axes[3], args, takelog=False, label='bin IDs', cmap=random_cmap, hide_yaxis=False, hide_cbar=True)
 
             line_map, line_map_err = bin_2D(line_map, bin_IDs, map_err=line_map_err)
+        
+        # ---------converting from flux to surface brightness units------------
+        pixscale_kpc = args.pix_size_arcsec/ cosmo.arcsec_per_kpc_proper(args.z).value # kpc
+        line_map /= (pixscale_kpc ** 2) # this is now in ergs/s/cm^2/kpc^2 (i.e. Surface Brightness)
+        line_map_err /= (pixscale_kpc ** 2) # this is now in ergs/s/cm^2/kpc^2 (i.e. Surface Brightness)
 
         # -----------discarding low-snr pixels AFTER vorbin, if any-----------------
         if args.snr_cut is not None:
