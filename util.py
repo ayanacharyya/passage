@@ -785,7 +785,7 @@ def split_COSMOSWebb_table_by_par(args, filename=None, old_dir_format=True, fiel
 # -------------------------------------------------------------------------------------------------------
 def get_passage_filter_dict(args=None, filename=None):
     '''
-    Reads PASSAGE spreadsheet and and returns a dictionary with PASSAGE field names and which filters are present in them
+    Reads PASSAGE spreadsheet and returns a dictionary with PASSAGE field names and which filters are present in them
     '''
     if filename is None:
         filename =  args.root_dir / 'passage_data' / 'v0.5' / 'JWST PASSAGE Cycle 1 - Cy1 Executed.csv'

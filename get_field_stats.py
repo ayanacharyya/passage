@@ -224,23 +224,24 @@ def plot_venn_wrap(df, args):
     return df_int
 
 # -------------------------------------------------------------------------------------------------------
-def plot_nested_pie(df_subset, args, outer_col='nPA', inner_col='filters'):
+def plot_nested_pie(df_subset, args, field_col='field', outer_col='nPA', inner_col='filters'):
     '''
     To plot concentric pie chart given a df, for a bunch of criteria
     Plots and saves the figure
     '''
 
     # -----------setting up dataframe--------
-    n_fields = len(pd.unique(df_subset['field']))
-    df_subset['nPA'] = df_subset['nPA'].apply(lambda x: f'{x} PA' if x <= 1 else f'{x} PAs')
-    df = df_subset.pivot_table('par_obj', [outer_col, inner_col], aggfunc='count').reset_index()
+    n_fields = len(pd.unique(df_subset[field_col]))
+    df['unique_item'] = df[field_col].astype(str) + '-' + df[inner_col].astype(str) + '-' + df[outer_col].astype(str)
+    if 'nPA' in df: df['nPA'] = df['nPA'].apply(lambda x: f'{x} PA' if x <= 1 else f'{x} PAs')
+    df = df.pivot_table('unique_item', [outer_col, inner_col], aggfunc='count').reset_index()
     n_outer = len(pd.unique(df[outer_col]))
     n_inner = df.groupby(outer_col).size().values
 
     # ------------determining pie values-----------
     size = 0.3
-    vals = df['par_obj'].values
-    group_sum = df.groupby(outer_col).sum()['par_obj'].values # Major category values = sum of minor category values
+    vals = df['unique_item'].values
+    group_sum = df.groupby(outer_col).sum()['unique_item'].values # Major category values = sum of minor category values
 
     # -----------determining labels to be displayed------------
     outer_labels = pd.unique(df[outer_col])
@@ -288,7 +289,7 @@ def plot_nested_pie(df_subset, args, outer_col='nPA', inner_col='filters'):
 
     # ----------annotate and save the diagram----------
     fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
-    fig.text(0.99, 0.99, f'Total {n_fields} fields: Par{args.field_text}\nTotal {len(df_subset)} objects', c='k', ha='right', va='top', transform=ax.transAxes)
+    fig.text(0.99, 0.99, f'Total {n_fields} fields: Par{args.field_text}\nTotal {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes)
     figname = args.output_dir / 'plots' / f'Par{args.field_text}_pie_diagram.png'
 
     # --------for talk plots--------------
