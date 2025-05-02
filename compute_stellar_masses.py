@@ -899,10 +899,7 @@ if __name__ == "__main__":
 
         # ---------Loop over the objects-------------
         if args.test_sed is not None:
-            index2 = df_sed[df_sed['objid'] == args.test_sed].index
-            if len(index2) == 0: index2 = 0
-            else: index2 = index2[0]
-            df_sed = df_sed[index2 : index2 + 1] ##
+            df_sed = df_sed[df_sed['objid'] == args.test_sed].reset_index(drop=True)
             print(f'Only runing on object {args.test_sed} as a test; for doing SED all objects, remove --test_sed and re-run')
 
         for index, obj in df_sed.iterrows():
