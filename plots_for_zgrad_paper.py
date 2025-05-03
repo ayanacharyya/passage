@@ -375,6 +375,18 @@ def make_master_df(objlist, args, sum=True):
     df = df_base.merge(df, on=['field', 'objid'], how='left')
     df['marker'] = df['field'].apply(lambda x: get_marker_type(x))
     
+    # ------computing mixing timescales-----------
+    Zdiag = 'NB'
+    df = df.rename(columns={'Z_SFR_slope':'logZ_logSFR_slope', 'Z_SFR_slope_u':'logZ_logSFR_slope_u'}) # renaming Z-SFR to logZ-logSFR slope, which it actually is
+    Z_SFR_slope = unp.uarray(df['logZ_logSFR_slope'], df['logZ_logSFR_slope_u']) * (10 ** (unp.uarray(df[f'logOH_sum_{Zdiag}'], df[f'logOH_sum_{Zdiag}_u']) - 8.69)) / unp.uarray(df['SFR'], df['SFR_u']) # computing Z-SFR slope from logZ-logSFR slope
+    
+    df['Z_SFR_slope'] = unp.nominal_values(Z_SFR_slope) # now this is in yr/Msun
+    df['Z_SFR_slope_u'] = unp.std_devs(Z_SFR_slope) # now this is in yr/Msun
+
+    t_mix = Z_SFR_slope * (10 ** df['lp_mass']) / 1e9 # in Gyr
+    df['t_mix'] = unp.nominal_values(t_mix)  # in Gyr
+    df['t_mix_u'] = unp.std_devs(t_mix)  # in Gyr
+
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -591,7 +603,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='Z_SFR_slope', fontsize=10):
+def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=10):
     '''
     Plots and saves the mass vs metallicity-SFR slope given a dataframe with list of objects and properties
     '''
@@ -618,13 +630,52 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='Z_SFR_slope', fontsize=1
 
     # ---------annotate axes and save figure-------
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
-    ax.set_ylabel(r'Z-$\Sigma_{*}$ slope', fontsize=args.fontsize)
+    ax.set_ylabel(r'$\log$ Z-$\log \Sigma_{*}$ slope', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(7, 11)
     ax.set_ylim(-0.3, 1.4)
 
     figname = f'MZsfr_colorby_Z.png'
+    save_fig(fig, figname, args)
+
+    return
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10):
+    '''
+    Plots and saves the mass vs mixing timescale given a dataframe with list of objects and properties
+    '''
+    args.fontsize = fontsize
+    print(f'Plotting M-t_mix...')
+
+    # ----------setting up the diagram----------
+    fig, ax = plt.subplots(1, figsize=(8, 6))
+    fig.subplots_adjust(left=0.12, right=0.99, bottom=0.1, top=0.95)
+
+    # ----------plotting----------
+    for m in pd.unique(df['marker']):
+        df_sub = df[df['marker'] == m]
+        p = ax.scatter(df_sub[mass_col], df_sub[ycol], c=df_sub['logZ_logSFR_slope'], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', vmin=-0.3, vmax=1.4)
+    if ycol + '_u' in df: ax.errorbar(df[mass_col], df[ycol], yerr=df[ycol + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+    if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[ycol], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+    
+    ax.axhline(0, ls='--', c='k', lw=0.5)
+
+    # ----------making colorbar----------
+    cbar = plt.colorbar(p, pad=0.01)
+    cbar.set_label(r'$\log$ Z-$\log \Sigma_{*}$ slope', fontsize=args.fontsize)
+    cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
+
+    # ---------annotate axes and save figure-------
+    ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
+    ax.set_ylabel(r'Metal mixing timescale $t_{mix}$ (Gyr)', fontsize=args.fontsize)
+    ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+
+    ax.set_xlim(7, 11)
+    ax.set_ylim(0., 1.)
+
+    figname = f'M_tmix_colorby_Z-SFR_slope.png'
     save_fig(fig, figname, args)
 
     return
@@ -2459,7 +2510,8 @@ if __name__ == "__main__":
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_R23_high', fontsize=15)
-    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='Z_SFR_slope', fontsize=15)
+    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
+    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
     #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12, show_log_flux=False)
