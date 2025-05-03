@@ -87,6 +87,7 @@ def get_line_finding_zcat(df, zcat_filename, idcol='objid'):
     dfz = pd.read_csv(outfilename).rename(columns={idcol: 'PASSAGE_ID'})
     dfz['PASSAGE_ID'] = dfz['PASSAGE_ID'].astype(int)
     df = df.merge(dfz[['PASSAGE_ID', 'redshift', 'redshift_error']], on='PASSAGE_ID', how='inner')
+    df = df.rename(columns = {'redshift_error': 'redshift_u'})
 
     return df
 
@@ -215,8 +216,6 @@ def run_bagpipes(photcat_filename_sed, filter_dir, args, idcol='PASSAGE_ID'):
     '''
     # -------reading and polishing phot catalog------------------
     df = pd.read_csv(photcat_filename_sed)
-    df.columns = df.columns.str.replace('_FLUXERR', '_err', regex=True)
-    df.columns = df.columns.str.replace('_FLUX', '_sci', regex=True)
     filter_list = [str(filter_dir) + '/' + item[:item.lower().find('_sci')] + '.txt' for item in df.columns if '_sci' in item]
     print(f'Resultant photcat has {len(filter_list)} filters')
 
@@ -239,9 +238,6 @@ def run_bagpipes(photcat_filename_sed, filter_dir, args, idcol='PASSAGE_ID'):
         fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.01, num_age_bins=5, min_age_bin=30) # Generate the fit parameters
 
         galaxy = bagpipes.galaxy(ID=obj[idcol], load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
-        fig, ax = galaxy.plot(show=True)
-        sys.exit()
-
         fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run=args.run) # Fit this galaxy
         fit.fit(verbose=True, sampler='nautilus', pool=args.ncpus)
 
@@ -310,6 +306,8 @@ if __name__ == "__main__":
 
     # ------writing out the catalog for SED fitting----------------
     df = df.drop('passage_id', axis=1)
+    df.columns = df.columns.str.replace('_FLUXERR', '_err', regex=True)
+    df.columns = df.columns.str.replace('_FLUX', '_sci', regex=True)
     photcat_filename_sed = passage_photcat_dir / f'{args.field}_PASSAGE_COSMOS2020_COSMOSWeb_fluxes_{args.run}.csv'
     df.to_csv(photcat_filename_sed, index=None)
     print(f'Saved SED photcat in {photcat_filename_sed}')
