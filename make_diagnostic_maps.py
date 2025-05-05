@@ -639,7 +639,7 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
     Returns the 2D line image
     '''
     # -----------getting the integrated flux value from grizli-----------------
-    line_int = get_emission_line_int(line, full_hdu, args, dered=dered, silent=silent)
+    line_int = get_emission_line_int(line, full_hdu, args, dered=dered and not for_vorbin, silent=silent)
 
     # -----------getting the integrated EW value-----------------
     line_index = np.where(args.available_lines == line)[0][0]
@@ -698,7 +698,7 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
     seg_mask = line_map.mask if np.ma.isMaskedArray(line_map) else False
 
     # -----------getting the dereddened flux value-----------------
-    if dered:
+    if dered and not for_vorbin:
         line_map_quant = get_dereddened_flux(unp.uarray(line_map, line_map_err), line_wave, args.EB_V)
         line_map = unp.nominal_values(line_map_quant)
         line_map_err = unp.std_devs(line_map_quant)
@@ -919,14 +919,14 @@ def compute_EB_V(Ha_flux, Hb_flux,verbose=False):
     return EB_V
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_EB_V(full_hdu, args, verbose=False, silent=False):
+def get_EB_V(full_hdu, args, verbose=False, silent=False, for_vorbin=False):
     '''
     Computes and returns the spatially resolved as well as integrated dust extinction map from a given HDU
     Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
     '''
 
-    Ha_map, Ha_wave, Ha_int, Ha_sum, _ = get_emission_line_map('Ha', full_hdu, args, dered=False, silent=silent) # do not need to deredden the lines when we are fetching the flux in order to compute reddening
-    Hb_map, Hb_wave, Hb_int, Hb_sum, _ = get_emission_line_map('Hb', full_hdu, args, dered=False, silent=silent)
+    Ha_map, Ha_wave, Ha_int, Ha_sum, _ = get_emission_line_map('Ha', full_hdu, args, dered=False, silent=silent, for_vorbin=for_vorbin) # do not need to deredden the lines when we are fetching the flux in order to compute reddening
+    Hb_map, Hb_wave, Hb_int, Hb_sum, _ = get_emission_line_map('Hb', full_hdu, args, dered=False, silent=silent, for_vorbin=for_vorbin)
 
     EB_V_map = compute_EB_V(Ha_map, Hb_map)
     EB_V_int = compute_EB_V(Ha_int, Hb_int, verbose=verbose)
@@ -2252,6 +2252,9 @@ def plot_metallicity_fig(full_hdu, args):
             Zbranch_text = '' if args.Zdiag in ['NB', 'P25', 'Te'] else f'-{args.Zbranch}'
             exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
             figname = fig_dir / f'{args.field}_{args.id:05d}_metallicity_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}{exclude_text}.png'
+            fig.savefig(figname, transparent=args.fortalk)
+            print(f'Saved figure at {figname}')
+            plt.show(block=False)
 
             # ------------------appending to Zgrad dataframe--------------------------
             df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_int.n, logOH_int.s, logOH_sum.n, logOH_sum.s, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s, args.Zdiag, args.Zbranch]

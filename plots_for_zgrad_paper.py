@@ -199,7 +199,7 @@ def get_sfr_df(objlist, args, Zdiag, Zdiag_branch='low', survey='passage', sum=T
     df_sfr = df_sfr.drop(['Zdiag', 'Zdiag_branch', 'AGN_diag'], axis=1)
     df_sfr = pd.merge(df, df_sfr, on=['field', 'objid'], how='left')
 
-    cols_to_extract = ['field', 'objid', 'Z_SFR_slope', 'Z_SFR_slope_u']
+    cols_to_extract = ['field', 'objid', 'logZ_logSFR_slope', 'logZ_logSFR_slope_u']
     if sum: cols_to_extract += ['SFR_sum', 'SFR_sum_u']
     else: cols_to_extract += ['SFR_int', 'SFR_int_u']
     df_sfr = df_sfr[cols_to_extract]
@@ -215,7 +215,7 @@ def get_logOH_df(objlist, args, survey='passage'):
     '''
     df = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
 
-    filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOHgrad_df{args.snr_text}{args.only_seg_text}{args.vorbin_text}.txt'
+    filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_fits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
     ####################################
     if 'glass' in survey:
         filename = Path(str(filename).replace('SNR_4.0', 'SNR_2.0'))
@@ -223,19 +223,18 @@ def get_logOH_df(objlist, args, survey='passage'):
     ####################################
     
     df_logOH = pd.read_csv(filename)
-    df_logOH = df_logOH.drop_duplicates(subset=['field', 'objid', 'logOH_branch', 'logOH_diagnostic'], keep='last')
+    df_logOH = df_logOH.drop_duplicates(subset=['field', 'objid', 'Zdiag_branch', 'Zdiag'], keep='last')
     df_logOH = pd.merge(df, df_logOH, on=['field', 'objid'], how='inner')
 
     logOH_cols = ['logOH_sum', 'logOH_int', 'logOH_slope', 'logOH_cen']
     Zdiag_arr = np.hstack([[item] if item in ['NB', 'P25'] else [item + '_low', item + '_high'] for item in args.Zdiag])
 
     for Zdiag in Zdiag_arr:
-        if 'low' in Zdiag: df_sub = df_logOH[(df_logOH['logOH_diagnostic'] == Zdiag[:-4]) & (df_logOH['logOH_branch'] == 'low')]
-        elif 'high' in Zdiag: df_sub = df_logOH[(df_logOH['logOH_diagnostic'] == Zdiag[:-5]) & (df_logOH['logOH_branch'] == 'high')]
-        else: df_sub = df_logOH[(df_logOH['logOH_diagnostic'] == Zdiag)].drop_duplicates(subset=['field', 'objid', 'logOH_diagnostic'], keep='last')
+        if 'low' in Zdiag: df_sub = df_logOH[(df_logOH['Zdiag'] == Zdiag[:-4]) & (df_logOH['Zdiag_branch'] == 'low')]
+        elif 'high' in Zdiag: df_sub = df_logOH[(df_logOH['Zdiag'] == Zdiag[:-5]) & (df_logOH['Zdiag_branch'] == 'high')]
+        else: df_sub = df_logOH[(df_logOH['Zdiag'] == Zdiag)].drop_duplicates(subset=['field', 'objid', 'Zdiag'], keep='last')
 
-        df_sub = df_sub.drop(['logOH_diagnostic', 'logOH_branch'], axis=1)
-        df_sub = df_sub.rename(columns={'log_OH_int_u':'logOH_int_u'})
+        df_sub = df_sub.drop(['Zdiag', 'Zdiag_branch'], axis=1)
         rename_dict = {}
         for col in logOH_cols:
             rename_dict.update({f'{col}': f'{col}_{Zdiag}'})
@@ -258,7 +257,62 @@ def get_marker_type(field):
     return marker_dict[survey]
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_glass_masses(df, mass_col='lp_mass', id_col='objid', field_col='field'):
+def get_passage_masses_from_cosmos(df, id_col='objid', field_col='field', cosmos_name='web'):
+    '''
+    Derives stellar masses of PASSAGE galaxies present in the given dataframe from COSMOS-Web catalog
+    Returns dataframe
+    '''
+    passage_fields = [item for item in np.unique(df[field_col]) if 'Par' in item]
+    
+    df_cosmos = pd.DataFrame()
+    for index, thisfield in enumerate(passage_fields):
+        if 'web' in cosmos_name:
+            cosmosfilename = args.input_dir / 'COSMOS' /  f'cosmoswebb_objects_in_{thisfield}.fits'
+            df_cosmos_thisfield = read_COSMOSWebb_catalog(filename=cosmosfilename)
+            sed_cols_to_extract = ['passage_id', 'LP_mass_minchi2']
+        elif '2020' in cosmos_name:
+            cosmosfilename = args.input_dir / 'COSMOS' /  f'cosmos2020_objects_in_{thisfield}.fits'
+            df_cosmos_thisfield = read_COSMOS2020_catalog(filename=cosmosfilename)
+            sed_cols_to_extract = np.hstack([['passage_id'], np.hstack([[f'lp_{item}_best', f'lp_{item}_med_min68', f'lp_{item}_med_max68'] for item in ['mass', 'SFR']])])
+
+        df_cosmos = pd.concat([df_cosmos, df_cosmos_thisfield[sed_cols_to_extract]])
+    
+    df['passage_id'] = df[field_col].astype(str) + '-' + df[id_col].astype(str)  # making a unique combination of field and object id
+    df = pd.merge(df, df_cosmos, on=['passage_id'], how='left')
+    df = df.rename(columns={'LP_mass_minchi2':'lp_mass', 'lp_mass_best':'lp_mass', 'lp_SFR_best':'lp_SFR'})
+    for item in ['mass', 'SFR']:
+        if f'lp_{item}_med_min68' in df:
+            df[f'lp_{item}_u'] = df.apply(lambda row: np.mean([row[f'lp_{item}'] - row[f'lp_{item}_med_min68'], row[f'lp_{item}_med_max68'] - row[f'lp_{item}']]))
+            df = df.drop(f'lp_{item}_med_min68', axis=1)
+            df = df.drop(f'lp_{item}_med_max68', axis=1)
+    df = df.drop('passage_id', axis=1)
+
+    return df
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_masses_from_mysedfit(df, id_col='objid', field_col='field'):
+    '''
+    Derives stellar masses of PASSAGE and GLASS galaxies present in the given dataframe from COSMOS-Web catalog
+    Returns dataframe
+    '''
+    df_sed = pd.DataFrame()
+    
+    for thisfield in np.unique(df[field_col]):
+        if 'Par' in thisfield: sed_fit_filename = args.output_dir / 'catalogs' / f'{thisfield}_v0.5_venn_OII,NeIII-3867,Hb,OIII,SNR>2.0,mass_df_withSED_for_paper_only_st.csv'
+        elif 'glass' in thisfield: sed_fit_filename = args.root_dir / 'glass_data' / f'GLASS_UNCOVER_photometry_for_paper_only_st_withSED_for_paper_only_st.csv'
+        df_sed_thisfield = pd.read_csv(sed_fit_filename)
+        df_sed_thisfield = df_sed_thisfield.rename(columns={'ID_NIRISS': id_col})
+        df_sed_thisfield[field_col] = thisfield
+        sed_cols_to_extract = [field_col, id_col, 'log_mass_bgp', 'log_mass_bgp_u', 'log_sfr_bgp', 'log_sfr_bgp_u']
+        df_sed = pd.concat([df_sed, df_sed_thisfield[sed_cols_to_extract]])
+    
+    df = pd.merge(df, df_sed, on=[field_col, id_col], how='left')
+    df = df.rename(columns={'log_mass_bgp':'lp_mass', 'log_mass_bgp_u':'lp_mass_u', 'log_sfr_bgp':'lp_SFR', 'log_sfr_bgp_u':'lp_SFR_u'})
+
+    return df
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_glass_masses_from_He2024(df, mass_col='lp_mass', id_col='objid', field_col='field'):
     '''
     Derives stellar masses of GLASS galaxies present in the given dataframe from He+2024 catalog
     Returns dataframe
@@ -297,37 +351,15 @@ def make_master_df(objlist, args, sum=True):
         print(f'Could not find{filename}, so making a new one..')
         df = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
     
-        # --------get PASSAGE stellar masses from COSMOS catalog----------
-        passage_fields = [item for item in np.unique(np.array(objlist)[:,0]) if 'Par' in item]
-        df_cosmos = pd.DataFrame()
-        for index, thisfield in enumerate(passage_fields):
-            if 'web' in cosmos_name:
-                cosmosfilename = args.input_dir / 'COSMOS' /  f'cosmoswebb_objects_in_{thisfield}.fits'
-                df_cosmos_thisfield = read_COSMOSWebb_catalog(filename=cosmosfilename)
-                sed_cols_to_extract = ['passage_id', 'LP_mass_minchi2']
-            elif '2020' in cosmos_name:
-                cosmosfilename = args.input_dir / 'COSMOS' /  f'cosmos2020_objects_in_{thisfield}.fits'
-                df_cosmos_thisfield = read_COSMOS2020_catalog(filename=cosmosfilename)
-                sed_cols_to_extract = np.hstack([['passage_id'], np.hstack([[f'lp_{item}_best', f'lp_{item}_med_min68', f'lp_{item}_med_max68'] for item in ['mass', 'SFR']])])
-
-            df_cosmos = pd.concat([df_cosmos, df_cosmos_thisfield[sed_cols_to_extract]])
+        # --------get PASSAGE & GLASS stellar masses----------
+        #df = get_passage_masses_from_cosmos(df, id_col='objid', field_col='field', cosmos_name=cosmos_name) # from COSMOS-Web/COSMOS2020 catalog
+        #df = get_glass_masses_from_He2024(df) # from He+2024 catalog
         
-        df['passage_id'] = df['field'].astype(str) + '-' + df['objid'].astype(str)  # making a unique combination of field and object id
-        df = pd.merge(df, df_cosmos, on=['passage_id'], how='left')
-        df = df.rename(columns={'LP_mass_minchi2':'lp_mass', 'lp_mass_best':'lp_mass', 'lp_SFR_best':'lp_SFR'})
-        for item in ['mass', 'SFR']:
-            if f'lp_{item}_med_min68' in df:
-                df[f'lp_{item}_u'] = df.apply(lambda row: np.mean([row[f'lp_{item}'] - row[f'lp_{item}_med_min68'], row[f'lp_{item}_med_max68'] - row[f'lp_{item}']]))
-                df = df.drop(f'lp_{item}_med_min68', axis=1)
-                df = df.drop(f'lp_{item}_med_max68', axis=1)
-        df = df.drop('passage_id', axis=1)
+        df = get_masses_from_mysedfit(df, id_col='objid', field_col='field') # from my SED fitting with Bagpipes
 
-        # --------get GLASS stellar masses from He+2024 catalog----------
-        df = get_glass_masses(df)
-     
         # -------getting redshift and integrated line flux info: looping through objects--------------
         line_list = ['OIII', 'Hb', 'Ha']
-        new_cols = np.hstack([['redshift', 'EB_V'], np.hstack([[f'{line}', f'{line}_u'] for line in line_list])])
+        new_cols = np.hstack([['RA', 'Dec', 'redshift', 'EB_V'], np.hstack([[f'{line}', f'{line}_u'] for line in line_list])])
         for col in new_cols: df[col] = np.nan # creating provision for the new columns
 
         args.only_integrated = True
@@ -338,6 +370,8 @@ def make_master_df(objlist, args, sum=True):
             full_hdu = load_full_fits(objid, field, args)
             
             args = load_object_specific_args(full_hdu, args, skip_vorbin=True)
+            df.loc[index, 'RA'] = full_hdu[0].header['RA']
+            df.loc[index, 'Dec'] = full_hdu[0].header['Dec']
             df.loc[index, 'redshift'] = args.z
             df.loc[index, 'EB_V'] = args.EB_V.n
 
@@ -377,7 +411,6 @@ def make_master_df(objlist, args, sum=True):
     
     # ------computing mixing timescales-----------
     Zdiag = 'NB'
-    df = df.rename(columns={'Z_SFR_slope':'logZ_logSFR_slope', 'Z_SFR_slope_u':'logZ_logSFR_slope_u'}) # renaming Z-SFR to logZ-logSFR slope, which it actually is
     Z_SFR_slope = unp.uarray(df['logZ_logSFR_slope'], df['logZ_logSFR_slope_u']) * (10 ** (unp.uarray(df[f'logOH_sum_{Zdiag}'], df[f'logOH_sum_{Zdiag}_u']) - 8.69)) / unp.uarray(df['SFR'], df['SFR_u']) # computing Z-SFR slope from logZ-logSFR slope
     
     df['Z_SFR_slope'] = unp.nominal_values(Z_SFR_slope) # now this is in yr/Msun
@@ -427,8 +460,8 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     ax.set_ylabel(r'log SFR (M$_{\odot}$/yr)', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
-    ax.set_xlim(7, 11)
-    ax.set_ylim(-3, 1)
+    ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
+    ax.set_ylim(-2, 1)
 
     figname = f'SFMS_colorby_redshift.png'
     save_fig(fig, figname, args)
@@ -470,7 +503,7 @@ def plot_MEx(df, args, mass_col='lp_mass', fontsize=10):
     ax.set_ylabel(r'log O III/H$\beta$', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
-    ax.set_xlim(7, 11)
+    ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
     ax.set_ylim(-1, 1.7)
 
     # ---------adding literature lines from Juneau+2014 (https://iopscience.iop.org/article/10.1088/0004-637X/788/1/88/pdf)----------
@@ -537,10 +570,10 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     cbar = plt.colorbar(p, pad=0.01)
     try:
         Zgrad = np.array(args.Zdiag)[[item in zgrad_col for item in args.Zdiag]][0]
-        clabel = r'$\$log (O/H) + 12' + f' [{Zgrad}]'
+        clabel = r'$\log$ (O/H) + 12' + f' [{Zgrad}]'
     except:
         try:
-            clabel = r'$\$log (O/H) + 12' + f' [{zgrad_col.split("_")[-2:-1][0]}]'
+            clabel = r'$\log$ (O/H) + 12' + f' [{zgrad_col.split("_")[-2:-1][0]}]'
         except:
             clabel = label_dict[colorcol]
     cbar.set_label(clabel, fontsize=args.fontsize)
@@ -584,7 +617,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
 
     # --------plotting other literature data----------
     coeff = [-0.199, 0.199 * 10 - 0.432] # Franchetto+21 eq 6
-    xarr = [7, 11]
+    xarr = log_mass_lim
     ax.plot(xarr, np.poly1d(coeff)(xarr), color='limegreen', ls='dotted', label='F21 forbidden')
     #ax.fill_between(xarr, -5, np.poly1d(coeff)(xarr), color='limegreen', alpha=0.2, label='F21 forbidden')
 
@@ -594,8 +627,8 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     ax.set_ylabel(r'log $\nabla$Z$_r$ (dex/kpc)', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
-    ax.set_xlim(7, 11)
-    ax.set_ylim(-0.5, 0.2)
+    ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
+    ax.set_ylim(-0.5, 0.25)
 
     figname = f'MZgrad_colorby_{colorcol}_Zdiag_{zgrad_col}.png'
     save_fig(fig, figname, args)
@@ -633,7 +666,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     ax.set_ylabel(r'$\log$ Z-$\log \Sigma_{*}$ slope', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
-    ax.set_xlim(7, 11)
+    ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
     ax.set_ylim(-0.3, 1.4)
 
     figname = f'MZsfr_colorby_Z.png'
@@ -672,8 +705,8 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10):
     ax.set_ylabel(r'Metal mixing timescale $t_{mix}$ (Gyr)', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
-    ax.set_xlim(7, 11)
-    ax.set_ylim(0., 1.)
+    ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
+    ax.set_ylim(-0.5, 0.6)
 
     figname = f'M_tmix_colorby_Z-SFR_slope.png'
     save_fig(fig, figname, args)
@@ -687,8 +720,8 @@ def make_latex_table(df, args, Zdiag='NB', sum=True):
     Returns the latex table as pandas dataframe
     '''
     column_dict = {'field':'Field', 'objid':'ID', 'redshift':r'$z$', 'lp_mass':r'$\log$ M$_{\star}$/M$_{\odot}$', 'lp_SFR':r'$\log$ SFR (M$_{\odot}$/yr)', 'SFR':r'SFR (M$_{\odot}$/yr)', 'logOH_int_NB':'$\log$ O/H + 12$_{total}$', 'logOH_sum_NB':'$\log$ O/H + 12$_{total}$', 'logOH_slope_NB':r'$\nabla Z$ (dex/kpc)'}
-    decimal_dict = defaultdict(lambda: 2, redshift=1, lp_mass=1)
-    base_cols = ['field', 'objid', 'redshift', 'lp_mass', 'SFR']
+    decimal_dict = defaultdict(lambda: 2, redshift=1, lp_mass=1, RA=4, Dec=4)
+    base_cols = ['field', 'objid', 'RA', 'Dec', 'redshift', 'lp_mass', 'SFR']
     cols_with_errors = [f'logOH_sum_{Zdiag}' if sum else f'logOH_int_{Zdiag}', f'logOH_slope_{Zdiag}']
 
     tex_df = pd.DataFrame()
@@ -922,10 +955,6 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None):
     segmentation_map = full_hdu['SEG'].data
     args.segmentation_map = trim_image(segmentation_map, args)
 
-    # ---------------dust value---------------
-    try: _, args.EB_V, _ = get_EB_V(full_hdu, args, verbose=False, silent=True)
-    except: args.EB_V = ufloat(0, 0)
-
     ####################################
     if field is not None and 'glass' in field:
         voronoi_snr = float(2)
@@ -938,6 +967,10 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None):
     if args.vorbin and args.voronoi_line is not None and not skip_vorbin:
         line_map, _, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True, silent=True)
         args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, voronoi_snr, plot=False, quiet=True, args=args)
+
+    # ---------------dust value---------------
+    try: _, args.EB_V, _ = get_EB_V(full_hdu, args, verbose=False, silent=True)
+    except: args.EB_V = ufloat(0, 0)
 
     return args
 
@@ -971,12 +1004,12 @@ def plot_radial_profile(image, ax, args, ylim=None, xlim=None, hide_xaxis=False,
     # -------radial fitting-------------
     try:
         fit_color = 'salmon'
-        linefit, linecov = np.polyfit(df['radius'], df['quant'], 1, cov=True, w=1. / (df['quant_u']) ** 2)
+        linefit, linecov = np.polyfit(df['radius'], df['quant'], 1, cov=True, w=1. / (df['quant_u']) ** 2 if (df['quant_u'] > 0).any() else None)
         y_fitted = np.poly1d(linefit)(df['radius'])
         ax.plot(df['radius'], y_fitted, color=fit_color, lw=1, ls='dashed')
         linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
         if quant in ['logOH', 'Z']:
-            label = r'$\nabla$Z$_r$' + f' = {linefit[0].s: .2f}' if short_label else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc'
+            label = r'$\nabla$Z$_r$' + f' = {linefit[0].n: .2f}' if short_label else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc'
         else:
             label = r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0].s: .2f}' if short_label else r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0]: .2f} dex/kpc'
         ax.text(0.1, 0.05, label, c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
@@ -1646,6 +1679,8 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
         print(f'Doing object {field}-{objid} which is {index + 1} of {len(objlist)} objects..')
         thisrow = int(index / ncol)
         thiscol = index % ncol
+        show_xaxis = (thisrow == nrow - 1) or (index == len(objlist) - 1) or ((len(objlist) - index - 1 ) < ncol)
+        hide_xaxis = not show_xaxis
 
         # --------setting up the sub-figure------------
         object_gs = outer_gs[index].subgridspec(1, 3, wspace=0., hspace=0.)
@@ -1654,22 +1689,35 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
         # -----------loading the data---------------
         full_hdu = load_full_fits(objid, field, args)
         args = load_object_specific_args(full_hdu, args, field=field)
-        logOH_map, _, _ = load_metallicity_map(field, objid, Zdiag, args)
+        logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
 
         # -----plotting direct image-----------------
-        axes[0] = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], axes[0], args, hide_xaxis=thisrow < nrow - 1, hide_yaxis=False, hide_cbar=True, hide_filter_names=index, hide_pa=True)
+        axes[0] = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], axes[0], args, hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, hide_filter_names=index, hide_pa=True)
         axes[0].text(0.95, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='w', ha='right', va='top', transform=axes[0].transAxes)
         
         # -----plotting 2D metallicity map-----------
-        Zlim, cmap = [7.1, 8.5], 'cividis'
-        axes[1] = plot_2D_map(logOH_map, axes[1], None, args, clabel='', takelog=False, cmap=cmap, vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=thisrow < nrow - 1, hide_yaxis=True, hide_cbar=True)
+        Zlim, cmap = [7.1, 8.5] if 'NB' in Zdiag else [8.2, 9.1], 'cividis'
+        axes[1] = plot_2D_map(logOH_map, axes[1], None, args, clabel='', takelog=False, cmap=cmap, vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=hide_xaxis, hide_yaxis=True, hide_cbar=True)
         axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', color='brown', loc='lower right')
     
         # # ------plotting metallicity radial profile-----------
-        axes[2], _ = plot_radial_profile(logOH_map, axes[2], args, ylim=Zlim, xlim=[0, 5], hide_xaxis=thisrow < nrow - 1, hide_yaxis=False, hide_cbar=True, short_label=True)
+        axes[2], linefit = plot_radial_profile(logOH_map, axes[2], args, ylim=Zlim, xlim=[0, 5], hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, short_label=True)
         axes[2].yaxis.set_label_position('right')
         axes[2].yaxis.tick_right()
    
+        # ----------append fit to dataframe and save-----------
+        if 'Par' in field: survey = 'passage'
+        elif 'glass' in field: survey = 'glass'
+        output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_fits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
+        ####################################
+        if 'glass' in field:
+            output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
+            print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
+        ####################################
+        df_logOH_fit = pd.DataFrame({'field': field, 'objid': objid, 'logOH_sum': logOH_sum.n, 'logOH_sum_u': logOH_sum.s, 'logOH_int': logOH_int.n, 'logOH_int_u': logOH_int.s, 'logOH_cen': linefit[1].n, 'logOH_cen_u': linefit[1].s, 'logOH_slope': linefit[0].n, 'logOH_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag}, index=[0])
+        df_logOH_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
+        print(f'Appended metallicity fit to catalog file {output_dfname}')
+
     # -------making colorbars for the entire fig----------
     cax = fig.add_axes([0.07, 0.96, 0.93 - 0.07, 0.01])    
     cbar = matplotlib.colorbar.ColorbarBase(cax, cmap=cmap, norm=mplcolors.Normalize(vmin=Zlim[0], vmax=Zlim[1]), orientation='horizontal')
@@ -1678,7 +1726,8 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
     cbar.ax.tick_params(labelsize=args.fontsize)
     
     # -----------saving figure------------
-    figname = f'metallicity_multi_panel.png'
+    Zbranch_text = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
+    figname = f'metallicity_multi_panel_Zdiag_{Zdiag}{Zbranch_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -1810,7 +1859,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
         output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
         print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
     ####################################
-    df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'Z_SFR_cen': linefit[1].n, 'Z_SFR_cen_u': linefit[1].s, 'Z_SFR_slope': linefit[0].n, 'Z_SFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag}, index=[0])
+    df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'logZ_logSFR_cen': linefit[1].n, 'logZ_logSFR_cen_u': linefit[1].s, 'logZ_logSFR_slope': linefit[0].n, 'logZ_logSFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag}, index=[0])
     df_Zsfr_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
     print(f'Appended metallicity-sfr fit to catalog file {output_dfname}')
 
@@ -1899,7 +1948,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
             output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
             print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
         ####################################
-        df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'Z_SFR_cen': linefit[1].n, 'Z_SFR_cen_u': linefit[1].s, 'Z_SFR_slope': linefit[0].n, 'Z_SFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag}, index=[0])
+        df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'logZ_logSFR_cen': linefit[1].n, 'logZ_logSFR_cen_u': linefit[1].s, 'logZ_logSFR_slope': linefit[0].n, 'logZ_logSFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag}, index=[0])
         df_Zsfr_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
         print(f'Appended metallicity-sfr fit to catalog file {output_dfname}')
 
@@ -1928,7 +1977,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     # -------setting up the figure--------------------
     fig = plt.figure(figsize=(10, 5))
     fig.subplots_adjust(left=0.07, right=0.99, bottom=0.1, top=0.93, wspace=0., hspace=0.)
-    outer_gs = gridspec.GridSpec(1, 2, width_ratios=[1.5, 1], figure=fig, wspace=0.41, hspace=0.)
+    outer_gs = gridspec.GridSpec(1, 2, width_ratios=[1.2, 1], figure=fig, wspace=0.41, hspace=0.)
 
     # --------setting up the sub-figure------------
     map_radprof_gs = outer_gs[0].subgridspec(2, 2, wspace=0., hspace=0.)
@@ -2471,15 +2520,17 @@ if __name__ == "__main__":
     #args.Zdiag = 'R2,R3,R23,O3O2,NB'.split(',')
     args.colorcol = 'radius'
     args.phot_models = 'nb'
+    log_mass_lim = [5, 10] # [7, 11]
 
     # -------setting up objects to plot--------------
     Par28_objects = [300, 1303, 1849, 2171, 2727, 2867]
-    #glass_objects = [1333, 1721, 1983, 2128]
     glass_objects = [1721, 1983, 2128]
+    #glass_objects = [1333] + glass_objects
 
     passage_objlist = [['Par028', item] for item in Par28_objects]
     glass_objlist = [['glass-a2744', item] for item in glass_objects]
     objlist = passage_objlist + glass_objlist
+    objlist_ha = [['Par028', item] for item in [300, 1303, 2171, 2867]] + [['glass-a2744', item] for item in [1721, 1983, 2128]]
 
     # -----------setting up global properties-------------------
     args.snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
@@ -2494,24 +2545,9 @@ if __name__ == "__main__":
     #plot_passage_venn(['Par028'], args, fontsize=10)
     #plot_glass_venn(args, fontsize=10)
 
-    # ---------loading master dataframe with only objects in objlist------------
-    df = make_master_df(objlist, args, sum=True)
-    full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)
-    
-    # ---------metallicity latex table for paper----------------------
-    #df_latex = make_latex_table(df, args, sum=True)
-
     # ---------photoionisation model plots----------------------
     #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True, fontsize=15)
     #plot_photoionisation_models('OIII/Hb', 'Z', args, fontsize=15)
-
-    # ---------full population plots----------------------
-    #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
-    #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
-    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsize=15)
-    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_R23_high', fontsize=15)
-    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
-    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
     #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12, show_log_flux=False)
@@ -2531,22 +2567,45 @@ if __name__ == "__main__":
     # --------multi-panel AGN demarcation plots------------------
     #plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10, exclude_ids=[1303])
 
+    # --------to create dataframe of all metallicity quantities including radial fits, etc------------------
+    # for Zdiag in args.Zdiag:
+    #     args.Zbranch = 'low'
+    #     plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10)
+    #     if not 'NB' in Zdiag:
+    #         args.Zbranch = 'high'
+    #         plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10)
+
     # --------multi-panel Z map plots------------------
     #plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)
-    
+
     # --------multi-panel SFR-Z plots------------------
-    df_ha = df[df['redshift'] < 2.5] # to make sure Halpha is available
-    objlist_ha = [[row['field'], row['objid']] for index, row in df_ha.iterrows()]
     #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
+
+    # ---------loading master dataframe with only objects in objlist------------
+    df = make_master_df(objlist, args, sum=True)
+    
+    # ---------metallicity latex table for paper----------------------
+    #df_latex = make_latex_table(df, args, sum=True)
+
+    # ---------full population plots----------------------
+    #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
+    #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
+    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsize=15)
+    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_R23_high', fontsize=15)
+    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
+    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15)
 
     # ---------metallicity comparison plots----------------------
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=10)
     #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
 
-    # -----------other diagnostics--------------
+    # -----------line ratio histograms--------------
+    #full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)
     #plot_line_ratio_histogram(full_df_spaxels, objlist, SEL_Zdiags, args, fontsize=15, full_df_int=full_df_int)
     #plot_line_ratio_histogram(full_df_spaxels, objlist, ['OIII/OII,OIII', 'OIII/OII'], args, fontsize=15, full_df_int=full_df_int)
+
+    # -----------other diagnostics--------------
     #plot_metallicity_sfr_radial_profile_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=13, exclude_ids=[1303])
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
