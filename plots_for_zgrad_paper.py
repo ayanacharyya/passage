@@ -722,7 +722,7 @@ def make_latex_table(df, args, Zdiag='NB', sum=True):
     column_dict = {'field':'Field', 'objid':'ID', 'redshift':r'$z$', 'lp_mass':r'$\log$ M$_{\star}$/M$_{\odot}$', 'lp_SFR':r'$\log$ SFR (M$_{\odot}$/yr)', 'SFR':r'SFR (M$_{\odot}$/yr)', 'logOH_int_NB':'$\log$ O/H + 12$_{total}$', 'logOH_sum_NB':'$\log$ O/H + 12$_{total}$', 'logOH_slope_NB':r'$\nabla Z$ (dex/kpc)'}
     decimal_dict = defaultdict(lambda: 2, redshift=1, lp_mass=1, RA=4, Dec=4)
     base_cols = ['field', 'objid', 'RA', 'Dec', 'redshift', 'lp_mass', 'SFR']
-    cols_with_errors = [f'logOH_sum_{Zdiag}' if sum else f'logOH_int_{Zdiag}', f'logOH_slope_{Zdiag}']
+    cols_with_errors = [f'logOH_sum_{Zdiag}' if sum else f'logOH_int_{Zdiag}', f'logOH_slope_{Zdiag}', 'lp_mass', 'SFR']
 
     tex_df = pd.DataFrame()
     for thiscol in base_cols + cols_with_errors:
