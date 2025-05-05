@@ -237,7 +237,7 @@ def run_bagpipes(photcat_filename_sed, filter_dir, args, idcol='PASSAGE_ID'):
         print(f'\nLooping over object {index + 1} of {len(df)}..')
         fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.01, num_age_bins=5, min_age_bin=30) # Generate the fit parameters
 
-        galaxy = bagpipes.galaxy(ID=obj[idcol], load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
+        galaxy = bagpipes.galaxy(ID=int(obj[idcol]), load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
         fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run=args.run) # Fit this galaxy
         fit.fit(verbose=True, sampler='nautilus', pool=args.ncpus)
 

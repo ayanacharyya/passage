@@ -11,7 +11,6 @@ from compute_stellar_masses import load_photom_bagpipes, generate_fit_params
 from astropy.cosmology import FlatLambdaCDM, Planck18
 
 cosmo = FlatLambdaCDM(H0=69.5, Om0=0.285, Ob0=0.0461)
-#cosmo = Planck18
 
 # -------------------------------------------------------------------------------------------------------
 def load_photom_bagpipes(str_id, phot_cat, id_colname = 'bin_id', zeropoint = 28.9, cat_hdu_index = 0, extra_frac_err = 0.1):
@@ -145,49 +144,6 @@ def generate_fit_params(obj_z, z_range = 0.01, num_age_bins = 5, min_age_bin = 3
 
     return fit_params
 
-# -------------------------------------------------------------------------------------------------------
-def load_fluxes_basic(str_id):
-    '''
-    Basic function to load fluxes given the object ID
-    '''
-    df = pd.read_csv(photcat_filename_sed)
-    obj = df[df['objid'].astype(str) == str(str_id)]
-
-    filters = [item for item in df.columns if '_sci' in item]
-
-    fluxes = [obj[f'{item}'] for item in filters]
-    fluxerrs = [obj[f'{item.replace("_sci", "_err")}'] for item in filters]
-    fluxerrs = np.sqrt(np.array(fluxerrs)**2 + (0.1 * np.array(fluxes)) ** 2)
-
-    photometry = np.c_[fluxes, fluxerrs]
-
-    return photometry
-
-# -------------------------------------------------------------------------------------------------------
-def get_fit_params_basic(z, z_range=0.01):
-    '''
-    Basic function to generate minimumally necessary fit instructions given the object redshift (z)
-    '''
-    exp = {}                                  # Tau-model star-formation history component
-    exp["age"] = (0.1, 15.)                   # Vary age between 100 Myr and 15 Gyr. In practice 
-                                            # the code automatically limits this to the age of
-                                            # the Universe at the observed redshift.
-
-    exp["tau"] = (0.3, 10.)                   # Vary tau between 300 Myr and 10 Gyr
-    exp["massformed"] = (1., 15.)             # vary log_10(M*/M_solar) between 1 and 15
-    exp["metallicity"] = (0., 2.5)            # vary Z between 0 and 2.5 Z_oldsolar
-
-    dust = {}                                 # Dust component
-    dust["type"] = "Calzetti"                 # Define the shape of the attenuation curve
-    dust["Av"] = (0., 2.)                     # Vary Av between 0 and 2 magnitudes
-
-    fit_instructions = {}                     # The fit instructions dictionary
-    fit_instructions["exponential"] = exp   
-    fit_instructions["dust"] = dust
-    fit_instructions['redshift'] = (z - z_range / 2, z + z_range / 2)
-
-    return fit_instructions
-
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     filter_dir = Path('/Users/acharyya/Work/astro/passage/passage_data/v0.5/COSMOS/transmission_curves')
@@ -198,18 +154,25 @@ if __name__ == "__main__":
     obj = df_sed[df_sed['objid'] == 1303].iloc[0]
 
     load_fn = partial(load_photom_bagpipes, phot_cat=photcat_filename_sed, id_colname='objid', zeropoint=28.9)
-    #fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.01, num_age_bins=5, min_age_bin=30)
-    fit_params = get_fit_params_basic(obj['redshift'], z_range=0.01)
+    fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.0, num_age_bins=5, min_age_bin=30)
     
     galaxy = bagpipes.galaxy(ID=obj['objid'], load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
-    #fig, ax = galaxy.plot(show=True)
-    #sys.exit()
 
-    fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run='test') # Fit this galaxy
+    fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run='test3') # Fit this galaxy
     fit.fit(verbose=True, sampler='nautilus', n_live=400, pool=1, n_eff=10000)
+    plot_restframe = True
 
+    # ---------converting to restframe-----------------
+    if plot_restframe:
+        fit.posterior.get_advanced_quantities()
+        redshift = np.median(fit.posterior.samples['redshift'])
+        fit.galaxy.photometry[:, 0] = fit.galaxy.photometry[:, 0] / (1 + redshift)
+        if fit.galaxy.spectrum_exists: fit.galaxy.spectrum[:, 0] = fit.galaxy.spectrum[:, 0] / (1 + redshift)
+        fit.galaxy.filter_set.eff_wavs = fit.galaxy.filter_set.eff_wavs / (1 + redshift)
+        fit.posterior.model_galaxy.wavelengths = fit.posterior.model_galaxy.wavelengths / (1 + redshift)
+    
     # ---------Make some plots---------
-    fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=True, xlim=[2.7, 4.5], ylim=[0, 6])
-    fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=False, xlim=[500, 30000], ylim=[0, 6])
+    fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=True, xlim=[2.8, 4.5], ylim=[0, 4])
+    fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=False, xlim=[500, 30000], ylim=[0, 4])
     fig = fit.plot_sfh_posterior(save=True, show=True, xlim=None, ylim=[0, 10])
     fig = fit.plot_corner(save=True, show=True)

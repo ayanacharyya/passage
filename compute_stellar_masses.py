@@ -666,7 +666,7 @@ def load_photom_bagpipes(str_id, phot_cat, id_colname = 'bin_id', zeropoint = 28
         except TypeError: phot_cat = Table.read(phot_cat)
     phot_cat[id_colname] = phot_cat[id_colname].astype(str)
 
-    row_idx = (phot_cat[id_colname] == str_id).nonzero()[0][0]
+    row_idx = (phot_cat[id_colname] == str(str_id)).nonzero()[0][0]
     fluxes = []
     errs = []
 
@@ -867,11 +867,6 @@ if __name__ == "__main__":
                     df_fluxes.drop(fluxcol, axis=1, inplace=True)
                     df_fluxes.drop(fluxcol.replace('_sci', '_err'), axis=1, inplace=True)
 
-        # ------------dropping MIRI until transmission file acquired---------
-        if 'NIRCAM_F770W_sci' in df_fluxes.columns and not os.path.exists(filter_dir / 'NIRCAM_F770W.txt'):
-            df_fluxes.drop('NIRCAM_F770W_sci', axis=1, inplace=True)
-            df_fluxes.drop('NIRCAM_F770W_err', axis=1, inplace=True)
-
         # ----------dropping other non-essential (for SED fitting) columns------------------
         cols_to_retain = ['_sci', '_err', 'id', 'field', 'redshift', 'ra', 'dec']
         cols_to_drop = [item for item in df_fluxes.columns if not np.array([item2 in item.lower() for item2 in cols_to_retain]).any()]
@@ -921,8 +916,8 @@ if __name__ == "__main__":
                 fit.posterior.model_galaxy.wavelengths = fit.posterior.model_galaxy.wavelengths / (1 + redshift)
 
             # ---------Make some plots---------
-            fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=True, xlim=[2.7, 4.5], ylim=[0, 6])
-            fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=False, xlim=[500, 30000], ylim=[0, 6])
+            fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=True, xlim=[2.8, 4.5], ylim=[0, 4])
+            fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=False, xlim=[500, 30000], ylim=[0, 4])
             fig = fit.plot_sfh_posterior(save=True, show=True, xlim=None, ylim=[0, 10])
             fig = fit.plot_corner(save=True, show=True)
 
