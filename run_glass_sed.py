@@ -36,7 +36,7 @@ def get_uncover_photometry(df, photcat_dir, aperture=1, idcol='id'):
     print(f'\nDoing cross-matching between GLASS-NIRISS and UNCOVER catalogs..')
     df_crossmatch = get_crossmatch(df, dfu, sep_threshold=1.0, df1_idcol=idcol, df2_idcol='id')
     df_crossmatch = df_crossmatch.rename(columns={'df1_id':idcol, 'df2_id':'ID_UNCOVER'})
-    df_crossmatch = pd.merge(df_crossmatch[[idcol,  'ID_UNCOVER']], dfu, left_on=idcol, right_on='id', how='inner').drop(['id', 'ra', 'dec'], axis=1)
+    df_crossmatch = pd.merge(df_crossmatch[[idcol,  'ID_UNCOVER']], dfu, left_on='ID_UNCOVER', right_on='id', how='inner').drop(['id', 'ra', 'dec'], axis=1)
     df = pd.merge(df, df_crossmatch)
     
     for thiscol in filter_list:

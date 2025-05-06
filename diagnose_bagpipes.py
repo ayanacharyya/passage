@@ -9,8 +9,10 @@ from os import PathLike
 from numpy.typing import ArrayLike
 from compute_stellar_masses import load_photom_bagpipes, generate_fit_params
 from astropy.cosmology import FlatLambdaCDM, Planck18
+from datetime import datetime, timedelta
 
 cosmo = FlatLambdaCDM(H0=69.5, Om0=0.285, Ob0=0.0461)
+start_time = datetime.now()
 
 # -------------------------------------------------------------------------------------------------------
 def load_photom_bagpipes(str_id, phot_cat, id_colname = 'bin_id', zeropoint = 28.9, cat_hdu_index = 0, extra_frac_err = 0.1):
@@ -151,6 +153,9 @@ if __name__ == "__main__":
     photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/glass_data/GLASS_UNCOVER_photometry_for_paper_only_st.csv')
     idcol = 'ID_NIRISS' # 'objid' #
     
+    plot_restframe = True
+    fit_sed = False
+
     df_sed = pd.read_csv(photcat_filename_sed)
     filter_list = [str(filter_dir) + '/' + item[:item.lower().find('_sci')] + '.txt' for item in df_sed.columns if '_sci' in item]
     obj = df_sed[df_sed[idcol] == 2128].iloc[0]
@@ -159,22 +164,27 @@ if __name__ == "__main__":
     fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.01, num_age_bins=5, min_age_bin=30)
     
     galaxy = bagpipes.galaxy(ID=int(obj[idcol]), load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
+    fig, ax = galaxy.plot(show=True)
 
-    fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run='test') # Fit this galaxy
-    fit.fit(verbose=True, sampler='nautilus', n_live=400, pool=1, n_eff=10000)
-    plot_restframe = True
+    if fit_sed:
+        fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run='test') # Fit this galaxy
+        fit.fit(verbose=True, sampler='nautilus', n_live=400, pool=1, n_eff=10000)
 
-    # ---------converting to restframe-----------------
-    if plot_restframe:
-        fit.posterior.get_advanced_quantities()
-        redshift = np.median(fit.posterior.samples['redshift'])
-        fit.galaxy.photometry[:, 0] = fit.galaxy.photometry[:, 0] / (1 + redshift)
-        if fit.galaxy.spectrum_exists: fit.galaxy.spectrum[:, 0] = fit.galaxy.spectrum[:, 0] / (1 + redshift)
-        fit.galaxy.filter_set.eff_wavs = fit.galaxy.filter_set.eff_wavs / (1 + redshift)
-        fit.posterior.model_galaxy.wavelengths = fit.posterior.model_galaxy.wavelengths / (1 + redshift)
+        # ---------converting to restframe-----------------
+        if plot_restframe:
+            fit.posterior.get_advanced_quantities()
+            redshift = np.median(fit.posterior.samples['redshift'])
+            fit.galaxy.photometry[:, 0] = fit.galaxy.photometry[:, 0] / (1 + redshift)
+            if fit.galaxy.spectrum_exists: fit.galaxy.spectrum[:, 0] = fit.galaxy.spectrum[:, 0] / (1 + redshift)
+            fit.galaxy.filter_set.eff_wavs = fit.galaxy.filter_set.eff_wavs / (1 + redshift)
+            fit.posterior.model_galaxy.wavelengths = fit.posterior.model_galaxy.wavelengths / (1 + redshift)
+        
+        # ---------Make some plots---------
+        fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=True)#, xlim=[2.8, 4.5], ylim=[0, 4])
+        fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=False)#, xlim=[500, 30000], ylim=[0, 4])
+        fig = fit.plot_sfh_posterior(save=True, show=True)#, xlim=None, ylim=[0, 10])
+        fig = fit.plot_corner(save=True, show=True)
+    else:
+        print(f'Set fit_Sed = True to fit SED')
     
-    # ---------Make some plots---------
-    fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=True)#, xlim=[2.8, 4.5], ylim=[0, 4])
-    fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=False)#, xlim=[500, 30000], ylim=[0, 4])
-    fig = fit.plot_sfh_posterior(save=True, show=True)#, xlim=None, ylim=[0, 10])
-    fig = fit.plot_corner(save=True, show=True)
+    print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
