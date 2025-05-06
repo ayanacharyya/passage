@@ -52,7 +52,7 @@ def load_photom_bagpipes(str_id, phot_cat, id_colname = 'bin_id', zeropoint = 28
         except TypeError: phot_cat = Table.read(phot_cat)
     phot_cat[id_colname] = phot_cat[id_colname].astype(str)
 
-    row_idx = (phot_cat[id_colname] == str_id).nonzero()[0][0]
+    row_idx = (phot_cat[id_colname] == str(str_id)).nonzero()[0][0]
     fluxes = []
     errs = []
 
@@ -147,18 +147,20 @@ def generate_fit_params(obj_z, z_range = 0.01, num_age_bins = 5, min_age_bin = 3
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     filter_dir = Path('/Users/acharyya/Work/astro/passage/passage_data/v0.5/COSMOS/transmission_curves')
-    photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5/catalogs/Par028_v0.5_venn_OII,NeIII-3867,Hb,OIII,SNR>2.0,mass_passage_cosmos_fluxes_wCWebb_for_bagpipe_for_paper_only_st.csv')
-
+    #photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5/catalogs/Par028_v0.5_venn_OII,NeIII-3867,Hb,OIII,SNR>2.0,mass_passage_cosmos_fluxes_wCWebb_for_bagpipe_for_paper_only_st.csv')
+    photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/glass_data/GLASS_UNCOVER_photometry_for_paper_only_st.csv')
+    idcol = 'ID_NIRISS' # 'objid' #
+    
     df_sed = pd.read_csv(photcat_filename_sed)
     filter_list = [str(filter_dir) + '/' + item[:item.lower().find('_sci')] + '.txt' for item in df_sed.columns if '_sci' in item]
-    obj = df_sed[df_sed['objid'] == 1303].iloc[0]
+    obj = df_sed[df_sed[idcol] == 2128].iloc[0]
 
-    load_fn = partial(load_photom_bagpipes, phot_cat=photcat_filename_sed, id_colname='objid', zeropoint=28.9)
-    fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.0, num_age_bins=5, min_age_bin=30)
+    load_fn = partial(load_photom_bagpipes, phot_cat=photcat_filename_sed, id_colname=idcol, zeropoint=28.9)
+    fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.01, num_age_bins=5, min_age_bin=30)
     
-    galaxy = bagpipes.galaxy(ID=obj['objid'], load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
+    galaxy = bagpipes.galaxy(ID=int(obj[idcol]), load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
 
-    fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run='test3') # Fit this galaxy
+    fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run='test') # Fit this galaxy
     fit.fit(verbose=True, sampler='nautilus', n_live=400, pool=1, n_eff=10000)
     plot_restframe = True
 

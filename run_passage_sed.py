@@ -238,7 +238,7 @@ def run_bagpipes(photcat_filename_sed, filter_dir, args, idcol='PASSAGE_ID'):
         fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.01, num_age_bins=5, min_age_bin=30) # Generate the fit parameters
 
         galaxy = bagpipes.galaxy(ID=int(obj[idcol]), load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
-        fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run=args.run) # Fit this galaxy
+        fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run=args.run, pool=args.ncpus) # Fit this galaxy
         fit.fit(verbose=True, sampler='nautilus', pool=args.ncpus)
 
         # --------converting everything to restframe----------------
@@ -251,10 +251,10 @@ def run_bagpipes(photcat_filename_sed, filter_dir, args, idcol='PASSAGE_ID'):
             fit.posterior.model_galaxy.wavelengths = fit.posterior.model_galaxy.wavelengths / (1 + redshift)
 
         # ---------Make some plots---------
-        fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=True, xlim=[2.7, 4.5], ylim=[0, 6])
-        fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=False, xlim=[500, 30000], ylim=[0, 6])
-        fig = fit.plot_sfh_posterior(save=True, show=True, xlim=None, ylim=[0, 10])
-        fig = fit.plot_corner(save=True, show=True)
+        fig, ax = fit.plot_spectrum_posterior(save=True, show=len(df) < 10, log_x=True, xlim=[2.7, 4.5], ylim=[0, 6])
+        fig, ax = fit.plot_spectrum_posterior(save=True, show=len(df) < 10, log_x=False, xlim=[500, 30000], ylim=[0, 6])
+        fig = fit.plot_sfh_posterior(save=True, show=len(df) < 10, xlim=None, ylim=[0, 10])
+        fig = fit.plot_corner(save=True, show=len(df) < 10)
 
         # --------Save the stellar masses---------------
         for thisquant in list(new_columns_dict.keys()):
