@@ -622,7 +622,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     #ax.fill_between(xarr, -5, np.poly1d(coeff)(xarr), color='limegreen', alpha=0.2, label='F21 forbidden')
 
     # ---------annotate axes and save figure-------
-    plt.legend(fontsize=args.fontsize / args.fontfactor, loc='best')
+    plt.legend(fontsize=args.fontsize / args.fontfactor, loc='upper left' if 'NB' in zgrad_col else 'best')
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
     ax.set_ylabel(r'log $\nabla$Z$_r$ (dex/kpc)', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
@@ -2520,7 +2520,7 @@ if __name__ == "__main__":
     #args.Zdiag = 'R2,R3,R23,O3O2,NB'.split(',')
     args.colorcol = 'radius'
     args.phot_models = 'nb'
-    log_mass_lim = [5, 10] # [7, 11]
+    log_mass_lim = [7.5, 10]
 
     # -------setting up objects to plot--------------
     Par28_objects = [300, 1303, 1849, 2171, 2727, 2867]

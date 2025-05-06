@@ -154,7 +154,7 @@ if __name__ == "__main__":
     idcol = 'ID_NIRISS' # 'objid' #
     
     plot_restframe = True
-    fit_sed = False
+    fit_sed = True
 
     df_sed = pd.read_csv(photcat_filename_sed)
     filter_list = [str(filter_dir) + '/' + item[:item.lower().find('_sci')] + '.txt' for item in df_sed.columns if '_sci' in item]
@@ -164,7 +164,7 @@ if __name__ == "__main__":
     fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.01, num_age_bins=5, min_age_bin=30)
     
     galaxy = bagpipes.galaxy(ID=int(obj[idcol]), load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
-    fig, ax = galaxy.plot(show=True)
+    #fig, ax = galaxy.plot(show=True)
 
     if fit_sed:
         fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run='test') # Fit this galaxy
