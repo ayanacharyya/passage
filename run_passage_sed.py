@@ -209,7 +209,7 @@ def remove_excess_columns(df):
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def run_bagpipes(photcat_filename_sed, filter_dir, args, idcol='PASSAGE_ID'):
+def run_bagpipes(photcat_filename_sed, filter_dir, args, idcol='PASSAGE_ID', start_id=0):
     '''
     Run bagpipes on each object in given phot catalog photcat_filename, save stellar mass in the catalog and write out the resulting catalog
     Returns resulting catalog, containing stellar mass
@@ -229,12 +229,15 @@ def run_bagpipes(photcat_filename_sed, filter_dir, args, idcol='PASSAGE_ID'):
     for thiscol in new_columns: df[thiscol] = np.zeros(len(df))
 
     # ---------Loop over the objects-------------
+    n_objects = len(df)
+    df = df.iloc[start_id:]
+    
     if args.test_sed is not None:
         df = df[df[idcol] == args.test_sed].reset_index(drop=True)
         print(f'Only runing on object {args.test_sed} as a test; for doing SED all objects, remove --test_sed and re-run')
     
     for index, obj in df.iterrows():
-        print(f'\nLooping over object {index + 1} of {len(df)}..')
+        print(f'\nLooping over object {index + 1} of {n_objects}..')
         fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.01, num_age_bins=5, min_age_bin=30) # Generate the fit parameters
 
         galaxy = bagpipes.galaxy(ID=int(obj[idcol]), load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
@@ -314,7 +317,7 @@ if __name__ == "__main__":
 
     # --------running SED fitting---------------------
     if args.fit_sed:
-        dfm = run_bagpipes(photcat_filename_sed, filter_dir, args, idcol='PASSAGE_ID')
+        dfm = run_bagpipes(photcat_filename_sed, filter_dir, args, idcol='PASSAGE_ID', start_id=72)
     else:
         print(f'Photcat for SED produced; use --fit_sed to actually run SED fitting')
 
