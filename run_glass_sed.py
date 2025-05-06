@@ -51,18 +51,58 @@ def get_uncover_photometry(df, photcat_dir, aperture=1, idcol='id'):
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def merge_glass_speccat(df, speccat_filename, idcol='id'):
+def merge_glass_speccat(speccat_filename, idcol='id', objids=None):
     '''
-    Reads in the GLASS-NIRISS photcat, and merges with given dataframe
+    Reads in the GLASS-NIRISS speccat, and merges redshift with given dataframe
     Returns merged dataframe
     '''
+    print(f'Reading in speccat from {speccat_filename}..')
     tab = Table(fits.open(speccat_filename)[1].data)
     if 'cdf_z' in tab.columns: tab.remove_column('cdf_z') # because multi dimension column does not agree well with pandas
-    df_glass = tab.to_pandas()
+    df = tab.to_pandas()
 
-    cols_to_extract = [idcol, 'RA', 'DEC', 'Z_NIRISS', 'Z_FLAG']
-    df = pd.merge(df, df_glass[cols_to_extract], on=idcol, how='left')
-    df = df.rename(columns={'RA':'ra', 'DEC':'dec', 'Z_NIRISS':'redshift'})
+    if objids is not None: df = df[df[idcol].isin(objids)]
+
+    cols_to_extract = [idcol, 'Z_NIRISS', 'Z_FLAG']
+    df = df[cols_to_extract]
+    df = df.rename(columns={'Z_NIRISS':'redshift'})
+
+    return df
+
+# --------------------------------------------------------------------------------------------------------------------
+def merge_glass_photcat(df, photcat_filename, aperture=1.0, idcol='id'):
+    '''
+    Reads in the GLASS photcat, with flux columns corresponding to a given aperture, in to a dataframe
+    Returns merged dataframe
+    '''
+    print(f'Reading in photcat from {photcat_filename}..')
+    hdu = fits.open(photcat_filename)[1]
+    df_phot = Table(hdu.data).to_pandas().rename(columns={'id': idcol})
+
+    # ---------determining the aperture id------------------------
+    index = 0
+    while True:
+        try:
+            this_ap = np.round(hdu.header[f'ASEC_{index}'], 1)
+        except KeyError:
+            print(f'{aperture} size not found in any of ASEC_0 to ASEC_{index - 1}')
+            break
+        if this_ap == aperture:
+            aper_ind = index
+            print(f'Found APER_{aper_ind} to match {aperture}')
+            break
+        index += 1
+
+    # -------determining flux and fluxerr columns from passage-------
+    fluxcols = [item for item in df_phot.columns if '_flux' in item and '_fluxerr' not in item]
+    filters = np.unique([item[: item.find('_flux')] for item in fluxcols])
+    cols_to_extract = np.hstack([[f'{item}_flux_aper_{aper_ind:0d}', f'{item}_fluxerr_aper_{aper_ind:0d}'] for item in filters])
+    
+    df_phot = df_phot[np.hstack([[idcol, 'ra', 'dec'], cols_to_extract])]
+    df = pd.merge(df, df_phot, on=idcol, how='left')
+    
+    for thisfilter in filters:
+        df= df.rename(columns={f'{thisfilter}_flux_aper_{aper_ind:0d}': f'NIRISS_{thisfilter.upper()[:-1]}_sci', f'{thisfilter}_fluxerr_aper_{aper_ind:0d}': f'NIRISS_{thisfilter.upper()[:-1]}_err'})
 
     return df
 
@@ -77,18 +117,17 @@ if __name__ == "__main__":
 
     filter_dir = args.input_dir / 'COSMOS' / 'transmission_curves'
     uncover_catalog_dir = args.root_dir / 'glass_data'
-    glass_catalog_filename = args.root_dir / 'glass_data' / 'a2744_spec_cat_niriss_20250401.fits'
-    #glass_catalog_filename = args.root_dir / 'glass_data' / 'full_internal_em_line_data.fits'
+    glass_photcat_filename = args.root_dir / 'glass_data' / 'glass-a2744_phot.fits'
+    glass_speccat_filename = args.root_dir / 'glass_data' / 'a2744_spec_cat_niriss_20250401.fits'
     photcat_filename_sed = uncover_catalog_dir / f'GLASS_UNCOVER_photometry_{args.run}.csv'
 
     # ----------making the photometric catalog for SED fitting-----------------
     if not os.path.exists(photcat_filename_sed) or args.clobber_sed_photcat:
         print(f'Not found {photcat_filename_sed}, so creating new..')
 
-        df = pd.DataFrame({idcol: glass_object_ids})
-
         # -----------gathering the catalog for SED fitting------------------
-        df = merge_glass_speccat(df, glass_catalog_filename, idcol=idcol)
+        df = merge_glass_speccat(glass_speccat_filename, idcol=idcol, objids=glass_object_ids)
+        df = merge_glass_photcat(df, glass_photcat_filename, aperture=aperture, idcol=idcol)
         df = get_uncover_photometry(df, uncover_catalog_dir, aperture=aperture, idcol=idcol)
 
         # ---using only specific bands-------------
