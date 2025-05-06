@@ -174,7 +174,7 @@ if __name__ == "__main__":
         fit.posterior.model_galaxy.wavelengths = fit.posterior.model_galaxy.wavelengths / (1 + redshift)
     
     # ---------Make some plots---------
-    fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=True, xlim=[2.8, 4.5], ylim=[0, 4])
-    fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=False, xlim=[500, 30000], ylim=[0, 4])
-    fig = fit.plot_sfh_posterior(save=True, show=True, xlim=None, ylim=[0, 10])
+    fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=True)#, xlim=[2.8, 4.5], ylim=[0, 4])
+    fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=False)#, xlim=[500, 30000], ylim=[0, 4])
+    fig = fit.plot_sfh_posterior(save=True, show=True)#, xlim=None, ylim=[0, 10])
     fig = fit.plot_corner(save=True, show=True)
