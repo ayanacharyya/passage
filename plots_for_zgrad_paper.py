@@ -416,13 +416,98 @@ def make_master_df(objlist, args, sum=True):
     df['Z_SFR_slope'] = unp.nominal_values(Z_SFR_slope) # now this is in yr/Msun
     df['Z_SFR_slope_u'] = unp.std_devs(Z_SFR_slope) # now this is in yr/Msun
 
-    df['log_mgas'] = df['lp_mass'].apply(lambda x: get_mg_from_mstar(x))
-
-    t_mix = Z_SFR_slope * (10 ** df['log_mgas']) / 1e9 # in Gyr
-    df['t_mix'] = unp.nominal_values(t_mix)  # in Gyr
-    df['t_mix_u'] = unp.std_devs(t_mix)  # in Gyr
+    df['log_mmol_T20'] = df.apply(lambda row: get_mmol_from_mstar(row['lp_mass'], row['redshift'], method='T20'), axis=1) 
+    for method in ['C18', 'G20', 'B23', 'C23']:
+        df['log_mgas_' + method] = df.apply(lambda row: get_mg_from_mstar(row['lp_mass'], log_mmol=row['log_mmol_T20'], method=method), axis=1)
+        t_mix = Z_SFR_slope * (10 ** df['log_mgas_' + method]) / 1e9 # in Gyr
+        df['t_mix_' + method] = unp.nominal_values(t_mix)  # in Gyr
+        df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)  # in Gyr
 
     return df
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_mmol_from_mstar(log_mstar, redshift, method='T20'):
+    '''
+    Compute log molecular gas mass, given log stellar mass and a scaling relation method
+    Returns log molecular gas mass
+    '''
+    
+    if method == 'T20':
+        log_mol_frac = 0.06 - 3.33 * (np.log10(1 + redshift) - 0.65) ** 2 - 0.41 * (log_mstar - 10.7) # eq 9 of Chowdhury+2023, eq 10 of Bera+2023b, this is actually from Tacconi+2020
+        log_mmol = log_mstar - log_mol_frac
+    
+    return log_mmol
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_mg_from_mstar(log_mstar, log_mmol=-np.inf, method='C18'):
+    '''
+    Compute log gas mass, given log stellar mass and a scaling relation method
+    Returns log gas mass
+    '''
+    if method == 'C18':
+        gas_frac = get_C18_scaling(log_mstar)
+        log_mgas = np.log10( 10 ** log_mstar / gas_frac)
+    elif method == 'G20':
+        gas_frac = 0.158 * log_mstar ** 2 - 3.548 * log_mstar + 19.964 # eq 17 of Gullieuszik+2020
+        log_mgas = np.log10( 10 ** log_mstar / gas_frac)
+    elif method == 'B23':
+        log_mhi = 8.977 + 0.183 * (log_mstar - 9) # eq 10 of Bera+2023a, eq 7 of Bera+2023b
+        log_mgas = np.log10(10 ** log_mhi + 10 ** log_mmol)
+    elif method == 'C23':
+        log_mhi = 0.38 * np.log10(10 ** log_mstar / 1e10) + 10.564 # eq 11 of Chowdhury+2023 (z~1.3)
+        log_mgas = np.log10(10 ** log_mhi + 10 ** log_mmol)
+
+    return log_mgas
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_C18_scaling(log_mstar):
+    '''
+    Gas fraction-mstar scaling relation from Catinella+2018
+    Values copied from Table 2 of the paper
+    Returns interpolated gas fraction at a given log_mstar
+    '''
+    log_gf_arr = [0.148, 0.040, -0.511, -0.485, -0.785, -0.965, -1.238, -1.496]
+    log_mstar_arr = [9.16, 9.44, 9.75, 10.05, 10.34, 10.65, 10.95, 11.21]
+    interpolation = interp1d(log_mstar_arr, log_gf_arr, fill_value='extrapolate')
+
+    log_gf = interpolation(log_mstar)
+    gas_frac = 10 ** log_gf
+
+    return gas_frac
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=10):
+    '''
+    Makes and saves plot for comparison of gas masses derived using different methods
+    '''
+    args.fontsize = fontsize
+    col_arr = ['g', 'b', 'r', 'salmon']
+    methods = [item.split('_')[-1] for item in df.columns if 'log_mgas' in item]
+
+    # ----------setting up the diagram----------
+    fig, ax = plt.subplots(1, figsize=(8, 6))
+    fig.subplots_adjust(left=0.12, right=0.99, bottom=0.1, top=0.95)
+
+    for index, method in enumerate(methods):
+     for index2, m in enumerate(pd.unique(df['marker'])):
+         df_sub = df[df['marker'] == m]
+         ax.scatter(df_sub[mass_col], df_sub['log_mgas_' + method], c=col_arr[index], marker=m, plotnonfinite=True, s =100, lw=1, edgecolor='k', label=method if index2==0 else None)
+    
+    ax.plot(log_mass_lim, log_mass_lim, ls='dashed', c='k', lw=0.5)
+
+    # ---------annotate axes and save figure-------
+    ax.legend(fontsize=args.fontsize)
+    ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
+    ax.set_ylabel(r'log M$_{\rm gas}$/M$_{\odot}$', fontsize=args.fontsize)
+    ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+
+    ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
+    ax.set_ylim(7, 10.5)
+
+    figname = f'log_mgas_comparison.png'
+    save_fig(fig, figname, args)
+
+    return
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
@@ -677,30 +762,40 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10):
+def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_method='G20', colorcol='logZ_logSFR_slope'):
     '''
     Plots and saves the mass vs mixing timescale given a dataframe with list of objects and properties
     '''
     args.fontsize = fontsize
     print(f'Plotting M-t_mix...')
-
+    
     # ----------setting up the diagram----------
     fig, ax = plt.subplots(1, figsize=(8, 6))
     fig.subplots_adjust(left=0.12, right=0.99, bottom=0.1, top=0.95)
 
+    if mgas_method is None:
+        mgas_methods = [item.split('_')[-1] for item in df.columns if 'log_mgas' in item]
+        col_arr = ['teal', 'cornflowerblue', 'crimson', 'salmon']
+    else:
+        mgas_methods = [mgas_method]
+
     # ----------plotting----------
-    for m in pd.unique(df['marker']):
-        df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub[ycol], c=df_sub['logZ_logSFR_slope'], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', vmin=-0.3, vmax=1.4)
-    if ycol + '_u' in df: ax.errorbar(df[mass_col], df[ycol], yerr=df[ycol + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
-    if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[ycol], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+    for index, method in enumerate(mgas_methods):
+        for index2, m in enumerate(pd.unique(df['marker'])):
+            df_sub = df[df['marker'] == m]
+            p = ax.scatter(df_sub[mass_col], df_sub[f'{ycol}_{method}'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', vmin=-0.3, vmax=1.4, label=r'M$_{\rm gas}$ from ' + method if index2 == 0 and mgas_method is None else None)
+        if f'{ycol}_{method}_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], yerr=df[f'{ycol}_{method}_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+        if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     
     ax.axhline(0, ls='--', c='k', lw=0.5)
 
     # ----------making colorbar----------
-    cbar = plt.colorbar(p, pad=0.01)
-    cbar.set_label(r'$\log$ Z-$\log \Sigma_{*}$ slope', fontsize=args.fontsize)
-    cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
+    if mgas_method is not None:
+        cbar = plt.colorbar(p, pad=0.01)
+        cbar.set_label(r'$\log$ Z-$\log \Sigma_{*}$ slope', fontsize=args.fontsize)
+        cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
+    else:
+        ax.legend(fontsize=args.fontsize)
 
     # ---------annotate axes and save figure-------
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
@@ -708,9 +803,10 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10):
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
-    ax.set_ylim(-0.5, 0.6)
+    if mgas_method is None or mgas_method == 'C23': ax.set_ylim(-0.7, 4.3)
+    else: ax.set_ylim(-0.5, 0.6)
 
-    figname = f'M_tmix_colorby_Z-SFR_slope.png'
+    figname = f'M_tmix_colorby_Z-SFR_slope_{mgas_method}.png' if mgas_method is not None else f'M_tmix.png'
     save_fig(fig, figname, args)
 
     return
@@ -2545,34 +2641,6 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_mg_from_mstar(log_mstar, method='C18'):
-    '''
-    Compute log gas mass, given log stellar mass and a scaling relation method
-    Returns log gas mass
-    '''
-    if method == 'C18':
-        gas_frac = get_C18_scaling(log_mstar)
-        log_mgas = np.log10( 10 ** log_mstar / gas_frac)
-    
-    return log_mgas
-
-# --------------------------------------------------------------------------------------------------------------------
-def get_C18_scaling(log_mstar):
-    '''
-    Gas fraction-mstar scaling relation from Catinella+2018
-    Values copied from Table 2 of the paper
-    Returns interpolated gas fraction at a given log_mstar
-    '''
-    log_gf_arr = [0.148, 0.040, -0.511, -0.485, -0.785, -0.965, -1.238, -1.496]
-    log_mstar_arr = [9.16, 9.44, 9.75, 10.05, 10.34, 10.65, 10.95, 11.21]
-    interpolation = interp1d(log_mstar_arr, log_gf_arr, fill_value='extrapolate')
-
-    log_gf = interpolation(log_mstar)
-    gas_frac = 10 ** log_gf
-
-    return gas_frac
-
-# --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
@@ -2668,12 +2736,13 @@ if __name__ == "__main__":
     #df_latex = make_latex_table(df, args, sum=True)
 
     # ---------full population plots----------------------
+    #plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=15)
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_R23_high', fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
-    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15)
+    plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method=None)
 
     # ---------metallicity comparison plots----------------------
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
