@@ -2742,7 +2742,8 @@ if __name__ == "__main__":
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_R23_high', fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
-    plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method=None)
+    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method=None)
+    plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method='G20')
 
     # ---------metallicity comparison plots----------------------
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
