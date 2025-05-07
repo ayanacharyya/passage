@@ -39,9 +39,9 @@ from PIL import Image
 from venn import venn, pseudovenn, generate_petal_labels, draw_venn, generate_colors
 from reproject import reproject_interp, reproject_adaptive
 from scipy.stats import mode as sci_mode
-from scipy.interpolate import NearestNDInterpolator
+from scipy.interpolate import NearestNDInterpolator, interp1d
 from scipy.ndimage import gaussian_filter1d
-from scipy.optimize import curve_fit
+from scipy.optimize import curve_fit, brentq
 
 import regions
 from regions import Regions, PixCoord

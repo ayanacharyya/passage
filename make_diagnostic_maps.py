@@ -2891,7 +2891,7 @@ if __name__ == "__main__":
             args.z = full_hdu[0].header['REDSHIFT']
             args.ndfilt = full_hdu[0].header['NDFILT']
             args.nlines = full_hdu[0].header['NUMLINES']
-            args.distance = cosmo.comoving_distance(args.z)
+            args.distance = cosmo.luminosity_distance(args.z)
             args.pix_arcsec = full_hdu[5].header['PIXASEC']
             args.pa_arr = np.unique([full_hdu[0].header[item] for item in list(full_hdu[0].header.keys()) if 'PA00' in item])
             try: args.mag = catalog[catalog['id'] == args.id]['mag_auto'].data.data[0]

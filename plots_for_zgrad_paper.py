@@ -416,7 +416,9 @@ def make_master_df(objlist, args, sum=True):
     df['Z_SFR_slope'] = unp.nominal_values(Z_SFR_slope) # now this is in yr/Msun
     df['Z_SFR_slope_u'] = unp.std_devs(Z_SFR_slope) # now this is in yr/Msun
 
-    t_mix = Z_SFR_slope * (10 ** df['lp_mass']) / 1e9 # in Gyr
+    df['log_mgas'] = df['lp_mass'].apply(lambda x: get_mg_from_mstar(x))
+
+    t_mix = Z_SFR_slope * (10 ** df['log_mgas']) / 1e9 # in Gyr
     df['t_mix'] = unp.nominal_values(t_mix)  # in Gyr
     df['t_mix_u'] = unp.std_devs(t_mix)  # in Gyr
 
@@ -461,7 +463,7 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
-    ax.set_ylim(-2, 1)
+    ax.set_ylim(-1, 1.5)
 
     figname = f'SFMS_colorby_redshift.png'
     save_fig(fig, figname, args)
@@ -936,7 +938,7 @@ def load_1d_fits(objid, field, args):
     return od_hdu
 
 # --------------------------------------------------------------------------------------------------------------------
-def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None):
+def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum=True):
     '''
     Loads some object specific details into args
     Returns modified args
@@ -971,6 +973,14 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None):
     # ---------------dust value---------------
     try: _, args.EB_V, _ = get_EB_V(full_hdu, args, verbose=False, silent=True)
     except: args.EB_V = ufloat(0, 0)
+
+    # ----------global stellar mass----------------------
+    if field is not None:
+        if 'Par' in field: sed_fit_filename = args.output_dir / 'catalogs' / f'{field}_v0.5_venn_OII,NeIII-3867,Hb,OIII,SNR>2.0,mass_df_withSED_for_paper_only_st.csv'
+        elif 'glass' in field: sed_fit_filename = args.root_dir / 'glass_data' / f'GLASS_UNCOVER_photometry_for_paper_only_st_withSED_for_paper_only_st.csv'
+        df_sed = pd.read_csv(sed_fit_filename)
+        df_sed = df_sed.rename(columns={'ID_NIRISS': 'objid'})
+        args.log_mass = df_sed[df_sed['objid'] == args.id]['log_mass_bgp'].values[0]
 
     return args
 
@@ -1733,60 +1743,103 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
+def correct_ha_C20(N2_plus_Ha_map, logOH_map):
+    '''
+    Extract the H-alpha flux from the N2+Halpha compund, following C20 metallicity calibration
+    '''
+    #log_N2Ha_logOH_poly_coeff = [1, -10] # from approx fit to MAPPINGS models
+    log_N2Ha_logOH_poly_coeff = [-0.489, 1.513, -2.554, -5.293, -2.867][::-1] # from Table 2 N2 row of Curti+2019
+
+    if hasattr(N2_plus_Ha_map, "__len__"): # if it is an array
+        logOH_arr = logOH_map.data.flatten()
+        log_N2Ha_arr = []
+        for logOH in logOH_arr:
+            try:
+                #log_N2Ha = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH)
+                log_N2Ha = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH - 8.69) # because using C19 N2 calibration
+                log_N2Ha_arr.append(log_N2Ha)
+            except:
+                log_N2Ha_arr.append(np.nan)
+        log_N2Ha_map = np.ma.masked_where(logOH_map.mask, np.reshape(log_N2Ha_arr, np.shape(logOH_map)))
+        N2Ha_map = np.ma.masked_where(log_N2Ha_map.mask, 10 ** log_N2Ha_map.data)
+
+        Ha_data = N2_plus_Ha_map.data / (1 + N2Ha_map.data)
+        Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask | N2Ha_map.mask, Ha_data)
+    else: # for single values
+        log_N2Ha_int = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH_map - 8.69)
+        N2Ha_int = 10 ** log_N2Ha_int
+        Ha_map = N2_plus_Ha_map / (1 + N2Ha_int)
+
+    return Ha_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def correct_ha_F18(N2_plus_Ha_map, args):
+    '''
+    Extract the H-alpha flux from the N2+Halpha compund, following F18 N2/Ha calibration
+    '''
+    def F18_func(x, redshift, log_mass): # Eq 3 of Faisst+2018
+        psi = x + 0.138 - 0.042 * (1 + redshift) **2 
+        solve = 3.696 * psi + 3.236 * psi**(-1) + 0.729 * psi ** (-2) + 14.928 + 0.156 * (1 + redshift)**2 - log_mass
+        return solve
+
+    log_N2Ha = brentq(F18_func, -2, 0, args=(args.z, args.log_mass))
+    N2Ha = 10 ** log_N2Ha
+
+    if hasattr(N2_plus_Ha_map, "__len__"): # if it is an array
+        Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask, N2_plus_Ha_map.data / (1 + 1.333 * N2Ha)) # 1.333 factor is because F18 consider BOTH NII components, assuming NII 6548 = N II 6584 / 3
+        Ha_map.data[Ha_map.data==0] = np.nan
+    else: # for single values
+        Ha_map = N2_plus_Ha_map / (1 + 1.333 * N2Ha)
+
+    return Ha_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_corrected_ha(N2_plus_Ha_map, logOH_map, args):
+    '''
+    Computes the corrected Halpha map given the metallicity map and N2+Halpha map
+    Returns corrected and uncorrcted Ha and SFR maps
+    '''
+    Ha_map = correct_ha_C20(N2_plus_Ha_map, logOH_map)
+    #Ha_map = correct_ha_F18(N2_plus_Ha_map, args)
+
+    return Ha_map
+
+# --------------------------------------------------------------------------------------------------------------------
 def get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=None, logOH_sum=None):
     '''
     Computes the corrected SFR map given the metallicity map and full_hdu (from whic it obtains the uncorrected Halpha map)
     Returns corrected and uncorrcted Ha and SFR maps
     '''
-    distance = cosmo.comoving_distance(args.z)
+    distance = cosmo.luminosity_distance(args.z)
 
     # -------deriving H-alpha map-----------
     N2_plus_Ha_map, _, N2_plus_Ha_int, N2_plus_Ha_sum, _ = get_emission_line_map('Ha', full_hdu, args, silent=True)
     sfr_map = compute_SFR(N2_plus_Ha_map, distance) # N2_plus_Ha_map here is really Ha_map, because the correction has not been undone yet
+    sfr_map.data[sfr_map.data==0] = np.nan
 
     # ----------correcting Ha map------------
     if not args.do_not_correct_flux:
         factor = 0.823 # from James et al. 2023?
         N2_plus_Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask, N2_plus_Ha_map.data / factor)
 
-    #log_N2Ha_logOH_poly_coeff = [1, -10] # from approx fit to MAPPINGS models
-    log_N2Ha_logOH_poly_coeff = [-0.489, 1.513, -2.554, -5.293, -2.867][::-1] # from Table 2 N2 row of Curti+2019
-
-    logOH_arr = logOH_map.data.flatten()
-    log_N2Ha_arr = []
-    for logOH in logOH_arr:
-        try:
-            #log_N2Ha = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH)
-            log_N2Ha = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH - 8.69) # because using C19 N2 calibration
-            log_N2Ha_arr.append(log_N2Ha)
-        except:
-            log_N2Ha_array.append(np.nan)
-    log_N2Ha_map = np.ma.masked_where(logOH_map.mask, np.reshape(log_N2Ha_arr, np.shape(logOH_map)))
-    N2Ha_map = np.ma.masked_where(log_N2Ha_map.mask, 10 ** log_N2Ha_map.data)
-
-    Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask | N2Ha_map.mask, N2_plus_Ha_map.data / (1 + N2Ha_map.data))
+    Ha_map = get_corrected_ha(N2_plus_Ha_map, logOH_map, args)
 
     # -------deriving SFR map-----------
     sfr_map_corrected = compute_SFR(Ha_map, distance)
 
     # -------deriving the integrated SFR------------
     if logOH_int is not None:
-        log_N2Ha_int = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH_int - 8.69)
-        N2Ha_int = 10 ** log_N2Ha_int
-        Ha_int = N2_plus_Ha_int / (1 + N2Ha_int)
+        Ha_int = get_corrected_ha(N2_plus_Ha_int, logOH_int, args)
         sfr_int_corrected = compute_SFR(Ha_int, distance)
     else:
         sfr_int_corrected = ufloat(np.nan, np.nan)
 
     if logOH_sum is not None:
-        log_N2Ha_sum = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH_sum - 8.69)
-        N2Ha_sum = 10 ** log_N2Ha_sum
-        Ha_sum = N2_plus_Ha_sum / (1 + N2Ha_sum)
+        Ha_sum = get_corrected_ha(N2_plus_Ha_sum, logOH_sum, args)
         sfr_sum_corrected = compute_SFR(Ha_sum, distance)
     else:
         sfr_sum_corrected = ufloat(np.nan, np.nan)
 
- 
     return N2_plus_Ha_map, Ha_map, sfr_map, sfr_map_corrected, sfr_int_corrected, sfr_sum_corrected
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -1802,7 +1855,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     args = load_object_specific_args(full_hdu, args, field=field)
     logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
     Zlim = [7.1, 8.5]
-    log_sfr_lim = [-3, -2]
+    log_sfr_lim = [-1.7, 0.]
 
     # --------setting up the figure------------
     fig, axes = plt.subplots(3 if args.debug_Zsfr else 1, 2, figsize=(5.7, 7) if args.debug_Zsfr else (7, 3))
@@ -1810,7 +1863,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
 
     # ----------getting the SFR maps------------------
     N2_plus_Ha_map, Ha_map, sfr_map, sfr_map_corrected, sfr_int, sfr_sum = get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=logOH_int, logOH_sum=logOH_sum)
-    log_sfr_map = np.ma.masked_where(sfr_map_corrected.mask, unp.log10(sfr_map_corrected.data))
+    log_sfr_map = np.ma.masked_where(sfr_map_corrected.mask | logOH_map.mask, unp.log10(sfr_map_corrected.data))
    
     # ------plotting native Ha and SFR maps------------
     if args.debug_Zsfr:
@@ -1824,7 +1877,6 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
         axes = axes[2]
 
     # -----plotting 2D SFR map-----------
-    log_sfr_lim = [-2.5, -0.5]
     axes[0] = plot_2D_map(log_sfr_map, axes[0], r'$\log(\Sigma_*)$ (corrected)' if args.debug_Zsfr else r'$\log(\Sigma_*)$', args, clabel=r'$\log$ $\Sigma_*$ (M$_{\odot}$/yr/kpc$^2$)', takelog=False, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
 
     # ------plotting metallicity vs SFR-----------
@@ -1903,11 +1955,11 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         args = load_object_specific_args(full_hdu, args, field=field)
         logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
         Zlim = [7.1, 8.5]
-        log_sfr_lim = [-2.5, -1]
+        log_sfr_lim = [-1.7, 0.]
 
         # ----------getting the SFR maps------------------
         _, _, _, sfr_map, sfr_int, sfr_sum = get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=logOH_int, logOH_sum=logOH_sum)
-        log_sfr_map = np.ma.masked_where(sfr_map.mask, unp.log10(sfr_map.data))
+        log_sfr_map = np.ma.masked_where(sfr_map.mask | logOH_map.mask, unp.log10(sfr_map.data))
     
         # -----plotting 2D SFR map-----------
         cmap = 'winter'
@@ -1990,11 +2042,11 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     args = load_object_specific_args(full_hdu, args, field=field)
     logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
     Zlim = [7.1, 8.5]
-    log_sfr_lim = [-2.5, -0.5]
+    log_sfr_lim = [-1.7, 0.]
 
     # ----------getting the SFR maps------------------
     _, _, _, sfr_map, sfr_int, sfr_sum = get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=logOH_int, logOH_sum=logOH_sum)
-    log_sfr_map = np.ma.masked_where(sfr_map.mask, unp.log10(sfr_map.data))
+    log_sfr_map = np.ma.masked_where(sfr_map.mask | logOH_map.mask, unp.log10(sfr_map.data))
 
     # -----plotting 2D metallicity map-----------
     axes[0] = plot_2D_map(logOH_map, axes[0], 'log(O/H) + 12 [NB]', args, clabel='', takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=True, hide_yaxis=False, hide_cbar=False, hide_cbar_ticks=True, cticks_integer=False)
@@ -2491,6 +2543,34 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
     save_fig(fig, figname, args)
 
     return
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_mg_from_mstar(log_mstar, method='C18'):
+    '''
+    Compute log gas mass, given log stellar mass and a scaling relation method
+    Returns log gas mass
+    '''
+    if method == 'C18':
+        gas_frac = get_C18_scaling(log_mstar)
+        log_mgas = np.log10( 10 ** log_mstar / gas_frac)
+    
+    return log_mgas
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_C18_scaling(log_mstar):
+    '''
+    Gas fraction-mstar scaling relation from Catinella+2018
+    Values copied from Table 2 of the paper
+    Returns interpolated gas fraction at a given log_mstar
+    '''
+    log_gf_arr = [0.148, 0.040, -0.511, -0.485, -0.785, -0.965, -1.238, -1.496]
+    log_mstar_arr = [9.16, 9.44, 9.75, 10.05, 10.34, 10.65, 10.95, 11.21]
+    interpolation = interp1d(log_mstar_arr, log_gf_arr, fill_value='extrapolate')
+
+    log_gf = interpolation(log_mstar)
+    gas_frac = 10 ** log_gf
+
+    return gas_frac
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
