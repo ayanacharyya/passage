@@ -398,7 +398,11 @@ def break_column_into_uncertainty(df, col, make_log=False):
                     pass
         if counter > 0: print(f'\n{counter} out of {len(df)} had -ve {col}!')
     elif make_log:
-        df['log_' + col] = np.log10(df[col])
+        if col + '_u' not in df: df[col + '_u'] = 0.
+        quant = unp.uarray(df[col], df[col + '_u'])
+        log_quant = unp.log10(quant)
+        df['log_' + col] = unp.nominal_values(log_quant)
+        df['log_' + col + '_u'] = unp.std_devs(log_quant)
 
     return df
 

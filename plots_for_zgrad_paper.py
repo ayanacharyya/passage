@@ -446,10 +446,10 @@ def get_mg_from_mstar(log_mstar, log_mmol=-np.inf, method='C18'):
     '''
     if method == 'C18':
         gas_frac = get_C18_scaling(log_mstar)
-        log_mgas = np.log10( 10 ** log_mstar / gas_frac)
+        log_mgas = log_mstar + np.log10(gas_frac)
     elif method == 'G20':
         gas_frac = 0.158 * log_mstar ** 2 - 3.548 * log_mstar + 19.964 # eq 17 of Gullieuszik+2020
-        log_mgas = np.log10( 10 ** log_mstar / gas_frac)
+        log_mgas = log_mstar + np.log10(gas_frac)
     elif method == 'B23':
         log_mhi = 8.977 + 0.183 * (log_mstar - 9) # eq 10 of Bera+2023a, eq 7 of Bera+2023b
         log_mgas = np.log10(10 ** log_mhi + 10 ** log_mmol)
@@ -542,7 +542,7 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     ax = plot_SFMS_Popesso23(ax, 3.0, color='royalblue')
 
     # ---------annotate axes and save figure-------
-    plt.legend(fontsize=args.fontsize)
+    plt.legend(fontsize=args.fontsize, loc='lower right')
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
     ax.set_ylabel(r'log SFR (M$_{\odot}$/yr)', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
@@ -649,7 +649,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     if colorcol == 'O3Hb': df['O3Hb'] =np.log10(df['OIII'] / df['Hb'])
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub[colorcol], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', vmin=lim_dict[colorcol][0], vmax=lim_dict[colorcol][1], cmap='viridis', label='GLASS' if m == 's' else 'PASSAGE')
+        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub[colorcol], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', vmin=lim_dict[colorcol][0], vmax=lim_dict[colorcol][1], cmap='viridis', label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
     if zgrad_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], yerr=df[zgrad_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 
@@ -668,6 +668,10 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
 
     ax.axhline(0, ls='--', c='k', lw=0.5)
 
+    # --------plotting Wang+22 data----------
+    ax.scatter(9.04, 0.165, color='goldenrod', marker='*', s=200, lw=1, edgecolor='k', label='Wang+22')
+    ax.errorbar(9.04, 0.165, xerr=0.05, yerr=0.023, c='gray', fmt='none', lw=1, alpha=0.5)
+
     # --------plotting Sharda+21 data----------
     legend_dict = {'sami': 'SAMI', 'manga': 'MaNGA', 'califa': 'CALIFA', 'sharda_scaling1': 'S21 scaling 1', 'sharda_scaling2': 'S21 scaling 2'}
     marker_dict = {'sami': '+', 'manga': 'x', 'califa': '1', 'sharda_scaling1': 'v', 'sharda_scaling2': '^'}
@@ -677,7 +681,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     literature_files = glob.glob(str(args.root_dir / 'zgrad_paper_plots' / 'literature' / 'mzgr_*.csv'))
     literature_files.sort(key=natural_keys)
 
-    for index,this_file in enumerate(literature_files):
+    for index, this_file in enumerate(literature_files):
         sample = Path(this_file).stem.split('mzgr_')[1]
         df_lit = pd.read_csv(this_file, names=['log_mass', 'Zgrad'], sep=', ')
         if 'scaling' in sample: ax.plot(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=1, ls=ls_dict[sample], label=legend_dict[sample])
@@ -702,7 +706,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     
     ax = plot_filled_region(new_df, xcol, ycol, ax, color='salmon', noscatter=True, label='FOGGIE')
 
-    # --------plotting other literature data----------
+    # --------plotting Franchetto+21 data----------
     coeff = [-0.199, 0.199 * 10 - 0.432] # Franchetto+21 eq 6
     xarr = log_mass_lim
     ax.plot(xarr, np.poly1d(coeff)(xarr), color='limegreen', ls='dotted', label='F21 forbidden')
@@ -2743,7 +2747,7 @@ if __name__ == "__main__":
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_R23_high', fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
     #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method=None)
-    plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method='G20')
+    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method='C18')
 
     # ---------metallicity comparison plots----------------------
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)

@@ -1538,7 +1538,7 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
         this_ratio = unp.nominal_values(this_ratio)
         if this_ratio > ratio_turnover:
             log_OH.append(ufloat(logOH_turnover, 0.))
-            if ax is not None: ax[1].scatter(logOH_turnover, this_ratio, lw=0, s=50, c='cornflowerblue')
+            #if ax is not None: ax[1].scatter(logOH_turnover, this_ratio, lw=0, s=50, c='cornflowerblue')
         else:
             try:
                 poly_to_solve = np.hstack([coeff[:-1], [coeff[-1] - this_ratio]])
@@ -1553,7 +1553,8 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
                 if ax is not None:
                     col_arr = ['k', 'g', 'b']
                     for index, real_root in enumerate(real_roots): ax[0].scatter(real_root, this_ratio, lw=0, s=10, c=col_arr[index] if len(real_roots) > 1 else 'r')
-                    ax[1].scatter(this_log_OH, this_ratio, lw=0, s=10, c='brown')
+                    ratio_turnover2 = max(model(model_turnovers[-2]-8.69), model(reasonable_Z_limit[0] - 8.69))
+                    ax[1].scatter(this_log_OH, this_ratio, lw=0, s=10, c='g' if branch == 'low' and this_ratio > ratio_turnover2 else 'b' if branch == 'high' and this_ratio > ratio_turnover2 else 'r')
             except:
                 log_OH.append(ufloat(np.nan, np.nan))
                 if ax is not None: ax[1].axhline(this_ratio, lw=0.5, c='grey', alpha=0.3)
