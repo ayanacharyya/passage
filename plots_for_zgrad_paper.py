@@ -410,18 +410,25 @@ def make_master_df(objlist, args, sum=True):
     df['marker'] = df['field'].apply(lambda x: get_marker_type(x))
     
     # ------computing mixing timescales-----------
-    Zdiag = 'NB'
-    Z_SFR_slope = unp.uarray(df['logZ_logSFR_slope'], df['logZ_logSFR_slope_u']) * (10 ** (unp.uarray(df[f'logOH_sum_{Zdiag}'], df[f'logOH_sum_{Zdiag}_u']) - 8.69)) / unp.uarray(df['SFR'], df['SFR_u']) # computing Z-SFR slope from logZ-logSFR slope
+    #Zdiag = 'NB'
+    #Z_SFR_slope = unp.uarray(df['logZ_logSFR_slope'], df['logZ_logSFR_slope_u']) * (10 ** (unp.uarray(df[f'logOH_sum_{Zdiag}'], df[f'logOH_sum_{Zdiag}_u']) - 8.69)) / unp.uarray(df['SFR'], df['SFR_u']) # computing Z-SFR slope from logZ-logSFR slope
     
-    df['Z_SFR_slope'] = unp.nominal_values(Z_SFR_slope) # now this is in yr/Msun
-    df['Z_SFR_slope_u'] = unp.std_devs(Z_SFR_slope) # now this is in yr/Msun
+    # df['Z_SFR_slope'] = unp.nominal_values(Z_SFR_slope) # now this is in yr/Msun
+    # df['Z_SFR_slope_u'] = unp.std_devs(Z_SFR_slope) # now this is in yr/Msun
 
-    df['log_mmol_T20'] = df.apply(lambda row: get_mmol_from_mstar(row['lp_mass'], row['redshift'], method='T20'), axis=1) 
-    for method in ['C18', 'G20', 'B23', 'C23']:
-        df['log_mgas_' + method] = df.apply(lambda row: get_mg_from_mstar(row['lp_mass'], log_mmol=row['log_mmol_T20'], method=method), axis=1)
-        t_mix = Z_SFR_slope * (10 ** df['log_mgas_' + method]) / 1e9 # in Gyr
-        df['t_mix_' + method] = unp.nominal_values(t_mix)  # in Gyr
-        df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)  # in Gyr
+    # df['log_mmol_T20'] = df.apply(lambda row: get_mmol_from_mstar(row['lp_mass'], row['redshift'], method='T20'), axis=1) 
+    # for method in ['C18', 'G20', 'B23', 'C23']:
+    #     df['log_mgas_' + method] = df.apply(lambda row: get_mg_from_mstar(row['lp_mass'], log_mmol=row['log_mmol_T20'], method=method), axis=1)
+    #     t_mix = Z_SFR_slope * (10 ** df['log_mgas_' + method]) / 1e9 # in Gyr
+    #     df['t_mix_' + method] = unp.nominal_values(t_mix)  # in Gyr
+    #     df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)  # in Gyr
+
+    method = 'my'
+    beta, B, kappa, Sigma = 0.286, 51.6, 100., 0.1
+    slope = unp.uarray(df['logZ_logSFR_slope'], df['logZ_logSFR_slope_u'])
+    t_mix = 1e3 * slope / (B * (Sigma ** beta) * (beta + slope * kappa)) # in Myr
+    df['t_mix_' + method] = unp.nominal_values(t_mix)
+    df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)
 
     return df
 
@@ -791,7 +798,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
         if f'{ycol}_{method}_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], yerr=df[f'{ycol}_{method}_u'], c='gray', fmt='none', lw=1, alpha=0.5)
         if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     
-    ax.axhline(0, ls='--', c='k', lw=0.5)
+    if not mgas_method == 'my': ax.axhline(0, ls='--', c='k', lw=0.5)
 
     # ----------making colorbar----------
     if mgas_method is not None:
@@ -803,11 +810,12 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
 
     # ---------annotate axes and save figure-------
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
-    ax.set_ylabel(r'Metal mixing timescale $t_{mix}$ (Gyr)', fontsize=args.fontsize)
+    ax.set_ylabel(r'Metal mixing timescale $t_{mix}$ ' + '(Myr)' if mgas_method == 'my' else '(Gyr)', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
     if mgas_method is None or mgas_method == 'C23': ax.set_ylim(-0.7, 4.3)
+    elif mgas_method is not None and mgas_method == 'my': ax.set_ylim(None, None)
     else: ax.set_ylim(-0.5, 0.6)
 
     figname = f'M_tmix_colorby_Z-SFR_slope_{mgas_method}.png' if mgas_method is not None else f'M_tmix.png'
@@ -2747,7 +2755,7 @@ if __name__ == "__main__":
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_R23_high', fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
     #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method=None)
-    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method='C18')
+    plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method='my')
 
     # ---------metallicity comparison plots----------------------
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
