@@ -339,9 +339,11 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
 
         # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
         if args.vorbin:
+            df['bin_distance'] = np.ma.compressed(np.ma.masked_where(image.mask, args.voronoi_bin_distances.data))
             df['bin_ID'] = np.ma.compressed(np.ma.masked_where(image.mask, args.voronoi_bin_IDs.data))
             df = df.groupby('bin_ID', as_index=False).agg(np.mean)
-
+            xcol = 'bin_distance'
+        
         if args.radius_max is not None: df = df[df[xcol] <= args.radius_max]
         df = df.sort_values(by=xcol)
 
@@ -476,6 +478,20 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
     return ax, radprof_fit
 
 # --------------------------------------------------------------------------------------------------------------------
+def bin_fluxes(fluxes, errors=None):
+    '''
+    Bin the fluxes (and errors if provided) in the pixels that belong to a single voronoi bin (either taking mean or weighted mean)
+    Returns binned flux
+    '''
+    fluxes = np.atleast_1d(fluxes)
+    if errors is None: errors = np.zeros(len(fluxes))
+    else: errors = np.atleast_1d(errors)
+    
+    binned_flux = np.average(unp.uarray(fluxes, errors), weights = 1 / (errors ** 2))
+ 
+    return binned_flux
+
+# --------------------------------------------------------------------------------------------------------------------
 def bin_2D(map, bin_IDs, map_err=None, debug_vorbin=False):
     '''
     Bin a given 2D map by given bin_IDs
@@ -486,19 +502,27 @@ def bin_2D(map, bin_IDs, map_err=None, debug_vorbin=False):
 
     unique_IDs = np.unique(np.ma.compressed(bin_IDs))
     for id in unique_IDs:
-        candidate_fluxes = map[bin_IDs == id]
-        candidate_fluxes_wo_nan = np.ma.compressed(candidate_fluxes)
-        binned_data = np.mean(candidate_fluxes_wo_nan) # this is in ergs/s/cm^2
-        if debug_vorbin: print(f'Deb445: val: id {int(id)} out of {len(unique_IDs)}, ntotal_pix = {len(candidate_fluxes)}, ngood_pix = {len(candidate_fluxes_wo_nan)}, assigned val = {binned_data:.2e}')  ##
-        if len(candidate_fluxes_wo_nan) > 0: binned_map[bin_IDs == id] = binned_data
-        else: binned_map[bin_IDs == id] = np.nan
+        all_pixel_fluxes = map[bin_IDs == id] # this is in ergs/s/cm^2
+        good_pixel_fluxes = np.ma.compressed(all_pixel_fluxes)
+        all_pixel_fluxes = all_pixel_fluxes.data
 
         if map_err is not None:
-            candidates = map_err[bin_IDs == id]
-            candidates_wo_nan = np.ma.compressed(candidates)
-            binned_err = np.sqrt(np.sum(candidates_wo_nan ** 2)) / len(candidates_wo_nan)
-            if debug_vorbin: print(f'Deb457: err: id {int(id)} out of {len(unique_IDs)}, ntotal_pix = {len(candidates)}, ngood_pix = {len(candidates_wo_nan)}, assigned err = {binned_err:.2e}, snr = {binned_data / binned_err : .2f}')  ##
-            binned_map_err[bin_IDs == id] = binned_err # this is the appropriate error propagation for mean() operation (which the flux is undergoing above)
+            all_pixel_errors = map_err[bin_IDs == id] # this is in ergs/s/cm^2
+            good_pixel_errors = np.ma.compressed(all_pixel_errors)
+            all_pixel_errors = all_pixel_errors.data
+        else:
+            good_pixel_errors, all_pixel_errors = None, None
+
+        all_pixels_binned = bin_fluxes(all_pixel_fluxes, errors=all_pixel_errors)
+        good_pixels_binned = bin_fluxes(good_pixel_fluxes, errors=good_pixel_errors)
+
+        chosen_data = all_pixels_binned # choose from [all_pixels_binned, good_pixels_binned] #    
+        if debug_vorbin: print(f'Deb445: id {int(id)}/{len(unique_IDs)}: all pixels: {len(all_pixel_fluxes)}, {all_pixels_binned:.1e}, {all_pixels_binned.n / all_pixels_binned.s:.1f}; good pixels: {len(good_pixel_fluxes)};, {good_pixels_binned:.1e}, {good_pixels_binned.n / good_pixels_binned.s:.1f}; snr = {chosen_data.n / chosen_data.s:.1f}') ##
+        binned_map[bin_IDs == id] = chosen_data.n
+        binned_map_err[bin_IDs == id] = chosen_data.s
+
+    binned_map = np.ma.masked_where(bin_IDs.mask, binned_map)
+    if map_err is not None: binned_map_err = np.ma.masked_where(bin_IDs.mask, binned_map_err)
 
     if map_err is None: return binned_map
     else: return binned_map, binned_map_err
@@ -511,12 +535,45 @@ def make_combined_cmap(cmap1, cmap2, vmin, vmax, vcut):
     '''
     cutoff_frac = (vcut - vmin) / (vmax - vmin)
     if cutoff_frac < 0: cutoff_frac = 0.
-    col_above = plt.get_cmap(cmap1)(np.linspace(cutoff_frac, 1, int(256 * (1 - cutoff_frac))))
-    col_below = plt.get_cmap(cmap2)(np.linspace(0, cutoff_frac, int(256 * cutoff_frac)))
+    elif cutoff_frac > 1: cutoff_frac = 1.
+    #col_above = plt.get_cmap(cmap1)(np.linspace(cutoff_frac, 1, int(256 * (1 - cutoff_frac))))
+    #col_below = plt.get_cmap(cmap2)(np.linspace(0, cutoff_frac, int(256 * cutoff_frac)))
+    col_above = plt.get_cmap(cmap1)(np.linspace(0, 1, int(256 * (1 - cutoff_frac))))
+    col_below = plt.get_cmap(cmap2)(np.linspace(0, 1, int(256 * cutoff_frac)))
     colors = np.vstack((col_below, col_above))
     combined_cmap = mplcolors.LinearSegmentedColormap.from_list('combined_cmap', colors)
 
     return combined_cmap
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_voronoi_bin_distances(full_hdu, line, args):
+    '''
+    Compute the galactocentric distances of Voronoi bins as the luminosity-weighted average of the pixels distances, based on the given line map
+    Returns the 2D map (of same shape as input args.voronoi_bin_IDs) with just the distances
+    '''
+    print(f'Computing Voronoi bin galactocentric distances using {line}-map as weight..')
+    line_map, _, _, _, _ = get_emission_line_map(line, full_hdu, args, for_vorbin=True)
+
+    pixel_distance_map = get_distance_map(np.shape(line_map), args)
+    try: pixel_distance_map = np.ma.masked_where(line_map.mask, pixel_distance_map)
+    except AttributeError: pixel_distance_map = np.ma.masked_where(False, pixel_distance_map)
+
+    # ----making the dataframe and computing luminosity-weighted bin distances--------------
+    df = pd.DataFrame({'pixel_distance': np.ma.compressed(pixel_distance_map), 'flux': unp.nominal_values(np.ma.compressed(line_map)), 'bin_ID': np.ma.compressed(np.ma.masked_where(line_map.mask, args.voronoi_bin_IDs.data))})
+    
+    wm = lambda x: np.average(x, weights=df.loc[x.index, 'flux'])
+    df2 = df.groupby(['bin_ID']).agg(bin_distance=('pixel_distance', wm)).reset_index()
+    binID_distance_dict = dict(zip(df2['bin_ID'], df2['bin_distance']))
+
+    bin_distance_map = np.zeros(np.shape(line_map))
+    for xind in range(np.shape(line_map)[0]):
+        for yind in range(np.shape(line_map)[1]):
+            try: bin_distance_map[xind][yind] = binID_distance_dict[args.voronoi_bin_IDs.data[xind][yind]]
+            except KeyError: bin_distance_map[xind][yind] = np.nan
+
+    bin_distance_map = np.ma.masked_where(args.voronoi_bin_IDs.mask, bin_distance_map)
+
+    return bin_distance_map
 
 # --------------------------------------------------------------------------------------------------------------------
 def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
@@ -524,27 +581,40 @@ def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
     Compute the Voronoi bin IDs a given 2D map and corresponding uncertainty and SNR threshold
     Returns the 2D map (of same shape as input map) with just the IDs
     '''
+    # -------separating data and masks if any-----------
+    if np.ma.isMaskedArray(map):
+        original_mask = map.mask
+        map = map.data
+    else:
+        original_mask = False
+
+    # -------separating flux and uncertainties to get snr-----------
     snr_cut_for_vorbin = 0
     x_size, y_size = np.shape(map)
     map_err = unp.std_devs(map)
     map = unp.nominal_values(map)
-    snr = map / map_err
 
-    bad_mask = (snr < snr_cut_for_vorbin) | (~np.isfinite(map)) | (~np.isfinite(map_err))
+    # -------applying snr mask before sending arrays to vorbin-----------
+    snr = map / map_err
+    bad_mask = (snr < snr_cut_for_vorbin) | original_mask
+    #bad_mask = original_mask
     map = np.ma.masked_where(bad_mask, map)
     map_err = np.ma.masked_where(bad_mask, map_err)
+    snr = np.ma.masked_where(bad_mask, snr)
 
+    # -------initial debugging checks-----------
     if args is not None and args.debug_vorbin:
-        fig, axes = plt.subplots(1, 7, figsize=(14, 3))
-        fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.1, wspace=0.5)
+        fig, axes = plt.subplots(2, 4, figsize=(11, 5))
+        fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.07, wspace=0.3, hspace=0.1)
         cmap = 'viridis'
-        fig.text(0.05, 0.98, f'{args.field}: ID {args.id}: vorbin step', fontsize=args.fontsize, c='k', ha='left', va='top')
-        plot_2D_map(map, axes[0], args, takelog=False, label=f'input {args.voronoi_line} map', cmap=cmap, hide_yaxis=False)
-        plot_2D_map(map_err, axes[1], args, takelog=False, label=f'input {args.voronoi_line} err', cmap=cmap, hide_yaxis=True)
+        fig.text(0.05, 0.98, f'{args.field}: ID {args.id}: Voronoi binning diagnostics', fontsize=args.fontsize, c='k', ha='left', va='top')
+        plot_2D_map(map, axes[0][0], args, takelog=False, label=f'input {args.voronoi_line} map', cmap=cmap, hide_yaxis=False, hide_xaxis=True)
+        plot_2D_map(map_err, axes[0][1], args, takelog=False, label=f'input {args.voronoi_line} err', cmap=cmap, hide_yaxis=True, hide_xaxis=True)
 
-        combined_cmap = make_combined_cmap(cmap, 'Grays', np.min(snr), np.max(snr), snr_cut_for_vorbin)
-        plot_2D_map(snr, axes[2], args, takelog=False, label=f'input {args.voronoi_line} SNR', cmap=combined_cmap, hide_yaxis=True)
+        combined_cmap = get_combined_cmap([np.min(snr), 0, snr_thresh, np.max(snr)], ['Greys', 'Reds', cmap], new_name='my_colormap')
+        plot_2D_map(snr, axes[0][2], args, takelog=False, label=f'input {args.voronoi_line} SNR', cmap=combined_cmap, hide_yaxis=True, hide_xaxis=True, vmin=np.min(snr), vmax=np.max(snr))
 
+    # -------making appropriate x and y coords for sending into to vorbin-----------
     x_coords_grid = np.reshape(np.repeat(np.arange(x_size), y_size), (x_size, y_size))
     y_coords_grid = np.reshape(np.tile(np.arange(y_size), x_size), (x_size, y_size))
     x_coords_grid_masked = np.ma.masked_where(map.mask, x_coords_grid)
@@ -559,8 +629,9 @@ def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
         print(f'No unmasked pixels to Voronoi bin on..so skipping this galaxy.')
         return None
 
+    # -------actually calling vorbin with non-negative fluxes and errors-----------
     try:
-        binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords_array, y_coords_array, map_array, map_err_array, snr_thresh, plot=plot, quiet=quiet, cvt=False, wvt=True)
+        binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords_array, y_coords_array, map_array, map_err_array, snr_thresh, plot=plot, quiet=quiet, cvt=True, wvt=True)
     except ValueError:
         print(f'Already enough SNR in all pixels so no Voronoi binning was required.')
         binIDs = np.arange(len(x_coords_array)) + 1
@@ -568,19 +639,48 @@ def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
         print(f'Voronoi binning failed..so skipping this galaxy.')
         return None
 
+    # -------interpolating binIDs derived from vorbin----------
     interp = NearestNDInterpolator(list(zip(x_coords_array, y_coords_array)), binIDs)
     binID_map = interp(x_coords_grid, y_coords_grid)
+    binID_map[args.segmentation_map != args.id] = -1
     binID_map = np.ma.masked_where(args.segmentation_map != args.id, binID_map)
 
+    # -------final debugging checks-----------
     if args is not None and args.debug_vorbin:
-        plot_2D_map(binID_map, axes[3], args, takelog=False, label='resultant bin IDs', cmap=cmap, hide_yaxis=True)
+        ax = axes[0][3]
+        p = ax.scatter(y_coords_array, x_coords_array, c=binIDs, cmap=random_cmap, marker='s', s=10, vmin=-1, vmax=np.max(binIDs))
+        ax.set_xlim(0, np.shape(map)[0])
+        ax.set_ylim(0, np.shape(map)[1])
+        ax.set_aspect('equal')
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes('right', size='5%', pad='2%')
+        cbar = plt.colorbar(p, cax=cax, orientation='vertical')
+        ax.text(ax.get_xlim()[0] + np.diff(ax.get_xlim())[0] * 0.1, ax.get_ylim()[1] - np.diff(ax.get_ylim())[0] * 0.05, 'resultant bin IDs', c='k', ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
 
-        map, map_err = bin_2D(map, binID_map, map_err=map_err, debug_vorbin=args.debug_vorbin)
-        plot_2D_map(map, axes[4], args, takelog=False, label=f'binned {args.voronoi_line} map', cmap=cmap, hide_yaxis=True)
-        plot_2D_map(map_err, axes[5], args, takelog=False, label=f'binned {args.voronoi_line} err', cmap=cmap, hide_yaxis=True)
-        plot_2D_map(map / map_err, axes[6], args, takelog=False, label='binned SNR', cmap=cmap, hide_yaxis=True)
+        plot_2D_map(binID_map, axes[1][3], args, takelog=False, label='interpolated bin IDs', cmap=random_cmap, hide_yaxis=True, vmin=-1, vmax=np.max(binIDs))
+        
+        map, map_err = bin_2D(map, binID_map, map_err=map_err, debug_vorbin=args.debug_vorbin)    
+        snr = map / map_err
+        snr_min, snr_max = np.min(snr), np.max(snr)
+        combined_cmap = get_combined_cmap([snr_min, 0, snr_thresh, snr_max], ['Greys', 'Reds', cmap], new_name='my_colormap')
+        final_snr_cut = -100 # snr_thresh # 0 #
+        map = np.ma.masked_where(map.mask | (snr < final_snr_cut), map)
+        map_err = np.ma.masked_where(map_err.mask | (snr < final_snr_cut), map_err)
+        snr = np.ma.masked_where(snr.mask | (snr < final_snr_cut), snr)
+
+        plot_2D_map(map, axes[1][0], args, takelog=False, label=f'binned {args.voronoi_line} map', cmap=cmap, hide_yaxis=False)
+        plot_2D_map(map_err, axes[1][1], args, takelog=False, label=f'binned {args.voronoi_line} err', cmap=cmap, hide_yaxis=True)
+
+        plot_2D_map(snr, axes[1][2], args, takelog=False, label='binned SNR', cmap=combined_cmap, hide_yaxis=True, vmin=snr_min, vmax=snr_max)
+        print(f'\nDeb677: {len(np.unique(np.ma.compressed(np.ma.masked_where(snr.mask | (snr < snr_thresh), snr))))} out of {len(np.unique(binIDs))} vorbins are above SNR={snr_thresh}')
+
+        figname = fig_dir / f'{args.field}_{args.id:05d}_vorbin_debug{snr_text}{vorbin_text}.png'
+        fig.savefig(figname)
+        print(f'Saved figure to {figname}')
         plt.show(block=False)
-        #sys.exit(f'Exiting here because of --debug_vorbin mode; if you want to run the full code as usual then remove the --debug_vorbin option and re-run')
+        sys.exit(f'Exiting here because of --debug_vorbin mode; if you want to run the full code as usual then remove the --debug_vorbin option and re-run')
 
     return binID_map
 
@@ -745,9 +845,11 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
         line_map_err /= (pixscale_kpc ** 2) # this is now in ergs/s/cm^2/kpc^2 (i.e. Surface Brightness)
 
         # -----------discarding low-snr pixels AFTER vorbin, if any-----------------
+        snr_map = line_map / line_map_err
         if args.snr_cut is not None:
-            snr_map = line_map / line_map_err
             snr_mask = (~np.isfinite(snr_map)) | (snr_map < args.snr_cut)
+        else:
+            snr_mask = ~np.isfinite(snr_map)
 
         line_map = np.ma.masked_where(seg_mask | snr_mask, unp.uarray(line_map.data, line_map_err.data))
 
@@ -2918,9 +3020,7 @@ if __name__ == "__main__":
                 if args.voronoi_line in args.available_lines:
                     line_map, _, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True)
                     args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
-                    if args.debug_vorbin:
-                        print(f'Running in --debug_vorbin mode, hence not proceeding further.')
-                        continue
+                    args.voronoi_bin_distances = get_voronoi_bin_distances(full_hdu, 'OIII', args)
                 else:
                     print(f'Requested line for voronoi binning {args.voronoi_line} not available, therefore skipping this object..')
                     continue
