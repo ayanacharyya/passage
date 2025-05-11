@@ -109,7 +109,7 @@ def parse_args():
     parser.add_argument('--voronoi_line', metavar='voronoi_line', type=str, action='store', default='Hb', help='Which emission line to be used for computing the Voronoi bins? Default is None i.e., the given emission line itself')
     parser.add_argument('--flam_max', metavar='flam_max', type=float, action='store', default=None, help='Maximum y-axis limit for f_lambda (in units of 1e-19 ergs/s/cm^2/A); default is None')
     parser.add_argument('--plot_radial_profiles', dest='plot_radial_profiles', action='store_true', default=False, help='Plot radial profiles corresponding to the 2D maps? Default is no.')
-    parser.add_argument('--snr_cut', metavar='snr_cut', type=float, action='store', default=0., help='Impose an SNR cut on the emission line maps to; default is 0')
+    parser.add_argument('--snr_cut', metavar='snr_cut', type=float, action='store', default=None, help='Impose an SNR cut on the emission line maps to; default is 0')
     parser.add_argument('--only_seg', dest='only_seg', action='store_true', default=False, help='Cut out the emission line plots corresponding to the grizli segmentation map? Default is no.')
     parser.add_argument('--write_file', dest='write_file', action='store_true', default=False, help='Write the measured quantities to a master dataframe? Default is no.')
     parser.add_argument('--plot_mappings', dest='plot_mappings', action='store_true', default=False, help='Plot emission line locations as per MAPPINGS predictions (will lead to crowding of many lines)? Default is no.')
@@ -1066,9 +1066,12 @@ def get_combined_cmap(breaks, cmaps, new_name='my_colormap'):
     Adapted from https://stackoverflow.com/questions/31051488/combining-two-matplotlib-colormaps
     '''
     colors = []
+    breaks[0] = min(breaks[0], breaks[1])
+    breaks[-1] = max(breaks[-1], breaks[-2])
+
     for index, cmap in enumerate(cmaps):
-        ncolors = int(256 * (breaks[index + 1] - breaks[index]))
-        this_colors = mplcolormaps[cmap](np.linspace(breaks[index], breaks[index + 1], ncolors))
+        ncolors = int(256 * (breaks[index + 1] - breaks[index]) / (breaks[-1] - breaks[0]))
+        this_colors = mplcolormaps[cmap](np.linspace((breaks[index] - breaks[0]) / (breaks[-1] - breaks[0]), (breaks[index + 1] - breaks[0]) /(breaks[-1] - breaks[0]), ncolors))
         colors.append(this_colors)
     colors = np.vstack(colors)
     new_cmap = mplcolors.LinearSegmentedColormap.from_list(new_name, colors)
