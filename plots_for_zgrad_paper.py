@@ -12,7 +12,7 @@ from util import *
 from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df, make_set
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
 from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
-from make_diagnostic_maps import bin_2D, get_cutout, get_emission_line_map, annotate_PAs, get_linelist, trim_image, get_EB_V, get_voronoi_bin_IDs, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
+from make_diagnostic_maps import bin_2D, get_cutout, get_emission_line_map, annotate_PAs, get_linelist, trim_image, get_EB_V, get_voronoi_bin_IDs, get_voronoi_bin_distances, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
 
 plt.rcParams['ytick.direction'] = 'in'
 plt.rcParams['ytick.right'] = True
@@ -1077,6 +1077,7 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
     if args.vorbin and args.voronoi_line is not None and not skip_vorbin:
         line_map, _, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True, silent=True)
         args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, voronoi_snr, plot=False, quiet=True, args=args)
+        args.voronoi_bin_distances = get_voronoi_bin_distances(full_hdu, 'OIII', args)
 
     # ---------------dust value---------------
     try: _, args.EB_V, _ = get_EB_V(full_hdu, args, verbose=False, silent=True)
@@ -1099,32 +1100,34 @@ def plot_radial_profile(image, ax, args, ylim=None, xlim=None, hide_xaxis=False,
     Returns the axis handle and the linefit
     '''
     label_dict = smart_dict({'SFR': r'$\log$ $\Sigma_*$ (M$_{\odot}$/yr/kpc$^2$)', 'logOH': r'$\log$ (O/H) + 12', 'Z': r'$\log$ (O/H) + 12'})
-    # ----------getting the distance map--------
-    distance_map = get_distance_map(np.shape(image), args)
-    distance_map = np.ma.masked_where(image.mask, distance_map)
 
     # ----making the dataframe before radial profile plot--------------
-    df = pd.DataFrame({'radius': np.ma.compressed(distance_map), 'quant': unp.nominal_values(np.ma.compressed(image)), 'quant_u': unp.std_devs(np.ma.compressed(image))})
+    df = pd.DataFrame({'quant': unp.nominal_values(np.ma.compressed(image)), 'quant_u': unp.std_devs(np.ma.compressed(image))})
 
     # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
     if args.vorbin:
+        df['distance'] = np.ma.compressed(np.ma.masked_where(image.mask, args.voronoi_bin_distances.data))
         df['bin_ID'] = np.ma.compressed(np.ma.masked_where(image.mask, args.voronoi_bin_IDs.data))
         df = df.groupby('bin_ID', as_index=False).agg(np.mean)
+    else:
+        # ----------getting the distance map--------
+        distance_map = get_distance_map(np.shape(image), args)
+        df['distance'] = np.ma.compressed(np.ma.masked_where(image.mask, distance_map))
 
-    if args.radius_max is not None: df = df[df['radius'] <= args.radius_max]
-    df = df.sort_values(by='radius').reset_index(drop=True)
+    if args.radius_max is not None: df = df[df['distance'] <= args.radius_max]
+    df = df.sort_values(by='distance').reset_index(drop=True)
 
     # -------plotting--------
-    ax.scatter(df['radius'], df['quant'], c='grey', s=20, alpha=1)
-    ax.errorbar(df['radius'], df['quant'], yerr=df['quant_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
+    ax.scatter(df['distance'], df['quant'], c='grey', s=20, alpha=1)
+    ax.errorbar(df['distance'], df['quant'], yerr=df['quant_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
     ax.set_aspect('auto') 
 
     # -------radial fitting-------------
     try:
         fit_color = 'salmon'
-        linefit, linecov = np.polyfit(df['radius'], df['quant'], 1, cov=True, w=1. / (df['quant_u']) ** 2 if (df['quant_u'] > 0).any() else None)
-        y_fitted = np.poly1d(linefit)(df['radius'])
-        ax.plot(df['radius'], y_fitted, color=fit_color, lw=1, ls='dashed')
+        linefit, linecov = np.polyfit(df['distance'], df['quant'], 1, cov=True, w=1. / (df['quant_u']) ** 2 if (df['quant_u'] > 0).any() else None)
+        y_fitted = np.poly1d(linefit)(df['distance'])
+        ax.plot(df['distance'], y_fitted, color=fit_color, lw=1, ls='dashed')
         linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
         if quant in ['logOH', 'Z']:
             label = r'$\nabla$Z$_r$' + f' = {linefit[0].n: .2f}' if short_label else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc'
@@ -2755,7 +2758,7 @@ if __name__ == "__main__":
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_R23_high', fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
     #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method=None)
-    plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method='my')
+    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method='my')
 
     # ---------metallicity comparison plots----------------------
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
