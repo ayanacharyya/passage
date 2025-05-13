@@ -12,7 +12,7 @@ from util import *
 from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df, make_set
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
 from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
-from make_diagnostic_maps import bin_2D, get_cutout, get_emission_line_map, annotate_PAs, get_linelist, trim_image, get_EB_V, get_voronoi_bin_IDs, get_voronoi_bin_distances, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
+from make_diagnostic_maps import bin_2D, get_cutout, get_emission_line_map, annotate_PAs, get_linelist, get_EB_V, get_voronoi_bin_IDs, get_voronoi_bin_distances, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
 
 plt.rcParams['ytick.direction'] = 'in'
 plt.rcParams['ytick.right'] = True
@@ -1075,9 +1075,8 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
 
     # ---------------voronoi binning stuff---------------
     if args.vorbin and args.voronoi_line is not None and not skip_vorbin:
-        line_map, _, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True, silent=True)
-        args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, voronoi_snr, plot=False, quiet=True, args=args)
-        args.voronoi_bin_distances = get_voronoi_bin_distances(full_hdu, 'OIII', args)
+        args.voronoi_bin_IDs = get_voronoi_bin_IDs(full_hdu, voronoi_snr, plot=False, quiet=True, args=args)
+        args.voronoi_bin_distances = get_voronoi_bin_distances(full_hdu, args.voronoi_line, args)
 
     # ---------------dust value---------------
     try: _, args.EB_V, _ = get_EB_V(full_hdu, args, verbose=False, silent=True)
@@ -1391,7 +1390,7 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True,
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_line_ratio_maps(full_hdu, ratio_labels, axes, args, cmap='cividis', vmin=None, vmax=None, hide_xaxis=False):
+def plot_line_ratio_maps(full_hdu, ratio_labels, axes, args, cmap='cividis', vmin=None, vmax=None, hide_xaxis=False, takelog=False):
     '''
     Plots the 2D line ratio maps for a given list of lines for a given object, in a given axis
     Returns the axis handle
@@ -1408,12 +1407,13 @@ def plot_line_ratio_maps(full_hdu, ratio_labels, axes, args, cmap='cividis', vmi
         line_map_den = np.ma.masked_where(line_map_den.mask | bad_mask, line_map_den.data)
 
         ratio_map = np.ma.masked_where(line_map_num.mask | line_map_den.mask, line_map_num.data / line_map_den.data)
-        ax = plot_2D_map(ratio_map, ax, ratio, args, clabel='log flux ratio', cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
+        log_text = r'log ' if takelog else ''
+        ax = plot_2D_map(ratio_map, ax, ratio, args, takelog=takelog, clabel=log_text + 'flux ratio', cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
 
     return axes
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_line_maps(full_hdu, line_labels, axes, args, cmap='cividis', vmin=None, vmax=None, hide_xaxis=False):
+def plot_line_maps(full_hdu, line_labels, axes, args, cmap='cividis', vmin=None, vmax=None, hide_xaxis=False, takelog=False):
     '''
     Plots the 2D line flux maps for a given list of lines for a given object, in a given axis
     Returns the axis handle
@@ -1422,12 +1422,13 @@ def plot_line_maps(full_hdu, line_labels, axes, args, cmap='cividis', vmin=None,
     for index, ax in enumerate(axes):
         line = line_labels[index]
         line_map, _, _, _, _ = get_emission_line_map(line, full_hdu, args, dered=True, silent=True)
-        ax = plot_2D_map(line_map, ax, line, args, clabel=r'$\log$ SB (ergs/s/cm$^2$/kpc$^2$)', cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
+        log_text = r'$\log$ ' if takelog else ''
+        ax = plot_2D_map(line_map, ax, line, args, takelog=takelog, clabel=log_text + r'SB (ergs/s/cm$^2$/kpc$^2$)', cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
 
     return axes
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_flux=False):
+def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_spectra=False, show_log_map=False):
     '''
     Plots and saves a single figure with the direct image, 1D spectra, emission line maps and emission line ratio maps for a given object
     '''
@@ -1435,7 +1436,7 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_flux=False
     print(f'\nPlotting example galaxy {field}:{objid}..')
     ncol = len(args.line_list) # one each for OII, OIII, Hb and NeIII line
 
-    # -------setting up the figure layout-------------
+    # -------setting up the figure layout------------
     fig = plt.figure(figsize=(10, 7) if args.plot_ratio_maps else (10, 5))
     fig.subplots_adjust(left=0.07, right=0.92, top=0.94, bottom=0.06)
     outer_gs = gridspec.GridSpec(2, 1, height_ratios=[1, 2 if args.plot_ratio_maps else 1], figure=fig, hspace=0.2) # Outer GridSpec: 2 rows – top (loose), bottom (tight)
@@ -1462,14 +1463,20 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_flux=False
     ax_dirimg = annotate_kpc_scale_bar(2, ax_dirimg, args, label='2 kpc', color='w', loc='lower right')
 
     # ----------plotting 1D spectra--------------
-    ax_1dspec = plot_1D_spectra(od_hdu, ax_1dspec, args, show_log_flux=show_log_flux)
+    ax_1dspec = plot_1D_spectra(od_hdu, ax_1dspec, args, show_log_flux=show_log_spectra)
 
     # ----------plotting line flux maps--------------
-    axes_line_maps = plot_line_maps(full_hdu, args.line_list, axes_line_maps, args, cmap='pink', vmin=-19-0.2, vmax=-17+0.2, hide_xaxis=args.plot_ratio_maps)
+    flux_map_lim = [10**(-19-0.2), 10**(-17+0.2)]
+    if show_log_map: flux_map_lim = np.log10(np.array(flux_map_lim))
+    flux_map_lim = [None, None] ##
+    axes_line_maps = plot_line_maps(full_hdu, args.line_list, axes_line_maps, args, cmap='pink', vmin=flux_map_lim[0], vmax=flux_map_lim[1], hide_xaxis=args.plot_ratio_maps, takelog=show_log_map)
 
     # ----------plotting line ratio image--------------
     if args.plot_ratio_maps:
-        axes_ratio_maps = plot_line_ratio_maps(full_hdu, ratios_to_plot, axes_ratio_maps, args, cmap='bone', vmin=-1, vmax=1, hide_xaxis=False)
+        ratio_map_lim = [10**-1, 10**1]
+        if show_log_map: ratio_map_lim = np.log10(np.array(ratio_map_lim))
+        ratio_map_lim = [None, None] ##
+        axes_ratio_maps = plot_line_ratio_maps(full_hdu, ratios_to_plot, axes_ratio_maps, args, cmap='bone', vmin=ratio_map_lim[0], vmax=ratio_map_lim[1], hide_xaxis=False, takelog=show_log_map)
 
     # ----------annotating and saving figure--------------
     fig.text(0.05, 0.98, f'{field}: ID {objid}', fontsize=args.fontsize, c='k', ha='left', va='top')
@@ -2667,11 +2674,12 @@ if __name__ == "__main__":
     args.only_seg = True
     args.vorbin = True
     args.plot_ratio_maps = True
-    args.AGN_diag = 'Ne3O2'
-    args.exclude_lines = 'SII'
+    args.AGN_diag = 'VO87' # 'Ne3O2'
+    args.exclude_lines = []# ['SII']
     args.do_not_correct_pixel =True
-    args.voronoi_line = 'NeIII-3867'
-    args.voronoi_snr = 4.0
+    #args.voronoi_line = 'NeIII-3869'
+    #args.voronoi_snr = 4.
+
     primary_Zdiag = 'NB'
     cosmos_name = 'web' # choose between '2020' (i.e. COSMOS2020 catalog) or 'web' (i.e. COSMOSWeb catalog))
     args.version_dict = {'passage': 'v0.5', 'glass': 'orig'}
@@ -2713,13 +2721,13 @@ if __name__ == "__main__":
     #plot_photoionisation_models('OIII/Hb', 'Z', args, fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
-    #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12, show_log_flux=False)
+    #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12, show_log_spectra=False, show_log_map=False)
     
     # ---------single galaxy plot: AGN demarcation----------------------
     #plot_AGN_demarcation_figure_single(1303, 'Par028', args, fontsize=15) # AGN demarcation
     
     # ---------single galaxy plot: Z map and gradient----------------------
-    #plot_metallicity_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
+    plot_metallicity_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
     
     # ---------single galaxy plot: SFR map and correlation----------------------
     #plot_metallicity_sfr_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
@@ -2745,7 +2753,7 @@ if __name__ == "__main__":
     #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
 
     # ---------loading master dataframe with only objects in objlist------------
-    df = make_master_df(objlist, args, sum=True)
+    #df = make_master_df(objlist, args, sum=True)
     
     # ---------metallicity latex table for paper----------------------
     #df_latex = make_latex_table(df, args, sum=True)

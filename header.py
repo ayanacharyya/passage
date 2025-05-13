@@ -68,7 +68,7 @@ from astropy import wcs as pywcs
 from astropy.io import fits
 from astropy.cosmology import Planck18
 from astropy.cosmology import FlatLambdaCDM
-from astropy.convolution import convolve, Gaussian1DKernel, Box1DKernel
+from astropy.convolution import convolve, interpolate_replace_nans, Gaussian1DKernel, Box1DKernel, Gaussian2DKernel, Box2DKernel
 from astropy.visualization import make_lupton_rgb, MinMaxInterval, ManualInterval, LogStretch, LinearStretch, SqrtStretch
 
 # grizli stuff

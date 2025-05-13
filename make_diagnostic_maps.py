@@ -301,21 +301,6 @@ def get_distance_map(image_shape, args):
 
     return distance_map
 
-# --------------------------------------------------------------------------------------------------------------
-def trim_image(image, args):
-    '''
-    Trim a given 2D image to a given arcsecond dimension
-    Returns 2D map
-    '''
-    image_shape = np.shape(image)
-    center_pix = int(image_shape[0] / 2.)
-    farthest_pix = int(args.arcsec_limit / args.pix_size_arcsec) # both quantities in arcsec
-
-    image = image[center_pix - farthest_pix : center_pix + farthest_pix, center_pix - farthest_pix : center_pix + farthest_pix]
-    # print(f'Trimming image of original shape {image_shape} to {args.arcsec_limit} arcseconds, which is from pixels {center_pix - farthest_pix} to {center_pix + farthest_pix}, so new shape is {np.shape(image)}')
-
-    return image
-
 # --------------------------------------------------------------------------------------------------------------------
 def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_xaxis=False, hide_yaxis=False, image_err=None, metallicity_multi_color=False, xcol='radius', ycol='data', color='darkorange', fontsize=None):
     '''
@@ -487,12 +472,14 @@ def bin_fluxes(fluxes, errors=None):
     if errors is None: errors = np.zeros(len(fluxes))
     else: errors = np.atleast_1d(errors)
     
-    binned_flux = np.average(unp.uarray(fluxes, errors), weights = 1 / (errors ** 2))
+    #print(f'Deb475: fluxes={fluxes}, errors={errors}') ##
+    binned_flux = np.average(unp.uarray(fluxes, errors))#, weights = 1 / (errors ** 2))
+    #print(f'Deb477: result={binned_flux}') ##
  
     return binned_flux
 
 # --------------------------------------------------------------------------------------------------------------------
-def bin_2D(map, bin_IDs, map_err=None, debug_vorbin=False):
+def bin_2D(map, bin_IDs, map_err=None, debug_vorbin=False, ax=None):
     '''
     Bin a given 2D map by given bin_IDs
     Returns the binned 2D map (of same shape as input map)
@@ -501,7 +488,9 @@ def bin_2D(map, bin_IDs, map_err=None, debug_vorbin=False):
     if map_err is not None: binned_map_err = np.zeros(np.shape(map_err))
 
     unique_IDs = np.unique(np.ma.compressed(bin_IDs))
-    for id in unique_IDs:
+    col_arr = plt.cm.viridis(np.linspace(0, 1, len(unique_IDs)))
+
+    for index, id in enumerate(unique_IDs):
         all_pixel_fluxes = map[bin_IDs == id] # this is in ergs/s/cm^2
         good_pixel_fluxes = np.ma.compressed(all_pixel_fluxes)
         all_pixel_fluxes = all_pixel_fluxes.data
@@ -515,9 +504,15 @@ def bin_2D(map, bin_IDs, map_err=None, debug_vorbin=False):
 
         all_pixels_binned = bin_fluxes(all_pixel_fluxes, errors=all_pixel_errors)
         good_pixels_binned = bin_fluxes(good_pixel_fluxes, errors=good_pixel_errors)
+        chosen_data = all_pixels_binned # choose from [all_pixels_binned, good_pixels_binned] #
+        if debug_vorbin:
+            print(f'Deb445: id {int(id)}/{len(unique_IDs)}: all pixels: {len(all_pixel_fluxes)}, {all_pixels_binned:.1e}, {all_pixels_binned.n / all_pixels_binned.s:.1f}; good pixels: {len(good_pixel_fluxes)}, {good_pixels_binned:.1e}, {good_pixels_binned.n / good_pixels_binned.s:.1f}; snr = {chosen_data.n / chosen_data.s:.1f}') ##
+            if ax is not None:
+                all_pixels_snr = all_pixel_fluxes / all_pixel_errors
+                hist, bin_edges = np.histogram(all_pixels_snr, bins=50, density=True, range=(-5, 5))
+                bin_centers = bin_edges[:-1] + np.diff(bin_edges)
+                ax.step(bin_centers, hist + index * 1., lw=0.5, where='mid', color=col_arr[index])
 
-        chosen_data = all_pixels_binned # choose from [all_pixels_binned, good_pixels_binned] #    
-        if debug_vorbin: print(f'Deb445: id {int(id)}/{len(unique_IDs)}: all pixels: {len(all_pixel_fluxes)}, {all_pixels_binned:.1e}, {all_pixels_binned.n / all_pixels_binned.s:.1f}; good pixels: {len(good_pixel_fluxes)};, {good_pixels_binned:.1e}, {good_pixels_binned.n / good_pixels_binned.s:.1f}; snr = {chosen_data.n / chosen_data.s:.1f}') ##
         binned_map[bin_IDs == id] = chosen_data.n
         binned_map_err[bin_IDs == id] = chosen_data.s
 
@@ -576,52 +571,83 @@ def get_voronoi_bin_distances(full_hdu, line, args):
     return bin_distance_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
+def get_voronoi_bin_IDs(full_hdu, snr_thresh, plot=False, quiet=True, args=None):
     '''
     Compute the Voronoi bin IDs a given 2D map and corresponding uncertainty and SNR threshold
     Returns the 2D map (of same shape as input map) with just the IDs
     '''
-    # -------separating data and masks if any-----------
-    if np.ma.isMaskedArray(map):
-        original_mask = map.mask
-        map = map.data
-    else:
-        original_mask = False
+    # ---------getting the spatially resolved line flux map----------------
+    try:
+        line_hdu = full_hdu['LINE', args.voronoi_line]
+        initial_map_err = 1e-17 / (full_hdu['LINEWHT', args.voronoi_line].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
+    except KeyError:
+        if args.voronoi_line == 'OIII':
+            line_hdu = full_hdu['LINE', 'OIII-5007']
+            initial_map_err = 1e-17 / (full_hdu['LINEWHT', 'OIII-5007'].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
 
-    # -------separating flux and uncertainties to get snr-----------
-    snr_cut_for_vorbin = 0
-    x_size, y_size = np.shape(map)
-    map_err = unp.std_devs(map)
-    map = unp.nominal_values(map)
+    initial_map = line_hdu.data * 1e-17 # in units of ergs/s/cm^2
 
-    # -------applying snr mask before sending arrays to vorbin-----------
-    snr = map / map_err
-    bad_mask = (snr < snr_cut_for_vorbin) | original_mask
-    #bad_mask = original_mask
-    map = np.ma.masked_where(bad_mask, map)
-    map_err = np.ma.masked_where(bad_mask, map_err)
-    snr = np.ma.masked_where(bad_mask, snr)
+    # ----------getting a smaller cutout around the object center-----------
+    initial_map = trim_image(initial_map, args)
+    initial_map_err = trim_image(initial_map_err, args)
+    initial_snr = initial_map / initial_map_err
+    if args.only_seg: seg_mask = args.segmentation_map != args.id
+    else: seg_mask = False
+    initial_map = np.ma.masked_where(seg_mask, initial_map)
+    initial_map_err = np.ma.masked_where(seg_mask, initial_map_err)
+    initial_snr = np.ma.masked_where(seg_mask, initial_snr)
 
-    # -------initial debugging checks-----------
+    # -------debugging checks: initial maps-----------
     if args is not None and args.debug_vorbin:
-        fig, axes = plt.subplots(2, 4, figsize=(11, 5))
+        fig, axes_all = plt.subplots(3, 4, figsize=(11, 7))
         fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.07, wspace=0.3, hspace=0.1)
         cmap = 'viridis'
+        axes_top = axes_all[0]
         fig.text(0.05, 0.98, f'{args.field}: ID {args.id}: Voronoi binning diagnostics', fontsize=args.fontsize, c='k', ha='left', va='top')
-        plot_2D_map(map, axes[0][0], args, takelog=False, label=f'input {args.voronoi_line} map', cmap=cmap, hide_yaxis=False, hide_xaxis=True)
-        plot_2D_map(map_err, axes[0][1], args, takelog=False, label=f'input {args.voronoi_line} err', cmap=cmap, hide_yaxis=True, hide_xaxis=True)
 
-        combined_cmap = get_combined_cmap([np.min(snr), 0, snr_thresh, np.max(snr)], ['Greys', 'Reds', cmap], new_name='my_colormap')
-        plot_2D_map(snr, axes[0][2], args, takelog=False, label=f'input {args.voronoi_line} SNR', cmap=combined_cmap, hide_yaxis=True, hide_xaxis=True, vmin=np.min(snr), vmax=np.max(snr))
+        snr_min, snr_max = np.min(initial_snr.data), np.max(initial_snr.data)
+        combined_cmap = get_combined_cmap([snr_min, 0, snr_thresh, snr_max], ['Greys', 'Reds', cmap], new_name='my_colormap')
+        plot_2D_map(initial_map, axes_top[0], args, takelog=False, label=f'initial {args.voronoi_line} map', cmap=cmap, hide_yaxis=False, hide_xaxis=True)
+        plot_2D_map(initial_map_err, axes_top[1], args, takelog=False, label=f'initial {args.voronoi_line} err', cmap=cmap, hide_yaxis=True, hide_xaxis=True)
+        plot_2D_map(initial_snr, axes_top[2], args, takelog=False, label='initial SNR', cmap=combined_cmap, hide_yaxis=True, vmin=snr_min, vmax=snr_max, hide_xaxis=True)
+
+    # ------smoothing the map before voronoi binning--------
+    smoothing_kernel = Box2DKernel(args.kernel_size, mode=args.kernel_mode)
+    smoothed_map = np.ma.masked_where(initial_map.mask, convolve(initial_map.data, smoothing_kernel))
+    smoothed_map_err = np.ma.masked_where(initial_map_err.mask, convolve(initial_map_err.data, smoothing_kernel))
+
+    # -------assigning input maps for voronoi binning------------
+    #input_map, input_map_err = initial_map, initial_map_err
+    input_map, input_map_err = smoothed_map, smoothed_map_err
+    input_snr = input_map / input_map_err
+    
+    # -------applying snr mask before sending arrays to vorbin-----------
+    snr_cut_for_vorbin = 0
+    bad_mask = (input_snr < snr_cut_for_vorbin) | seg_mask
+    #bad_mask = seg_mask
+    input_map = np.ma.masked_where(bad_mask, input_map)
+    input_map_err = np.ma.masked_where(bad_mask, input_map_err)
+    input_snr = np.ma.masked_where(bad_mask, input_snr)
+
+    # ------------debugging checks: input maps---------------------- 
+    if args is not None and args.debug_vorbin:
+        axes_mid = axes_all[1]
+
+        snr_min, snr_max = np.min(input_snr.data), np.max(input_snr.data)
+        combined_cmap = get_combined_cmap([snr_min, 0, snr_thresh, snr_max], ['Greys', 'Reds', cmap], new_name='my_colormap')
+        plot_2D_map(input_map, axes_mid[0], args, takelog=False, label=f'input {args.voronoi_line} map', cmap=cmap, hide_yaxis=False, hide_xaxis=True)
+        plot_2D_map(input_map_err, axes_mid[1], args, takelog=False, label=f'input {args.voronoi_line} err', cmap=cmap, hide_yaxis=True, hide_xaxis=True)
+        plot_2D_map(input_snr, axes_mid[2], args, takelog=False, label='input SNR', cmap=combined_cmap, hide_yaxis=True, vmin=snr_min, vmax=snr_max, hide_xaxis=True)
 
     # -------making appropriate x and y coords for sending into to vorbin-----------
+    x_size, y_size = np.shape(input_map)
     x_coords_grid = np.reshape(np.repeat(np.arange(x_size), y_size), (x_size, y_size))
     y_coords_grid = np.reshape(np.tile(np.arange(y_size), x_size), (x_size, y_size))
-    x_coords_grid_masked = np.ma.masked_where(map.mask, x_coords_grid)
-    y_coords_grid_masked = np.ma.masked_where(map.mask, y_coords_grid)
+    x_coords_grid_masked = np.ma.masked_where(input_map.mask, x_coords_grid)
+    y_coords_grid_masked = np.ma.masked_where(input_map.mask, y_coords_grid)
 
-    map_array = np.ma.compressed(map)
-    map_err_array = np.ma.compressed(map_err)
+    input_map_array = np.ma.compressed(input_map)
+    input_map_err_array = np.ma.compressed(input_map_err)
     x_coords_array = np.ma.compressed(x_coords_grid_masked)
     y_coords_array = np.ma.compressed(y_coords_grid_masked)
 
@@ -630,27 +656,36 @@ def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
         return None
 
     # -------actually calling vorbin with non-negative fluxes and errors-----------
-    try:
-        binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords_array, y_coords_array, map_array, map_err_array, snr_thresh, plot=plot, quiet=quiet, cvt=True, wvt=True)
-    except ValueError:
-        print(f'Already enough SNR in all pixels so no Voronoi binning was required.')
-        binIDs = np.arange(len(x_coords_array)) + 1
-    except IndexError:
-        print(f'Voronoi binning failed..so skipping this galaxy.')
-        return None
+    binIDs, _, _, _, _, _, _, _ = voronoi_2d_binning(x_coords_array, y_coords_array, input_map_array, input_map_err_array, snr_thresh, plot=False, quiet=quiet, cvt=True, wvt=False)
 
     # -------interpolating binIDs derived from vorbin----------
     interp = NearestNDInterpolator(list(zip(x_coords_array, y_coords_array)), binIDs)
     binID_map = interp(x_coords_grid, y_coords_grid)
-    binID_map[args.segmentation_map != args.id] = -1
-    binID_map = np.ma.masked_where(args.segmentation_map != args.id, binID_map)
+    binID_map[seg_mask] = -1
+    binID_map = np.ma.masked_where(seg_mask, binID_map)
 
-    # -------final debugging checks-----------
+    # --------extracting only those bins with SNR above a certain threshold for ALL relevant lines--------------
+    relevant_lines = [args.voronoi_line] #  ['OII', 'Hb', 'OIII'] # 
+    final_snr_cut = 0 # snr_thresh OR 0 OR -100 (some very low number)
+    bad_mask = seg_mask
+    for index, line in enumerate(relevant_lines):
+        line_map2, _, _, _, _ = get_emission_line_map(line, full_hdu, args, for_vorbin=True)
+        map2 = np.ma.masked_where(line_map2.mask, unp.nominal_values(line_map2.data))
+        map2_err = np.ma.masked_where(line_map2.mask, unp.std_devs(line_map2.data))
+        map2, map2_err = bin_2D(map2, binID_map, map_err=map2_err, debug_vorbin=False)    
+        snr = map2 / map2_err
+        bad_mask = bad_mask | (snr < final_snr_cut)
+    binID_map = np.ma.masked_where(bad_mask, binID_map.data)
+    if args is not None and args.debug_vorbin: print(f'Eventually {len(np.unique(np.ma.compressed(binID_map)))} out of {len(np.unique(binIDs))} vorbins are above SNR={snr_thresh} for all {len(relevant_lines)} lines of interest')
+
+    # -------debugging checks: final binned maps-----------
     if args is not None and args.debug_vorbin:
-        ax = axes[0][3]
+        axes_bottom = axes_all[2]
+
+        ax = axes_mid[3]
         p = ax.scatter(y_coords_array, x_coords_array, c=binIDs, cmap=random_cmap, marker='s', s=10, vmin=-1, vmax=np.max(binIDs))
-        ax.set_xlim(0, np.shape(map)[0])
-        ax.set_ylim(0, np.shape(map)[1])
+        ax.set_xlim(0, np.shape(input_map)[0])
+        ax.set_ylim(0, np.shape(input_map)[1])
         ax.set_aspect('equal')
         ax.set_xticklabels([])
         ax.set_yticklabels([])
@@ -659,21 +694,17 @@ def get_voronoi_bin_IDs(map, snr_thresh, plot=False, quiet=True, args=None):
         cbar = plt.colorbar(p, cax=cax, orientation='vertical')
         ax.text(ax.get_xlim()[0] + np.diff(ax.get_xlim())[0] * 0.1, ax.get_ylim()[1] - np.diff(ax.get_ylim())[0] * 0.05, 'resultant bin IDs', c='k', ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
 
-        plot_2D_map(binID_map, axes[1][3], args, takelog=False, label='interpolated bin IDs', cmap=random_cmap, hide_yaxis=True, vmin=-1, vmax=np.max(binIDs))
+        plot_2D_map(binID_map, axes_bottom[3], args, takelog=False, label='interpolated bin IDs', cmap=random_cmap, hide_yaxis=True, vmin=-1, vmax=np.max(binIDs))
         
-        map, map_err = bin_2D(map, binID_map, map_err=map_err, debug_vorbin=args.debug_vorbin)    
+        map, map_err = bin_2D(input_map, binID_map, map_err=input_map_err, debug_vorbin=args.debug_vorbin, ax=axes_top[3])
+        axes_top[3].text(axes_top[3].get_xlim()[0] + np.diff(axes_top[3].get_xlim())[0] * 0.05, axes_top[3].get_ylim()[1] - np.diff(axes_top[3].get_ylim())[0] * 0.05, 'SNR of pixels in each bin', c='k', ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+        axes_top[3].axvline(0, ls='dotted', c='grey', lw=0.5)
         snr = map / map_err
-        snr_min, snr_max = np.min(snr), np.max(snr)
+        snr_min, snr_max = np.min(snr.data), np.max(snr.data)
         combined_cmap = get_combined_cmap([snr_min, 0, snr_thresh, snr_max], ['Greys', 'Reds', cmap], new_name='my_colormap')
-        final_snr_cut = -100 # snr_thresh # 0 #
-        map = np.ma.masked_where(map.mask | (snr < final_snr_cut), map)
-        map_err = np.ma.masked_where(map_err.mask | (snr < final_snr_cut), map_err)
-        snr = np.ma.masked_where(snr.mask | (snr < final_snr_cut), snr)
-
-        plot_2D_map(map, axes[1][0], args, takelog=False, label=f'binned {args.voronoi_line} map', cmap=cmap, hide_yaxis=False)
-        plot_2D_map(map_err, axes[1][1], args, takelog=False, label=f'binned {args.voronoi_line} err', cmap=cmap, hide_yaxis=True)
-
-        plot_2D_map(snr, axes[1][2], args, takelog=False, label='binned SNR', cmap=combined_cmap, hide_yaxis=True, vmin=snr_min, vmax=snr_max)
+        plot_2D_map(map, axes_bottom[0], args, takelog=False, label=f'binned {args.voronoi_line} map', cmap=cmap, hide_yaxis=False)
+        plot_2D_map(map_err, axes_bottom[1], args, takelog=False, label=f'binned {args.voronoi_line} err', cmap=cmap, hide_yaxis=True)
+        plot_2D_map(snr, axes_bottom[2], args, takelog=False, label='binned SNR', cmap=combined_cmap, hide_yaxis=True, vmin=snr_min, vmax=snr_max)
         print(f'\nDeb677: {len(np.unique(np.ma.compressed(np.ma.masked_where(snr.mask | (snr < snr_thresh), snr))))} out of {len(np.unique(binIDs))} vorbins are above SNR={snr_thresh}')
 
         figname = fig_dir / f'{args.field}_{args.id:05d}_vorbin_debug{snr_text}{vorbin_text}.png'
@@ -820,11 +851,18 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
                 line_map = np.ma.masked_where(snr_mask, line_map.data)
                 line_map_err = np.ma.masked_where(snr_mask, line_map_err.data)
 
+            # ------getting vorornoi bin IDs------------------
             if args.voronoi_line is None: # No reference emission line specified, so Voronoi IDs need to be computed now
                 bin_IDs = get_voronoi_bin_IDs(unp.uarray(line_map, line_map_err), args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
             else: # Reference emission line specified for Voronoi binning, so bin IDs have been pre-computed
                 bin_IDs = args.voronoi_bin_IDs
 
+            # ------smoothing the map before voronoi binning--------
+            smoothing_kernel = Box2DKernel(args.kernel_size, mode=args.kernel_mode)
+            line_map = np.ma.masked_where(line_map.mask, convolve(line_map.data, smoothing_kernel))
+            line_map_err = np.ma.masked_where(line_map_err.mask, convolve(line_map_err.data, smoothing_kernel))
+
+            # ------debugging plots-------------------
             if args.debug_vorbin:
                 fig, axes = plt.subplots(1, 7, figsize=(14, 3))
                 fig.subplots_adjust(left=0.05, right=0.95, top=0.95, bottom=0.1, wspace=0.5)
@@ -1453,7 +1491,7 @@ def get_Z_KD02_R23(full_hdu, args, branch='low'):
     return logOH_map, logOH_int, logOH_sum
 
 # --------------------------------------------------------------------------------------------------------------------
-def compute_Z_NB(line_label_array, line_flux_array):
+def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
     '''
     Calculates and returns the NebulaBayes metallicity given a list of observed line fluxes
     '''
@@ -1508,21 +1546,34 @@ def compute_Z_NB(line_label_array, line_flux_array):
             logOH = logOH_dict_unique_IDs[this_ID]
         else:
             start_time4 = datetime.now()
-            # -------setting up NB parameters----------
 
+            # ------getting all line fluxes-------------
+            obs_fluxes = obs_flux_array[:,index]
+            obs_errs = obs_err_array[:, index]
+
+            # ------discarding lines with negative fluxes-------------
+            good_obs = obs_fluxes >= 0
+            obs_fluxes = obs_fluxes[good_obs]
+            obs_errs = obs_errs[good_obs]
+            line_labels = np.array(line_label_array)[good_obs]
+            line_waves = np.array(line_waves_array)[good_obs]
+
+            # -------setting up NB parameters----------
+            dered = 'Hbeta' in line_labels and 'Halpha' in line_labels
             kwargs = {'prior_plot': os.path.join(out_dir, 'prior_plots', f'{this_ID}_HII_prior_plot.pdf'),
                       'likelihood_plot': os.path.join(out_dir, 'likelihood_plots', f'{this_ID}_HII_likelihood_plot.pdf'),
                       'posterior_plot': os.path.join( out_dir, 'posterior_plots', f'{this_ID}_HII_posterior_plot.pdf'),
                       'estimate_table': os.path.join(out_dir, 'best_model_catalogs', f'{this_ID}_HII_param_estimates.csv'),
                       'best_model_table': os.path.join(out_dir, 'param_estimates_catalogs', f'{this_ID}_HII_best_model.csv'),
                       'verbosity': 'ERROR',
-                      'norm_line':'Hbeta' if 'Hbeta' in line_label_array else 'OIII5007',
+                      'norm_line':'Hbeta' if 'Hbeta' in line_labels else 'OIII5007',
+                      'deredden': dered,
+                      'propagate_dered_errors': dered,
+                      'obs_wavelengths': line_waves if dered else None
                       }
-            obs_fluxes = obs_flux_array[:,index]
-            obs_errs = obs_err_array[:, index]
 
             # -------running NB--------------
-            Result = NB_Model_HII(obs_fluxes, obs_errs, line_label_array, **kwargs)
+            Result = NB_Model_HII(obs_fluxes, obs_errs, line_labels, **kwargs)
 
             # -------estimating the resulting logOH, and associated uncertainty-----------
             df_estimates = Result.Posterior.DF_estimates # pandas DataFrame
@@ -1534,12 +1585,12 @@ def compute_Z_NB(line_label_array, line_flux_array):
 
             counter += 1
             logOH_dict_unique_IDs.update({this_ID: logOH}) # updating to unique ID dictionary once logOH has been calculated for this unique ID
-            print(f'Ran NB for unique ID {this_ID}, which is {counter} out of {len(unique_IDs_array)} in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
+            print(f'Ran NB for unique ID {this_ID} (with {len(obs_fluxes)} good fluxes) which is {counter} out of {len(unique_IDs_array)} in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
 
             if args.only_integrated: ##
                 print('\n') ##
-                norm_flux = obs_fluxes[np.where(np.array(line_label_array)==kwargs['norm_line'])[0][0]]
-                for index, line in enumerate(line_label_array): print(f'{args.id}: {line}={obs_fluxes[index]/norm_flux: .1f}+/-{obs_errs[index]/norm_flux: .1f}')  ##
+                norm_flux = obs_fluxes[np.where(np.array(line_labels)==kwargs['norm_line'])[0][0]]
+                for index, line in enumerate(line_labels): print(f'{args.id}: {line}={obs_fluxes[index]/norm_flux: .1f}+/-{obs_errs[index]/norm_flux: .1f}')  ##
                 print(f'{args.id}: log O/H + 12={logOH: .1f}')
 
         logOH_array.append(logOH)
@@ -1563,9 +1614,9 @@ def get_Z_NB(full_hdu, args):
     else: line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
                        'Ha':'NII6583_Halpha', 'SII':'SII6716_31', 'NeIII-3867':'NeIII3869'}
 
-    line_map_array, line_int_array, line_sum_array, line_label_array = [], [], [], []
+    line_map_array, line_int_array, line_sum_array, line_label_array, line_waves_array = [], [], [], [], []
     for line in args.available_lines:
-        line_map, line_wave, line_int, line_sum, _ = get_emission_line_map(line, full_hdu, args, dered=False, silent=args.only_integrated)
+        line_map, line_wave, line_int, line_sum, _ = get_emission_line_map(line, full_hdu, args, dered=not args.dered_in_NB, silent=args.only_integrated)
         if not args.do_not_correct_flux:
             factor = 1.
             if args.use_original_NB_grid:
@@ -1595,11 +1646,12 @@ def get_Z_NB(full_hdu, args):
             line_int_array.append(line_int)
             line_sum_array.append(line_sum)
             line_label_array.append(line_label_dict[line])
+            line_waves_array.append(rest_wave_dict[line])
 
-    logOH_map = compute_Z_NB(line_label_array, line_map_array) if not args.only_integrated else None
-    if (np.array(line_int_array) > 0).all(): logOH_int = compute_Z_NB(line_label_array, line_int_array)
+    logOH_map = compute_Z_NB(line_label_array, line_waves_array, line_map_array) if not args.only_integrated else None
+    if (np.array(line_int_array) > 0).all(): logOH_int = compute_Z_NB(line_label_array, line_waves_array, line_int_array)
     else: logOH_int = ufloat(np.nan, np.nan)
-    if (np.array(line_sum_array) > 0).all(): logOH_sum = compute_Z_NB(line_label_array, line_sum_array)
+    if (np.array(line_sum_array) > 0).all(): logOH_sum = compute_Z_NB(line_label_array, line_waves_array, line_sum_array)
     else: logOH_sum = ufloat(np.nan, np.nan)
 
     return logOH_map, logOH_int, logOH_sum, line_label_array
@@ -1829,7 +1881,7 @@ def get_Z(full_hdu, args):
     '''
     # -----------determining output fits file name---------
     NB_text = '_orig_grid' if args.use_original_NB_grid and args.Zdiag == 'NB' else ''
-    exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
+    exclude_text = f'_without_{",".join(args.exclude_lines)}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
     Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
     output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{NB_text}{exclude_text}.fits'
 
@@ -1861,7 +1913,7 @@ def get_Z(full_hdu, args):
         # ---------saving the metallicity maps as fits files-------------
         if logOH_map is not None:
             NB_text = '_orig_grid' if args.use_original_NB_grid and args.Zdiag == 'NB' else ''
-            exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
+            exclude_text = f'_without_{",".join(args.exclude_lines)}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
             Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
             output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{NB_text}{exclude_text}.fits'
             logOH_map_val = np.where(logOH_map.mask, np.nan, unp.nominal_values(logOH_map.data))
@@ -2353,7 +2405,7 @@ def plot_metallicity_fig(full_hdu, args):
             # ---------decorating and saving the figure------------------------------
             fig.text(0.05, 0.98, f'{args.field}: ID {args.id}', fontsize=args.fontsize, c='k', ha='left', va='top')
             Zbranch_text = '' if args.Zdiag in ['NB', 'P25', 'Te'] else f'-{args.Zbranch}'
-            exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
+            exclude_text = f'_without_{",".join(args.exclude_lines)}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
             figname = fig_dir / f'{args.field}_{args.id:05d}_metallicity_maps{radial_plot_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}{exclude_text}.png'
             fig.savefig(figname, transparent=args.fortalk)
             print(f'Saved figure at {figname}')
@@ -3018,8 +3070,7 @@ if __name__ == "__main__":
             # ---------------voronoi binning stuff---------------
             if args.vorbin and args.voronoi_line is not None and not args.only_integrated:
                 if args.voronoi_line in args.available_lines:
-                    line_map, _, _, _, _ = get_emission_line_map(args.voronoi_line, full_hdu, args, for_vorbin=True)
-                    args.voronoi_bin_IDs = get_voronoi_bin_IDs(line_map, args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
+                    args.voronoi_bin_IDs = get_voronoi_bin_IDs(full_hdu, args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
                     args.voronoi_bin_distances = get_voronoi_bin_distances(full_hdu, 'OIII', args)
                 else:
                     print(f'Requested line for voronoi binning {args.voronoi_line} not available, therefore skipping this object..')

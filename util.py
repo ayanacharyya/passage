@@ -145,6 +145,9 @@ def parse_args():
     parser.add_argument('--exclude_lines', metavar='exclude_lines', type=str, action='store', default='', help='Which lines to be excluded for metallicity measurement with NB? Default is empty string, i.e., use all available lines')
     parser.add_argument('--radius_max', metavar='radius_max', type=float, action='store', default=None, help='Impose a radius (kpc) on radial plots, to be appliedduring radial fitting; default is None i.e. extends up to the full extent of the cutout defined by args.arcsec_limit')
     parser.add_argument('--only_integrated', dest='only_integrated', action='store_true', default=False, help='Analyse only the integrated fluxes? Default is no.')
+    parser.add_argument('--kernel_mode', metavar='kernel_mode', type=str, action='store', default='linear_interp', help='Mode to be used for astropy Box2DKernel? Default is linear_interp')
+    parser.add_argument('--kernel_size', metavar='kernel_size', type=float, action='store', default=3, help='Kernel size to be used for astropy Box2DKernel? Default is 3')
+    parser.add_argument('--dered_in_NB', dest='dered_in_NB', action='store_true', default=False, help='Make NebulaBayes de-redden the lines? Default is no (i.e., do de-reddening separately before calling NB)')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
@@ -289,6 +292,7 @@ def parse_args():
 
     args.plot_conditions = args.plot_conditions.split(',')
     args.res = [float(item) for item in args.res.split(',')]
+    args.exclude_lines = args.exclude_lines.split(',') if len(args.exclude_lines) > 0 else []
 
     if args.fortalk:
         print(f'Setting up plots for talks..')
@@ -1277,4 +1281,73 @@ def parse_latex_value(entry):
     else:
         return None, None  # or raise an error if you prefer
 
+# --------------------------------------------------------------------------------------------------------------
+def trim_image(image, args=None, arcsec_limit=None, pix_size_arcsec=None):
+    '''
+    Trim a given 2D image to a given arcsecond dimension
+    Returns 2D map
+    '''
+    if args is not None: arcsec_limit, pix_size_arcsec = args.arcsec_limit, args.pix_size_arcsec
+    image_shape = np.shape(image)
+    center_pix = int(image_shape[0] / 2.)
+    farthest_pix = int(arcsec_limit / pix_size_arcsec) # both quantities in arcsec
+
+    image = image[center_pix - farthest_pix : center_pix + farthest_pix, center_pix - farthest_pix : center_pix + farthest_pix]
+    # print(f'Trimming image of original shape {image_shape} to {args.arcsec_limit} arcseconds, which is from pixels {center_pix - farthest_pix} to {center_pix + farthest_pix}, so new shape is {np.shape(image)}')
+
+    return image
+
 # --------------------------------------------------------------------------------------------------
+def extract_emission_line_map_from_full(line, args=None, field=None, id=None, arcsec_limit=1.):
+    '''
+    Reads in the fill.fits or maps.fits, as available, then reads in the emission line flux and err map
+    Writes out the two maps as two separate fits files
+    Reads the newly written files and returns as two 2D numpy arrays
+    '''
+    # -------reading full.fits---------------
+    if id is not None:
+        if field is None:
+            if args is not None: field = args.field
+            else: field = 'Par028'
+        if args is not None:
+            full_filename = args.input_dir / field / 'Products' / 'full' / f'{field}_{id:05d}.full.fits'
+        else:
+            full_filename = HOME / 'Work/astro/passage/passage_data/v0.5' / field / 'Products' / 'full' / f'{field}_{id:05d}.full.fits'
+    else:
+        full_filename = args.input_dir / args.field / 'Products' / 'full' / f'{args.field}_{args.id:05d}.full.fits'
+    if not os.path.exists(full_filename): full_filename = Path(str(full_filename).replace('full', 'maps'))
+    print(f'Reading in {full_filename}..')
+    full_hdu = fits.open(full_filename)
+
+    # -----reading in required emission line-------
+    try:
+        line_hdu = full_hdu['LINE', line]
+        line_map_err = 1e-17 / (full_hdu['LINEWHT', line].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
+    except KeyError:
+        if line == 'OIII':
+            line_hdu = full_hdu['LINE', 'OIII-5007']
+            line_map_err = 1e-17 / (full_hdu['LINEWHT', 'OIII-5007'].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
+ 
+    line_map = line_hdu.data * 1e-17 # in units of ergs/s/cm^2
+
+    # --------trimming the images------------
+    line_wcs = pywcs.WCS(full_hdu['DSCI'].header)
+    pix_size_arcsec = utils.get_wcs_pscale(line_wcs)
+    line_map = trim_image(line_map, pix_size_arcsec=pix_size_arcsec, arcsec_limit=args.arcsec_limit if args is not None else arcsec_limit)
+    line_map_err = trim_image(line_map_err, pix_size_arcsec=pix_size_arcsec, arcsec_limit=args.arcsec_limit if args is not None else arcsec_limit)
+
+    # -----writing out required emission line-------
+    map_hdul = fits.HDUList(fits.PrimaryHDU(data=line_map))
+    err_hdul = fits.HDUList(fits.PrimaryHDU(data=line_map_err))
+
+    if args is not None: outfilename = args.input_dir / args.field / 'emission_maps' / 'unbinned' / f'{args.field}_{args.id:05d}_{line}_map.fits'
+    else: outfilename = HOME / 'Work/astro/passage/passage_data/v0.5' / field / 'emission_maps' / 'unbinned' / f'{field}_{id:05d}_{line}_map.fits'
+    
+    map_hdul.writeto(outfilename, overwrite=True)
+    err_hdul.writeto(str(outfilename).replace('map.fits', 'map_u.fits'), overwrite=True)
+    print(f'Saved as {outfilename}')
+
+    data_map = fits.open(outfilename)[0].data
+    data_err = fits.open(str(outfilename).replace('map.fits', 'map_u.fits'))[0].data
+
+    return data_map, data_err
