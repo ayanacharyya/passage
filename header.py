@@ -128,7 +128,7 @@ plt.rcParams['xtick.top'] = True
 HOME = Path.home()
 
 rest_wave_dict = {'Lya': 121.6, 'OII': 372.7, 'NeIII-3867':386.9, 'Hd': 434.0, 'OIII-4363': 436.3, 'Hb': 486.1, 'OIII': 500.7,
-                  'Ha+NII': 655.5, 'Ha': 656.2, 'SII': 671.7, 'ArIII-7138':713.6,
+                  'OI-6302':630., 'Ha+NII': 655.5, 'Ha': 656.2, 'SII': 671.7, 'ArIII-7138':713.6,
                   'SIII': 953.0, 'PaD': 1004.6, 'PaG': 1093.5, 'PaB': 1281.4,
                   'PaA': 1874.5}  # approximate wavelengths in nm
 

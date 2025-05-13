@@ -1558,34 +1558,41 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
             line_labels = np.array(line_label_array)[good_obs]
             line_waves = np.array(line_waves_array)[good_obs]
 
-            # -------setting up NB parameters----------
-            dered = 'Hbeta' in line_labels and 'Halpha' in line_labels
-            kwargs = {'prior_plot': os.path.join(out_dir, 'prior_plots', f'{this_ID}_HII_prior_plot.pdf'),
-                      'likelihood_plot': os.path.join(out_dir, 'likelihood_plots', f'{this_ID}_HII_likelihood_plot.pdf'),
-                      'posterior_plot': os.path.join( out_dir, 'posterior_plots', f'{this_ID}_HII_posterior_plot.pdf'),
-                      'estimate_table': os.path.join(out_dir, 'best_model_catalogs', f'{this_ID}_HII_param_estimates.csv'),
-                      'best_model_table': os.path.join(out_dir, 'param_estimates_catalogs', f'{this_ID}_HII_best_model.csv'),
-                      'verbosity': 'ERROR',
-                      'norm_line':'Hbeta' if 'Hbeta' in line_labels else 'OIII5007',
-                      'deredden': dered,
-                      'propagate_dered_errors': dered,
-                      'obs_wavelengths': line_waves if dered else None
-                      }
+            if len(line_labels) > 1:
+                # -------setting up NB parameters----------
+                dered = 'Hbeta' in line_labels and 'Halpha' in line_labels
+                norm_line = 'Hbeta' if 'Hbeta' in line_labels else 'OIII5007' if 'OIII5007' in line_labels else 'NII6583_Halpha'
+                kwargs = {'prior_plot': os.path.join(out_dir, 'prior_plots', f'{this_ID}_HII_prior_plot.pdf'),
+                        'likelihood_plot': os.path.join(out_dir, 'likelihood_plots', f'{this_ID}_HII_likelihood_plot.pdf'),
+                        'posterior_plot': os.path.join( out_dir, 'posterior_plots', f'{this_ID}_HII_posterior_plot.pdf'),
+                        'estimate_table': os.path.join(out_dir, 'best_model_catalogs', f'{this_ID}_HII_param_estimates.csv'),
+                        'best_model_table': os.path.join(out_dir, 'param_estimates_catalogs', f'{this_ID}_HII_best_model.csv'),
+                        'verbosity': 'ERROR',
+                        'norm_line':norm_line,
+                        'deredden': dered,
+                        'propagate_dered_errors': dered,
+                        'obs_wavelengths': line_waves if dered else None
+                        }
 
-            # -------running NB--------------
-            Result = NB_Model_HII(obs_fluxes, obs_errs, line_labels, **kwargs)
+                # -------running NB--------------
+                #print(f'Deb1576: binID {this_ID}: nlines={len(obs_fluxes)}, {dict(zip(line_labels, obs_fluxes))}, norm_line = {norm_line}') ##
+                Result = NB_Model_HII(obs_fluxes, obs_errs, line_labels, **kwargs)
 
-            # -------estimating the resulting logOH, and associated uncertainty-----------
-            df_estimates = Result.Posterior.DF_estimates # pandas DataFrame
-            logOH_est = df_estimates.loc['12 + log O/H', 'Estimate']
-            logOH_low = df_estimates.loc['12 + log O/H', 'CI68_low']
-            logOH_high = df_estimates.loc['12 + log O/H', 'CI68_high']
-            logOH_err = np.mean([logOH_est - logOH_low, logOH_high - logOH_est])
-            logOH = ufloat(logOH_est, logOH_err)
+                # -------estimating the resulting logOH, and associated uncertainty-----------
+                df_estimates = Result.Posterior.DF_estimates # pandas DataFrame
+                logOH_est = df_estimates.loc['12 + log O/H', 'Estimate']
+                logOH_low = df_estimates.loc['12 + log O/H', 'CI68_low']
+                logOH_high = df_estimates.loc['12 + log O/H', 'CI68_high']
+                logOH_err = np.mean([logOH_est - logOH_low, logOH_high - logOH_est])
+                logOH = ufloat(logOH_est, logOH_err)
+                
+                print(f'Ran NB for unique ID {this_ID} ({counter} out of {len(unique_IDs_array)}) with {len(obs_fluxes)} good fluxes in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
+            else:
+                logOH = ufloat(np.nan, np.nan)
+                print(f'Could not run NB for unique ID {this_ID} ({counter} out of {len(unique_IDs_array)}) with only {len(obs_fluxes)} good fluxes')
 
             counter += 1
             logOH_dict_unique_IDs.update({this_ID: logOH}) # updating to unique ID dictionary once logOH has been calculated for this unique ID
-            print(f'Ran NB for unique ID {this_ID} (with {len(obs_fluxes)} good fluxes) which is {counter} out of {len(unique_IDs_array)} in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
 
             if args.only_integrated: ##
                 print('\n') ##
@@ -1646,7 +1653,7 @@ def get_Z_NB(full_hdu, args):
             line_int_array.append(line_int)
             line_sum_array.append(line_sum)
             line_label_array.append(line_label_dict[line])
-            line_waves_array.append(rest_wave_dict[line])
+            line_waves_array.append(rest_wave_dict[line] * 10) # factor of 10 to convert from nm to Angstroms
 
     logOH_map = compute_Z_NB(line_label_array, line_waves_array, line_map_array) if not args.only_integrated else None
     if (np.array(line_int_array) > 0).all(): logOH_int = compute_Z_NB(line_label_array, line_waves_array, line_int_array)
