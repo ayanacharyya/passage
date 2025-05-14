@@ -148,6 +148,7 @@ def parse_args():
     parser.add_argument('--kernel_mode', metavar='kernel_mode', type=str, action='store', default='linear_interp', help='Mode to be used for astropy Box2DKernel? Default is linear_interp')
     parser.add_argument('--kernel_size', metavar='kernel_size', type=float, action='store', default=3, help='Kernel size to be used for astropy Box2DKernel? Default is 3')
     parser.add_argument('--dered_in_NB', dest='dered_in_NB', action='store_true', default=False, help='Make NebulaBayes de-redden the lines? Default is no (i.e., do de-reddening separately before calling NB)')
+    parser.add_argument('--debug_offset', dest='debug_offset', action='store_true', default=False, help='Do extra plots and prints for debugging offset calculation from center? Default is no.')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')

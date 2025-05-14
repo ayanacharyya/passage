@@ -12,7 +12,7 @@ from util import *
 from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df, make_set
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
 from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
-from make_diagnostic_maps import bin_2D, get_cutout, get_emission_line_map, annotate_PAs, get_linelist, get_EB_V, get_voronoi_bin_IDs, get_voronoi_bin_distances, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
+from make_diagnostic_maps import bin_2D, get_cutout, get_emission_line_map, get_offsets_from_center, annotate_PAs, get_linelist, get_EB_V, get_voronoi_bin_IDs, get_voronoi_bin_distances, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
 
 plt.rcParams['ytick.direction'] = 'in'
 plt.rcParams['ytick.right'] = True
@@ -1061,8 +1061,13 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
     args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
     args.available_lines = np.array(['OIII' if item == 'OIII-5007' else item for item in args.available_lines])  # replace 'OIII-5007' with 'OIII'
 
+    # -------determining true center of object-------------
+    args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W')
+
     # ---------------segmentation map---------------
     segmentation_map = full_hdu['SEG'].data
+    segmentation_map = np.roll(segmentation_map, args.ndelta_xpix, axis=0)
+    segmentation_map = np.roll(segmentation_map, args.ndelta_ypix, axis=1)
     args.segmentation_map = trim_image(segmentation_map, args)
 
     ####################################
@@ -1152,16 +1157,17 @@ def plot_linelist(ax, fontsize=10, line_list_file=None, show_log_flux=False):
     '''
     lines_df = get_linelist(wave_lim=ax.get_xlim(), line_list_file=line_list_file)
     previous_wave = np.min(lines_df['restwave']) * 0.1 # very small value, so that it is far left (blue-ward) of the actual plot
-    last_flipped = False # flip switch for determining if last label was placed to the left or right of the vertical line
+    last_flipped = True # flip switch for determining if last label was placed to the left or right of the vertical line
 
     for index in range(len(lines_df)):
         this_wave = lines_df.iloc[index]['restwave']
-        ax.axvline(this_wave, c='cornflowerblue', lw=1)
-        if this_wave - previous_wave < 100 or last_flipped:
-            xpos = this_wave + np.diff(ax.get_xlim())[0] * 0.01
-            last_flipped = not last_flipped
+        ax.axvline(this_wave, c='cornflowerblue', lw=1, alpha=0.5)
+        #if this_wave - previous_wave < 500 or last_flipped:
+        if last_flipped:
+            xpos = this_wave - np.diff(ax.get_xlim())[0] * 0.04
         else:
-            xpos = this_wave - np.diff(ax.get_xlim())[0] * 0.02
+            xpos = this_wave + np.diff(ax.get_xlim())[0] * 0.01
+        last_flipped = not last_flipped
         ypos = ax.get_ylim()[1] * 1.0006 if show_log_flux else ax.get_ylim()[1] * 0.98
         ax.text(xpos, ypos, lines_df.iloc[index]['LineID'].strip(), rotation=90, va='top', ha='left', fontsize=fontsize)
         previous_wave = this_wave
@@ -1210,7 +1216,7 @@ def plot_1D_spectra(od_hdu, ax, args, show_log_flux=False):
     # ---observed wavelength axis-------
     ax2 = ax.twiny()
     ax2.set_xlim(ax.get_xlim())
-    ax2.set_xticks(ax.get_xticks())
+    ax2.xaxis.set_major_locator(ticker.MaxNLocator(nbins=5, prune='both'))
     ax2.set_xticklabels(['%.2F' % (item * (1 + args.z) / 1e4) for item in ax2.get_xticks()], fontsize=args.fontsize)
     ax2.set_xlabel(r'Observed wavelength ($\mu$)', fontsize=args.fontsize)
 
@@ -1232,7 +1238,7 @@ def annotate_axes(ax, xlabel, ylabel, args, label='', clabel='', hide_xaxis=Fals
     '''
     ax.text(0.1, 0.9, label, c='k', fontsize=args.fontsize/args.fontfactor, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9), transform=ax.transAxes)
 
-    ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=4, prune='both'))
+    ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=3, prune='both'))
     ax.xaxis.set_minor_locator(ticker.AutoMinorLocator(4))
     if hide_xaxis:
         ax.set_xticklabels([])
@@ -1240,7 +1246,7 @@ def annotate_axes(ax, xlabel, ylabel, args, label='', clabel='', hide_xaxis=Fals
         ax.set_xlabel(xlabel, fontsize=args.fontsize)
         ax.tick_params(axis='x', which='major', labelsize=args.fontsize)
 
-    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=4, prune='both'))
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=3, prune='both'))
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator(4))
     if hide_yaxis:
         ax.set_yticklabels([])
@@ -1303,8 +1309,11 @@ def get_direct_image(full_hdu, filter, args):
             image = get_cutout(full_field_filename, pos, size, target_header, args, plot_test_axes=None)
             args.only_seg, args.vorbin = temp1, temp2
 
+    image = np.roll(image, args.ndelta_xpix, axis=0)
+    image = np.roll(image, args.ndelta_ypix, axis=1)
+
     image = trim_image(image, args)
-    
+ 
     return image, exptime
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -1437,12 +1446,13 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_spectra=Fa
     ncol = len(args.line_list) # one each for OII, OIII, Hb and NeIII line
 
     # -------setting up the figure layout------------
-    fig = plt.figure(figsize=(10, 7) if args.plot_ratio_maps else (10, 5))
-    fig.subplots_adjust(left=0.07, right=0.92, top=0.94, bottom=0.06)
+    #fig = plt.figure(figsize=(10, 7) if args.plot_ratio_maps else (10, 5))
+    fig = plt.figure(figsize=(7.5, 7) if args.plot_ratio_maps else (8, 5))
+    fig.subplots_adjust(left=0.09, right=0.9, top=0.94, bottom=0.06)
     outer_gs = gridspec.GridSpec(2, 1, height_ratios=[1, 2 if args.plot_ratio_maps else 1], figure=fig, hspace=0.2) # Outer GridSpec: 2 rows – top (loose), bottom (tight)
 
     # ---------setting up direct image (1x1 square) and 1D spectra (1x3 wide) subplots----------------
-    top_gs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=outer_gs[0], width_ratios=[1, ncol - 1], wspace=0.03)
+    top_gs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=outer_gs[0], width_ratios=[1, ncol - 1], wspace=0.07)
     ax_dirimg = fig.add_subplot(top_gs[0, 0])
     ax_1dspec = fig.add_subplot(top_gs[0, 1])
 
@@ -1451,7 +1461,8 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_spectra=Fa
     axes_line_maps = [fig.add_subplot(bottom_gs[0, item]) for item in np.arange(ncol)]
     if args.plot_ratio_maps:
         axes_ratio_maps = [fig.add_subplot(bottom_gs[1, item]) for item in np.arange(ncol)]
-        ratios_to_plot = ['OII/NeIII-3867', 'OIII/OII', 'OII/Hb', 'OIII/Hb']
+        #ratios_to_plot = ['OII/NeIII-3867', 'OIII/OII', 'OII/Hb', 'OIII/Hb']
+        ratios_to_plot = ['OIII/OII', 'OII/Hb', 'OIII/Hb']
 
     # ----------loading the full.fits and 1D.fits files--------------
     full_hdu = load_full_fits(objid, field, args)
@@ -1466,16 +1477,16 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_spectra=Fa
     ax_1dspec = plot_1D_spectra(od_hdu, ax_1dspec, args, show_log_flux=show_log_spectra)
 
     # ----------plotting line flux maps--------------
-    flux_map_lim = [10**(-19-0.2), 10**(-17+0.2)]
+    flux_map_lim = [10**(-18-0.2), 10**(-16.8+0.2)]
     if show_log_map: flux_map_lim = np.log10(np.array(flux_map_lim))
-    flux_map_lim = [None, None] ##
+    #flux_map_lim = [None, None] ##
     axes_line_maps = plot_line_maps(full_hdu, args.line_list, axes_line_maps, args, cmap='pink', vmin=flux_map_lim[0], vmax=flux_map_lim[1], hide_xaxis=args.plot_ratio_maps, takelog=show_log_map)
 
     # ----------plotting line ratio image--------------
     if args.plot_ratio_maps:
         ratio_map_lim = [10**-1, 10**1]
         if show_log_map: ratio_map_lim = np.log10(np.array(ratio_map_lim))
-        ratio_map_lim = [None, None] ##
+        #ratio_map_lim = [None, None] ##
         axes_ratio_maps = plot_line_ratio_maps(full_hdu, ratios_to_plot, axes_ratio_maps, args, cmap='bone', vmin=ratio_map_lim[0], vmax=ratio_map_lim[1], hide_xaxis=False, takelog=show_log_map)
 
     # ----------annotating and saving figure--------------
@@ -2685,7 +2696,8 @@ if __name__ == "__main__":
     args.version_dict = {'passage': 'v0.5', 'glass': 'orig'}
 
     args.plot_conditions = 'SNR,mass'.split(',')
-    args.line_list = 'OII,NeIII-3867,Hb,OIII'.split(',')
+    #args.line_list = 'OII,NeIII-3867,Hb,OIII'.split(',')
+    args.line_list = 'OII,Hb,OIII'.split(',')
     args.SNR_thresh = 2
     args.Zdiag = 'R2,R3,R23,NB'.split(',')
     #args.Zdiag = 'R2,R3,R23,O3O2,NB'.split(',')
@@ -2709,7 +2721,7 @@ if __name__ == "__main__":
     args.vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
 
     # ------additional variables, for clarity-------------
-    all_ratios = ['OII/Hb', 'OIII/Hb', 'OII,OIII/Hb', 'OIII/OII', 'NeIII-3867/OII', 'OIII/OII,OIII']
+    all_ratios = ['OII/Hb', 'OIII/Hb', 'OII,OIII/Hb', 'OIII/OII', 'OIII/OII,OIII'] #'NeIII-3867/OII', 
     SEL_Zdiags = [item for item in args.Zdiag if 'NB' not in item]
 
     # ---------venn diagram plot----------------------
@@ -2721,13 +2733,14 @@ if __name__ == "__main__":
     #plot_photoionisation_models('OIII/Hb', 'Z', args, fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
-    #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12, show_log_spectra=False, show_log_map=False)
+    #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12, show_log_spectra=False, show_log_map=True)
     
     # ---------single galaxy plot: AGN demarcation----------------------
     #plot_AGN_demarcation_figure_single(1303, 'Par028', args, fontsize=15) # AGN demarcation
     
     # ---------single galaxy plot: Z map and gradient----------------------
-    plot_metallicity_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
+    plot_metallicity_fig_single(1849, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
+    #plot_metallicity_fig_single(1983, 'glass-a2744', primary_Zdiag, args, fontsize=10) # zgrad plot
     
     # ---------single galaxy plot: SFR map and correlation----------------------
     #plot_metallicity_sfr_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot

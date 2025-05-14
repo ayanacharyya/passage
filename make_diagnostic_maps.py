@@ -73,7 +73,7 @@ def annotate_PAs(pa_arr, ax, fontsize=10, color='k'):
         x_comp = len * np.sin(pa * np.pi / 180)
         y_comp = len * np.cos(pa * np.pi / 180)
         ax.plot([x_cen, x_cen - x_comp], [y_cen, y_cen + y_comp], lw=1, c=color)
-        ax.text(x_cen - x_comp - 0.02, y_cen + y_comp + 0.02, r'%d$^\circ$' % pa, color=color, fontsize=fontsize, ha='center', va='center', rotation=pa)
+        ax.text(x_cen - 1.2 * x_comp, y_cen + 1.2 * y_comp, r'%d$^\circ$' % pa, color=color, fontsize=fontsize, ha='center', va='center', rotation=pa)
 
     return ax
 
@@ -587,6 +587,13 @@ def get_voronoi_bin_IDs(full_hdu, snr_thresh, plot=False, quiet=True, args=None)
 
     initial_map = line_hdu.data * 1e-17 # in units of ergs/s/cm^2
 
+    # -------------pixel offset to true center----------------
+    print(f'Correcting emission lines for pixel offset by {args.ndelta_xpix} on x and {args.ndelta_ypix} on y')
+    initial_map = np.roll(initial_map, args.ndelta_xpix, axis=0)
+    initial_map_err = np.roll(initial_map_err, args.ndelta_xpix, axis=0)
+    initial_map = np.roll(initial_map, args.ndelta_ypix, axis=1)
+    initial_map_err = np.roll(initial_map_err, args.ndelta_ypix, axis=1)
+
     # ----------getting a smaller cutout around the object center-----------
     initial_map = trim_image(initial_map, args)
     initial_map_err = trim_image(initial_map_err, args)
@@ -808,14 +815,11 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
     line_map = line_map * factor
     line_map_err = line_map_err * factor
 
-    # -------------pixel offset----------------
-    if not args.do_not_correct_pixel:
-        ndelta_xpix, ndelta_ypix = 1, 1
-        print(f'Correcting emission lines for pixel offset by {ndelta_xpix} on x and {ndelta_ypix} on y')
-        line_map = np.roll(line_map, ndelta_xpix, axis=1)
-        line_map_err = np.roll(line_map_err, ndelta_xpix, axis=1)
-        line_map = np.roll(line_map, ndelta_ypix, axis=0)
-        line_map_err = np.roll(line_map_err, ndelta_ypix, axis=0)
+    # -------------pixel offset to true center----------------
+    line_map = np.roll(line_map, args.ndelta_xpix, axis=0)
+    line_map_err = np.roll(line_map_err, args.ndelta_xpix, axis=0)
+    line_map = np.roll(line_map, args.ndelta_ypix, axis=1)
+    line_map_err = np.roll(line_map_err, args.ndelta_ypix, axis=1)
 
     # ----------getting a smaller cutout around the object center-----------
     line_map = trim_image(line_map, args)
@@ -2395,7 +2399,7 @@ def plot_metallicity_fig(full_hdu, args):
 
         # ---------plotting-------------
         if logOH_map is not None:
-            lim = [7.5, 8.2] if args.Zdiag == 'KD02_R23' and args.Zbranch == 'low' else [7.1, 9.1]
+            lim = [8.1, 8.8] if args.Zdiag == 'NB' else [7.1, 8.1] if args.Zbranch =='low' else [8.1, 8.8]
             ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
             if args.plot_snr:
                 OH_map = 10 ** logOH_map.data
@@ -2894,6 +2898,86 @@ def plot_DIG_figure(full_hdu, args):
 
     return fig, cdig_map
 
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_offsets_from_center(full_hdu, args, filter='F200W'):
+    '''
+    Computes the offset from the original center of image to the brightest pixel in the direct image with the given filter
+    Returns two integers (offset in x and y axes)
+    '''
+    dummy_filter = 'F140W'
+    try:
+        dir_img = full_hdu['DSCI', f'{filter}-{filter}-CLEAR'].data
+    except:
+        try: 
+            dir_img = full_hdu['DSCI', filter].data
+        except:
+            try:
+                dir_img = full_hdu['DSCI', dummy_filter].data
+                filter = dummy_filter
+            except:
+                dir_img = None
+
+    if dir_img is not None:
+        dir_img = trim_image(dir_img, args=args)
+        segmentation_map = full_hdu['SEG'].data
+        segmentation_map = trim_image(segmentation_map, args)
+
+        smoothing_kernel = Box2DKernel(5, mode=args.kernel_mode)
+        dir_img_smoothed = convolve(dir_img, smoothing_kernel)
+        brightest_coords = np.where(dir_img_smoothed == dir_img_smoothed.max())
+        brightest_x, brightest_y = brightest_coords[0][0], brightest_coords[1][0]
+        cen_x, cen_y = int(np.shape(dir_img)[0] / 2), int(np.shape(dir_img)[1] / 2)
+        ndelta_xpix = cen_x - brightest_x
+        ndelta_ypix = cen_x - brightest_y
+        #ndelta_xpix, ndelta_ypix = 0, 0 ##
+        print(f'For {args.field}:{args.id}: Determined x and y offsets from {filter} direct image = {ndelta_xpix}, {ndelta_ypix}')
+
+        if args.debug_offset:
+            print(f'Deb2934: original shape = {np.shape(dir_img)}') ##
+            print(f'Deb2935: original center = {cen_x}, {cen_y}') ##
+            print(f'Deb2934: brightest pixel = {brightest_x}, {brightest_y}') ##
+
+            fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+            fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.07, wspace=0.3, hspace=0.1)
+            cmap = 'viridis'
+            fig.text(0.05, 0.98, f'{args.field}: ID {args.id}: Centering offset diagnostics', fontsize=args.fontsize, c='k', ha='left', va='top')
+
+            axes[0].imshow(dir_img, origin='lower', cmap=cmap)
+            axes[0].scatter(cen_y, cen_x, marker='x', c='k')
+            axes[0].scatter(brightest_y, brightest_x, marker='x', c='r')
+            axes[0].contour(segmentation_map != args.id, levels=0, colors='w', linewidths=0.5)
+            axes[0].text(0.9, 0.9, 'Original', c='w', fontsize=args.fontsize, ha='right', va='top', transform=axes[0].transAxes)
+
+            axes[1].imshow(dir_img_smoothed, origin='lower', cmap=cmap)
+            axes[1].scatter(cen_y, cen_x, marker='x', c='k')
+            axes[1].scatter(brightest_y, brightest_x, marker='x', c='r')
+            axes[1].contour(segmentation_map != args.id, levels=0, colors='w', linewidths=0.5)
+            axes[1].text(0.9, 0.9, 'Smoothed', c='w', fontsize=args.fontsize, ha='right', va='top', transform=axes[1].transAxes)
+
+            dir_img_shifted = np.roll(dir_img_smoothed, ndelta_xpix, axis=0)
+            dir_img_shifted = np.roll(dir_img_shifted, ndelta_ypix, axis=1)
+            
+            segmentation_map = np.roll(segmentation_map, ndelta_xpix, axis=0)
+            segmentation_map = np.roll(segmentation_map, ndelta_ypix, axis=1)
+
+            new_cen_x, new_cen_y = int(np.shape(dir_img_shifted)[0] / 2), int(np.shape(dir_img_shifted)[1] / 2)
+            
+            axes[2].imshow(dir_img_shifted, origin='lower', cmap=cmap)
+            axes[2].scatter(new_cen_y, new_cen_x, marker='x', c='k')
+            axes[2].contour(segmentation_map != args.id, levels=0, colors='w', linewidths=0.5)
+            axes[2].text(0.9, 0.9, 'Shifted', c='w', fontsize=args.fontsize, ha='right', va='top', transform=axes[2].transAxes)
+
+            plt.show(block=False)
+            sys.exit(f'Exiting here because of --debug_offset mode; if you want to run the full code as usual then remove the --debug_offset option and re-run')
+    
+    else:
+        ndelta_xpix = 0
+        ndelta_ypix = 0
+        print(f'Could not find image for filter {filter} in {args.field}:{args.id}, so forcing center offsets to be {ndelta_xpix}, {ndelta_ypix}')
+
+    return ndelta_xpix, ndelta_ypix
+
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
@@ -3065,8 +3149,13 @@ if __name__ == "__main__":
             args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
             args.EB_V = 0. # until gets over-written, if both H alpha and H beta lines are present
 
+            # --------determining true center of object---------------------
+            args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W')
+
             # ---------------segmentation map---------------
             segmentation_map = full_hdu['SEG'].data
+            segmentation_map = np.roll(segmentation_map, args.ndelta_xpix, axis=0)
+            segmentation_map = np.roll(segmentation_map, args.ndelta_ypix, axis=1)
             args.segmentation_map = trim_image(segmentation_map, args)
 
             # ---------------dust value---------------
