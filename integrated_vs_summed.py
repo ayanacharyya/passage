@@ -3,7 +3,7 @@
     Notes: Comparing grizli-reported integrated line fluxes, ratios, metallicities etc. vs those derived from summing the 2D emission line maps
     Author : Ayan
     Created: 09-04-25
-    Example: run integrated_vs_summed.py --do_not_correct_pixel --Zbranch low
+    Example: run integrated_vs_summed.py --Zbranch low
 '''
 from header import *
 from util import *

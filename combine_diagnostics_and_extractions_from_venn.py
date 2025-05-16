@@ -6,7 +6,7 @@
     Example: run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --only_seg --do_all_fields --line_list Ha --plot_conditions SNR,mass,F115W,F150W,F200W --SNR_thresh 10
              run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --only_seg --do_all_fields --line_list OIII,Ha --plot_conditions EW,mass,PA --EW_thresh 300
              run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --only_seg --do_all_fields --line_list OIII,Ha --plot_conditions SNR,mass,PA,a_image --SNR_thresh 10 --a_thresh 2.4
-             run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --plot_snr --plot_ratio_maps --plot_AGN_frac --only_seg --drv 0.5 --field Par028 --vorbin --voronoi_line Ha --voronoi_snr 5 --do_not_correct_pixel --Zdiag O3S2 --AGN_diag Ne3O2 --plot_circle_at_arcsec 0.5  --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --clobber
+             run combine_diagnostics_and_extractions_from_venn.py --plot_radial_profiles --plot_snr --plot_ratio_maps --plot_AGN_frac --only_seg --drv 0.5 --field Par028 --vorbin --voronoi_line Ha --voronoi_snr 5 --Zdiag O3S2 --AGN_diag Ne3O2 --plot_circle_at_arcsec 0.5  --plot_conditions SNR --line_list OIII,Ha,OII,Hb,SII --SNR_thresh 2 --clobber
 '''
 
 from header import *

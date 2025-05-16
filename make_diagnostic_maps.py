@@ -31,22 +31,22 @@
              run make_diagnostic_maps.py --field Par28 --id 1332,1500,1565,1692,1697,192,68,754 --plot_metallicity --plot_radial_profile --plot_ion --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5
              run make_diagnostic_maps.py --field Par28 --id 192 --plot_metallicity --ignore_combined --plot_radial_profile --plot_ion --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5
 
-             run make_diagnostic_maps.py --field Par28 --id 1303,1934,2734,2867,300,2903,2906 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --keep
-             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --mask_agn --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --keep
-             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --plot_circle_at_arcsec 0.5
-             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_snr --plot_ratio_maps --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag O3S2 --plot_circle_at_arcsec 0.5
-             run make_diagnostic_maps.py --field Par28 --id 2867 --plot_BPT --plot_AGN_frac --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.25 --colorcol distance_from_AGN_line --AGN_diag H21
-             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --AGN_diag O2O3
-             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --use_variable_N2Ha
-             run make_diagnostic_maps.py --field glass-a2744 --id 2928,5184 --plot_radial_profile --plot_AGN_frac --only_seg --vorbin --voronoi_line OIII --voronoi_snr 10 --drv 0.5 --do_not_correct_pixel --Zdiag O3O2
-             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --AGN_diag H21 --plot_models --slice_at_quantity3 4,9
+             run make_diagnostic_maps.py --field Par28 --id 1303,1934,2734,2867,300,2903,2906 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --Zdiag O3S2 --keep
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --mask_agn --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --Zdiag O3S2 --keep
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --Zdiag O3S2 --plot_circle_at_arcsec 0.5
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_snr --plot_ratio_maps --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --Zdiag O3S2 --plot_circle_at_arcsec 0.5
+             run make_diagnostic_maps.py --field Par28 --id 2867 --plot_BPT --plot_AGN_frac --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --plot_circle_at_arcsec 0.25 --colorcol distance_from_AGN_line --AGN_diag H21
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --plot_circle_at_arcsec 0.5 --AGN_diag O2O3
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --plot_circle_at_arcsec 0.5 --use_variable_N2Ha
+             run make_diagnostic_maps.py --field glass-a2744 --id 2928,5184 --plot_radial_profile --plot_AGN_frac --only_seg --vorbin --voronoi_line OIII --voronoi_snr 10 --drv 0.5 --Zdiag O3O2
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_BPT --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --plot_circle_at_arcsec 0.5 --AGN_diag H21 --plot_models --slice_at_quantity3 4,9
 
-             run make_diagnostic_maps.py --field glass-a2744 --id 321,998,1694,1983,2355,2744,2938 --plot_snr --plot_ratio_maps --plot_radial_profiles --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.5 --fontsize 5 --arcsec_limit 0.5
-             run make_diagnostic_maps.py --field glass-a2744 --plot_snr --plot_ratio_maps --plot_radial_profiles --plot_AGN_frac --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 2 --drv 0.5 --do_not_correct_pixel --plot_circle_at_arcsec 0.25 --AGN_diag Ne3O2 --Zdiag R3 --mask_agn --fontsize 5 --id 5184,1407,629,1504,1622,2273,2926,3422,2891,562,1300,2928,600 --output_subdir diagnostics_OIII,OII,Hb,NeIII-3867,SNR>2.0
-             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_DIG --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --do_not_correct_pixel --Zdiag P25 --plot_circle_at_arcsec 0.5 --plot_snr
+             run make_diagnostic_maps.py --field glass-a2744 --id 321,998,1694,1983,2355,2744,2938 --plot_snr --plot_ratio_maps --plot_radial_profiles --plot_AGN_frac --plot_radial_profiles --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --plot_circle_at_arcsec 0.5 --fontsize 5 --arcsec_limit 0.5
+             run make_diagnostic_maps.py --field glass-a2744 --plot_snr --plot_ratio_maps --plot_radial_profiles --plot_AGN_frac --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 2 --drv 0.5 --plot_circle_at_arcsec 0.25 --AGN_diag Ne3O2 --Zdiag R3 --mask_agn --fontsize 5 --id 5184,1407,629,1504,1622,2273,2926,3422,2891,562,1300,2928,600 --output_subdir diagnostics_OIII,OII,Hb,NeIII-3867,SNR>2.0
+             run make_diagnostic_maps.py --field Par28 --id 1303 --plot_DIG --plot_radial_profile --only_seg --vorbin --voronoi_line Ha --voronoi_snr 5 --drv 0.5 --Zdiag P25 --plot_circle_at_arcsec 0.5 --plot_snr
 
-             run make_diagnostic_maps.py --field Par28 --id 300,1303,1849,2171,2727,2867 --plot_ratio_maps --plot_snr --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 2 --drv 0.5 --do_not_correct_pixel --Zdiag R3 --AGN_diag Ne3O2 --mask_agn --fontsize 5
-             run make_diagnostic_maps.py --field Par28 --id 300,1303,1849,2171,2727,2867 --plot_metallicity --plot_radial_profile --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --do_not_correct_pixel --Zdiag R3,R2,R23,O3O2,P25,NB --AGN_diag Ne3O2 --mask_agn --exclude_line SII
+             run make_diagnostic_maps.py --field Par28 --id 300,1303,1849,2171,2727,2867 --plot_ratio_maps --plot_snr --plot_AGN_frac --plot_radial_profile --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 2 --drv 0.5 --Zdiag R3 --AGN_diag Ne3O2 --mask_agn --fontsize 5
+             run make_diagnostic_maps.py --field Par28 --id 300,1303,1849,2171,2727,2867 --plot_metallicity --plot_radial_profile --only_seg --vorbin --voronoi_line NeIII-3867 --voronoi_snr 4 --drv 0.5 --Zdiag R3,R2,R23,O3O2,P25,NB --AGN_diag Ne3O2 --mask_agn --exclude_line SII
    Afterwards, to make the animation: run /Users/acharyya/Work/astro/ayan_codes/animate_png.py --inpath /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_output/Par028/all_diag_plots_wradprof_snr3.0_onlyseg/ --rootname Par028_*_all_diag_plots_wradprof_snr3.0_onlyseg.png --delay 0.1
 '''
 
@@ -290,14 +290,17 @@ def plot_binned_profile(df, ax, color='darkorange', yerr=None, xcol='radius', yc
     return ax, linefit
 
 # --------------------------------------------------------------------------------------------------------------
-def get_distance_map(image_shape, args):
+def get_distance_map(image_shape, args, for_distmap=False):
     '''
     Get map of distances from the center, in target rest-frame, on a given 2D grid
     Returns 2D distance map
     '''
-    pixscale_kpc = args.pix_size_arcsec/ cosmo.arcsec_per_kpc_proper(args.z).value # kpc
-    center_pix = image_shape[0] / 2.
-    distance_map = np.array([[np.sqrt((i - center_pix)**2 + (j - center_pix)**2) for j in range(image_shape[1])] for i in range(image_shape[0])]) * pixscale_kpc # kpc
+    if not args.vorbin or for_distmap:
+        pixscale_kpc = args.pix_size_arcsec/ cosmo.arcsec_per_kpc_proper(args.z).value # kpc
+        center_pix = image_shape[0] / 2.
+        distance_map = np.array([[np.sqrt((i - center_pix)**2 + (j - center_pix)**2) for j in range(image_shape[1])] for i in range(image_shape[0])]) * pixscale_kpc # kpc
+    else:
+        distance_map = args.voronoi_bin_distances
 
     return distance_map
 
@@ -324,10 +327,8 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
 
         # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
         if args.vorbin:
-            df['bin_distance'] = np.ma.compressed(np.ma.masked_where(image.mask, args.voronoi_bin_distances.data))
             df['bin_ID'] = np.ma.compressed(np.ma.masked_where(image.mask, args.voronoi_bin_IDs.data))
             df = df.groupby('bin_ID', as_index=False).agg(np.mean)
-            xcol = 'bin_distance'
         
         if args.radius_max is not None: df = df[df[xcol] <= args.radius_max]
         df = df.sort_values(by=xcol)
@@ -549,14 +550,16 @@ def get_voronoi_bin_distances(full_hdu, line, args):
     print(f'Computing Voronoi bin galactocentric distances using {line}-map as weight..')
     line_map, _, _, _, _ = get_emission_line_map(line, full_hdu, args, for_vorbin=True)
 
-    pixel_distance_map = get_distance_map(np.shape(line_map), args)
+    pixel_distance_map = get_distance_map(np.shape(line_map), args, for_distmap=True)
     try: pixel_distance_map = np.ma.masked_where(line_map.mask, pixel_distance_map)
     except AttributeError: pixel_distance_map = np.ma.masked_where(False, pixel_distance_map)
 
     # ----making the dataframe and computing luminosity-weighted bin distances--------------
-    df = pd.DataFrame({'pixel_distance': np.ma.compressed(pixel_distance_map), 'flux': unp.nominal_values(np.ma.compressed(line_map)), 'bin_ID': np.ma.compressed(np.ma.masked_where(line_map.mask, args.voronoi_bin_IDs.data))})
+    df = pd.DataFrame({'pixel_distance': np.ma.compressed(pixel_distance_map), 'flux': unp.nominal_values(np.ma.compressed(line_map)), 'flux_u': unp.std_devs(np.ma.compressed(line_map)), 'bin_ID': np.ma.compressed(np.ma.masked_where(line_map.mask, args.voronoi_bin_IDs.data))})
+    df['snr'] = df['flux'] / df['flux']
     
-    wm = lambda x: np.average(x, weights=df.loc[x.index, 'flux'])
+    weight_col = 'snr' # 'snr' or 'flux'
+    wm = lambda x: np.average(x[df[weight_col] >= 0], weights=df.loc[x[df[weight_col] >= 0].index, weight_col]) # weighting the pixel distance by the SNr of the pixel
     df2 = df.groupby(['bin_ID']).agg(bin_distance=('pixel_distance', wm)).reset_index()
     binID_distance_dict = dict(zip(df2['bin_ID'], df2['bin_distance']))
 
@@ -673,7 +676,7 @@ def get_voronoi_bin_IDs(full_hdu, snr_thresh, plot=False, quiet=True, args=None)
 
     # --------extracting only those bins with SNR above a certain threshold for ALL relevant lines--------------
     relevant_lines = [args.voronoi_line] #  ['OII', 'Hb', 'OIII'] # 
-    final_snr_cut = 0 # snr_thresh OR 0 OR -100 (some very low number)
+    final_snr_cut = snr_thresh # snr_thresh OR 0 OR -100 (some very low number)
     bad_mask = seg_mask
     for index, line in enumerate(relevant_lines):
         line_map2, _, _, _, _ = get_emission_line_map(line, full_hdu, args, for_vorbin=True)
@@ -1894,7 +1897,8 @@ def get_Z(full_hdu, args):
     NB_text = '_orig_grid' if args.use_original_NB_grid and args.Zdiag == 'NB' else ''
     exclude_text = f'_without_{",".join(args.exclude_lines)}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
     Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
-    output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{NB_text}{exclude_text}.fits'
+    AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
+    output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map_upto_{args.arcsec_limit}arcsec{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}{AGN_diag_text}{NB_text}{exclude_text}.fits'
 
     # ------checking if the outputfile already exists--------------
     if os.path.exists(output_fitsname) and not args.clobber:
@@ -1923,20 +1927,19 @@ def get_Z(full_hdu, args):
 
         # ---------saving the metallicity maps as fits files-------------
         if logOH_map is not None:
-            NB_text = '_orig_grid' if args.use_original_NB_grid and args.Zdiag == 'NB' else ''
-            exclude_text = f'_without_{",".join(args.exclude_lines)}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
-            Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
-            output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}_AGNdiag_{args.AGN_diag}{NB_text}{exclude_text}.fits'
             logOH_map_val = np.where(logOH_map.mask, np.nan, unp.nominal_values(logOH_map.data))
             logOH_map_err = np.where(logOH_map.mask, np.nan, unp.std_devs(logOH_map.data))
 
+            distance_map = get_distance_map(np.shape(logOH_map_val), args)
             if args.vorbin:  # getting how many unique IDs present, so that NB does not have to run unnecessary repeats
                 bin_IDs_map = np.where(args.voronoi_bin_IDs.mask, np.nan, args.voronoi_bin_IDs.data)
+                distance_map = np.where(args.voronoi_bin_IDs.mask, np.nan, distance_map.data)
             else:
                 bin_IDs_map = np.arange(np.shape(logOH_map_val)[0] * np.shape(logOH_map_val)[1]).reshape(np.shape(logOH_map_val))
 
-            distance_map = get_distance_map(np.shape(logOH_map_val), args)
-            df = pd.DataFrame({'radius': distance_map.flatten(), 'log_OH': logOH_map_val.flatten(),'log_OH_u': logOH_map_err.flatten(), 'bin_ID': bin_IDs_map.flatten()})
+        # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
+            df = pd.DataFrame({'distance': distance_map.flatten(), 'log_OH': logOH_map_val.flatten(),'log_OH_u': logOH_map_err.flatten(), 'bin_ID': bin_IDs_map.flatten()})
+            
             if args.distance_from_AGN_line_map is not None: df['agn_dist'] = args.distance_from_AGN_line_map.data.flatten()
             df = df.dropna().reset_index(drop=True)
             df['bin_ID'] = df['bin_ID'].astype(int)
@@ -2139,13 +2142,12 @@ def get_direct_image_per_filter(full_hdu, filter, target_header, args, plot_test
         direct_map_wht = get_cutout(drizzled_image_filename.replace('sci', 'wht'), pos, size, target_header, args)
 
         # -------------pixel offset----------------
-        if not args.do_not_correct_pixel:
-            ndelta_xpix, ndelta_ypix = 2, 0
-            print(f'Correcting emission lines for pixel offset by {ndelta_xpix} on x and {ndelta_ypix} on y')
-            direct_map = np.roll(direct_map, ndelta_xpix, axis=1)
-            direct_map_wht = np.roll(direct_map_wht, ndelta_xpix, axis=1)
-            direct_map = np.roll(direct_map, ndelta_ypix, axis=0)
-            direct_map_wht = np.roll(direct_map_wht, ndelta_ypix, axis=0)
+        print(f'Correcting direct image maps for pixel offset by {args.ndelta_xpix} on x and {args.ndelta_ypix} on y')
+        direct_map = np.roll(direct_map, args.ndelta_xpix, axis=0)
+        direct_map_wht = np.roll(direct_map_wht, args.ndelta_xpix, axis=0)
+        direct_map = np.roll(direct_map, args.ndelta_ypix, axis=1)
+        direct_map_wht = np.roll(direct_map_wht, args.ndelta_ypix, axis=1)
+
 
         # ---------computing uncertainty-------------
         direct_map_err = 0.1 * np.abs(direct_map) # 1 / np.sqrt(direct_map_wht)
@@ -2356,7 +2358,7 @@ def plot_metallicity_fig(full_hdu, args):
     Returns the figure handle and the metallicity map just produced
     '''
     # ---------lotting metallicity profiles and gradients----------------------
-    df_logOH_radfit = pd.DataFrame(columns=['field', 'objid', 'logOH_int', 'logOH_int_u', 'logOH_sum', 'logOH_sum_u', 'logOH_slope', 'logOH_slope_u', 'logOH_cen', 'logOH_cen_u', 'logOH_diagnostic', 'logOH_branch'])
+    df_logOH_radfit = pd.DataFrame(columns=['field', 'objid', 'logOH_int', 'logOH_int_u', 'logOH_sum', 'logOH_sum_u', 'logOH_slope', 'logOH_slope_u', 'logOH_cen', 'logOH_cen_u', 'logOH_diagnostic', 'logOH_branch', 'AGN_diag', 'extent_arcsec'])
 
     # -------looping over all Zdiagnostics-----------
     for index, args.Zdiag in enumerate(args.Zdiag_arr):
@@ -2423,11 +2425,11 @@ def plot_metallicity_fig(full_hdu, args):
             plt.show(block=False)
 
             # ------------------appending to Zgrad dataframe--------------------------
-            df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_int.n, logOH_int.s, logOH_sum.n, logOH_sum.s, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s, args.Zdiag, args.Zbranch]
+            df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_int.n, logOH_int.s, logOH_sum.n, logOH_sum.s, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s, args.Zdiag, args.Zbranch, args.AGN_diag, args.arcsec_limit]
 
     # ------------------writing out Z gradient fits, for making MZGR plot later--------------------------
     if not args.only_integrated:
-        outfilename = args.output_dir / 'catalogs' / f'logOHgrad_df{snr_text}{only_seg_text}{vorbin_text}.txt'
+        outfilename = args.output_dir / 'catalogs' / f'logOHgrad_df{snr_text}{only_seg_text}{vorbin_text}.csv'
         df_logOH_radfit.to_csv(outfilename, index=None, mode='a', header=not os.path.exists(outfilename))
         print(f'Appended metallicity gradient fits to catalog file {outfilename}')
 
@@ -2442,7 +2444,7 @@ def get_AGN_func_methods(args):
     if args.AGN_diag in ['VO87', 'K01', 'S24']:
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'SII', 'Ha', ['K01', 'S24']
     elif args.AGN_diag in ['H21', 'B22']:
-        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'SII', 'Ha', ['B22_S2Ha', 'H21']
+        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'SII', 'Ha', ['H21', 'B22_S2Ha']
     elif args.AGN_diag == 'O2O3':
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'OII', 'OIII', []
     elif args.AGN_diag == 'O2Hb':
@@ -2592,11 +2594,15 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
     dist_method = theoretical_lines[0] if len(theoretical_lines) > 0 else None
 
     # -----------getting the fluxes------------------
-    ynum_map, _, ynum_int, ynum_sum, _ = get_emission_line_map(args.ynum_line, full_hdu, args)
-    yden_map, _, yden_int, yden_sum, _ = get_emission_line_map(args.yden_line, full_hdu, args)
+    try:
+        ynum_map, _, ynum_int, ynum_sum, _ = get_emission_line_map(args.ynum_line, full_hdu, args)
+        yden_map, _, yden_int, yden_sum, _ = get_emission_line_map(args.yden_line, full_hdu, args)
 
-    xnum_map, _, xnum_int, xnum_sum, _ = get_emission_line_map(args.xnum_line, full_hdu, args)
-    xden_map, _, xden_int, xden_sum, _ = get_emission_line_map(args.xden_line, full_hdu, args)
+        xnum_map, _, xnum_int, xnum_sum, _ = get_emission_line_map(args.xnum_line, full_hdu, args)
+        xden_map, _, xden_int, xden_sum, _ = get_emission_line_map(args.xden_line, full_hdu, args)
+    except:
+        print(f'Required emission lines not available for {args.id} with {args.AGN_diag} AGN diagnostic. So skipping this object')
+        return ax, None, None
 
     if not args.do_not_correct_flux and args.AGN_diag in ['H21', 'B22'] and args.xden_line == 'Ha': # special treatment for H-alpha line, in order to add the NII 6584 component back
         factor = 0.823  # from grizli source code
@@ -2667,8 +2673,6 @@ def plot_BPT(full_hdu, ax, args, cmap='viridis', ax_inset=None, hide_plot=False,
 
     # -----------spatially_resolved-----------------------
     distance_map = get_distance_map(np.shape(ynum_map), args)
-    distance_map = np.ma.masked_where(False, distance_map)
-    if args.vorbin: distance_map = bin_2D(distance_map, args.voronoi_bin_IDs)
 
     if args.use_variable_N2Ha and args.xden_line == 'Ha':
         if not args.do_not_correct_flux:  # special treatment for H-alpha line, in order to add the NII 6584 component back
@@ -3175,13 +3179,6 @@ if __name__ == "__main__":
                 if args.voronoi_bin_IDs is None:
                     print(f'Voronoi binning was not possible, therefore skipping this object..')
                     continue
-
-            # ---------------radial profile stuff---------------
-            if args.plot_radial_profiles:
-                seg_map = full_hdu['SEG'].data
-                distance_map = get_distance_map(np.shape(seg_map), args)
-                distance_map = np.ma.compressed(np.ma.masked_where(seg_map != args.id, distance_map))
-                #if args.radius_max is None: args.radius_max = np.max(distance_map)
 
             # ---------initialising the starburst figure------------------------------
             if args.test_cutout or args.plot_direct_filters:

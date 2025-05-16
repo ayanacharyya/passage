@@ -142,7 +142,8 @@ def plot_venn(df, args, silent=False):
     if 'lp_mass' in df:
         if not silent: print('\n')
         condition = np.isfinite(df['lp_mass'])
-        set_arr, label_arr = make_set(df, condition, 'Stellar mass available', set_arr, label_arr, silent=silent)
+        #set_arr, label_arr = make_set(df, condition, 'Stellar mass available', set_arr, label_arr, silent=silent)
+        set_arr, label_arr = make_set(df, condition, 'COSMOS-Web photometry available', set_arr, label_arr, silent=silent)
 
     if 'lp_SFR' in df:
         condition = df['lp_SFR'] > args.log_SFR_thresh
