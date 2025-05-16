@@ -1818,7 +1818,7 @@ def plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10, exclude_ids
         cbar.ax.tick_params(labelsize=args.fontsize)
     
     # -----------saving figure------------
-    figname = f'BPT_all_objects_upto_{args.arcsec_limit}arcsecc_AGNdiag_{args.AGN_diag}.png'
+    figname = f'BPT_all_objects_upto_{args.arcsec_limit}arcsec_AGNdiag_{args.AGN_diag}.png'
     save_fig(fig, figname, args)
 
     return
