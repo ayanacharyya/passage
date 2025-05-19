@@ -12,7 +12,7 @@ from util import *
 from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df, make_set
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
 from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
-from make_diagnostic_maps import bin_2D, get_cutout, get_emission_line_map, get_offsets_from_center, annotate_PAs, get_linelist, get_EB_V, get_voronoi_bin_IDs, get_voronoi_bin_distances, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
+from make_diagnostic_maps import get_re, get_cutout, get_emission_line_map, get_offsets_from_center, annotate_PAs, get_linelist, get_EB_V, get_voronoi_bin_IDs, get_voronoi_bin_distances, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
 
 plt.rcParams['ytick.direction'] = 'in'
 plt.rcParams['ytick.right'] = True
@@ -193,8 +193,10 @@ def get_sfr_df(objlist, args, Zdiag, Zdiag_branch='low', survey='passage', sum=T
     ####################################
     
     df_sfr = pd.read_csv(filename)
-    df_sfr = df_sfr.drop_duplicates(subset=['field', 'objid', 'Zdiag', 'Zdiag_branch', 'AGN_diag', 'extent_arcsec'], keep='last')
-    df_sfr = df_sfr[(df_sfr['Zdiag'] == Zdiag) & (df_sfr['Zdiag_branch'] == Zdiag_branch) & (df_sfr['extent_arcsec'] == args.arcsec_limit)]
+    df_sfr = df_sfr.drop_duplicates(subset=['field', 'objid', 'Zdiag', 'Zdiag_branch', 'AGN_diag', 'extent_value', 'extent_unit'], keep='last')
+    if args.re_limit is not None: df_sfr = df_sfr[(df_sfr['extent_unit'] == 're') & (df_sfr['extent_value'] == args.re_limit)]
+    else: df_sfr = df_sfr[(df_sfr['extent_unit'] == 'arcsec') & (df_sfr['extent_value'] == args.arcsec_limit)]
+    df_sfr = df_sfr[(df_sfr['Zdiag'] == Zdiag) & (df_sfr['Zdiag_branch'] == Zdiag_branch)]
     if args.AGN_diag != 'None': df_sfr = df_sfr[df_sfr['AGN_diag'] == args.AGN_diag]
     df_sfr = df_sfr.drop(['Zdiag', 'Zdiag_branch', 'AGN_diag'], axis=1)
     df_sfr = pd.merge(df, df_sfr, on=['field', 'objid'], how='left')
@@ -223,8 +225,9 @@ def get_logOH_df(objlist, args, survey='passage'):
     ####################################
     
     df_logOH = pd.read_csv(filename)
-    df_logOH = df_logOH.drop_duplicates(subset=['field', 'objid', 'Zdiag_branch', 'Zdiag', 'extent_arcsec'], keep='last')
-    df_logOH = df_logOH[(df_logOH['extent_arcsec'] == args.arcsec_limit)]
+    df_logOH = df_logOH.drop_duplicates(subset=['field', 'objid', 'Zdiag_branch', 'Zdiag', 'extent_value', 'extent_unit'], keep='last')
+    if args.re_limit is not None: df_logOH = df_logOH[(df_logOH['extent_unit'] == 're') & (df_logOH['extent_value'] == args.re_limit)]
+    else: df_logOH = df_logOH[(df_logOH['extent_unit'] == 'arcsec') & (df_logOH['extent_value'] == args.arcsec_limit)]
     if args.AGN_diag != 'None': df_logOH = df_logOH[df_logOH['AGN_diag'] == args.AGN_diag]
     df_logOH = pd.merge(df, df_logOH, on=['field', 'objid'], how='inner')
 
@@ -665,7 +668,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     # ----------making colorbar----------
     cbar = plt.colorbar(p, pad=0.01)
     try:
-        Zgrad = np.array(args.Zdiag)[[item in zgrad_col for item in args.Zdiag]][0]
+        Zgrad = np.array(args.Zdiag)[[f'logOH_slope_{item}' == zgrad_col for item in args.Zdiag]][0]
         clabel = r'$\log$ (O/H) + 12' + f' [{Zgrad}]'
     except:
         try:
@@ -728,7 +731,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
-    ax.set_ylim(-0.5, 0.25)
+    ax.set_ylim(-0.5, 0.75)
 
     figname = f'MZgrad_colorby_{colorcol}_Zdiag_{zgrad_col}_upto_{args.arcsec_limit}arcsec.png'
     save_fig(fig, figname, args)
@@ -767,7 +770,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
-    ax.set_ylim(-0.3, 1.4)
+    ax.set_ylim(-1.3, 0.4)
 
     figname = f'MZsfr_colorby_Z_upto_{args.arcsec_limit}arcsec.png'
     save_fig(fig, figname, args)
@@ -831,7 +834,7 @@ def make_latex_table(df, args, Zdiag='NB', sum=True):
     Makes and saves a latex table for with metallicity and other columns, given a dataframe with list of objects and properties
     Returns the latex table as pandas dataframe
     '''
-    column_dict = {'field':'Field', 'objid':'ID', 'redshift':r'$z$', 'lp_mass':r'$\log$ M$_{\star}$/M$_{\odot}$', 'lp_SFR':r'$\log$ SFR (M$_{\odot}$/yr)', 'SFR':r'SFR (M$_{\odot}$/yr)', 'logOH_int_NB':'$\log$ O/H + 12$_{total}$', 'logOH_sum_NB':'$\log$ O/H + 12$_{total}$', 'logOH_slope_NB':r'$\nabla Z$ (dex/kpc)'}
+    column_dict = {'field':'Field', 'objid':'ID', 'redshift':r'$z$', 'lp_mass':r'$\log$ M$_{\star}$/M$_{\odot}$', 'lp_SFR':r'$\log$ SFR (M$_{\odot}$/yr)', 'SFR':r'SFR (M$_{\odot}$/yr)', 'logOH_int_NB':'$\log$ O/H + 12$_{total}$', 'logOH_sum_NB':'$\log$ O/H + 12$_{total}$', 'logOH_slope_NB':r'$\nabla Z$ (dex/kpc)' if args.re_limit is None else r'$\nabla Z$ (dex/R$_e$)'}
     decimal_dict = defaultdict(lambda: 2, redshift=1, lp_mass=1, RA=4, Dec=4)
     base_cols = ['field', 'objid', 'RA', 'Dec', 'redshift', 'lp_mass', 'SFR']
     cols_with_errors = [f'logOH_sum_{Zdiag}' if sum else f'logOH_int_{Zdiag}', f'logOH_slope_{Zdiag}', 'lp_mass', 'SFR']
@@ -1058,21 +1061,28 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
     args.field = field
     line_wcs = pywcs.WCS(full_hdu['DSCI'].header)
     args.pix_size_arcsec = utils.get_wcs_pscale(line_wcs)
-    args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
     args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
     args.available_lines = np.array(['OIII' if item == 'OIII-5007' else item for item in args.available_lines])  # replace 'OIII-5007' with 'OIII'
 
     # -------determining true center of object-------------
     args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W')
 
+    # --------determining effective radius of object---------------------
+    args.re_kpc, args.re_arcsec = get_re(full_hdu, args, filter='F150W')
+    if args.re_limit is not None:
+        args.extent = (-args.re_limit, args.re_limit, -args.re_limit, args.re_limit)
+    else:
+        args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
+
     # ---------------segmentation map---------------
     segmentation_map = full_hdu['SEG'].data
     segmentation_map = np.roll(segmentation_map, args.ndelta_xpix, axis=0)
     segmentation_map = np.roll(segmentation_map, args.ndelta_ypix, axis=1)
+    args.segmentation_map_arcsec = trim_image(segmentation_map, args, skip_re_trim=True)
     args.segmentation_map = trim_image(segmentation_map, args)
 
     ####################################
-    if field is not None and 'glass' in field:
+    if field is not None and 'glass' in field and args.voronoi_snr == 4:
         voronoi_snr = float(2)
         print(f'\nWARNING: Actually voronoi snr={voronoi_snr} for {field}-{args.id}') ##
     else:
@@ -1158,6 +1168,7 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     '''
     label_dict = smart_dict({'SFR': r'$\log$ $\Sigma_*$ (M$_{\odot}$/yr/kpc$^2$)', 'logOH': r'$\log$ (O/H) + 12', 'Z': r'$\log$ (O/H) + 12', 'log_OH': r'$\log$ (O/H) + 12'})
 
+    if args.re_limit is not None: df['distance'] /= args.re_kpc # converting from kpc to Re
     if args.radius_max is not None: df = df[df['distance'] <= args.radius_max]
     df = df.sort_values(by='distance').reset_index(drop=True)
 
@@ -1173,10 +1184,10 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
         y_fitted = np.poly1d(linefit)(df['distance'])
         ax.plot(df['distance'], y_fitted, color=fit_color, lw=1, ls='dashed')
         linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
-        if quant in ['logOH', 'Z']:
-            label = r'$\nabla$Z$_r$' + f' = {linefit[0].n: .2f}' if short_label else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc'
+        if quant in ['logOH', 'Z', 'log_OH']:
+            label = r'$\nabla$Z$_r$' + f' = {linefit[0].n: .2f}' if short_label else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc' if args.re_limit is None else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} ' + r'dex/R$_e$'
         else:
-            label = r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0].s: .2f}' if short_label else r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0]: .2f} dex/kpc'
+            label = r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0].s: .2f}' if short_label else r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0]: .2f} dex/kpc' if args.re_limit is None else r'$\nabla$' + f' = {linefit[0]: .2f} ' + r'dex/R$_e$'
         ax.text(0.1, 0.05, label, c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
     except:
         print(f'WARNING: Could not fit radial profile, returning nan fit parameters')
@@ -1185,7 +1196,7 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     # --------annotating axis--------------
     if xlim is not None: ax.set_xlim(xlim[0], xlim[1]) # kpc
     if ylim is not None: ax.set_ylim(ylim[0], ylim[1])
-    if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)', label_dict[quant], args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+    if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)' if args.re_limit is None else r'Radius (R$_e$)', label_dict[quant], args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
     
     return ax, linefit
 
@@ -1315,6 +1326,7 @@ def annotate_kpc_scale_bar(kpc, ax, args, label=None, color='k', loc='lower left
     Returns axis handle
     '''
     pix = kpc * cosmo.arcsec_per_kpc_proper(args.z).value  # converting kpc to arcsec
+    if args.re_limit is not None: pix /= args.re_arcsec # converting arcsec to Re units
     scalebar = AnchoredSizeBar(ax.transData, pix, label, loc, pad=0.5, color=color, frameon=False, size_vertical=0.01, fontproperties={'size':args.fontsize / args.fontfactor})
     ax.add_artist(scalebar)
 
@@ -1332,27 +1344,32 @@ def get_direct_image(full_hdu, filter, args):
         exptime = 1
     except:
         try:
-            hdu = full_hdu['DSCI', f'{filter.upper()}-{filter.upper()}-CLEAR']
+            hdu = full_hdu['DSCI', f'{filter}-CLEAR']
             image = hdu.data
             exptime = full_hdu[0].header[f'T_{filter.upper()}']
         except:
-            full_field_filename = get_data_path(args.field, args) / f'{args.field}_{filter.lower()}-clear_drz_sci.fits'
-            print(f'{filter.upper()} not found in full_hdu extension. Therefore trying to get cutout from full field image {full_field_filename}')
+            try:
+                hdu = full_hdu['DSCI', f'{filter.upper()}-{filter.upper()}-CLEAR']
+                image = hdu.data
+                exptime = full_hdu[0].header[f'T_{filter.upper()}']
+            except:
+                full_field_filename = get_data_path(args.field, args) / f'{args.field}_{filter.lower()}-clear_drz_sci.fits'
+                print(f'{filter.upper()} not found in full_hdu extension. Therefore trying to get cutout from full field image {full_field_filename}')
             
-            exptime = fits.open(full_field_filename)[0].header['EXPTIME']
-            pos = SkyCoord(full_hdu[0].header['RA'], full_hdu[0].header['DEC'], unit = 'deg')
-            size = 2 * args.arcsec_limit * u.arcsec
-            target_header = full_hdu['DSCI', 'F140W'].header
-            
-            temp1, temp2 = args.only_seg, args.vorbin
-            args.only_seg, args.vorbin = False, False
-            image = get_cutout(full_field_filename, pos, size, target_header, args, plot_test_axes=None)
-            args.only_seg, args.vorbin = temp1, temp2
+                exptime = fits.open(full_field_filename)[0].header['EXPTIME']
+                pos = SkyCoord(full_hdu[0].header['RA'], full_hdu[0].header['DEC'], unit = 'deg')
+                size = 2 * args.arcsec_limit * u.arcsec
+                target_header = full_hdu['DSCI', 'F140W'].header
+                
+                temp1, temp2 = args.only_seg, args.vorbin
+                args.only_seg, args.vorbin = False, False
+                image = get_cutout(full_field_filename, pos, size, target_header, args, plot_test_axes=None, skip_re_trim=True)
+                args.only_seg, args.vorbin = temp1, temp2
 
     image = np.roll(image, args.ndelta_xpix, axis=0)
     image = np.roll(image, args.ndelta_ypix, axis=1)
 
-    image = trim_image(image, args)
+    image = trim_image(image, args, skip_re_trim=True)
  
     return image, exptime
 
@@ -1397,13 +1414,19 @@ def plot_rgb_image(full_hdu, filters, ax, args, hide_xaxis=False, hide_yaxis=Fal
     rgb_image = make_rgb(image_arr[0], image_arr[1], image_arr[2], interval=ManualInterval(vmin=0, vmax=maximum), stretch=SqrtStretch())
 
     # -------plot RGB image---------
-    p = ax.imshow(rgb_image, origin='lower', extent=args.extent, alpha=1)
+    extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
+    p = ax.imshow(rgb_image, origin='lower', extent=extent, alpha=1)
     ax.set_aspect('auto') 
 
     ax.scatter(0, 0, marker='x', s=10, c='grey')
     ax.text(0.05, 0.05, f'z={args.z:.2f}', c='w', fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
 
     # ----------annotate axis---------------
+    if args.re_limit is not None:
+        limit = args.re_limit * args.re_arcsec
+        ax.add_patch(plt.Rectangle((-limit, -limit), 2 * limit, 2 * limit, lw=0.5, color='r', fill=False))
+        #ax.add_patch(plt.Circle((0, 0), args.re_arcsec, color='k', fill=False, lw=0.5))
+
     if not hide_pa:
         pa_arr = np.unique([full_hdu[0].header[item] for item in list(full_hdu[0].header.keys()) if 'PA00' in item])
         ax = annotate_PAs(pa_arr, ax, fontsize=args.fontsize / args.fontfactor, color='w')
@@ -1411,7 +1434,7 @@ def plot_rgb_image(full_hdu, filters, ax, args, hide_xaxis=False, hide_yaxis=Fal
     ax.set_xlim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
     ax.set_ylim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
 
-    if 'segmentation_map' in args: ax.contour(args.segmentation_map != args.id, levels=0, colors='w', extent=args.extent, linewidths=0.5)
+    if 'segmentation_map_arcsec' in args: ax.contour(args.segmentation_map_arcsec != args.id, levels=0, colors='w', extent=extent, linewidths=0.5)
     if not skip_annotate: ax = annotate_axes(ax, 'arcsec', 'arcsec', args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
 
     return ax
@@ -1434,7 +1457,9 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True,
     ax.set_aspect('auto') 
     
     if 'segmentation_map' in args: ax.contour(args.segmentation_map != args.id, levels=0, colors='w' if args.fortalk else 'k', extent=args.extent, linewidths=0.5) # demarcating the segmentation map zone
-    if not skip_annotate: ax = annotate_axes(ax, 'arcsec', 'arcsec', args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
+    if not skip_annotate:
+        xylabel = 'arcsec' if args.re_limit is None else r'Offset (R$_e$)'
+        ax = annotate_axes(ax, xylabel, xylabel, args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
 
     return ax
 
@@ -1511,7 +1536,12 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_spectra=Fa
 
     # ----------plotting direct image--------------
     ax_dirimg = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], ax_dirimg, args)
-    ax_dirimg = annotate_kpc_scale_bar(2, ax_dirimg, args, label='2 kpc', color='w', loc='lower right')
+
+    # ----annotating with scalebar----------------
+    kpc = 2
+    pix = kpc * cosmo.arcsec_per_kpc_proper(args.z).value  # converting kpc to arcsec
+    scalebar = AnchoredSizeBar(ax_dirimg.transData, pix, f'{kpc} kpc', 'lower right', pad=0.5, color='w', frameon=False, size_vertical=0.01, fontproperties={'size':args.fontsize / args.fontfactor})
+    ax_dirimg.add_artist(scalebar)
 
     # ----------plotting 1D spectra--------------
     ax_1dspec = plot_1D_spectra(od_hdu, ax_1dspec, args, show_log_flux=show_log_spectra)
@@ -1522,6 +1552,14 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_spectra=Fa
     #flux_map_lim = [None, None] ##
     axes_line_maps = plot_line_maps(full_hdu, args.line_list, axes_line_maps, args, cmap='pink', vmin=flux_map_lim[0], vmax=flux_map_lim[1], hide_xaxis=args.plot_ratio_maps, takelog=show_log_map)
 
+    # -------zoom-in annotation------------------
+    if args.re_limit is not None:
+        limit = args.re_limit * args.re_arcsec
+        connect1 = ConnectionPatch(xyA=(-limit, -limit), xyB=(axes_line_maps[0].get_xlim()[0], axes_line_maps[0].get_ylim()[1]), coordsA='data', coordsB='data', axesA=ax_dirimg, axesB=axes_line_maps[0], color='r', lw=0.5)
+        connect2 = ConnectionPatch(xyA=(limit, -limit), xyB=(axes_line_maps[0].get_xlim()[1], axes_line_maps[0].get_ylim()[1]), coordsA='data', coordsB='data', axesA=ax_dirimg, axesB=axes_line_maps[0], color='r', lw=0.5)
+        axes_line_maps[0].add_artist(connect1)
+        axes_line_maps[0].add_artist(connect2)
+        
     # ----------plotting line ratio image--------------
     if args.plot_ratio_maps:
         ratio_map_lim = [10**-1, 10**1]
@@ -1746,7 +1784,7 @@ def plot_AGN_demarcation_figure_integrated(objlist, args, fontsize=10):
     cbar.set_label(f'Distance from {theoretical_lines[0]} line', fontsize=args.fontsize)
     cbar.ax.tick_params(labelsize=args.fontsize)
 
-    ax.set_xlim(-1.6, 0.5)
+    ax.set_xlim(-2.5, 0.5)
     ax.set_ylim(-1, 2)
     ax.set_xlabel(f'Log {get_ratio_labels("NeIII-3867/OII")}' if args.AGN_diag == 'Ne3O2' else f'Log {get_ratio_labels("SII/NII,Ha")}' if args.AGN_diag == 'H21' else f'Log {get_ratio_labels(f"{args.xnum_line}/{args.xden_line}")}', fontsize=args.fontsize)
     ax.set_ylabel(f'Log {get_ratio_labels("OIII/Hb")}', fontsize=args.fontsize)
@@ -1834,9 +1872,10 @@ def load_metallicity_map(field, objid, Zdiag, args):
     if 'Par' in field: survey = 'passage'
     elif 'glass' in field: survey = 'glass'
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
-    output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map_upto_{args.arcsec_limit}arcsec{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}{AGN_diag_text}{exclude_text}.fits'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map_upto_{extent_text}{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}{AGN_diag_text}{exclude_text}.fits'
     ####################################
-    if 'glass' in field:
+    if 'glass' in field and 'SNR_4.0' in str(output_fitsname):
         output_fitsname = Path(str(output_fitsname).replace('SNR_4.0', 'SNR_2.0'))
         print(f'\nWARNING: Actually choosing metallicity map corresponding to vorbin SNR=2 for {field}-{objid}') ##
     ####################################
@@ -1865,9 +1904,10 @@ def load_metallicity_df(field, objid, Zdiag, args, ensure_sii=False):
     Zbranch_text = '' if np.array([item in Zdiag for item in ['NB', 'P25']]).any() else f'-{args.Zbranch}'
     exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and Zdiag == 'NB' else ''
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
-    output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map_upto_{args.arcsec_limit}arcsec{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}{AGN_diag_text}{exclude_text}.fits'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map_upto_{extent_text}{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}{AGN_diag_text}{exclude_text}.fits'
     ####################################
-    if 'glass' in field:
+    if 'glass' in field and 'SNR_4.0' in str(output_fitsname):
         output_fitsname = Path(str(output_fitsname).replace('SNR_4.0', 'SNR_2.0'))
         print(f'\nWARNING: Actually choosing metallicity map corresponding to vorbin SNR=2 for {field}-{objid}') ##
     ####################################
@@ -1905,7 +1945,7 @@ def plot_metallicity_fig_single(objid, field, Zdiag, args, fontsize=10):
 
     # --------setting up the figure------------
     fig = plt.figure(figsize=(9, 3))
-    fig.subplots_adjust(left=0.07, right=0.99, top=0.96, bottom=0.12, wspace=0.3)
+    fig.subplots_adjust(left=0.07, right=0.99, top=0.96, bottom=0.14, wspace=0.3)
     outer_gs = gridspec.GridSpec(1, 2, width_ratios=[2, 1], figure=fig)
 
     left_gs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=outer_gs[0], wspace=0.1)
@@ -1916,13 +1956,21 @@ def plot_metallicity_fig_single(objid, field, Zdiag, args, fontsize=10):
     axes[0] = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], axes[0], args)
 
     # -----plotting 2D metallicity map-----------
-    Zlim = [7.1, 8.5]
+    Zlim = [7.5, 8.6]
     axes[1] = plot_2D_map(logOH_map, axes[1], f'log O/H + 12 ({Zdiag})', args, clabel='', takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=False, hide_yaxis=True, hide_cbar=False)
     axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', loc='lower right')
 
     # ------plotting metallicity radial profile-----------
-    axes[2], _ = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5])
+    axes[2], _ = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit])
 
+    # -------zoom-in annotation------------------
+    if args.re_limit is not None:
+        limit = args.re_limit * args.re_arcsec
+        connect1 = ConnectionPatch(xyA=(limit, limit), xyB=(axes[1].get_xlim()[0], axes[1].get_ylim()[1]), coordsA='data', coordsB='data', axesA=axes[0], axesB=axes[1], color='r', lw=0.5)
+        connect2 = ConnectionPatch(xyA=(limit, -limit), xyB=(axes[1].get_xlim()[0], axes[1].get_ylim()[0]), coordsA='data', coordsB='data', axesA=axes[0], axesB=axes[1], color='r', lw=0.5)
+        axes[1].add_artist(connect1)
+        axes[1].add_artist(connect2)
+        
     # -----------saving figure------------
     axes[2].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[2].transAxes)
     figname = f'metallicity_{objid:05d}_upto_{args.arcsec_limit}arcsec.png'
@@ -1940,7 +1988,8 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
     print(f'Plotting metallicity ({Zdiag}) figure for {len(objlist)} objects..')
 
    # -------setting up the figure--------------------
-    nrow, ncol = 4, 2
+    ncol = 2
+    nrow = int(np.ceil(len(objlist) / ncol))
     fig = plt.figure(figsize=(10, 6))
     fig.subplots_adjust(left=0.07, right=0.93, bottom=0.07, top=0.93, wspace=0., hspace=0.)
     outer_gs = gridspec.GridSpec(nrow, ncol, figure=fig, wspace=0.33, hspace=0.)
@@ -1974,8 +2023,16 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
         axes[1] = plot_2D_map(logOH_map, axes[1], None, args, clabel='', takelog=False, cmap=cmap, vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=hide_xaxis, hide_yaxis=True, hide_cbar=True)
         axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', color='brown', loc='lower right')
     
-        # # ------plotting metallicity radial profile-----------
-        axes[2], linefit = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5], hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, short_label=True)
+        # -------zoom-in annotation------------------
+        if args.re_limit is not None:
+            limit = args.re_limit * args.re_arcsec
+            connect1 = ConnectionPatch(xyA=(limit, limit), xyB=(axes[1].get_xlim()[0], axes[1].get_ylim()[1]), coordsA='data', coordsB='data', axesA=axes[0], axesB=axes[1], color='r', lw=0.5)
+            connect2 = ConnectionPatch(xyA=(limit, -limit), xyB=(axes[1].get_xlim()[0], axes[1].get_ylim()[0]), coordsA='data', coordsB='data', axesA=axes[0], axesB=axes[1], color='r', lw=0.5)
+            axes[1].add_artist(connect1)
+            axes[1].add_artist(connect2)
+        
+        # ------plotting metallicity radial profile-----------
+        axes[2], linefit = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit], hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, short_label=True)
         axes[2].yaxis.set_label_position('right')
         axes[2].yaxis.tick_right()
    
@@ -1988,7 +2045,7 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
             output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
             print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
         ####################################
-        df_logOH_fit = pd.DataFrame({'field': field, 'objid': objid, 'logOH_sum': logOH_sum.n, 'logOH_sum_u': logOH_sum.s, 'logOH_int': logOH_int.n, 'logOH_int_u': logOH_int.s, 'logOH_cen': linefit[1].n, 'logOH_cen_u': linefit[1].s, 'logOH_slope': linefit[0].n, 'logOH_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, 'extent_arcsec': args.arcsec_limit}, index=[0])
+        df_logOH_fit = pd.DataFrame({'field': field, 'objid': objid, 'logOH_sum': logOH_sum.n, 'logOH_sum_u': logOH_sum.s, 'logOH_int': logOH_int.n, 'logOH_int_u': logOH_int.s, 'logOH_cen': linefit[1].n, 'logOH_cen_u': linefit[1].s, 'logOH_slope': linefit[0].n, 'logOH_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, 'extent_unit': 'arcsec' if args.re_limit is None else 're', 'extent_value': args.arcsec_limit if args.re_limit is None else args.re_limit}, index=[0])
         df_logOH_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
         print(f'Appended metallicity fit to catalog file {output_dfname}')
 
@@ -2118,8 +2175,8 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     full_hdu = load_full_fits(objid, field, args)
     args = load_object_specific_args(full_hdu, args, field=field)
     logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
-    Zlim = [7.1, 8.5]
-    log_sfr_lim = [-1.7, 0.]
+    Zlim = [7.5, 8.9]
+    log_sfr_lim = [-1.4, 0.5]
 
     # --------setting up the figure------------
     fig, axes = plt.subplots(3 if args.debug_Zsfr else 1, 2, figsize=(5.7, 7) if args.debug_Zsfr else (7, 3))
@@ -2154,7 +2211,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
 
     # -------radial fitting-------------
     fit_color = 'salmon'
-    linefit, linecov = np.polyfit(df['log_sfr'], df['logOH'], 1, cov=True, w=1. / (df['logOH_u']) ** 2)
+    linefit, linecov = np.polyfit(df['log_sfr'], df['logOH'], 1, cov=True, w=1. / ((df['logOH_u']) ** 2 + df['log_sfr_u'] ** 2))
     y_fitted = np.poly1d(linefit)(df['log_sfr'])
     axes[1].plot(df['log_sfr'], y_fitted, color=fit_color, lw=1, ls='dashed')
     linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
@@ -2175,7 +2232,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
         output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
         print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
     ####################################
-    df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'logZ_logSFR_cen': linefit[1].n, 'logZ_logSFR_cen_u': linefit[1].s, 'logZ_logSFR_slope': linefit[0].n, 'logZ_logSFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, 'extent_arcsec': args.arcsec_limit}, index=[0])
+    df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'logZ_logSFR_cen': linefit[1].n, 'logZ_logSFR_cen_u': linefit[1].s, 'logZ_logSFR_slope': linefit[0].n, 'logZ_logSFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, 'extent_unit': 'arcsec' if args.re_limit is None else 're', 'extent_value': args.arcsec_limit if args.re_limit is None else args.re_limit}, index=[0])
     df_Zsfr_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
     print(f'Appended metallicity-sfr fit to catalog file {output_dfname}')
 
@@ -2216,8 +2273,8 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         full_hdu = load_full_fits(objid, field, args)
         args = load_object_specific_args(full_hdu, args, field=field)
         logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
-        Zlim = [7.1, 8.5]
-        log_sfr_lim = [-1.7, 0.]
+        Zlim = [7.5, 8.9]
+        log_sfr_lim = [-1.4, 0.5]
 
         # ----------getting the SFR maps------------------
         _, _, _, sfr_map, sfr_int, sfr_sum = get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=logOH_int, logOH_sum=logOH_sum)
@@ -2242,7 +2299,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         # -------radial fitting-------------
         fit_color = 'salmon'
         try:
-            linefit, linecov = np.polyfit(df['log_sfr'], df['logOH'], 1, cov=True, w=1. / (df['logOH_u']) ** 2)
+            linefit, linecov = np.polyfit(df['log_sfr'], df['logOH'], 1, cov=True, w=1. / ((df['logOH_u']) ** 2 + df['log_sfr_u'] ** 2))
             y_fitted = np.poly1d(linefit)(df['log_sfr'])
             axes[1].plot(df['log_sfr'], y_fitted, color=fit_color, lw=1, ls='dashed')
             linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
@@ -2268,7 +2325,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
             output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
             print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
         ####################################
-        df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'logZ_logSFR_cen': linefit[1].n, 'logZ_logSFR_cen_u': linefit[1].s, 'logZ_logSFR_slope': linefit[0].n, 'logZ_logSFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, 'extent_arcsec': args.arcsec_limit}, index=[0])
+        df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'logZ_logSFR_cen': linefit[1].n, 'logZ_logSFR_cen_u': linefit[1].s, 'logZ_logSFR_slope': linefit[0].n, 'logZ_logSFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, 'extent_unit': 'arcsec' if args.re_limit is None else 're', 'extent_value': args.arcsec_limit if args.re_limit is None else args.re_limit}, index=[0])
         df_Zsfr_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
         print(f'Appended metallicity-sfr fit to catalog file {output_dfname}')
 
@@ -2310,8 +2367,8 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     args = load_object_specific_args(full_hdu, args, field=field)
     logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
     logOH_df, _, _ = load_metallicity_df(field, objid, Zdiag, args)
-    Zlim = [7.1, 8.5]
-    log_sfr_lim = [-1.7, 0.]
+    Zlim = [7.5, 8.9]
+    log_sfr_lim = [-1., 0.5]
 
     # ----------getting the SFR maps------------------
     _, _, _, sfr_map, sfr_int, sfr_sum = get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=logOH_int, logOH_sum=logOH_sum)
@@ -2322,7 +2379,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     axes[0] = annotate_kpc_scale_bar(2, axes[0], args, label='2 kpc', color='brown', loc='lower right')
 
     # # ------plotting metallicity radial profile-----------
-    axes[1], _ = plot_radial_profile(logOH_df, axes[1], args, ylim=Zlim, xlim=[0, 5], hide_xaxis=True, hide_yaxis=False, hide_cbar=True, short_label=False)
+    axes[1], _ = plot_radial_profile(logOH_df, axes[1], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit], hide_xaxis=True, hide_yaxis=False, hide_cbar=True, short_label=False)
     axes[1].yaxis.set_label_position('right')
     axes[1].yaxis.tick_right()
     
@@ -2340,7 +2397,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
         log_sfr_df = log_sfr_df.groupby('bin_ID', as_index=False).agg(np.mean)
 
     # -----plotting SFR radial profile-----------
-    axes[3], _ = plot_radial_profile(log_sfr_df, axes[3], args, quant='SFR', ylim=log_sfr_lim, xlim=[0, 5], hide_xaxis=False, hide_yaxis=False, hide_cbar=True, short_label=False)
+    axes[3], _ = plot_radial_profile(log_sfr_df, axes[3], args, quant='SFR', ylim=log_sfr_lim, xlim=[0, 5 if args.re_limit is None else args.re_limit], hide_xaxis=False, hide_yaxis=False, hide_cbar=True, short_label=False)
     axes[3].yaxis.set_label_position('right')
     axes[3].yaxis.tick_right()
   
@@ -2359,7 +2416,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
 
     # -------radial fitting-------------
     fit_color = 'salmon'
-    linefit, linecov = np.polyfit(df['log_sfr'], df['logOH'], 1, cov=True, w=1. / (df['logOH_u']) ** 2)
+    linefit, linecov = np.polyfit(df['log_sfr'], df['logOH'], 1, cov=True, w=1. / ((df['logOH_u']) ** 2 + df['log_sfr_u'] ** 2))
     y_fitted = np.poly1d(linefit)(df['log_sfr'])
     axes[4].plot(df['log_sfr'], y_fitted, color=fit_color, lw=1, ls='dashed')
     linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
@@ -2403,7 +2460,7 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
 
     # -------setting limits and colors-----------
     Z_limits = [7.1, 9.1]
-    color_lim_dict = {'color':[None, None, '', ''], 'bin_ID':[None, None, 'Voronoi bin ID', 'rainbow'], 'distance':[0, 5, 'Galactocentric distance (kpc)', 'cividis'], 'agn_dist':[-1, 1, f'Distance from {args.AGN_diag} SF line', args.diverging_cmap]}
+    color_lim_dict = {'color':[None, None, '', ''], 'bin_ID':[None, None, 'Voronoi bin ID', 'rainbow'], 'distance':[0, 5, 'Galactocentric distance (kpc)', 'cividis'], 'distance_re':[0, args.re_limit, r'Galactocentric distance (R$_e$)', 'cividis'], 'agn_dist':[-1, 1, f'Distance from {args.AGN_diag} SF line', args.diverging_cmap]}
     color = 'brown'
 
     # --------setting up full figure----------------------------------
@@ -2416,6 +2473,8 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
     for index, obj in enumerate(objlist):
         field = obj[0]
         objid = obj[1]
+        full_hdu = load_full_fits(objid, field, args)
+        args = load_object_specific_args(full_hdu, args, field=field)
         markersize = 80
         marker='o' if 'Par' in field else 's'
         log_int_array = []
@@ -2428,6 +2487,7 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
             else:
                 df = pd.merge(df, this_df, on = ['distance', 'bin_ID'])
             df = df.rename(columns={'log_OH': f'log_OH_{Zdiag}', 'log_OH_u': f'log_OH_{Zdiag}_err'})
+            df['distance_re'] = df['distance'] / args.re_kpc # converting from kpc to Re
             #log_int_array.append(this_logOH_int)
             log_int_array.append(this_logOH_sum)
 
@@ -2838,7 +2898,8 @@ if __name__ == "__main__":
     args.plot_ratio_maps = True
     args.exclude_lines = []# ['SII']
     args.voronoi_line = 'OII'
-    args.voronoi_snr = 4.
+    args.voronoi_snr = 3.
+    args.re_limit = 2.5
 
     primary_Zdiag = 'NB'
     cosmos_name = 'web' # choose between '2020' (i.e. COSMOS2020 catalog) or 'web' (i.e. COSMOSWeb catalog))
@@ -2851,14 +2912,15 @@ if __name__ == "__main__":
     
     args.Zdiag = 'R2,R3,R23,NB'.split(',')
     #args.Zdiag = 'R2,R3,R23,O3O2,NB'.split(',')
-    args.colorcol = 'distance'
+    args.colorcol = 'distance' if args.re_limit is None else 'distance_re'
     args.phot_models = 'nb'
     log_mass_lim = [7.5, 10]
 
     # -------setting up objects to plot--------------
-    Par28_objects = [1303, 1849, 2171, 2727, 2867]
-    glass_objects = [1721, 1983, 2128]
-    #glass_objects = [1333] + glass_objects
+    Par28_objects = [1303, 1849, 2727, 2867]
+    Par28_objects = [2171] + Par28_objects
+    glass_objects = [1721, 1983, 1991]
+    #glass_objects = [1333, 2128] + glass_objects
 
     passage_objlist = [['Par028', item] for item in Par28_objects]
     glass_objlist = [['glass-a2744', item] for item in glass_objects]
@@ -2883,11 +2945,13 @@ if __name__ == "__main__":
     #plot_photoionisation_models('OIII/Hb', 'Z', args, fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
-    #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12, show_log_spectra=False, show_log_map=True)
+    plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12, show_log_spectra=False, show_log_map=True)
     
     # ---------single galaxy plot: AGN demarcation----------------------
     #plot_AGN_demarcation_figure_single(1303, 'Par028', args, fontsize=15) # AGN demarcation
-    #temp_objlist = [['glass-a2744', item] for item in [1333, 1983, 2128, 1721, 2273, 1991, 1504,  562, 3015,   34, 1622, 2928, 2492]]
+    # temp_objlistg = [['glass-a2744', item] for item in [1333, 1983, 2128, 1721, 2273, 1991, 1504, 562, 3015, 34, 1622, 2928, 2492]]
+    # temp_objlistp = [['Par028', item] for item  in [235,300,502,668,1302,1303,1634,1675,1798,1849,2038,2171,2180,2706,2727,2797,2867]]
+    # objlist = temp_objlistg + temp_objlistp
     #df_agn_fluxes, df_agn = plot_AGN_demarcation_figure_integrated(objlist, args, fontsize=15) # AGN demarcation
     
     # ---------single galaxy plot: Z map and gradient----------------------
@@ -2895,7 +2959,7 @@ if __name__ == "__main__":
     #plot_metallicity_fig_single(1721, 'glass-a2744', primary_Zdiag, args, fontsize=10) # zgrad plot
     
     # ---------single galaxy plot: SFR map and correlation----------------------
-    #plot_metallicity_sfr_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
+    #plot_metallicity_sfr_fig_single(1333, 'glass-a2744', primary_Zdiag, args, fontsize=10) # z-sfr plot
     
     # ---------single galaxy plot: SFR-Z radial profile----------------------
     #plot_metallicity_sfr_radial_profile_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=13)
@@ -2917,7 +2981,12 @@ if __name__ == "__main__":
     # --------multi-panel SFR-Z plots------------------
     #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
 
-    # ---------loading master dataframe with only objects in objlist------------
+    # ---------metallicity comparison plots----------------------
+    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
+    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=10)
+    #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
+
+   # ---------loading master dataframe with only objects in objlist------------
     df = make_master_df(objlist, args, sum=True)
     
     # ---------metallicity latex table for paper----------------------
@@ -2932,11 +3001,6 @@ if __name__ == "__main__":
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
     #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method=None)
     #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method='my')
-
-    # ---------metallicity comparison plots----------------------
-    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
-    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=10)
-    #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
 
     # -----------line ratio histograms--------------
     #full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)

@@ -118,6 +118,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import mplcyberpunk
 import matplotlib.gridspec as gridspec
 import matplotlib.ticker as ticker
+from matplotlib.patches import ConnectionPatch
 
 from matplotlib import pyplot as plt
 plt.rcParams['ytick.direction'] = 'in'

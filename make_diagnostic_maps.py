@@ -321,6 +321,7 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
 
         # ----making the dataframe before radial profile plot--------------
         df = pd.DataFrame({xcol: np.ma.compressed(distance_map), ycol: np.ma.compressed(image)})
+        if args.re_limit is not None: df[xcol] = df[xcol] / args.re_kpc # converting from kpc to Re units
         if image_err is not None: df[ycol + '_err'] = np.ma.compressed(image_err)
         if metallicity_multi_color: df['agn_dist'] = np.ma.compressed(np.ma.masked_where(image.mask, args.distance_from_AGN_line_map.data))
         if len(df[df[ycol + '_err'] > 0]) == 0: image_err = None
@@ -358,7 +359,7 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     if hide_xaxis:
         ax.set_xticklabels([])
     else:
-        ax.set_xlabel('Distance (kpc)', fontsize=fontsize)
+        ax.set_xlabel('Distance (kpc)' if args.re_limit is None else r'Galactocentric distance (R/R$_e$)', fontsize=fontsize)
         #ax.set_xticklabels(['%d' % item / cosmo.arcsec_per_kpc_proper(args.z).value for item in ax.get_xticks()], fontsize=fontsize)
         ax.tick_params(axis='x', which='major', labelsize=fontsize)
 
@@ -409,24 +410,17 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
     if not args.no_text_on_plot: ax.text(ax.get_xlim()[0] * 0.88, ax.get_ylim()[1] * 0.88, label, c='k', fontsize=fontsize if args.arcsec_limit >= 1 else fontsize/1.5, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
     ax.scatter(0, 0, marker='x', s=10, c='grey')
 
+    offset_units = 'kpc' if args.plot_target_frame else r'R$_e$' if args.re_limit is not None else '"'
     if hide_xaxis:
         ax.set_xticklabels([])
     else:
-        if args.plot_target_frame:
-            ax.set_xlabel('Offset (kpc)', fontsize=fontsize)
-            ax.set_xticklabels(['%d' % (item / cosmo.arcsec_per_kpc_proper(args.z).value) for item in ax.get_xticks()], fontsize=fontsize)
-        else:
-            ax.set_xlabel('RA (")', fontsize=fontsize)
+        ax.set_xlabel(f'Offset ({offset_units})', fontsize=fontsize)
         ax.tick_params(axis='x', which='major', labelsize=fontsize)
 
     if hide_yaxis:
         ax.set_yticklabels([])
     else:
-        if args.plot_target_frame:
-            ax.set_ylabel('Offset (kpc)', fontsize=fontsize)
-            ax.set_yticklabels(['%d' % (item / cosmo.arcsec_per_kpc_proper(args.z).value) for item in ax.get_xticks()], fontsize=fontsize)
-        else:
-            ax.set_ylabel('Dec (")', fontsize=fontsize)
+        ax.set_ylabel(f'Offset ({offset_units})', fontsize=fontsize)
         ax.tick_params(axis='y', which='major', labelsize=fontsize)
 
     if not hide_cbar:
@@ -445,6 +439,7 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
         radprof_fit = [np.nan, np.nan] # dummy values for when the fit was not performed
 
     if args.plot_circle_at_arcsec is not None: ax.add_patch(plt.Circle((0, 0), args.plot_circle_at_arcsec, color='r', fill=False, lw=0.5)) # additional circle for debugging purpose
+    if 're_arcsec' in args: ax.add_patch(plt.Circle((0, 0), args.re_arcsec if args.re_limit is None else 1., color='w', fill=False, lw=0.5))
     if 'segmentation_map' in args: ax.contour(args.segmentation_map != args.id, levels=0, colors='w' if args.fortalk else 'k', extent=args.extent, linewidths=0.5) # demarcating the segmentation map zone
 
     if args.vorbin and args.plot_vorbin and vorbin_ax is not None:
@@ -615,7 +610,7 @@ def get_voronoi_bin_IDs(full_hdu, snr_thresh, plot=False, quiet=True, args=None)
         axes_top = axes_all[0]
         fig.text(0.05, 0.98, f'{args.field}: ID {args.id}: Voronoi binning diagnostics', fontsize=args.fontsize, c='k', ha='left', va='top')
 
-        snr_min, snr_max = np.min(initial_snr.data), np.max(initial_snr.data)
+        snr_min, snr_max = np.nanmin(initial_snr.data), np.nanmax(initial_snr.data)
         combined_cmap = get_combined_cmap([snr_min, 0, snr_thresh, snr_max], ['Greys', 'Reds', cmap], new_name='my_colormap')
         plot_2D_map(initial_map, axes_top[0], args, takelog=False, label=f'initial {args.voronoi_line} map', cmap=cmap, hide_yaxis=False, hide_xaxis=True)
         plot_2D_map(initial_map_err, axes_top[1], args, takelog=False, label=f'initial {args.voronoi_line} err', cmap=cmap, hide_yaxis=True, hide_xaxis=True)
@@ -643,7 +638,7 @@ def get_voronoi_bin_IDs(full_hdu, snr_thresh, plot=False, quiet=True, args=None)
     if args is not None and args.debug_vorbin:
         axes_mid = axes_all[1]
 
-        snr_min, snr_max = np.min(input_snr.data), np.max(input_snr.data)
+        snr_min, snr_max = np.nanmin(input_snr.data), np.nanmax(input_snr.data)
         combined_cmap = get_combined_cmap([snr_min, 0, snr_thresh, snr_max], ['Greys', 'Reds', cmap], new_name='my_colormap')
         plot_2D_map(input_map, axes_mid[0], args, takelog=False, label=f'input {args.voronoi_line} map', cmap=cmap, hide_yaxis=False, hide_xaxis=True)
         plot_2D_map(input_map_err, axes_mid[1], args, takelog=False, label=f'input {args.voronoi_line} err', cmap=cmap, hide_yaxis=True, hide_xaxis=True)
@@ -710,7 +705,7 @@ def get_voronoi_bin_IDs(full_hdu, snr_thresh, plot=False, quiet=True, args=None)
         axes_top[3].text(axes_top[3].get_xlim()[0] + np.diff(axes_top[3].get_xlim())[0] * 0.05, axes_top[3].get_ylim()[1] - np.diff(axes_top[3].get_ylim())[0] * 0.05, 'SNR of pixels in each bin', c='k', ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
         axes_top[3].axvline(0, ls='dotted', c='grey', lw=0.5)
         snr = map / map_err
-        snr_min, snr_max = np.min(snr.data), np.max(snr.data)
+        snr_min, snr_max = np.nanmin(snr.data), np.nanmax(snr.data)
         combined_cmap = get_combined_cmap([snr_min, 0, snr_thresh, snr_max], ['Greys', 'Reds', cmap], new_name='my_colormap')
         plot_2D_map(map, axes_bottom[0], args, takelog=False, label=f'binned {args.voronoi_line} map', cmap=cmap, hide_yaxis=False)
         plot_2D_map(map_err, axes_bottom[1], args, takelog=False, label=f'binned {args.voronoi_line} err', cmap=cmap, hide_yaxis=True)
@@ -1898,7 +1893,8 @@ def get_Z(full_hdu, args):
     exclude_text = f'_without_{",".join(args.exclude_lines)}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
     Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
-    output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map_upto_{args.arcsec_limit}arcsec{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}{AGN_diag_text}{NB_text}{exclude_text}.fits'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map_upto_{extent_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}{AGN_diag_text}{NB_text}{exclude_text}.fits'
 
     # ------checking if the outputfile already exists--------------
     if os.path.exists(output_fitsname) and not args.clobber:
@@ -2081,7 +2077,7 @@ def plot_this(data, ax):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_cutout(filename, pos, size, target_header, args, plot_test_axes=None):
+def get_cutout(filename, pos, size, target_header, args, plot_test_axes=None, skip_re_trim=False):
     '''
     Return a cutout from a given filename of a fits image, around a given position within a given extent,
     and then reproject it on to a given target header parameters
@@ -2101,7 +2097,7 @@ def get_cutout(filename, pos, size, target_header, args, plot_test_axes=None):
 
     cutout_data_hdu = fits.ImageHDU(cutout_data, header=source_header)
     cutout_data_rebinned, _ = reproject_interp(cutout_data_hdu, target_header)  # 125 x 125 pixels
-    cutout_data_rebinned_trimmed = trim_image(cutout_data_rebinned, args)  # 50 x 50 pixels
+    cutout_data_rebinned_trimmed = trim_image(cutout_data_rebinned, args, skip_re_trim=skip_re_trim)  # 50 x 50 pixels
 
     # --------test plots-------------------
     if plot_test_axes is not None:
@@ -2358,7 +2354,7 @@ def plot_metallicity_fig(full_hdu, args):
     Returns the figure handle and the metallicity map just produced
     '''
     # ---------lotting metallicity profiles and gradients----------------------
-    df_logOH_radfit = pd.DataFrame(columns=['field', 'objid', 'logOH_int', 'logOH_int_u', 'logOH_sum', 'logOH_sum_u', 'logOH_slope', 'logOH_slope_u', 'logOH_cen', 'logOH_cen_u', 'logOH_diagnostic', 'logOH_branch', 'AGN_diag', 'extent_arcsec'])
+    df_logOH_radfit = pd.DataFrame(columns=['field', 'objid', 'logOH_int', 'logOH_int_u', 'logOH_sum', 'logOH_sum_u', 'logOH_slope', 'logOH_slope_u', 'logOH_cen', 'logOH_cen_u', 'logOH_diagnostic', 'logOH_branch', 'AGN_diag', 'extent_value', 'extent_unit'])
 
     # -------looping over all Zdiagnostics-----------
     for index, args.Zdiag in enumerate(args.Zdiag_arr):
@@ -2425,7 +2421,7 @@ def plot_metallicity_fig(full_hdu, args):
             plt.show(block=False)
 
             # ------------------appending to Zgrad dataframe--------------------------
-            df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_int.n, logOH_int.s, logOH_sum.n, logOH_sum.s, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s, args.Zdiag, args.Zbranch, args.AGN_diag, args.arcsec_limit]
+            df_logOH_radfit.loc[len(df_logOH_radfit)] = [args.field, args.id, logOH_int.n, logOH_int.s, logOH_sum.n, logOH_sum.s, logOH_radfit[0].n, logOH_radfit[0].s, logOH_radfit[1].n, logOH_radfit[1].s, args.Zdiag, args.Zbranch, args.AGN_diag, args.arcsec_limit if args.re_limit is None else args.re_limit, 'arcsec' if args.re_limit is None else 're']
 
     # ------------------writing out Z gradient fits, for making MZGR plot later--------------------------
     if not args.only_integrated:
@@ -2902,6 +2898,96 @@ def plot_DIG_figure(full_hdu, args):
 
     return fig, cdig_map
 
+# --------------------------------------------------------------------------------------------------------------------
+def get_re(full_hdu, args, filter='F200W'):
+    '''
+    Computes the half-light radius in the direct image with the given filter
+    Returns the radius
+    '''
+    dir_img, filter = read_direct_image(full_hdu, filter=filter)
+    
+    if dir_img is not None:
+        dir_img = trim_image(dir_img, args=args, skip_re_trim=True)
+        segmentation_map = full_hdu['SEG'].data
+        segmentation_map = trim_image(segmentation_map, args, skip_re_trim=True)
+
+        smoothing_kernel = Box2DKernel(5, mode=args.kernel_mode)
+        dir_img_smoothed = convolve(dir_img, smoothing_kernel)
+        dir_img_shifted = np.roll(dir_img_smoothed, args.ndelta_xpix, axis=0)
+        dir_img_shifted = np.roll(dir_img_shifted, args.ndelta_ypix, axis=1)
+        segmentation_map_shifted = np.roll(segmentation_map, args.ndelta_xpix, axis=0)
+        segmentation_map_shifted = np.roll(segmentation_map_shifted, args.ndelta_ypix, axis=1)
+
+        distance_map = get_distance_map(np.shape(dir_img_shifted), args, for_distmap=True)
+        flux = np.ma.compressed(np.ma.masked_where(segmentation_map_shifted != args.id, dir_img_shifted)).flatten()
+        radius = np.ma.compressed(np.ma.masked_where(segmentation_map_shifted != args.id, distance_map)).flatten()
+
+        flux = [x for _, x in sorted(zip(radius, flux), key=lambda pair: pair[0])]
+        radius = sorted(radius)
+
+        re_kpc = radius[np.where(np.cumsum(flux) >= 0.5 * np.sum(flux))[0][0]]
+        re_arcsec = re_kpc * cosmo.arcsec_per_kpc_proper(args.z).value # arcsec
+        re_pix = re_arcsec / args.pix_size_arcsec
+        print(f'For {args.field}:{args.id}: Determined half-light radius from {filter} direct image = {re_kpc:.2f} kpc (={re_arcsec:.2f} arcsec = {re_pix:.1f} pixel)')
+
+        if args.debug_re:
+            fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+            fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.12, wspace=0.3, hspace=0.1)
+            cmap = 'viridis'
+            fig.text(0.05, 0.98, f'{args.field}: ID {args.id}: Effective radius diagnostics', fontsize=args.fontsize, c='k', ha='left', va='top')
+
+            axes[0].imshow(dir_img, origin='lower', cmap=cmap)
+            cen_x, cen_y = int(np.shape(dir_img)[0] / 2), int(np.shape(dir_img)[1] / 2)
+            axes[0].scatter(cen_y, cen_x, marker='x', c='k')
+            axes[0].contour(segmentation_map != args.id, levels=0, colors='w', linewidths=0.5)
+            axes[0].text(0.9, 0.9, 'Original', c='w', fontsize=args.fontsize, ha='right', va='top', transform=axes[0].transAxes)
+
+            axes[1].imshow(dir_img_shifted, origin='lower', cmap=cmap)
+            cen_x, cen_y = int(np.shape(dir_img_shifted)[0] / 2), int(np.shape(dir_img_shifted)[1] / 2)
+            axes[1].scatter(cen_y, cen_x, marker='x', c='k')
+            axes[1].contour(segmentation_map_shifted != args.id, levels=0, colors='w', linewidths=0.5)
+            axes[1].text(0.9, 0.9, 'Shifted', c='w', fontsize=args.fontsize, ha='right', va='top', transform=axes[1].transAxes)
+            axes[1].add_patch(plt.Circle((cen_y, cen_x), re_pix, color='r', fill=False, lw=0.5))
+
+            axes[2].scatter(radius, np.cumsum(flux))
+            axes[2].axvline(re_kpc, c='k', ls='dotted')
+            axes[2].axhline(0.5 * np.sum(flux), c='k', ls='dashed')
+            axes[2].text(0.9, 0.9, 'Light profile', c='w', fontsize=args.fontsize, ha='right', va='top', transform=axes[2].transAxes)
+            axes[2].set_xlabel('Radius (kpc)')
+            axes[2].set_ylabel(f'Cumulative {filter} flux')
+
+            plt.show(block=False)
+            sys.exit(f'Exiting here because of --debug_re mode; if you want to run the full code as usual then remove the --debug_re option and re-run')
+
+    else:
+        re_kpc, re_arcsec = np.nan, np.nan
+        print(f'Could not find image for filter {filter} in {args.field}:{args.id}, so forcing reto be {re}')
+
+    return re_kpc, re_arcsec
+
+# --------------------------------------------------------------------------------------------------------------------
+def read_direct_image(full_hdu, filter='F150W'):
+    '''
+    Reads in the direct image of an object in the given filter, by trying out a few combinations of how the filter name might be in the header
+    Returns direct image and the final filter name it found in the header
+    '''
+    dummy_filter = 'F140W'
+    try:
+        dir_img = full_hdu['DSCI', f'{filter}-{filter}-CLEAR'].data
+    except:
+        try:
+            dir_img = full_hdu['DSCI', f'{filter}-CLEAR'].data
+        except:
+            try: 
+                dir_img = full_hdu['DSCI', filter].data
+            except:
+                try:
+                    dir_img = full_hdu['DSCI', dummy_filter].data
+                    filter = dummy_filter
+                except:
+                    dir_img = None
+
+    return dir_img, filter
 
 # --------------------------------------------------------------------------------------------------------------------
 def get_offsets_from_center(full_hdu, args, filter='F200W'):
@@ -2909,23 +2995,12 @@ def get_offsets_from_center(full_hdu, args, filter='F200W'):
     Computes the offset from the original center of image to the brightest pixel in the direct image with the given filter
     Returns two integers (offset in x and y axes)
     '''
-    dummy_filter = 'F140W'
-    try:
-        dir_img = full_hdu['DSCI', f'{filter}-{filter}-CLEAR'].data
-    except:
-        try: 
-            dir_img = full_hdu['DSCI', filter].data
-        except:
-            try:
-                dir_img = full_hdu['DSCI', dummy_filter].data
-                filter = dummy_filter
-            except:
-                dir_img = None
+    dir_img, filter = read_direct_image(full_hdu, filter=filter)
 
     if dir_img is not None:
-        dir_img = trim_image(dir_img, args=args)
+        dir_img = trim_image(dir_img, args=args, skip_re_trim=True)
         segmentation_map = full_hdu['SEG'].data
-        segmentation_map = trim_image(segmentation_map, args)
+        segmentation_map = trim_image(segmentation_map, args, skip_re_trim=True)
 
         smoothing_kernel = Box2DKernel(5, mode=args.kernel_mode)
         dir_img_smoothed = convolve(dir_img, smoothing_kernel)
@@ -3156,6 +3231,12 @@ if __name__ == "__main__":
             # --------determining true center of object---------------------
             args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W')
 
+            # --------determining effective radius of object---------------------
+            args.re_kpc, args.re_arcsec = get_re(full_hdu, args, filter='F150W')
+            if args.re_limit is not None:
+                args.extent = (-args.re_limit, args.re_limit, -args.re_limit, args.re_limit)
+                args.arcsec_limit = args.re_limit * args.re_arcsec
+            
             # ---------------segmentation map---------------
             segmentation_map = full_hdu['SEG'].data
             segmentation_map = np.roll(segmentation_map, args.ndelta_xpix, axis=0)

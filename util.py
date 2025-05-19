@@ -104,6 +104,7 @@ def parse_args():
     # ------- args added for make_diagnostic_maps.py ------------------------------
     parser.add_argument('--plot_target_frame', dest='plot_target_frame', action='store_true', default=False, help='Annotate plot axes in the object/target frame of reference? Default is no.')
     parser.add_argument('--arcsec_limit', metavar='arcsec_limit', type=float, action='store', default=1.0, help='Half box size (in arcsec) of the thumbnails to plot; default is 1.5')
+    parser.add_argument('--re_limit', metavar='arcsec_limit', type=float, action='store', default=None, help='Effective radius to limit all analysis to; default is None (uses arcsec_limit)')
     parser.add_argument('--vorbin', dest='vorbin', action='store_true', default=False, help='Voronoi bin the 2D emission line maps? Default is no.')
     parser.add_argument('--voronoi_snr', metavar='voronoi_snr', type=float, action='store', default=3, help='Target SNR to Voronoi bin the emission line maps to; default is 3')
     parser.add_argument('--voronoi_line', metavar='voronoi_line', type=str, action='store', default='Hb', help='Which emission line to be used for computing the Voronoi bins? Default is None i.e., the given emission line itself')
@@ -148,6 +149,7 @@ def parse_args():
     parser.add_argument('--kernel_size', metavar='kernel_size', type=float, action='store', default=3, help='Kernel size to be used for astropy Box2DKernel? Default is 3')
     parser.add_argument('--dered_in_NB', dest='dered_in_NB', action='store_true', default=False, help='Make NebulaBayes de-redden the lines? Default is no (i.e., do de-reddening separately before calling NB)')
     parser.add_argument('--debug_offset', dest='debug_offset', action='store_true', default=False, help='Do extra plots and prints for debugging offset calculation from center? Default is no.')
+    parser.add_argument('--debug_re', dest='debug_re', action='store_true', default=False, help='Do extra plots and prints for debugging effective radius calculation? Default is no.')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
@@ -1282,12 +1284,20 @@ def parse_latex_value(entry):
         return None, None  # or raise an error if you prefer
 
 # --------------------------------------------------------------------------------------------------------------
-def trim_image(image, args=None, arcsec_limit=None, pix_size_arcsec=None):
+def trim_image(image, args=None, arcsec_limit=None, pix_size_arcsec=None, re_limit=None, re_arcsec=None, skip_re_trim=False):
     '''
     Trim a given 2D image to a given arcsecond dimension
     Returns 2D map
     '''
-    if args is not None: arcsec_limit, pix_size_arcsec = args.arcsec_limit, args.pix_size_arcsec
+    if args is not None:
+        pix_size_arcsec = args.pix_size_arcsec
+        if args.re_limit is None or skip_re_trim:
+            arcsec_limit = args.arcsec_limit
+        else:
+            arcsec_limit = args.re_limit * args.re_arcsec
+    elif re_limit is not None and re_arcsec is not None:
+        arcsec_limit = re_limit * re_arcsec
+
     image_shape = np.shape(image)
     center_pix = int(image_shape[0] / 2.)
     farthest_pix = int(arcsec_limit / pix_size_arcsec) # both quantities in arcsec

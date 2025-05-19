@@ -696,7 +696,7 @@ if __name__ == "__main__":
         EW_cols = [item for item in df.columns if 'EW' in item]
 
         # ------------merging cosmos datasets for the venn diagrams--------------------
-        conditions_from_cosmos = ['mass', 'sfr', 'sSFR']
+        conditions_from_cosmos = ['photometry', 'mass', 'sfr', 'sSFR']
         if len(set(conditions_from_cosmos).intersection(set(args.plot_conditions))) > 0:
             df = get_crossmatch_with_cosmos(df, args, cosmos_name='web')
 

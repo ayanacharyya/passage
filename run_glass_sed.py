@@ -113,7 +113,7 @@ if __name__ == "__main__":
 
     aperture = 1.
     idcol = 'ID_NIRISS'
-    glass_object_ids = [1333, 1721, 1983, 2128]
+    glass_object_ids = [1333, 1721, 1983, 1991, 2128]
 
     filter_dir = args.input_dir / 'COSMOS' / 'transmission_curves'
     uncover_catalog_dir = args.root_dir / 'glass_data'
