@@ -733,7 +733,8 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     ax.set_xlim(7.9, 11.2)
     #ax.set_ylim(-1.5, 0.75)
 
-    figname = f'MZgrad_colorby_{colorcol}_Zdiag_{zgrad_col}_upto_{args.arcsec_limit}arcsec.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'MZgrad_colorby_{colorcol}_Zdiag_{zgrad_col}_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -772,7 +773,8 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
     #ax.set_ylim(-1.3, 0.4)
 
-    figname = f'MZsfr_colorby_Z_upto_{args.arcsec_limit}arcsec.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'MZsfr_colorby_Z_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -823,7 +825,8 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     elif mgas_method is not None and mgas_method == 'my': ax.set_ylim(None, None)
     else: ax.set_ylim(-0.5, 0.6)
 
-    figname = f'M_tmix_colorby_Z-SFR_slope_{mgas_method}_upto_{args.arcsec_limit}arcsec.png' if mgas_method is not None else f'M_tmix_upto_{args.arcsec_limit}arcsec.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'M_tmix_colorby_Z-SFR_slope_{mgas_method}_upto_{extent_text}.png' if mgas_method is not None else f'M_tmix_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -849,7 +852,8 @@ def make_latex_table(df, args, Zdiag='NB', sum=True):
             tex_df[thiscol] = df[thiscol].map(lambda x:  r'$' + f'{x: .{decimal_dict[thiscol]}f}' + r'$' if np.isfinite(x) else '-')
 
     tex_df = tex_df.rename(columns=column_dict) # change column names to nice ones
-    tabname = args.root_dir / 'zgrad_paper_plots' / f'paper_table_upto_{args.arcsec_limit}arcsec.tex'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    tabname = args.root_dir / 'zgrad_paper_plots' / f'paper_table_upto_{extent_text}.tex'
     tex_df.to_latex(tabname, index=False, escape=False)
     print('Saved latex table at', tabname)
 
@@ -1569,7 +1573,8 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_spectra=Fa
 
     # ----------annotating and saving figure--------------
     fig.text(0.05, 0.98, f'{field}: ID {objid}', fontsize=args.fontsize, c='k', ha='left', va='top')
-    figname = f'{field}_{objid}_example_upto_{args.arcsec_limit}arcsec.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'{field}_{objid}_example_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -1708,7 +1713,8 @@ def plot_AGN_demarcation_figure_single(objid, field, args, fontsize=10):
 
    # -----------saving figure------------
     ax.text(0.05, 0.95, f'ID #{full_hdu[0].header["ID"]}', fontsize=args.fontsize, c='k', ha='left', va='top', transform=ax.transAxes)
-    figname = f'BPT_{full_hdu[0].header["ID"]:05d}_upto_{args.arcsec_limit}arcsec_AGNdiag_{args.AGN_diag}.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'BPT_{full_hdu[0].header["ID"]:05d}_upto_{extent_text}_AGNdiag_{args.AGN_diag}.png'
     save_fig(fig, figname, args)
 
     return
@@ -1796,7 +1802,8 @@ def plot_AGN_demarcation_figure_integrated(objlist, args, fontsize=10):
         overplot_AGN_line_on_BPT(ax, theoretical_line=theoretical_line, label=line_label, color=color_arr[index], fontsize=args.fontsize, lw=0.5 if index else 1, ls='solid')
 
    # -----------saving figure------------
-    figname = f'BPT_integrated_upto_{args.arcsec_limit}arcsec_AGNdiag_{args.AGN_diag}.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'BPT_integrated_upto_{extent_text}_AGNdiag_{args.AGN_diag}.png'
     save_fig(fig, figname, args)
 
     return df_orig, df
@@ -1856,7 +1863,8 @@ def plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10, exclude_ids
         cbar.ax.tick_params(labelsize=args.fontsize)
     
     # -----------saving figure------------
-    figname = f'BPT_all_objects_upto_{args.arcsec_limit}arcsec_AGNdiag_{args.AGN_diag}.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'BPT_all_objects_upto_{extent_text}_AGNdiag_{args.AGN_diag}.png'
     save_fig(fig, figname, args)
 
     return
@@ -1973,7 +1981,8 @@ def plot_metallicity_fig_single(objid, field, Zdiag, args, fontsize=10):
         
     # -----------saving figure------------
     axes[2].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[2].transAxes)
-    figname = f'metallicity_{objid:05d}_upto_{args.arcsec_limit}arcsec.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'metallicity_{objid:05d}_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2058,7 +2067,8 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
     
     # -----------saving figure------------
     Zbranch_text = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
-    figname = f'metallicity_multi_panel_Zdiag_{Zdiag}{Zbranch_text}_upto_{args.arcsec_limit}arcsec.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'metallicity_multi_panel_Zdiag_{Zdiag}{Zbranch_text}_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2239,7 +2249,8 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
 # -----------saving figure------------
     axes[1].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
     debug_text = '_debug' if args.debug_Zsfr else ''
-    figname = f'metallicity-sfr_{objid:05d}{debug_text}_upto_{args.arcsec_limit}arcsec.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'metallicity-sfr_{objid:05d}{debug_text}_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2337,7 +2348,8 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
     cbar.ax.tick_params(labelsize=args.fontsize)
     
      # -----------saving figure------------
-    figname = f'metallicity-sfr_multi_panel_upto_{args.arcsec_limit}arcsec.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'metallicity-sfr_multi_panel_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2429,7 +2441,8 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     axes[4] = annotate_axes(axes[4], r'$\log$ $\Sigma_*$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args, hide_xaxis=False, hide_yaxis=False, hide_cbar=True)
     axes[4].set_aspect('equal')
     # -----------saving figure------------
-    figname = f'metallicity-sfr_radial_profile_{objid:05d}_upto_{args.arcsec_limit}arcsec.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'metallicity-sfr_radial_profile_{objid:05d}_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2535,7 +2548,8 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
 
     # ------------saving the full figure--------------------------
     colorby_text = f'_colorby_{args.colorcol}' if args.colorcol != 'color' else ''
-    figname = f'Zdiag{Zbranch_text}_comparison{colorby_text}{args.vorbin_text}_upto_{args.arcsec_limit}arcsec.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'Zdiag{Zbranch_text}_comparison{colorby_text}{args.vorbin_text}_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2601,7 +2615,8 @@ def plot_nb_comparison_sii(objlist, args, fontsize=10):
 
     # ------------saving the full figure--------------------------
     colorby_text = f'_colorby_{args.colorcol}' if args.colorcol != 'color' else ''
-    figname = f'Zdiag_NB_SII_comparison{colorby_text}{args.vorbin_text}.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'Zdiag_NB_SII_comparison{colorby_text}{args.vorbin_text}_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2879,7 +2894,8 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
 
     # ---------saving the fig--------------
     histbycol_text = '' if args.histbycol is None else f'_histby_{args.histbycol.lower()}'
-    figname = f'histogram_ratios_{"_".join(ratios).replace("/", "-")}{histbycol_text}_upto_{args.arcsec_limit}arcsec.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'histogram_ratios_{"_".join(ratios).replace("/", "-")}{histbycol_text}_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2899,7 +2915,7 @@ if __name__ == "__main__":
     args.exclude_lines = []# ['SII']
     args.voronoi_line = 'OII'
     args.voronoi_snr = 3.
-    args.re_limit = 2.5
+    #args.re_limit = 2.5
 
     primary_Zdiag = 'NB'
     cosmos_name = 'web' # choose between '2020' (i.e. COSMOS2020 catalog) or 'web' (i.e. COSMOSWeb catalog))
@@ -2976,7 +2992,7 @@ if __name__ == "__main__":
     #         plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10)
 
     # --------multi-panel Z map plots------------------
-    #plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)
+    plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)
 
     # --------multi-panel SFR-Z plots------------------
     #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
@@ -2987,7 +3003,7 @@ if __name__ == "__main__":
     #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
 
     # ---------loading master dataframe with only objects in objlist------------
-    df = make_master_df(objlist, args, sum=True)
+    #df = make_master_df(objlist, args, sum=True)
     
     # ---------metallicity latex table for paper----------------------
     #df_latex = make_latex_table(df, args, sum=True)
