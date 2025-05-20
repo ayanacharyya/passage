@@ -155,7 +155,7 @@ def generate_fit_params(obj_z, z_range = 0.01, num_age_bins = 5, min_age_bin = 3
     return fit_params
 
 # --------------------------------------------------------------------------------------------------------------------
-def run_bagpipes(photcat_filename_sed, filter_dir, output_dir, run, idcol='PASSAGE_ID', start_id=0, plot_restframe=False, ncpus=1):
+def run_bagpipes(photcat_filename_sed, filter_dir, output_dir, run, idcol='PASSAGE_ID', start_id=0, ncpus=1):
     '''
     Code written by A Acharyya
 
@@ -188,20 +188,10 @@ def run_bagpipes(photcat_filename_sed, filter_dir, output_dir, run, idcol='PASSA
         fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run=run) # Fit this galaxy
         fit.fit(verbose=True, sampler='nautilus', pool=ncpus)
 
-        # --------converting everything to restframe----------------
-        if plot_restframe:
-            fit.posterior.get_advanced_quantities()
-            redshift = np.median(fit.posterior.samples['redshift'])
-            fit.galaxy.photometry[:, 0] = fit.galaxy.photometry[:, 0] / (1 + redshift)
-            if fit.galaxy.spectrum_exists: fit.galaxy.spectrum[:, 0] = fit.galaxy.spectrum[:, 0] / (1 + redshift)
-            fit.galaxy.filter_set.eff_wavs = fit.galaxy.filter_set.eff_wavs / (1 + redshift)
-            fit.posterior.model_galaxy.wavelengths = fit.posterior.model_galaxy.wavelengths / (1 + redshift)
-
         # ---------Make some plots---------
-        fig, ax = fit.plot_spectrum_posterior(save=True, show=len(df) < 10, log_x=True, xlim=[2.7, 4.5], ylim=[0, 6])
-        fig, ax = fit.plot_spectrum_posterior(save=True, show=len(df) < 10, log_x=False, xlim=[500, 30000], ylim=[0, 6])
-        fig = fit.plot_sfh_posterior(save=True, show=len(df) < 10, xlim=None, ylim=[0, 10])
-        fig = fit.plot_corner(save=True, show=len(df) < 10)
+        fig, ax = fit.plot_spectrum_posterior(save=True, show=True)
+        fig = fit.plot_sfh_posterior(save=True, show=True)
+        fig = fit.plot_corner(save=True, show=True)
 
         # --------Save the stellar masses---------------
         for thisquant in list(new_columns_dict.keys()):
@@ -226,7 +216,6 @@ if __name__ == "__main__":
     # --------global variables to change----------
     idcol = 'ID_NIRISS' # column name of ID in the photometry catalog
     run = 'for_paper_only_st' # string label with which the runs would be saved
-    plot_restframe = True # set True to make output spectra plots in rest-frame of wavelength
     ncpus = 1 # BAGPIPES can parallelise, it will use ncpus number of processors
 
     # ------the transmission curves should be in this directory------
@@ -240,7 +229,7 @@ if __name__ == "__main__":
     df = pd.read_csv(photcat_filename_sed)
 
     # --------running SED fitting---------------------
-    dfm = run_bagpipes(photcat_filename_sed, filter_directory, output_dir, run, idcol=idcol, plot_restframe=plot_restframe, ncpus=ncpus)
+    dfm = run_bagpipes(photcat_filename_sed, filter_directory, output_dir, run, idcol=idcol, ncpus=ncpus)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
 
