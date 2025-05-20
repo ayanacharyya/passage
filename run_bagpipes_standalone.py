@@ -20,7 +20,7 @@ from uncertainties import ufloat
 from scipy.stats import mode as sci_mode
 
 start_time = datetime.now()
-cosmo = FlatLambdaCDM(H0=69.5, Om0=0.285, Ob0=0.0461)
+cosmo = FlatLambdaCDM(H0=70., Om0=0.3)
 
 # -------------------------------------------------------------------------------------------------------
 def load_photom_bagpipes(str_id, phot_cat, id_colname = 'bin_id', zeropoint = 28.9, cat_hdu_index = 0, extra_frac_err = 0.1):
