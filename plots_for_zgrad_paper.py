@@ -725,13 +725,13 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     #ax.fill_between(xarr, -5, np.poly1d(coeff)(xarr), color='limegreen', alpha=0.2, label='F21 forbidden')
 
     # ---------annotate axes and save figure-------
-    plt.legend(fontsize=args.fontsize / args.fontfactor, loc='lower left' if 'NB' in zgrad_col else 'best')
+    plt.legend(fontsize=args.fontsize / args.fontfactor, loc='upper right')
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
-    ax.set_ylabel(r'log $\nabla$Z$_r$ (dex/kpc)', fontsize=args.fontsize)
+    ax.set_ylabel(r'log $\nabla$Z$_r$ (dex/kpc)' if args.re_limit is None else r'log $\nabla$Z$_r$ (dex/R$_e$)', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
-    ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
-    ax.set_ylim(-0.5, 0.75)
+    ax.set_xlim(7.9, 11.2)
+    #ax.set_ylim(-1.5, 0.75)
 
     figname = f'MZgrad_colorby_{colorcol}_Zdiag_{zgrad_col}_upto_{args.arcsec_limit}arcsec.png'
     save_fig(fig, figname, args)
@@ -770,7 +770,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
-    ax.set_ylim(-1.3, 0.4)
+    #ax.set_ylim(-1.3, 0.4)
 
     figname = f'MZsfr_colorby_Z_upto_{args.arcsec_limit}arcsec.png'
     save_fig(fig, figname, args)
@@ -1513,7 +1513,7 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_spectra=Fa
     # -------setting up the figure layout------------
     #fig = plt.figure(figsize=(10, 7) if args.plot_ratio_maps else (10, 5))
     fig = plt.figure(figsize=(7.5, 7) if args.plot_ratio_maps else (8, 5))
-    fig.subplots_adjust(left=0.09, right=0.9, top=0.94, bottom=0.06)
+    fig.subplots_adjust(left=0.09, right=0.9, top=0.94, bottom=0.07)
     outer_gs = gridspec.GridSpec(2, 1, height_ratios=[1, 2 if args.plot_ratio_maps else 1], figure=fig, hspace=0.2) # Outer GridSpec: 2 rows – top (loose), bottom (tight)
 
     # ---------setting up direct image (1x1 square) and 1D spectra (1x3 wide) subplots----------------
@@ -2911,21 +2911,21 @@ if __name__ == "__main__":
     args.SNR_thresh = 2
     
     args.Zdiag = 'R2,R3,R23,NB'.split(',')
-    #args.Zdiag = 'R2,R3,R23,O3O2,NB'.split(',')
+    #args.Zdiag += ['O3O2']
     args.colorcol = 'distance' if args.re_limit is None else 'distance_re'
     args.phot_models = 'nb'
     log_mass_lim = [7.5, 10]
 
     # -------setting up objects to plot--------------
-    Par28_objects = [1303, 1849, 2727, 2867]
-    Par28_objects = [2171] + Par28_objects
+    Par28_objects = [300, 1303, 1849, 2727, 2867]
+    #Par28_objects = [2171] + Par28_objects
     glass_objects = [1721, 1983, 1991]
     #glass_objects = [1333, 2128] + glass_objects
 
     passage_objlist = [['Par028', item] for item in Par28_objects]
     glass_objlist = [['glass-a2744', item] for item in glass_objects]
     objlist = passage_objlist + glass_objlist
-    objlist_ha = [['Par028', item] for item in [1303, 2171, 2867]] + [['glass-a2744', item] for item in [1721, 1983, 2128]]
+    objlist_ha = [['Par028', item] for item in [300, 1303, 2867]] + [['glass-a2744', item] for item in [1721, 1983, 1991]]
 
     # -----------setting up global properties-------------------
     args.snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
@@ -2945,7 +2945,7 @@ if __name__ == "__main__":
     #plot_photoionisation_models('OIII/Hb', 'Z', args, fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
-    plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12, show_log_spectra=False, show_log_map=True)
+    #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12, show_log_spectra=False, show_log_map=True)
     
     # ---------single galaxy plot: AGN demarcation----------------------
     #plot_AGN_demarcation_figure_single(1303, 'Par028', args, fontsize=15) # AGN demarcation
@@ -2955,7 +2955,7 @@ if __name__ == "__main__":
     #df_agn_fluxes, df_agn = plot_AGN_demarcation_figure_integrated(objlist, args, fontsize=15) # AGN demarcation
     
     # ---------single galaxy plot: Z map and gradient----------------------
-    #plot_metallicity_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
+    #plot_metallicity_fig_single(300, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
     #plot_metallicity_fig_single(1721, 'glass-a2744', primary_Zdiag, args, fontsize=10) # zgrad plot
     
     # ---------single galaxy plot: SFR map and correlation----------------------
@@ -2986,7 +2986,7 @@ if __name__ == "__main__":
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=10)
     #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
 
-   # ---------loading master dataframe with only objects in objlist------------
+    # ---------loading master dataframe with only objects in objlist------------
     df = make_master_df(objlist, args, sum=True)
     
     # ---------metallicity latex table for paper----------------------

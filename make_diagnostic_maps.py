@@ -92,15 +92,22 @@ def plot_direct_image(full_hdu, ax, args, hide_xaxis=False, hide_yaxis=False):
 
         filter_hdu = full_hdu['DSCI', f'{filt.upper()}']
         image = filter_hdu.data
-        image = trim_image(image, args)
+        image = trim_image(image, args, skip_re_trim=True)
 
-        p = ax.imshow(image, cmap=cmap_arr[index], origin='lower', extent=args.extent, alpha=1)#, vmin=0, vmax=0.03)
+        extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
+        p = ax.imshow(image, cmap=cmap_arr[index], origin='lower', extent=extent, alpha=1)#, vmin=0, vmax=0.03)
 
         ax.set_xlim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
         ax.set_ylim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
 
         textcolor = mpl_cm.get_cmap(cmap_arr[index])(0.9)
         ax.text(ax.get_xlim()[0] * 0.9, ax.get_ylim()[1] * 0.7 - index * 0.1, filt, c=textcolor, fontsize=args.fontsize, ha='left', va='top')
+
+   # ----------annotate axis---------------
+    if args.re_limit is not None:
+        limit = args.re_limit * args.re_arcsec
+        ax.add_patch(plt.Rectangle((-limit, -limit), 2 * limit, 2 * limit, lw=0.5, color='r', fill=False))
+        #ax.add_patch(plt.Circle((0, 0), args.re_arcsec, color='k', fill=False, lw=0.5))
 
     ax.text(ax.get_xlim()[0] * 0.9, ax.get_ylim()[1] * 0.95, f'z={args.z:.2f}', c='k', fontsize=args.fontsize, ha='left', va='top')
     ax.text(ax.get_xlim()[1] * 0.95, ax.get_ylim()[0] * 0.95, f'Mag={args.mag:.1f}', c='k', fontsize=args.fontsize, ha='right', va='bottom')
@@ -109,7 +116,7 @@ def plot_direct_image(full_hdu, ax, args, hide_xaxis=False, hide_yaxis=False):
     #cbar = plt.colorbar(p)
 
     if args.only_seg:
-        ax.contour(args.segmentation_map != args.id, levels=0, colors='k', extent=args.extent, linewidths=0.5)
+        ax.contour(args.segmentation_map != args.id, levels=0, colors='k', extent=extent, linewidths=0.5)
 
     if args.plot_circle_at_arcsec is not None:
         ax.add_patch(plt.Circle((0, 0), args.plot_circle_at_arcsec, color='r', fill=False, lw=0.5)) # additional circle for debugging purpose
@@ -1932,6 +1939,7 @@ def get_Z(full_hdu, args):
                 distance_map = np.where(args.voronoi_bin_IDs.mask, np.nan, distance_map.data)
             else:
                 bin_IDs_map = np.arange(np.shape(logOH_map_val)[0] * np.shape(logOH_map_val)[1]).reshape(np.shape(logOH_map_val))
+            print(f'\nDeb1935: id {args.id}, Zdiag={args.Zdiag}, logOH_map shape={np.shape(logOH_map)}, logOH_map_val shape={np.shape(logOH_map_val)} distance_map shape={np.shape(distance_map)}, args.re_limit={args.re_limit}, args.arcsec_limit={args.arcsec_limit}, re={args.re_arcsec} arcsec\n') ##
 
         # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
             df = pd.DataFrame({'distance': distance_map.flatten(), 'log_OH': logOH_map_val.flatten(),'log_OH_u': logOH_map_err.flatten(), 'bin_ID': bin_IDs_map.flatten()})
@@ -3233,9 +3241,7 @@ if __name__ == "__main__":
 
             # --------determining effective radius of object---------------------
             args.re_kpc, args.re_arcsec = get_re(full_hdu, args, filter='F150W')
-            if args.re_limit is not None:
-                args.extent = (-args.re_limit, args.re_limit, -args.re_limit, args.re_limit)
-                args.arcsec_limit = args.re_limit * args.re_arcsec
+            if args.re_limit is not None: args.extent = (-args.re_limit, args.re_limit, -args.re_limit, args.re_limit)
             
             # ---------------segmentation map---------------
             segmentation_map = full_hdu['SEG'].data
