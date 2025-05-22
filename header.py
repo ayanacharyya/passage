@@ -120,6 +120,20 @@ import matplotlib.gridspec as gridspec
 import matplotlib.ticker as ticker
 from matplotlib.patches import ConnectionPatch
 
+import webbpsf
+from statsmodels.regression.linear_model import WLS
+
+import lenstronomy
+from lenstronomy.Data.psf import PSF
+from lenstronomy.LightModel.light_model import LightModel
+from lenstronomy.Util import util
+from lenstronomy.Util import image_util
+from lenstronomy.Data.imaging_data import ImageData
+from lenstronomy.ImSim.image_model import ImageModel
+from lenstronomy.LensModel.lens_model import LensModel
+from lenstronomy.ImSim.tracer_model import TracerModelSource
+from lenstronomy.Workflow.fitting_sequence import FittingSequence
+
 from matplotlib import pyplot as plt
 plt.rcParams['ytick.direction'] = 'in'
 plt.rcParams['ytick.right'] = True

@@ -561,7 +561,7 @@ def get_voronoi_bin_distances(full_hdu, line, args):
     df['snr'] = df['flux'] / df['flux']
     
     weight_col = 'snr' # 'snr' or 'flux'
-    wm = lambda x: np.average(x[df[weight_col] >= 0], weights=df.loc[x[df[weight_col] >= 0].index, weight_col]) # weighting the pixel distance by the SNr of the pixel
+    wm = lambda x: np.average(x[df[weight_col] >= 0], weights=df.loc[x[df[weight_col] >= 0].index, weight_col]) # weighting the pixel distance by the SNR of the pixel
     df2 = df.groupby(['bin_ID']).agg(bin_distance=('pixel_distance', wm)).reset_index()
     binID_distance_dict = dict(zip(df2['bin_ID'], df2['bin_distance']))
 
@@ -1952,6 +1952,8 @@ def get_Z(full_hdu, args):
             hdr1, hdr2 = fits.Header(), fits.Header()
             hdr1['field'] = args.field
             hdr1['object'] = args.id
+            hdr1['redshift'] = args.z
+            hdr1['re_arcsec'] = args.re_arcsec
             primary_hdu = fits.PrimaryHDU(header=hdr1)
 
             hdr2['z_diag'] = args.Zdiag
