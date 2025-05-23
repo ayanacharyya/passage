@@ -2901,25 +2901,25 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def lenstronomy_fit(image, df, quant_x='distance_arcsec', quant_y='log_OH'):
+def lenstronomy_fit(light_map, logOH_map, filter='F150W', exptime=500, pixel_scale=0.066, supersampling_factor=5):
     '''
     Fits the x and y columns using Lenstronomy
     Returns fitted parameters
-    This code is from https://github.com/astrobenji/lenstronomy-metals-notebooks/blob/main/tracer_module_tutorial.ipynb
+    This code is adapted from https://github.com/astrobenji/lenstronomy-metals-notebooks/blob/main/tracer_module_tutorial.ipynb
     '''
-    supersampling_factor = 5
-    pixel_scale = 0.066
 
-    # -------making the PSF---------------
-    FWHM                 = 1.5
-    psf_type             = 'GAUSSIAN'
-    psf_truncation       = 4 # four sigma is plenty
-
-    kwargs_psf = {'psf_type': psf_type, 'fwhm': FWHM, 'pixel_size': pixel_scale, 'truncation': psf_truncation}
-    psf_class = PSF(**kwargs_psf)
-
-    # --------------------------------------
+    # ---------making the PSF---------------
+    niriss        = webbpsf.NIRISS()
+    niriss.filter = filter
+    psf           = niriss.calc_psf(fov_arcsec=args.arcsec_limit * 2 if args.re_limit is None else args.re_limit * args.re_arcsec * 2, oversample=supersampling_factor)
+    psf_array  = psf[0].data
+    psf_type   = 'PIXEL'
+    kwargs_psf = {'psf_type': psf_type, 'kernel_point_source':psf_array, 'point_source_supersampling_factor':supersampling_factor}
+    psf_class  = PSF(**kwargs_psf)
+    
+    # ---------defining supersampling kwargs-----------------------------
     supersampling_R_pix = 30 #pixels, = 2'', which is 2Re
+    R_pix = np.sqrt((np.arange(np.shape(light_map)[0]) - np.shape(light_map)[0]/2)**2 + (np.arange(np.shape(light_map)[1]) - np.shape(light_map)[1]/2)**2)
     pix_to_supersample  = R_pix < supersampling_R_pix
 
     kwargs_numerics_adaptive_supersampling = {'supersampling_factor':supersampling_factor,
@@ -2929,19 +2929,23 @@ def lenstronomy_fit(image, df, quant_x='distance_arcsec', quant_y='log_OH'):
                             'supersampling_kernel_size': None,
                             'supersampled_indexes': pix_to_supersample}
 
-    # Define the parameter lists (long, but not complex)
+    # ---------defining light (source) and metallicity (tracer) model kwargs-----------------------------
+    # Sersic parameters in the initial simulation for the source
+    kwargs_sersic      = {'amp': 16, 'R_sersic': 1, 'n_sersic': 1, 'e1': 0, 'e2': 0, 'center_x': 0, 'center_y': 0}
+    source_model_list  = ['SERSIC_ELLIPSE']
+    kwargs_source      = [kwargs_sersic]
+    source_model_class = LightModel(source_model_list)
 
-    # lens models
-    # Since our model is no lens, use a bunch of empty lists
-    fixed_lens        = []
-    kwargs_lens_init  = []
-    kwargs_lens_sigma = []
-    kwargs_lower_lens = []
-    kwargs_upper_lens = []
-    lens_params       = [kwargs_lens_init, kwargs_lens_sigma, fixed_lens, kwargs_lower_lens, kwargs_upper_lens]
+    # Source tracer model 1 -- linear gradient
+    tracer_source_model_list = ['LINEAR']
+    kwargs_tracer_source     = [{'amp': 8, 'k': -0.2, 'center_x': kwargs_sersic['center_x'], 'center_y': kwargs_sersic['center_y']}]
+    tracer_source_class      = LightModel(tracer_source_model_list)
 
-    # Source params -- fixed to true input values
-    # We know that lenstronomy can fit galaxy properties, we are not testing this here.
+    # ---------defining lens model-----------------------------
+    lens_params = [[], [], [], [], []] # Since our model is no lens, use a bunch of empty lists
+
+    # ---------defining source model params-----------------------------
+    # Source params -- fixed to true input values; We know that lenstronomy can fit galaxy properties, we are not testing this here.
     fixed_source        = [{'amp': 16, 'R_sersic': 1, 'n_sersic': 1, 'e1': 0, 'e2': 0, 'center_x': 0, 'center_y': 0}]
     kwargs_source_init  = [{'amp': 16, 'R_sersic': 1, 'n_sersic': 1, 'e1': 0, 'e2': 0, 'center_x': 0, 'center_y': 0}]
     kwargs_source_sigma = [{'amp': 1,  'R_sersic': 1, 'n_sersic': 1, 'e1': 1, 'e2': 1, 'center_x': 1, 'center_y': 1}]
@@ -2950,51 +2954,55 @@ def lenstronomy_fit(image, df, quant_x='distance_arcsec', quant_y='log_OH'):
 
     source_params = [kwargs_source_init, kwargs_source_sigma, fixed_source, kwargs_lower_source, kwargs_upper_source]
 
-    # Tracer params
+    # ---------defining tracer model params-----------------------------
     fixed_tracer_source = [{'center_x': 0., 'center_y': 0}]
-    # close but wrong initial Zc, model assumes no metallicity gradient
-    kwargs_tracer_source_init  = [{'center_x': 0., 'center_y': 0, 'amp': 7.9, 'k': 0}] 
+    kwargs_tracer_source_init  = [{'center_x': 0., 'center_y': 0, 'amp': 8, 'k': 0}] 
     kwargs_tracer_source_sigma = [{'center_x': 1., 'center_y': 1, 'amp': 0.5, 'k': 0.3}]
     kwargs_lower_tracer_source = [{'center_x': 0., 'center_y': 0, 'amp': 6,   'k': -1}]
     kwargs_upper_tracer_source = [{'center_x': 0., 'center_y': 0, 'amp': 9,   'k': +1}]
 
     tracer_source_params = [kwargs_tracer_source_init, kwargs_tracer_source_sigma, fixed_tracer_source, kwargs_lower_tracer_source, kwargs_upper_tracer_source]
 
-    # Bring it together
-    kwargs_params = {'lens_model': lens_params,
-                    'source_model': source_params,
-                    'tracer_source_model': tracer_source_params}
-                    
+    # ---------combing all models-----------------------------
+    kwargs_params = {'lens_model': lens_params, 'source_model': source_params, 'tracer_source_model': tracer_source_params}           
     kwargs_likelihood = {'source_marg': False, 'tracer_likelihood': True}
+    kwargs_model = {'lens_model_list': [], 'source_light_model_list': ['SERSIC_ELLIPSE'],  'tracer_source_model_list': ['LINEAR'], 'tracer_source_band': 0, 'tracer_partition':[[0,0]]}
 
-    kwargs_model = {'lens_model_list': [], 
-                    'source_light_model_list': ['SERSIC_ELLIPSE'], 
-                    'tracer_source_model_list': ['LINEAR'],
-                    'tracer_source_band': 0,
-                    'tracer_partition':[[0,0]]}
+    # --------generate the coordinate grid and image properties (we only read out the relevant lines we need)-----------
+    _, _, ra_at_xy_0, dec_at_xy_0, _, _, Mpix2coord, _ = util.make_grid_with_coordtransform(numPix=np.shape(logOH_map)[0], deltapix=pixel_scale, center_ra=0, center_dec=0, subgrid_res=1, inverse=False)
 
-    # Input the observed light map
-    kwargs_image_data['image_data'] = image_model # Overwrite placeholder of zeros
+    # ---------reading in observed light map-----------------------------
+    kwargs_image_data = {'background_rms':.005 ,  # rms of background noise; background noise per pixel
+                     'exposure_time': exptime,  # exposure time (arbitrary units, flux per pixel is in units #photons/exp_time unit)
+                     'ra_at_xy_0': ra_at_xy_0,  # RA at (0,0) pixel
+                     'dec_at_xy_0': dec_at_xy_0,  # DEC at (0,0) pixel 
+                     'transform_pix2angle': Mpix2coord,  # matrix to translate shift in pixel in shift in relative RA/DEC (2x2 matrix). Make sure it's units are arcseconds or the angular units you want to model.
+                     'image_data': light_map
+                     }    
     image_data_class = ImageData(**kwargs_image_data)
+    imageModel = ImageModel(image_data_class, psf_class, source_model_class=source_model_class, kwargs_numerics=kwargs_numerics_adaptive_supersampling)
+    image_model = imageModel.image(kwargs_source=kwargs_source)
 
-    # Input the observed metallicity map and its noise
-    kwargs_tracer_data['noise_map']  = heteronoise_SD_map # S.D. of pixels
-    kwargs_tracer_data['image_data'] = tracer_real         # Overwrite placeholder of zeros   
+    # ---------reading in observed metallicity map-----------------------------
+    kwargs_tracer_data = {'noise_map': unp.std_devs(logOH_map.data),
+                      'ra_at_xy_0': ra_at_xy_0,  # RA at (0,0) pixel
+                      'dec_at_xy_0': dec_at_xy_0,  # DEC at (0,0) pixel 
+                      'transform_pix2angle': Mpix2coord,  # matrix to translate shift in pixel in shift in relative RA/DEC (2x2 matrix). Make sure it's units are arcseconds or the angular units you want to model.
+                      'image_data': unp.nominal_values(logOH_map.data)}
+
     tracer_data_class = ImageData(**kwargs_tracer_data)
+    tracer_model_class = TracerModelSource(data_class=tracer_data_class, tracer_source_class=tracer_source_class, psf_class=psf_class, source_model_class=source_model_class, tracer_type = 'LOG') # Because we use log units for metallicity
+    tracer_model = tracer_model_class.tracer_model(kwargs_lens = None, kwargs_tracer_source=kwargs_tracer_source, kwargs_source=kwargs_source)
 
-    # Now we can start fitting, using the kwargs defined above on the simulated data
+    # ---------fitting process-----------------------------
     multi_band_list = [[kwargs_image_data, kwargs_psf, kwargs_numerics_adaptive_supersampling]]
-
     kwargs_data_joint = {'multi_band_list': multi_band_list, 
                         'multi_band_type': 'single-band',  # 'multi-linear': every imaging band has independent solutions of the surface brightness, 'joint-linear': there is one joint solution of the linear coefficients demanded across the bands.
                         'tracer_data': [kwargs_tracer_data, kwargs_psf, kwargs_numerics_adaptive_supersampling]}
-
     kwargs_constraints = {'linear_solver': True}
 
     fitting_seq = FittingSequence(kwargs_data_joint, kwargs_model, kwargs_constraints, kwargs_likelihood, kwargs_params)
-
-    fitting_kwargs_list = [['PSO',  {'sigma_scale': 1, 'n_particles': 100, 'n_iterations': 100}],
-                        ['MCMC', {'n_burn': 50, 'n_run': 200, 'n_walkers': 100, 'sigma_scale': .1}]]
+    fitting_kwargs_list = [['PSO',  {'sigma_scale': 1, 'n_particles': 100, 'n_iterations': 100}], ['MCMC', {'n_burn': 50, 'n_run': 200, 'n_walkers': 100, 'sigma_scale': .1}]]
 
     chain_list = fitting_seq.fit_sequence(fitting_kwargs_list)
     kwargs_result = fitting_seq.best_fit()
@@ -3027,7 +3035,7 @@ def myfit(df, quant_x='distance_arcsec', quant_y='log_OH'):
     return linefit
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_metallicity_fit_tests(objid, field, Zdiag, args, fontsize=10):
+def plot_metallicity_fit_tests(objid, field, Zdiag, args, filter='F150W', fontsize=10):
     '''
     Test various radial fitting methods (polyfit, WLS, lenstronomy)
     Saves the figure
@@ -3047,19 +3055,22 @@ def plot_metallicity_fit_tests(objid, field, Zdiag, args, fontsize=10):
     else: arcsec_limit = args.re_limit * args.re_arcsec
 
     # ---------setting up the figure----------------
-    fig, axes = plt.subplots(1, 3, figsize=(10, 3))
-    fig.subplots_adjust(left=0.07, right=0.99, top=0.96, bottom=0.14, wspace=0.4)
+    fig, axes = plt.subplots(1, 4, figsize=(13, 3))
+    fig.subplots_adjust(left=0.05, right=0.99, top=0.96, bottom=0.14, wspace=0.4)
     cmap = 'cividis'
 
     # -----plotting direct image-----------------
-    axes[0], rgb_image = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], axes[0], args)
+    axes[0], _ = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], axes[0], args)
+    filter_image, exptime = get_direct_image(full_hdu, filter, args)
+    center_pix = int(np.shape(filter_image)[0] / 2)
+    farthest_pix = int(np.shape(logOH_map)[0] / 2)
+    filter_image = filter_image[center_pix - farthest_pix : center_pix + farthest_pix, center_pix - farthest_pix : center_pix + farthest_pix]
 
-    # -----plotting 2D metallicity map-----------
-    logOH_map = np.ma.masked_where(logOH_map.mask, unp.nominal_values(logOH_map.data))
-    p = axes[1].imshow(logOH_map, extent=(-arcsec_limit, arcsec_limit, -arcsec_limit, arcsec_limit), cmap=cmap, origin='lower')
+    # -----plotting trimmed direct image---------------
+    p = axes[1].imshow(filter_image, extent=(-arcsec_limit, arcsec_limit, -arcsec_limit, arcsec_limit), origin='lower')
     axes[1].scatter(0, 0, marker='x', s=10, c='grey')
     axes[1].set_aspect('auto') 
-    axes[1] = annotate_axes(axes[1], 'arcsec', 'arcsec', args, label='Metallicity', clabel='', hide_cbar=False, p=p)
+    axes[1] = annotate_axes(axes[1], 'arcsec', 'arcsec', args, label=f'{filter} image', clabel='', hide_cbar=False, p=p)
 
     # -------zoom-in annotation------------------
     if args.re_limit is not None:
@@ -3068,36 +3079,43 @@ def plot_metallicity_fit_tests(objid, field, Zdiag, args, fontsize=10):
         axes[1].add_artist(connect1)
         axes[1].add_artist(connect2)
         
-    # ------plotting metallicity radial profile-----------
-    axes[2].scatter(logOH_df[quant_x], logOH_df[quant_y], s=20, c='grey', lw=0, alpha=1)
-    axes[2].errorbar(logOH_df[quant_x], logOH_df[quant_y], yerr=logOH_df[quant_y + '_u'], fmt='none', c='grey', lw=0.5, alpha=0.2)
+    # -----plotting 2D metallicity map-----------
+    logOH_map = np.ma.masked_where(logOH_map.mask, unp.nominal_values(logOH_map.data))
+    p = axes[2].imshow(logOH_map, extent=(-arcsec_limit, arcsec_limit, -arcsec_limit, arcsec_limit), cmap=cmap, origin='lower')
+    axes[2].scatter(0, 0, marker='x', s=10, c='grey')
     axes[2].set_aspect('auto') 
-    axes[2] = annotate_axes(axes[2], 'Radius (arcsec)', r'$\log$ O/H + 12', args)
+    axes[2] = annotate_axes(axes[2], 'arcsec', 'arcsec', args, label='Metallicity', clabel='', hide_cbar=False, p=p)
+
+    # ------plotting metallicity radial profile-----------
+    axes[3].scatter(logOH_df[quant_x], logOH_df[quant_y], s=20, c='grey', lw=0, alpha=1)
+    axes[3].errorbar(logOH_df[quant_x], logOH_df[quant_y], yerr=logOH_df[quant_y + '_u'], fmt='none', c='grey', lw=0.5, alpha=0.2)
+    axes[3].set_aspect('auto') 
+    axes[3] = annotate_axes(axes[3], 'Radius (arcsec)', r'$\log$ O/H + 12', args)
 
     # -------fitting and ploting the fits--------------
     xarr = logOH_df[quant_x]
     
     linefit = myfit(logOH_df, quant_x=quant_x, quant_y=quant_y)
     my_yfit = np.poly1d(linefit)(xarr)
-    axes[2].plot(xarr, my_yfit, color='salmon', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit[0]:.2f}')
+    axes[3].plot(xarr, my_yfit, color='salmon', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit[0]:.2f}')
 
     linefit_wls = wlsfit(logOH_df, quant_x=quant_x, quant_y=quant_y)
     wls_yfit = np.poly1d(linefit_wls)(xarr)
-    axes[2].plot(xarr, wls_yfit, color='sienna', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit_wls[0]:.2f}')
+    axes[3].plot(xarr, wls_yfit, color='sienna', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit_wls[0]:.2f}')
 
-    #linefit_l = lenstronomy_fit(logOH_df, quant_x=quant_x, quant_y=quant_y)
+    lfit = lenstronomy_fit(filter_image, logOH_map, filter=filter, exptime=exptime, pixel_scale=args.pix_size_arcsec, supersampling_factor=5)
     #l_yfit = np.poly1d(linefit_l)(xarr)
-    #axes[2].plot(xarr, l_yfit, color='g', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit_l[0]:.2f}')
+    #axes[3].plot(xarr, l_yfit, color='g', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit_l[0]:.2f}')
 
-    axes[2].legend(fontsize=args.fontsize / args.fontfactor, loc='lower left')
+    axes[3].legend(fontsize=args.fontsize / args.fontfactor, loc='lower left')
 
     # -----------saving figure------------
-    axes[2].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[2].transAxes)
+    axes[3].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[2].transAxes)
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     figname = f'metallicity_fit_tests_{objid:05d}_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
-    return
+    return lfit
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -3172,7 +3190,7 @@ if __name__ == "__main__":
     # ---------single galaxy plot: Z map and gradient----------------------
     #plot_metallicity_fig_single(2867, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
     #plot_metallicity_fig_single(1721, 'glass-a2744', primary_Zdiag, args, fontsize=10) # zgrad plot
-    plot_metallicity_fit_tests(2867, 'Par028', primary_Zdiag, args, fontsize=10)
+    lfit = plot_metallicity_fit_tests(2867, 'Par028', primary_Zdiag, args, fontsize=10)
     
     # ---------single galaxy plot: SFR map and correlation----------------------
     #plot_metallicity_sfr_fig_single(1333, 'glass-a2744', primary_Zdiag, args, fontsize=10) # z-sfr plot
