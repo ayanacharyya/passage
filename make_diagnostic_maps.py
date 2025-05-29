@@ -517,7 +517,7 @@ def bin_2D(map, bin_IDs, map_err=None, debug_vorbin=False, ax=None):
                 ax.step(bin_centers, hist + index * 1., lw=0.5, where='mid', color=col_arr[index])
 
         binned_map[bin_IDs == id] = chosen_data.n
-        binned_map_err[bin_IDs == id] = chosen_data.s
+        if map_err is not None: binned_map_err[bin_IDs == id] = chosen_data.s
 
     binned_map = np.ma.masked_where(bin_IDs.mask, binned_map)
     if map_err is not None: binned_map_err = np.ma.masked_where(bin_IDs.mask, binned_map_err)

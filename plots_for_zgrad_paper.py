@@ -1165,7 +1165,23 @@ def plot_radial_profile_old(image, ax, args, ylim=None, xlim=None, hide_xaxis=Fa
     return ax, linefit
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, short_label=False, quant='log_OH'):
+def plot_fitted_line(ax, linefit, xarr, fit_color, args, quant='log_OH', short_label=False, index=0):
+    '''
+    Computes and plots the fitted line given the linear fit parameters, on an axisting axis handle
+    Returns axis handle
+    '''
+    y_fitted = np.poly1d(unp.nominal_values(linefit))(xarr)
+    ax.plot(xarr, y_fitted, color=fit_color, lw=1, ls='dashed')
+    if quant in ['logOH', 'Z', 'log_OH']:
+        label = r'$\nabla$Z$_r$' + f' = {linefit[0].n: .2f}' if short_label else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc' if args.re_limit is None else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} ' + r'dex/R$_e$'
+    else:
+        label = r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0].s: .2f}' if short_label else r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0]: .2f} dex/kpc' if args.re_limit is None else r'$\nabla$' + f' = {linefit[0]: .2f} ' + r'dex/R$_e$'
+    ax.text(0.1, 0.05 + index * 0.1, label, c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
+    
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, short_label=False, quant='log_OH', Zdiag='NB'):
     '''
     Plots and fits the radial profile from a given 2D image in a given axis
     Returns the axis handle and the linefit
@@ -1176,33 +1192,29 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     if args.radius_max is not None: df = df[df['distance'] <= args.radius_max]
     df = df.sort_values(by='distance').reset_index(drop=True)
 
-    # -------plotting--------
-    ax.scatter(df['distance'], df[quant], c='grey', s=20, alpha=1)
-    if quant + '_u' in df: ax.errorbar(df['distance'], df[quant], yerr=df[quant + '_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
-    ax.set_aspect('auto') 
+    # -------fitting by various methods--------------
+    quant_x = 'distance'
+    
+    linefit_original = original_fit(df, quant_x=quant_x, quant_y=quant)
+    linefit_wls = wls_fit(df, quant_x=quant_x, quant_y=quant)
+    if quant in ['logOH', 'Z', 'log_OH']: linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
 
-    # -------radial fitting-------------
-    try:
-        fit_color = 'salmon'
-        linefit, linecov = np.polyfit(df['distance'], df[quant], 1, cov=True, w=1. / (df[quant + '_u']) ** 2 if (df[quant + '_u'] > 0).any() else None)
-        y_fitted = np.poly1d(linefit)(df['distance'])
-        ax.plot(df['distance'], y_fitted, color=fit_color, lw=1, ls='dashed')
-        linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
-        if quant in ['logOH', 'Z', 'log_OH']:
-            label = r'$\nabla$Z$_r$' + f' = {linefit[0].n: .2f}' if short_label else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc' if args.re_limit is None else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} ' + r'dex/R$_e$'
-        else:
-            label = r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0].s: .2f}' if short_label else r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0]: .2f} dex/kpc' if args.re_limit is None else r'$\nabla$' + f' = {linefit[0]: .2f} ' + r'dex/R$_e$'
-        ax.text(0.1, 0.05, label, c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
-    except:
-        print(f'WARNING: Could not fit radial profile, returning nan fit parameters')
-        linefit = np.array([ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)])
+    # -------plotting the data and the fits--------
+    ax.scatter(df[quant_x], df[quant], c='grey', s=20, alpha=1)
+    if quant + '_u' in df: ax.errorbar(df['distance'], df[quant], yerr=df[quant + '_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
+
+    xarr = df[quant_x]
+    ax = plot_fitted_line(ax, linefit_original, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
+    ax = plot_fitted_line(ax, linefit_wls, xarr, 'sienna', args, quant=quant, short_label=short_label, index=1)
+    if quant in ['logOH', 'Z', 'log_OH']: ax = plot_fitted_line(ax, linefit_lenstronomy, xarr, 'green', args, quant=quant, short_label=short_label, index=2)
+    ax.set_aspect('auto') 
 
     # --------annotating axis--------------
     if xlim is not None: ax.set_xlim(xlim[0], xlim[1]) # kpc
     if ylim is not None: ax.set_ylim(ylim[0], ylim[1])
     if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)' if args.re_limit is None else r'Radius (R$_e$)', label_dict[quant], args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
     
-    return ax, linefit
+    return ax, linefit_original
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_linelist(ax, fontsize=10, line_list_file=None, show_log_flux=False):
@@ -1969,7 +1981,7 @@ def plot_metallicity_fig_single(objid, field, Zdiag, args, fontsize=10):
     axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', loc='lower right')
 
     # ------plotting metallicity radial profile-----------
-    axes[2], _ = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit])
+    axes[2], _ = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit], Zdiag=Zdiag)
 
     # -------zoom-in annotation------------------
     if args.re_limit is not None:
@@ -1997,6 +2009,7 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
     print(f'Plotting metallicity ({Zdiag}) figure for {len(objlist)} objects..')
 
    # -------setting up the figure--------------------
+    Zlim, cmap = [7.1, 9.1] if 'NB' in Zdiag else [8.2, 9.1], 'cividis'
     ncol = 2
     nrow = int(np.ceil(len(objlist) / ncol))
     fig = plt.figure(figsize=(10, 6))
@@ -2028,7 +2041,6 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
         axes[0].text(0.95, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='w', ha='right', va='top', transform=axes[0].transAxes)
         
         # -----plotting 2D metallicity map-----------
-        Zlim, cmap = [7.1, 8.5] if 'NB' in Zdiag else [8.2, 9.1], 'cividis'
         axes[1] = plot_2D_map(logOH_map, axes[1], None, args, clabel='', takelog=False, cmap=cmap, vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=hide_xaxis, hide_yaxis=True, hide_cbar=True)
         axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', color='brown', loc='lower right')
     
@@ -2041,7 +2053,7 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
             axes[1].add_artist(connect2)
         
         # ------plotting metallicity radial profile-----------
-        axes[2], linefit = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit], hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, short_label=True)
+        axes[2], linefit = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit], hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, short_label=True, Zdiag=Zdiag)
         axes[2].yaxis.set_label_position('right')
         axes[2].yaxis.tick_right()
    
@@ -2901,6 +2913,102 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
     return
 
 # --------------------------------------------------------------------------------------------------------------------
+def mcmc_vorbin_fit(logOH_df_data, args, filter='F150W', Zdiag='NB', quant_x='distance_arcsec', quant_y='log_OH'):
+    '''
+    Fits the given x and y quantities by taking into account PSF smearing (using MCMC) and the given Voronoi bin segmentation map
+    Returns fitted parameters
+    '''
+
+    # -----------loading the metallicity map---------------
+    full_hdu = load_full_fits(args.id, args.field, args)
+    args = load_object_specific_args(full_hdu, args, field=args.field)
+    logOH_map_data, _, _ = load_metallicity_map(args.field, args.id, Zdiag, args)
+
+    # ---------making the PSF---------------
+    niriss = webbpsf.NIRISS()
+    niriss.filter = filter
+    niriss.pixelscale = args.pix_size_arcsec
+    if args.re_limit is None: fov_arcsec = args.arcsec_limit * 2
+    else: fov_arcsec = args.re_limit * args.re_arcsec * 2
+    fov_arcsec = fov_arcsec + niriss.pixelscale
+    psf = niriss.calc_psf(fov_arcsec=fov_arcsec, oversample=1)
+    psf_kernel  = psf[0].data
+
+    # -------making the ideal metallicity map (model)-----------------
+    kwargs_init = [{'center_x': 0, 'center_y': 0, 'slope': -0.5, 'cen': 8}]
+    kwargs_sigma = [{'center_x': 1, 'center_y': 1, 'slope': 0.5, 'cen': 1}]
+    kwargs_lower = [{'center_x': 0, 'center_y': 0, 'slope': 2, 'cen': 6}]
+    kwargs_upper = [{'center_x': 0, 'center_y': 0, 'slope': -2, 'cen': 9}]
+    radprof = [kwargs_init[0]['slope'], kwargs_init[0]['cen']]
+
+    distance_map = get_distance_map(np.shape(logOH_map_data), args, for_distmap=True)
+    distance_map = distance_map * cosmo.arcsec_per_kpc_proper(args.z).value # converting from kpc to arcsec
+    logOH_map_model = np.poly1d(radprof)(distance_map)
+
+    # ------smoothing metallicity model with PSF------------------
+    logOH_map_model_smoothed = convolve(logOH_map_model, psf_kernel)
+
+    # -------voronoi binning the smoothed map as per given vorbin segmentation----------
+    bin_IDs_map = args.voronoi_bin_IDs
+    logOH_map_model_smoothed = bin_2D(logOH_map_model_smoothed, bin_IDs_map)
+    logOH_df_model = pd.DataFrame({'distance': distance_map.flatten(), 'log_OH': logOH_map_model_smoothed.flatten(), 'bin_ID': bin_IDs_map.flatten()})
+    logOH_df_model = logOH_df_model.dropna().reset_index(drop=True)
+    logOH_df_model['bin_ID'] = logOH_df_model['bin_ID'].astype(int)
+    logOH_df_model = logOH_df_model.groupby(['bin_ID'], as_index=False).agg(np.mean)
+
+    # --------comparing model vorbin data to observed vorbin data--------------
+    
+    
+    # --------getting the final radial fit--------------
+    linefit = [ufloat(0,0), ufloat(8,0)]
+
+    return linefit
+
+# --------------------------------------------------------------------------------------------------------------------
+def lenstronomy_fit_wrap(logOH_df, args, filter='F150W', supersampling_factor=1, Zdiag='NB', quant_x='distance_arcsec', quant_y='log_OH', return_intermediate=False):
+    '''
+    Wrapper function to read in the metallicity map and direct image map, given a set of args, and then call lenstronomy_fit() to fit the metallicity map accounting for PSF smearing
+    Returns fitted parameters
+    '''
+
+    # -----------loading the data---------------
+    full_hdu = load_full_fits(args.id, args.field, args)
+    args = load_object_specific_args(full_hdu, args, field=args.field)
+    logOH_map, _, _ = load_metallicity_map(args.field, args.id, Zdiag, args)
+
+    # -----reading in direct image-----------------
+    filter_image, exptime = get_direct_image(full_hdu, filter, args)
+    center_pix = int(np.shape(filter_image)[0] / 2)
+    farthest_pix = int(np.shape(logOH_map)[0] / 2)
+    filter_image = filter_image[center_pix - farthest_pix : center_pix + farthest_pix, center_pix - farthest_pix : center_pix + farthest_pix]
+
+    # ------interpolating voronoi binned radial profile------------------
+    # distance_array = np.linspace(np.min(logOH_df[quant_x]), np.max(logOH_df[quant_x]), 10)
+    # interp_func = interp1d(logOH_df[quant_x], logOH_df[quant_y], assume_sorted=False, fill_value='extrapolate', bounds_error=False)
+    # interp_func_u = interp1d(logOH_df[quant_x], logOH_df[quant_y + '_u'], assume_sorted=False, fill_value=0, bounds_error=False)
+    # distance_map = get_distance_map(np.shape(filter_image), args, for_distmap=True)
+    # distance_map = distance_map * cosmo.arcsec_per_kpc_proper(args.z).value # converting from kpc to arcsec
+    # logOH_map_lenstronomy = np.ma.masked_where(False, unp.uarray(interp_func(distance_map), interp_func_u(distance_map)))
+
+    # ------replacing nans in logOH map with zeros------------------
+    logOH_map_lenstronomy = logOH_map.copy()
+    logOH_map_lenstronomy.data[np.isnan(unp.nominal_values(logOH_map_lenstronomy.data))] = ufloat(0, 1e20)
+
+    # -----calling lenstronomy fitter----------------------
+    #linefit_lenstronomy = lenstronomy_fit(filter_image, logOH_map_lenstronomy, filter=filter, exptime=exptime, pixel_scale=args.pix_size_arcsec, supersampling_factor=supersampling_factor) # the output slope is dex/arcsec
+    linefit_lenstronomy = [np.nan, np.nan]
+
+    if quant_x == 'distance':
+        linefit_lenstronomy[0] *= cosmo.arcsec_per_kpc_proper(args.z).value # converting from dex/arcsec to dex/kpc
+        if args.re_limit is not None: linefit_lenstronomy[0] *= args.re_kpc # converting from dex/kpc to dex/Re
+    linefit_lenstronomy = unp.uarray(linefit_lenstronomy, np.zeros(len(linefit_lenstronomy)))
+
+    if return_intermediate:
+        return linefit_lenstronomy, filter_image, logOH_map, logOH_map_lenstronomy
+    else:
+        return linefit_lenstronomy
+
+# --------------------------------------------------------------------------------------------------------------------
 def lenstronomy_fit(light_map, logOH_map, filter='F150W', exptime=500, pixel_scale=0.066, supersampling_factor=1):
     '''
     Fits the x and y columns using Lenstronomy
@@ -2942,8 +3050,8 @@ def lenstronomy_fit(light_map, logOH_map, filter='F150W', exptime=500, pixel_sca
     fixed_tracer_source = [{'center_x': 0., 'center_y': 0}]
     kwargs_tracer_source_init  = [{'center_x': 0., 'center_y': 0, 'amp': 8, 'k': 0}] 
     kwargs_tracer_source_sigma = [{'center_x': 1., 'center_y': 1, 'amp': 0.5, 'k': 0.3}]
-    kwargs_lower_tracer_source = [{'center_x': 0., 'center_y': 0, 'amp': 6,   'k': -1}]
-    kwargs_upper_tracer_source = [{'center_x': 0., 'center_y': 0, 'amp': 9,   'k': +1}]
+    kwargs_lower_tracer_source = [{'center_x': -2, 'center_y': -2, 'amp': 6,   'k': -1}]
+    kwargs_upper_tracer_source = [{'center_x': 2, 'center_y': 2, 'amp': 9,   'k': +1}]
 
     tracer_source_params = [kwargs_tracer_source_init, kwargs_tracer_source_sigma, fixed_tracer_source, kwargs_lower_tracer_source, kwargs_upper_tracer_source]
 
@@ -2988,28 +3096,35 @@ def lenstronomy_fit(light_map, logOH_map, filter='F150W', exptime=500, pixel_sca
     return linefit
 
 # --------------------------------------------------------------------------------------------------------------------
-def wlsfit(df, quant_x='distance_arcsec', quant_y='log_OH'):
+def wls_fit(df, quant_x='distance_arcsec', quant_y='log_OH'):
     '''
     Fits the x and y columns using WLS
     Returns fitted parameters
     '''
-    ones = np.ones(len(df))
-    covariates = np.vstack((ones, df[quant_x])).T
-    wls_model_fit = WLS(df[quant_y], covariates, weights=1/(df[quant_y + '_u']**2)).fit()
-
-    linefit = [wls_model_fit.params['x1'], wls_model_fit.params['const']]
+    try:
+        ones = np.ones(len(df))
+        covariates = np.vstack((ones, df[quant_x])).T
+        wls_model_fit = WLS(df[quant_y], covariates, weights=1/(df[quant_y + '_u']**2)).fit()
+        linefit = [ufloat(wls_model_fit.params['x1'], 0), ufloat(wls_model_fit.params['const'], 0)]
+    except:
+        print(f'WARNING: Could not fit radial profile via WLS, returning nan fit parameters')
+        linefit = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
 
     return linefit
 
 # --------------------------------------------------------------------------------------------------------------------
-def myfit(df, quant_x='distance_arcsec', quant_y='log_OH'):
+def original_fit(df, quant_x='distance_arcsec', quant_y='log_OH'):
     '''
     Fits the x and y columns using np.polyfit
     Returns fitted parameters
     '''
-    linefit, linecov = np.polyfit(df[quant_x], df[quant_y], 1, cov=True, w=1. / (df[quant_y + '_u'] ** 2))
-    #linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
-
+    try:
+        linefit, linecov = np.polyfit(df[quant_x], df[quant_y], 1, cov=True, w=1. / (df[quant_y + '_u']) ** 2 if (df[quant_y + '_u'] > 0).any() else None)
+        linefit = [ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))]
+    except:
+        print(f'WARNING: Could not fit radial profile via polyfit, returning nan fit parameters')
+        linefit = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
+    
     return linefit
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -3023,28 +3138,27 @@ def plot_metallicity_fit_tests(objid, field, Zdiag, args, filter='F150W', fontsi
     args.fontsize = fontsize
     print(f'Plotting radial fit comparisons for ({Zdiag}) for {objid}..')
 
-    # -----------loading the data---------------
+    # -----------loading the data---------------    
     full_hdu = load_full_fits(objid, field, args)
     args = load_object_specific_args(full_hdu, args, field=field)
-    logOH_map, _, _ = load_metallicity_map(field, objid, Zdiag, args)
-    #logOH_map.data[np.isnan(unp.nominal_values(logOH_map.data))] = ufloat(7.5,0.1) ## arbitrarily filling up all NaN values with a constant, just to see if it works
-    
     logOH_df, _, _ =  load_metallicity_df(field, objid, Zdiag, args)
-    logOH_df['distance_arcsec'] = logOH_df['distance'] * cosmo.arcsec_per_kpc_proper(args.z).value # conerting from kpc to arcsec
+    logOH_df['distance_arcsec'] = logOH_df['distance'] * cosmo.arcsec_per_kpc_proper(args.z).value # converting from kpc to arcsec
     if args.re_limit is None: arcsec_limit = args.arcsec_limit
     else: arcsec_limit = args.re_limit * args.re_arcsec
 
+    # -------doing the radial fits--------------
+    linefit_original = original_fit(logOH_df, quant_x=quant_x, quant_y=quant_y)
+    linefit_wls = wls_fit(logOH_df, quant_x=quant_x, quant_y=quant_y)
+    linefit_lenstronomy, filter_image, logOH_map, logOH_map_lenstronomy = lenstronomy_fit_wrap(logOH_df, args, filter=filter, supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant_y, return_intermediate=True)
+    linefit_mcmc = mcmc_vorbin_fit(logOH_df, args, filter=filter, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant_y)
+
     # ---------setting up the figure----------------
-    fig, axes = plt.subplots(1, 4, figsize=(13, 3))
+    fig, axes = plt.subplots(1, 5, figsize=(16, 2.8))
     fig.subplots_adjust(left=0.05, right=0.99, top=0.96, bottom=0.14, wspace=0.4)
     cmap = 'cividis'
 
     # -----plotting direct image-----------------
     axes[0], _ = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], axes[0], args)
-    filter_image, exptime = get_direct_image(full_hdu, filter, args)
-    center_pix = int(np.shape(filter_image)[0] / 2)
-    farthest_pix = int(np.shape(logOH_map)[0] / 2)
-    filter_image = filter_image[center_pix - farthest_pix : center_pix + farthest_pix, center_pix - farthest_pix : center_pix + farthest_pix]
 
     # -----plotting trimmed direct image---------------
     p = axes[1].imshow(filter_image, extent=(-arcsec_limit, arcsec_limit, -arcsec_limit, arcsec_limit), origin='lower')
@@ -3061,41 +3175,42 @@ def plot_metallicity_fit_tests(objid, field, Zdiag, args, filter='F150W', fontsi
         
     # -----plotting 2D metallicity map-----------
     logOH_map_to_plot = np.ma.masked_where(logOH_map.mask, unp.nominal_values(logOH_map.data))
+    clim = [np.min(np.ma.compressed(logOH_map_to_plot)), np.max(np.ma.compressed(logOH_map_to_plot))]
     p = axes[2].imshow(logOH_map_to_plot, extent=(-arcsec_limit, arcsec_limit, -arcsec_limit, arcsec_limit), cmap=cmap, origin='lower')
     axes[2].scatter(0, 0, marker='x', s=10, c='grey')
     axes[2].set_aspect('auto') 
-    axes[2] = annotate_axes(axes[2], 'arcsec', 'arcsec', args, label='Metallicity', clabel='', hide_cbar=False, p=p)
+    axes[2] = annotate_axes(axes[2], 'arcsec', 'arcsec', args, label='Metallicity', clabel='', hide_cbar=False, p=p, hide_yaxis=True)
+
+    # -----plotting interpolated 2D metallicity map-----------
+    logOH_map_to_plot = np.ma.masked_where(logOH_map_lenstronomy.mask, unp.nominal_values(logOH_map_lenstronomy))
+    p = axes[3].imshow(logOH_map_to_plot, extent=(-arcsec_limit, arcsec_limit, -arcsec_limit, arcsec_limit), cmap=cmap, origin='lower', vmin=clim[0], vmax=clim[1])
+    axes[3].scatter(0, 0, marker='x', s=10, c='grey')
+    axes[3].set_aspect('auto') 
+    axes[3] = annotate_axes(axes[3], 'arcsec', 'arcsec', args, label='Lenstronomy input metallicity', clabel='', hide_cbar=False, p=p, hide_yaxis=True)
 
     # ------plotting metallicity radial profile-----------
-    axes[3].scatter(logOH_df[quant_x], logOH_df[quant_y], s=20, c='grey', lw=0, alpha=1)
-    axes[3].errorbar(logOH_df[quant_x], logOH_df[quant_y], yerr=logOH_df[quant_y + '_u'], fmt='none', c='grey', lw=0.5, alpha=0.2)
-    axes[3].set_aspect('auto') 
-    axes[3] = annotate_axes(axes[3], 'Radius (arcsec)', r'$\log$ O/H + 12', args)
+    radprof_ax = axes[4]
+    radprof_ax.scatter(logOH_df[quant_x], logOH_df[quant_y], s=20, c='grey', lw=0, alpha=1)
+    radprof_ax.errorbar(logOH_df[quant_x], logOH_df[quant_y], yerr=logOH_df[quant_y + '_u'], fmt='none', c='grey', lw=0.5, alpha=0.2)
+    radprof_ax.set_aspect('auto') 
+    radprof_ax = annotate_axes(radprof_ax, 'Radius (arcsec)', r'$\log$ O/H + 12', args)
 
-    # -------fitting and ploting the fits--------------
+    # -------ploting the radial fits--------------
     xarr = logOH_df[quant_x]
     
-    linefit = myfit(logOH_df, quant_x=quant_x, quant_y=quant_y)
-    my_yfit = np.poly1d(linefit)(xarr)
-    axes[3].plot(xarr, my_yfit, color='salmon', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit[0]:.2f}')
-
-    linefit_wls = wlsfit(logOH_df, quant_x=quant_x, quant_y=quant_y)
-    wls_yfit = np.poly1d(linefit_wls)(xarr)
-    axes[3].plot(xarr, wls_yfit, color='sienna', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit_wls[0]:.2f}')
-
-    lfit = lenstronomy_fit(filter_image, logOH_map, filter=filter, exptime=exptime, pixel_scale=args.pix_size_arcsec, supersampling_factor=1)
-    l_yfit = np.poly1d(lfit)(xarr)
-    axes[3].plot(xarr, l_yfit, color='g', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{lfit[0]:.2f}')
-
-    axes[3].legend(fontsize=args.fontsize / args.fontfactor, loc='upper left')
+    radprof_ax.plot(xarr, np.poly1d(unp.nominal_values(linefit_original))(xarr), color='salmon', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit_original[0].n:.2f}')
+    radprof_ax.plot(xarr, np.poly1d(unp.nominal_values(linefit_wls))(xarr), color='sienna', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit_wls[0].n:.2f}')
+    radprof_ax.plot(xarr, np.poly1d(unp.nominal_values(linefit_lenstronomy))(xarr), color='green', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit_lenstronomy[0].n:.2f}')
+    radprof_ax.plot(xarr, np.poly1d(unp.nominal_values(linefit_mcmc))(xarr), color='cornflowerblue', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit_mcmc[0].n:.2f}')
+    radprof_ax.legend(fontsize=args.fontsize / args.fontfactor, loc='upper left')
 
     # -----------saving figure------------
-    axes[3].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[2].transAxes)
+    radprof_ax.text(0.95, 0.95, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='right', va='top', transform=radprof_ax.transAxes)
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     figname = f'metallicity_fit_tests_{objid:05d}_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
-    return lfit
+    return
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -3170,7 +3285,7 @@ if __name__ == "__main__":
     # ---------single galaxy plot: Z map and gradient----------------------
     #plot_metallicity_fig_single(2867, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
     #plot_metallicity_fig_single(1721, 'glass-a2744', primary_Zdiag, args, fontsize=10) # zgrad plot
-    lfit = plot_metallicity_fit_tests(2867, 'Par028', primary_Zdiag, args, fontsize=10)
+    plot_metallicity_fit_tests(2867, 'Par028', primary_Zdiag, args, fontsize=10)
     
     # ---------single galaxy plot: SFR map and correlation----------------------
     #plot_metallicity_sfr_fig_single(1333, 'glass-a2744', primary_Zdiag, args, fontsize=10) # z-sfr plot
