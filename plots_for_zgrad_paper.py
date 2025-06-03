@@ -12,7 +12,7 @@ from util import *
 from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df, make_set
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
 from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
-from make_diagnostic_maps import bin_2D, get_re, get_cutout, get_emission_line_map, get_offsets_from_center, annotate_PAs, get_linelist, get_EB_V, get_voronoi_bin_IDs, get_voronoi_bin_distances, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
+from make_diagnostic_maps import get_re, get_cutout, get_emission_line_map, get_offsets_from_center, annotate_PAs, get_linelist, get_EB_V, get_voronoi_bin_IDs, get_voronoi_bin_distances, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
 
 plt.rcParams['ytick.direction'] = 'in'
 plt.rcParams['ytick.right'] = True
@@ -1197,8 +1197,11 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     
     linefit_original = original_fit(df, quant_x=quant_x, quant_y=quant)
     linefit_wls = wls_fit(df, quant_x=quant_x, quant_y=quant)
-    if quant in ['logOH', 'Z', 'log_OH']: linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
-
+    if quant in ['logOH', 'Z', 'log_OH']:
+        linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
+        params_llim, params_median, params_ulim = mcmc_vorbin_fit(df, args, filter='F150W', quant_x=quant_x, quant_y=quant, plot_corner=False)
+        linefit_mcmc = unp.uarray(params_median[:2], np.mean([np.array(params_median[:2]) - np.array(params_llim[:2]), np.array(params_ulim[:2]) - np.array(params_median[:2])], axis=0))
+    
     # -------plotting the data and the fits--------
     ax.scatter(df[quant_x], df[quant], c='grey', s=20, alpha=1)
     if quant + '_u' in df: ax.errorbar(df['distance'], df[quant], yerr=df[quant + '_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
@@ -1206,7 +1209,9 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     xarr = df[quant_x]
     ax = plot_fitted_line(ax, linefit_original, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
     ax = plot_fitted_line(ax, linefit_wls, xarr, 'sienna', args, quant=quant, short_label=short_label, index=1)
-    if quant in ['logOH', 'Z', 'log_OH']: ax = plot_fitted_line(ax, linefit_lenstronomy, xarr, 'green', args, quant=quant, short_label=short_label, index=2)
+    if quant in ['logOH', 'Z', 'log_OH']:
+        ax = plot_fitted_line(ax, linefit_lenstronomy, xarr, 'green', args, quant=quant, short_label=short_label, index=2)
+        ax = plot_fitted_line(ax, linefit_mcmc, xarr, 'cornflowerblue', args, quant=quant, short_label=short_label, index=3)
     ax.set_aspect('auto') 
 
     # --------annotating axis--------------
@@ -1214,7 +1219,8 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     if ylim is not None: ax.set_ylim(ylim[0], ylim[1])
     if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)' if args.re_limit is None else r'Radius (R$_e$)', label_dict[quant], args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
     
-    return ax, linefit_original
+    if quant in ['logOH', 'Z', 'log_OH']: return ax, [linefit_original, linefit_wls, linefit_lenstronomy, params_llim, params_median, params_ulim]
+    else: return ax, [linefit_original, linefit_wls]
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_linelist(ax, fontsize=10, line_list_file=None, show_log_flux=False):
@@ -2020,7 +2026,7 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
     for index, obj in enumerate(objlist):
         field = obj[0]
         objid = obj[1]
-        print(f'Doing object {field}-{objid} which is {index + 1} of {len(objlist)} objects..')
+        print(f'\nDoing object {field}-{objid} which is {index + 1} of {len(objlist)} objects..')
         thisrow = int(index / ncol)
         thiscol = index % ncol
         show_xaxis = (thisrow == nrow - 1) or (index == len(objlist) - 1) or ((len(objlist) - index - 1 ) < ncol)
@@ -2054,19 +2060,32 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
         
         # ------plotting metallicity radial profile-----------
         axes[2], linefit = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit], hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, short_label=True, Zdiag=Zdiag)
+        linefit_original, linefit_wls, linefit_lenstronomy, params_llim, params_median, params_ulim = linefit
+        linefit_mcmc = unp.uarray(params_median[:2], np.mean([np.array(params_median[:2]) - np.array(params_llim[:2]), np.array(params_ulim[:2]) - np.array(params_median[:2])], axis=0))
         axes[2].yaxis.set_label_position('right')
         axes[2].yaxis.tick_right()
    
         # ----------append fit to dataframe and save-----------
         if 'Par' in field: survey = 'passage'
         elif 'glass' in field: survey = 'glass'
-        output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_fits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
+        output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_allfits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
         ####################################
         if 'glass' in field:
             output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
             print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
         ####################################
-        df_logOH_fit = pd.DataFrame({'field': field, 'objid': objid, 'logOH_sum': logOH_sum.n, 'logOH_sum_u': logOH_sum.s, 'logOH_int': logOH_int.n, 'logOH_int_u': logOH_int.s, 'logOH_cen': linefit[1].n, 'logOH_cen_u': linefit[1].s, 'logOH_slope': linefit[0].n, 'logOH_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, 'extent_unit': 'arcsec' if args.re_limit is None else 're', 'extent_value': args.arcsec_limit if args.re_limit is None else args.re_limit}, index=[0])
+        df_logOH_fit = pd.DataFrame({'field': field, 'objid': objid, 
+                                     'logOH_sum': logOH_sum.n, 'logOH_sum_u': logOH_sum.s, 'logOH_int': logOH_int.n, 'logOH_int_u': logOH_int.s, 
+                                     'logOH_cen': linefit_original[1].n, 'logOH_cen_u': linefit_original[1].s, 'logOH_slope': linefit_original[0].n, 'logOH_slope_u': linefit_original[0].s, 
+                                     'logOH_cen_wls': linefit_wls[1].n, 'logOH_cen_wls_u': linefit_wls[1].s, 'logOH_slope_wls': linefit_wls[0].n, 'logOH_slope_wls_u': linefit_wls[0].s, 
+                                     'logOH_cen_lenstronomy': linefit_lenstronomy[1].n, 'logOH_cen_lenstronomy_u': linefit_lenstronomy[1].s, 'logOH_slope_lenstronomy': linefit_lenstronomy[0].n, 'logOH_slope_lenstronomy_u': linefit_lenstronomy[0].s, 
+                                     'logOH_cen_mcmc': linefit_mcmc[1].n, 'logOH_cen_mcmc_u': linefit_mcmc[1].s, 'logOH_slope_mcmc': linefit_mcmc[0].n, 'logOH_slope_mcmc_u': linefit_mcmc[0].s,
+                                     'logOH_cen_mcmc_llim': params_llim[1], 'logOH_cen_mcmc_ulim': params_ulim[1], 'logOH_slope_mcmc_llim': params_llim[0], 'logOH_slope_mcmc_ulim': params_ulim[0],
+                                     'q_mcmc': params_median[2], 'q_mcmc_llim': params_llim[2], 'q_mcmc_ulim': params_ulim[2],
+                                     'pa_mcmc': params_median[3], 'pa_mcmc_llim': params_llim[3], 'pa_mcmc_ulim': params_ulim[3],
+                                     'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, 
+                                     'extent_unit': 'arcsec' if args.re_limit is None else 're', 
+                                     'extent_value': args.arcsec_limit if args.re_limit is None else args.re_limit}, index=[0])
         df_logOH_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
         print(f'Appended metallicity fit to catalog file {output_dfname}')
 
@@ -2913,56 +2932,150 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def mcmc_vorbin_fit(logOH_df_data, args, filter='F150W', Zdiag='NB', quant_x='distance_arcsec', quant_y='log_OH'):
+def bin_2D(value_array, id_array):
+    '''
+    Bin value_array based on unique bin IDs from id_array
+    Return binned array
+    '''
+    valid_ids = id_array.data[~id_array.mask].astype(int)
+    valid_values = value_array[~id_array.mask]
+
+    unique_ids = np.unique(valid_ids)
+    means = ndimage.mean(valid_values, labels=valid_ids, index=unique_ids)
+
+    lut = np.full(int(np.nanmax(id_array.data)) + 1, np.nan)
+    lut[unique_ids] = means
+
+    result_array = np.full(id_array.shape, np.nan)
+    result_array[~id_array.mask] = lut[valid_ids]
+
+    return result_array
+
+# --------------------------------------------------------------------------------------------------------------------
+def compute_model(params, psf_array, bin_IDs_map, pixel_scale, quant_x='distance_arcsec', quant_y='log_OH'):
+    '''
+    Compute the model voronoi binned metallicity data from convolving a 2D metallicity profile (built with input gradient and morphology parameters)
+    with a PSF array
+    '''
+    # -------creating an elliptical metallicity map--------------
+    center_pix = np.array(np.shape(bin_IDs_map)) / 2.
+    y, x = np.indices(np.shape(bin_IDs_map))
+    x_rel = x - center_pix[0]
+    y_rel = (y - center_pix[1]) / params[2]
+    theta = np.radians(params[3])
+    x_rel = x_rel * np.cos(theta) + y_rel * np.sin(theta)
+    y_rel = -x_rel * np.sin(theta) + y_rel * np.cos(theta)
+
+    distance_map = np.sqrt(x_rel ** 2 + y_rel ** 2) * pixel_scale # arcsec
+    logOH_map_model = np.poly1d(params[:2])(distance_map)
+    
+    # ------smoothing metallicity model with PSF------------------
+    logOH_map_model_smoothed = convolve(logOH_map_model, psf_array, boundary='extend')
+
+    # -------voronoi binning the smoothed map as per given vorbin segmentation----------
+    logOH_map_model_binned = bin_2D(logOH_map_model_smoothed, bin_IDs_map)
+    logOH_df_model = pd.DataFrame({quant_x: distance_map.flatten(), quant_y + '_model': logOH_map_model_binned.flatten(), 'bin_ID': bin_IDs_map.data.flatten()})
+    logOH_df_model = logOH_df_model.dropna().reset_index(drop=True)
+    logOH_df_model['bin_ID'] = logOH_df_model['bin_ID'].astype(int)
+    logOH_df_model = logOH_df_model.groupby(['bin_ID'], as_index=False).agg('mean')
+
+    return logOH_df_model, distance_map, logOH_map_model, logOH_map_model_smoothed, logOH_map_model_binned
+
+# --------------------------------------------------------------------------------------------------------------------
+def log_prior(params, bounds):
+    '''
+    Uniform priors for running MCMC on elliptical metallicity models
+    '''
+    for index, this_param in enumerate(params):
+        if  this_param < bounds[index][0] or this_param > bounds[index][1]:
+            return -np.inf
+    
+    return 0
+
+# --------------------------------------------------------------------------------------------------------------------
+def log_likelihood(params, logOH_df, psf_array, bin_IDs_map, bounds, pixel_scale, quant_x='distance_arcsec', quant_y='log_OH'):
+    '''
+    Likelihood function for running MCMC on elliptical metallicity models
+    '''
+    lnpr = log_prior(params, bounds)
+    if not np.isfinite(lnpr):
+        return -np.inf
+    
+    x = logOH_df[quant_x]
+    y = logOH_df[quant_y]
+    yerr = logOH_df[quant_y + '_u']
+
+    logOH_df_model, _, _, _, _= compute_model(params, psf_array, bin_IDs_map, pixel_scale, quant_x=quant_x, quant_y=quant_y)
+    logOH_df_merged = logOH_df.merge(logOH_df_model, on=['bin_ID'])
+    model = logOH_df_merged[quant_y + '_model']
+
+    log_like = -0.5 * np.sum((y - model) ** 2 / (yerr ** 2) + np.log(2 * np.pi * yerr ** 2))
+
+    return log_like
+
+# --------------------------------------------------------------------------------------------------------------------
+def mcmc_vorbin_fit(logOH_df, args, filter='F150W', quant_x='distance_arcsec', quant_y='log_OH', plot_corner=True):
     '''
     Fits the given x and y quantities by taking into account PSF smearing (using MCMC) and the given Voronoi bin segmentation map
     Returns fitted parameters
     '''
-
-    # -----------loading the metallicity map---------------
-    full_hdu = load_full_fits(args.id, args.field, args)
-    args = load_object_specific_args(full_hdu, args, field=args.field)
-    logOH_map_data, _, _ = load_metallicity_map(args.field, args.id, Zdiag, args)
-
-    # ---------making the PSF---------------
-    niriss = webbpsf.NIRISS()
-    niriss.filter = filter
-    niriss.pixelscale = args.pix_size_arcsec
-    if args.re_limit is None: fov_arcsec = args.arcsec_limit * 2
-    else: fov_arcsec = args.re_limit * args.re_arcsec * 2
-    fov_arcsec = fov_arcsec + niriss.pixelscale
-    psf = niriss.calc_psf(fov_arcsec=fov_arcsec, oversample=1)
-    psf_kernel  = psf[0].data
-
-    # -------making the ideal metallicity map (model)-----------------
-    kwargs_init = [{'center_x': 0, 'center_y': 0, 'slope': -0.5, 'cen': 8}]
-    kwargs_sigma = [{'center_x': 1, 'center_y': 1, 'slope': 0.5, 'cen': 1}]
-    kwargs_lower = [{'center_x': 0, 'center_y': 0, 'slope': 2, 'cen': 6}]
-    kwargs_upper = [{'center_x': 0, 'center_y': 0, 'slope': -2, 'cen': 9}]
-    radprof = [kwargs_init[0]['slope'], kwargs_init[0]['cen']]
-
-    distance_map = get_distance_map(np.shape(logOH_map_data), args, for_distmap=True)
-    distance_map = distance_map * cosmo.arcsec_per_kpc_proper(args.z).value # converting from kpc to arcsec
-    logOH_map_model = np.poly1d(radprof)(distance_map)
-
-    # ------smoothing metallicity model with PSF------------------
-    logOH_map_model_smoothed = convolve(logOH_map_model, psf_kernel)
-
-    # -------voronoi binning the smoothed map as per given vorbin segmentation----------
+    # -----------initialising the parameters for MCMC---------------
     bin_IDs_map = args.voronoi_bin_IDs
-    logOH_map_model_smoothed = bin_2D(logOH_map_model_smoothed, bin_IDs_map)
-    logOH_df_model = pd.DataFrame({'distance': distance_map.flatten(), 'log_OH': logOH_map_model_smoothed.flatten(), 'bin_ID': bin_IDs_map.flatten()})
-    logOH_df_model = logOH_df_model.dropna().reset_index(drop=True)
-    logOH_df_model['bin_ID'] = logOH_df_model['bin_ID'].astype(int)
-    logOH_df_model = logOH_df_model.groupby(['bin_ID'], as_index=False).agg(np.mean)
 
-    # --------comparing model vorbin data to observed vorbin data--------------
-    
-    
-    # --------getting the final radial fit--------------
-    linefit = [ufloat(0,0), ufloat(8,0)]
+    labels = ['Zslope', 'Zcen', 'q', 'pa']
+    params_init = [-0.5, 8, 0.7, 45] # [slope (in dex/arcsec), Z_cen, q=1-ellipticity, position angle in deg]
+    bounds = [[-10, 10], [6, 10], [0, 1], [0, 180]]
+    ndim = len(params_init)
 
-    return linefit
+    mcmc_filename = args.root_dir / 'zgrad_paper_plots' / f'{args.field}_{args.id:05d}_logOH_MCMC_ndim_{ndim}_nwalkers_{args.nwalkers}_niter_{args.niter}.h5py'
+
+    # ----------------checking if saved file exists--------------
+    if not os.path.exists(mcmc_filename) or args.clobber_mcmc:
+        # ---------making the PSF---------------
+        niriss = webbpsf.NIRISS()
+        niriss.filter = filter
+        niriss.pixelscale = args.pix_size_arcsec
+        if args.re_limit is None: fov_arcsec = args.arcsec_limit * 2
+        else: fov_arcsec = args.re_limit * args.re_arcsec * 2
+        fov_arcsec = fov_arcsec + niriss.pixelscale
+        psf = niriss.calc_psf(fov_arcsec=fov_arcsec, oversample=1)
+        psf_array  = psf[0].data
+
+        # -------setup backend-----------
+        if os.path.exists(mcmc_filename): os.remove(mcmc_filename)
+        backend = emcee.backends.HDFBackend(mcmc_filename)
+        backend.reset(args.nwalkers, ndim)
+        
+        # -------running MCMC-----------
+        pos = params_init + 1e-4 * np.random.randn(args.nwalkers, ndim)
+        sampler = emcee.EnsembleSampler(args.nwalkers, ndim, log_likelihood, args=(logOH_df, psf_array, bin_IDs_map, bounds, args.pix_size_arcsec, quant_x, quant_y), backend=backend)
+        dummy = sampler.run_mcmc(pos, args.niter, progress=True)
+    else:
+        print(f'\nReading saved MCMC results from {mcmc_filename}')
+        sampler = emcee.backends.HDFBackend(mcmc_filename)
+
+    # --------extracting results-------------
+    flat_samples = sampler.get_chain(discard=args.ndiscard, thin=15, flat=True)
+
+    # --------getting the final results--------------
+    params_llim = [np.percentile(flat_samples[:, item], 16) for item in range(np.shape(flat_samples)[1])]
+    params_median = [np.percentile(flat_samples[:, item], 50) for item in range(np.shape(flat_samples)[1])]
+    params_ulim = [np.percentile(flat_samples[:, item], 84) for item in range(np.shape(flat_samples)[1])]
+    if plot_corner: fig_corner = corner.corner(flat_samples, labels=labels, truths=params_median)
+    
+    # ----------converting gradient units---------
+    if quant_x == 'distance':
+        factor = cosmo.arcsec_per_kpc_proper(args.z).value
+        params_llim[0] *= factor # converting from dex/arcsec to dex/kpc
+        params_median[0] *= factor # converting from dex/arcsec to dex/kpc
+        params_ulim[0] *= factor # converting from dex/arcsec to dex/kpc
+        
+        if args.re_limit is not None:
+            params_llim[0] *= args.re_kpc # converting from dex/kpc to dex/Re
+            params_median[0] *= args.re_kpc # converting from dex/kpc to dex/Re
+            params_ulim[0] *= args.re_kpc # converting from dex/kpc to dex/Re
+
+    return [params_llim, params_median, params_ulim]
 
 # --------------------------------------------------------------------------------------------------------------------
 def lenstronomy_fit_wrap(logOH_df, args, filter='F150W', supersampling_factor=1, Zdiag='NB', quant_x='distance_arcsec', quant_y='log_OH', return_intermediate=False):
@@ -2995,8 +3108,7 @@ def lenstronomy_fit_wrap(logOH_df, args, filter='F150W', supersampling_factor=1,
     logOH_map_lenstronomy.data[np.isnan(unp.nominal_values(logOH_map_lenstronomy.data))] = ufloat(0, 1e20)
 
     # -----calling lenstronomy fitter----------------------
-    #linefit_lenstronomy = lenstronomy_fit(filter_image, logOH_map_lenstronomy, filter=filter, exptime=exptime, pixel_scale=args.pix_size_arcsec, supersampling_factor=supersampling_factor) # the output slope is dex/arcsec
-    linefit_lenstronomy = [np.nan, np.nan]
+    linefit_lenstronomy = lenstronomy_fit(filter_image, logOH_map_lenstronomy, filter=filter, exptime=exptime, pixel_scale=args.pix_size_arcsec, supersampling_factor=supersampling_factor) # the output slope is dex/arcsec
 
     if quant_x == 'distance':
         linefit_lenstronomy[0] *= cosmo.arcsec_per_kpc_proper(args.z).value # converting from dex/arcsec to dex/kpc
@@ -3087,7 +3199,7 @@ def lenstronomy_fit(light_map, logOH_map, filter='F150W', exptime=500, pixel_sca
     kwargs_constraints = {'linear_solver': True}
 
     fitting_seq = FittingSequence(kwargs_data_joint, kwargs_model, kwargs_constraints, kwargs_likelihood, kwargs_params)
-    fitting_kwargs_list = [['PSO',  {'sigma_scale': 1, 'n_particles': 100, 'n_iterations': 100}], ['MCMC', {'n_burn': 50, 'n_run': 200, 'n_walkers': 100, 'sigma_scale': .1}]]
+    fitting_kwargs_list = [['PSO',  {'sigma_scale': 1, 'n_particles': 100, 'n_iterations': 500}], ['MCMC', {'n_burn': 100, 'n_run': 1000, 'n_walkers': 100, 'sigma_scale': .1}]]
 
     chain_list = fitting_seq.fit_sequence(fitting_kwargs_list)
     kwargs_result = fitting_seq.best_fit()
@@ -3150,7 +3262,8 @@ def plot_metallicity_fit_tests(objid, field, Zdiag, args, filter='F150W', fontsi
     linefit_original = original_fit(logOH_df, quant_x=quant_x, quant_y=quant_y)
     linefit_wls = wls_fit(logOH_df, quant_x=quant_x, quant_y=quant_y)
     linefit_lenstronomy, filter_image, logOH_map, logOH_map_lenstronomy = lenstronomy_fit_wrap(logOH_df, args, filter=filter, supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant_y, return_intermediate=True)
-    linefit_mcmc = mcmc_vorbin_fit(logOH_df, args, filter=filter, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant_y)
+    params_llim, params_median, params_ulim = mcmc_vorbin_fit(logOH_df, args, filter=filter, quant_x=quant_x, quant_y=quant_y, plot_corner=False)
+    linefit_mcmc = unp.uarray(params_median[:2], np.mean([np.array(params_median[:2]) - np.array(params_llim[:2]), np.array(params_ulim[:2]) - np.array(params_median[:2])], axis=0))
 
     # ---------setting up the figure----------------
     fig, axes = plt.subplots(1, 5, figsize=(16, 2.8))
@@ -3229,6 +3342,10 @@ if __name__ == "__main__":
     args.voronoi_snr = 3.
     #args.re_limit = 2.5
 
+    args.nwalkers = 100
+    args.niter = 5000
+    args.ndiscard = 100
+
     primary_Zdiag = 'NB'
     cosmos_name = 'web' # choose between '2020' (i.e. COSMOS2020 catalog) or 'web' (i.e. COSMOSWeb catalog))
     args.version_dict = {'passage': 'v0.5', 'glass': 'orig'}
@@ -3285,7 +3402,7 @@ if __name__ == "__main__":
     # ---------single galaxy plot: Z map and gradient----------------------
     #plot_metallicity_fig_single(2867, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
     #plot_metallicity_fig_single(1721, 'glass-a2744', primary_Zdiag, args, fontsize=10) # zgrad plot
-    plot_metallicity_fit_tests(2867, 'Par028', primary_Zdiag, args, fontsize=10)
+    #plot_metallicity_fit_tests(2867, 'Par028', primary_Zdiag, args, fontsize=10)
     
     # ---------single galaxy plot: SFR map and correlation----------------------
     #plot_metallicity_sfr_fig_single(1333, 'glass-a2744', primary_Zdiag, args, fontsize=10) # z-sfr plot
@@ -3305,7 +3422,7 @@ if __name__ == "__main__":
     #         plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10)
 
     # --------multi-panel Z map plots------------------
-    #plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)
+    plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)
 
     # --------multi-panel SFR-Z plots------------------
     #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])

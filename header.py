@@ -42,6 +42,8 @@ from scipy.stats import mode as sci_mode
 from scipy.interpolate import NearestNDInterpolator, interp1d
 from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import curve_fit, brentq
+from scipy import ndimage
+from scipy.optimize import minimize
 
 import regions
 from regions import Regions, PixCoord
@@ -133,6 +135,9 @@ from lenstronomy.ImSim.image_model import ImageModel
 from lenstronomy.LensModel.lens_model import LensModel
 from lenstronomy.ImSim.tracer_model import TracerModelSource
 from lenstronomy.Workflow.fitting_sequence import FittingSequence
+
+import emcee
+import corner
 
 from matplotlib import pyplot as plt
 plt.rcParams['ytick.direction'] = 'in'
