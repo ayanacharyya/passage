@@ -3014,6 +3014,26 @@ def log_likelihood(params, logOH_df, psf_array, bin_IDs_map, bounds, pixel_scale
     return log_like
 
 # --------------------------------------------------------------------------------------------------------------------
+def make_psf(filter, args, supersampling_factor=1):
+    '''
+    Computes NIRISS PSF in a given filter
+    Returns 2D array
+    '''
+    niriss = webbpsf.NIRISS()
+    niriss.filter = filter
+    niriss.pixelscale = args.pix_size_arcsec
+    if args.re_limit is None: fov_arcsec = args.arcsec_limit * 2
+    else: fov_arcsec = args.re_limit * args.re_arcsec * 2
+    psf = niriss.calc_psf(fov_arcsec=fov_arcsec + niriss.pixelscale, oversample=supersampling_factor)
+    psf_array  = psf[0].data
+    
+    if np.shape(psf_array)[0] % 2 == 0:
+        psf = niriss.calc_psf(fov_arcsec=fov_arcsec, oversample=supersampling_factor)
+        psf_array  = psf[0].data
+    
+    return psf_array
+
+# --------------------------------------------------------------------------------------------------------------------
 def mcmc_vorbin_fit(logOH_df, args, filter='F150W', quant_x='distance_arcsec', quant_y='log_OH', plot_corner=True):
     '''
     Fits the given x and y quantities by taking into account PSF smearing (using MCMC) and the given Voronoi bin segmentation map
@@ -3027,19 +3047,13 @@ def mcmc_vorbin_fit(logOH_df, args, filter='F150W', quant_x='distance_arcsec', q
     bounds = [[-10, 10], [6, 10], [0, 1], [0, 180]]
     ndim = len(params_init)
 
-    mcmc_filename = args.root_dir / 'zgrad_paper_plots' / f'{args.field}_{args.id:05d}_logOH_MCMC_ndim_{ndim}_nwalkers_{args.nwalkers}_niter_{args.niter}.h5py'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    mcmc_filename = args.root_dir / 'zgrad_paper_plots' / f'{args.field}_{args.id:05d}_logOH_MCMC_ndim_{ndim}_nwalkers_{args.nwalkers}_niter_{args.niter}_upto_{extent_text}.h5py'
 
     # ----------------checking if saved file exists--------------
     if not os.path.exists(mcmc_filename) or args.clobber_mcmc:
         # ---------making the PSF---------------
-        niriss = webbpsf.NIRISS()
-        niriss.filter = filter
-        niriss.pixelscale = args.pix_size_arcsec
-        if args.re_limit is None: fov_arcsec = args.arcsec_limit * 2
-        else: fov_arcsec = args.re_limit * args.re_arcsec * 2
-        fov_arcsec = fov_arcsec + niriss.pixelscale
-        psf = niriss.calc_psf(fov_arcsec=fov_arcsec, oversample=1)
-        psf_array  = psf[0].data
+        psf_array = make_psf(filter, args, supersampling_factor=1)
 
         # -------setup backend-----------
         if os.path.exists(mcmc_filename): os.remove(mcmc_filename)
@@ -3107,8 +3121,11 @@ def lenstronomy_fit_wrap(logOH_df, args, filter='F150W', supersampling_factor=1,
     logOH_map_lenstronomy = logOH_map.copy()
     logOH_map_lenstronomy.data[np.isnan(unp.nominal_values(logOH_map_lenstronomy.data))] = ufloat(0, 1e20)
 
+    # ------making the PSF--------------
+    psf_array = make_psf(filter, args, supersampling_factor=supersampling_factor)
+
     # -----calling lenstronomy fitter----------------------
-    linefit_lenstronomy = lenstronomy_fit(filter_image, logOH_map_lenstronomy, filter=filter, exptime=exptime, pixel_scale=args.pix_size_arcsec, supersampling_factor=supersampling_factor) # the output slope is dex/arcsec
+    linefit_lenstronomy = lenstronomy_fit(filter_image, logOH_map_lenstronomy, psf_array, exptime=exptime, pixel_scale=args.pix_size_arcsec, supersampling_factor=supersampling_factor) # the output slope is dex/arcsec
 
     if quant_x == 'distance':
         linefit_lenstronomy[0] *= cosmo.arcsec_per_kpc_proper(args.z).value # converting from dex/arcsec to dex/kpc
@@ -3121,22 +3138,14 @@ def lenstronomy_fit_wrap(logOH_df, args, filter='F150W', supersampling_factor=1,
         return linefit_lenstronomy
 
 # --------------------------------------------------------------------------------------------------------------------
-def lenstronomy_fit(light_map, logOH_map, filter='F150W', exptime=500, pixel_scale=0.066, supersampling_factor=1):
+def lenstronomy_fit(light_map, logOH_map, psf_array, exptime=500, pixel_scale=0.066, supersampling_factor=1):
     '''
     Fits the x and y columns using Lenstronomy
     Returns fitted parameters
     This code is adapted from https://github.com/astrobenji/lenstronomy-metals-notebooks/blob/main/tracer_module_tutorial.ipynb
     '''
 
-    # ---------making the PSF---------------
-    niriss = webbpsf.NIRISS()
-    niriss.filter = filter
-    niriss.pixelscale = pixel_scale
-    if args.re_limit is None: fov_arcsec = args.arcsec_limit * 2
-    else: fov_arcsec = args.re_limit * args.re_arcsec * 2
-    fov_arcsec = fov_arcsec + pixel_scale
-    psf = niriss.calc_psf(fov_arcsec=fov_arcsec, oversample=supersampling_factor)
-    psf_array  = psf[0].data
+    # -----setting up the PSF-----------------
     psf_type   = 'PIXEL'
     kwargs_psf = {'psf_type': psf_type, 'kernel_point_source':psf_array, 'point_source_supersampling_factor':supersampling_factor}
     
