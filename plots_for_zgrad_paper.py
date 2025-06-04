@@ -217,7 +217,7 @@ def get_logOH_df(objlist, args, survey='passage'):
     '''
     df = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
 
-    filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_fits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
+    filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_allfits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
     ####################################
     if 'glass' in survey:
         filename = Path(str(filename).replace('SNR_4.0', 'SNR_2.0'))
@@ -227,25 +227,32 @@ def get_logOH_df(objlist, args, survey='passage'):
     df_logOH = pd.read_csv(filename)
     df_logOH = df_logOH.drop_duplicates(subset=['field', 'objid', 'Zdiag_branch', 'Zdiag', 'extent_value', 'extent_unit'], keep='last')
     if args.re_limit is not None: df_logOH = df_logOH[(df_logOH['extent_unit'] == 're') & (df_logOH['extent_value'] == args.re_limit)]
-    else: df_logOH = df_logOH[(df_logOH['extent_unit'] == 'arcsec') & (df_logOH['extent_value'] == args.arcsec_limit)]
+    else: df_logOH = df_logOH[(df_logOH['extent_unit'] == 'arcsec') & (df_logOH['extent_value'] == args.arcsec_limit)]    
     if args.AGN_diag != 'None': df_logOH = df_logOH[df_logOH['AGN_diag'] == args.AGN_diag]
+
+    df_logOH = df_logOH.drop(['extent_unit', 'extent_value', 'AGN_diag'], axis=1)
     df_logOH = pd.merge(df, df_logOH, on=['field', 'objid'], how='inner')
 
-    logOH_cols = ['logOH_sum', 'logOH_int', 'logOH_slope', 'logOH_cen']
+    substrings = ['logOH', 'pa', 'q']
+    cols_to_join = [item for item in df_logOH.columns if any([i in item for i in substrings])]
+    cols_to_join = [item for item in cols_to_join if not any([item.endswith(i) for i in ['_u', '_ulim', '_llim']])]
     Zdiag_arr = np.hstack([[item] if item in ['NB', 'P25'] else [item + '_low', item + '_high'] for item in args.Zdiag])
 
     for Zdiag in Zdiag_arr:
         if 'low' in Zdiag: df_sub = df_logOH[(df_logOH['Zdiag'] == Zdiag[:-4]) & (df_logOH['Zdiag_branch'] == 'low')]
         elif 'high' in Zdiag: df_sub = df_logOH[(df_logOH['Zdiag'] == Zdiag[:-5]) & (df_logOH['Zdiag_branch'] == 'high')]
         else: df_sub = df_logOH[(df_logOH['Zdiag'] == Zdiag)].drop_duplicates(subset=['field', 'objid', 'Zdiag'], keep='last')
-
         df_sub = df_sub.drop(['Zdiag', 'Zdiag_branch'], axis=1)
+        
         rename_dict = {}
-        for col in logOH_cols:
+        for col in cols_to_join:
             rename_dict.update({f'{col}': f'{col}_{Zdiag}'})
             rename_dict.update({f'{col}_u': f'{col}_{Zdiag}_u'})
+            rename_dict.update({f'{col}_ulim': f'{col}_{Zdiag}_ulim'})
+            rename_dict.update({f'{col}_llim': f'{col}_{Zdiag}_llim'})
         df_sub = df_sub.rename(columns=rename_dict)
-        common_columns = list(set(df.columns) & set(df_sub.columns))
+        #common_columns = list(set(df.columns) & set(df_sub.columns))
+        common_columns = ['field', 'objid']
         df = pd.merge(df, df_sub, on=common_columns, how='left')
 
     return df
@@ -649,7 +656,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     '''
     args.fontsize = fontsize
     print(f'Plotting MZgrad...')
-    colorcol = zgrad_col.replace('slope', 'sum') # choose from ['redshift', 'SFR', 'Z_SFR_slope', 'logOH_sum_NB', 'logOH_int_NB', 'O3Hb', 'EB_V']
+    colorcol = 'logOH_sum_' + zgrad_col.split('_')[-1] # choose from ['redshift', 'SFR', 'Z_SFR_slope', 'logOH_sum_NB', 'logOH_int_NB', 'O3Hb', 'EB_V']
     lim_dict = defaultdict(lambda: [None, None], redshift=[1.7, 3.1])
     
     # ----------setting up the diagram----------
@@ -725,13 +732,13 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     #ax.fill_between(xarr, -5, np.poly1d(coeff)(xarr), color='limegreen', alpha=0.2, label='F21 forbidden')
 
     # ---------annotate axes and save figure-------
-    plt.legend(fontsize=args.fontsize / args.fontfactor, loc='upper right')
+    plt.legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
     ax.set_ylabel(r'log $\nabla$Z$_r$ (dex/kpc)' if args.re_limit is None else r'log $\nabla$Z$_r$ (dex/R$_e$)', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(7.9, 11.2)
-    #ax.set_ylim(-1.5, 0.75)
+    ax.set_ylim(-2.1, 1)
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     figname = f'MZgrad_colorby_{colorcol}_Zdiag_{zgrad_col}_upto_{extent_text}.png'
@@ -771,7 +778,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
-    #ax.set_ylim(-1.3, 0.4)
+    ax.set_ylim(-1, 2)
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     figname = f'MZsfr_colorby_Z_upto_{extent_text}.png'
@@ -1165,17 +1172,18 @@ def plot_radial_profile_old(image, ax, args, ylim=None, xlim=None, hide_xaxis=Fa
     return ax, linefit
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_fitted_line(ax, linefit, xarr, fit_color, args, quant='log_OH', short_label=False, index=0):
+def plot_fitted_line(ax, linefit, xarr, fit_color, args, quant='log_OH', short_label=False, index=0, label=None):
     '''
     Computes and plots the fitted line given the linear fit parameters, on an axisting axis handle
     Returns axis handle
     '''
     y_fitted = np.poly1d(unp.nominal_values(linefit))(xarr)
     ax.plot(xarr, y_fitted, color=fit_color, lw=1, ls='dashed')
-    if quant in ['logOH', 'Z', 'log_OH']:
-        label = r'$\nabla$Z$_r$' + f' = {linefit[0].n: .2f}' if short_label else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc' if args.re_limit is None else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} ' + r'dex/R$_e$'
-    else:
-        label = r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0].s: .2f}' if short_label else r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0]: .2f} dex/kpc' if args.re_limit is None else r'$\nabla$' + f' = {linefit[0]: .2f} ' + r'dex/R$_e$'
+    if label is None:
+        if quant in ['logOH', 'Z', 'log_OH']:
+            label = r'$\nabla$Z$_r$' + f' = {linefit[0].n: .2f}' if short_label else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc' if args.re_limit is None else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} ' + r'dex/R$_e$'
+        else:
+            label = r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0].s: .2f}' if short_label else r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0]: .2f} dex/kpc' if args.re_limit is None else r'$\nabla$' + f' = {linefit[0]: .2f} ' + r'dex/R$_e$'
     ax.text(0.1, 0.05 + index * 0.1, label, c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
     
     return ax
@@ -2216,7 +2224,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     full_hdu = load_full_fits(objid, field, args)
     args = load_object_specific_args(full_hdu, args, field=field)
     logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
-    Zlim = [7.5, 8.9]
+    Zlim = [7.1, 9.1]
     log_sfr_lim = [-1.4, 0.5]
 
     # --------setting up the figure------------
@@ -2252,11 +2260,9 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
 
     # -------radial fitting-------------
     fit_color = 'salmon'
-    linefit, linecov = np.polyfit(df['log_sfr'], df['logOH'], 1, cov=True, w=1. / ((df['logOH_u']) ** 2 + df['log_sfr_u'] ** 2))
-    y_fitted = np.poly1d(linefit)(df['log_sfr'])
-    axes[1].plot(df['log_sfr'], y_fitted, color=fit_color, lw=1, ls='dashed')
-    linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
-    axes[1].text(0.05, 0.05, f'Slope = {linefit[0]: .2f}', c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=axes[1].transAxes)
+    #linefit = original_fit(df, quant_x='log_sfr', quant_y='logOH')
+    linefit = wls_fit(df, quant_x='log_sfr', quant_y='logOH')
+    axes[1] = plot_fitted_line(axes[1], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0].n: .2f}')
 
     # --------annotating axis--------------
     axes[1].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
@@ -2295,6 +2301,9 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
     objlist = [item for item in objlist if not item[1] in exclude_ids]
     print(f'Plotting metallicity-SFR figure for {len(objlist)} objects..')
 
+    Zlim = [7.1, 9.1]
+    log_sfr_lim = [-1.4, 0.5]
+
    # -------setting up the figure--------------------
     nrow, ncol = 3, 2
     fig = plt.figure(figsize=(9, 6))
@@ -2315,8 +2324,6 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         full_hdu = load_full_fits(objid, field, args)
         args = load_object_specific_args(full_hdu, args, field=field)
         logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
-        Zlim = [7.5, 8.9]
-        log_sfr_lim = [-1.4, 0.5]
 
         # ----------getting the SFR maps------------------
         _, _, _, sfr_map, sfr_int, sfr_sum = get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=logOH_int, logOH_sum=logOH_sum)
@@ -2340,15 +2347,9 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
 
         # -------radial fitting-------------
         fit_color = 'salmon'
-        try:
-            linefit, linecov = np.polyfit(df['log_sfr'], df['logOH'], 1, cov=True, w=1. / ((df['logOH_u']) ** 2 + df['log_sfr_u'] ** 2))
-            y_fitted = np.poly1d(linefit)(df['log_sfr'])
-            axes[1].plot(df['log_sfr'], y_fitted, color=fit_color, lw=1, ls='dashed')
-            linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
-            axes[1].text(0.05, 0.05, f'Slope = {linefit[0].n: .2f}', c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=axes[1].transAxes)
-        except:
-            print(f'WARNING: Could not fit radial profile, returning nan fit parameters')
-            linefit = np.array([ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)])
+        #linefit = original_fit(df, quant_x='log_sfr', quant_y='logOH')
+        linefit = wls_fit(df, quant_x='log_sfr', quant_y='logOH')
+        axes[1] = plot_fitted_line(axes[1], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0].n: .2f}')
 
         # --------annotating axis--------------
         axes[1].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
@@ -2459,11 +2460,9 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
 
     # -------radial fitting-------------
     fit_color = 'salmon'
-    linefit, linecov = np.polyfit(df['log_sfr'], df['logOH'], 1, cov=True, w=1. / ((df['logOH_u']) ** 2 + df['log_sfr_u'] ** 2))
-    y_fitted = np.poly1d(linefit)(df['log_sfr'])
-    axes[4].plot(df['log_sfr'], y_fitted, color=fit_color, lw=1, ls='dashed')
-    linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
-    axes[4].text(0.05, 0.05, f'Slope = {linefit[0]: .2f}', c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=axes[4].transAxes)
+    #linefit = original_fit(df, quant_x='log_sfr', quant_y='logOH')
+    linefit = wls_fit(df, quant_x='log_sfr', quant_y='logOH')
+    axes[4] = plot_fitted_line(axes[4], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0].n: .2f}')
 
     # --------annotating axis--------------
     axes[4].text(0.95, 0.05, f'ID #{objid}', fontsize=args.fontsize, c='k', ha='right', va='bottom', transform=axes[4].transAxes)
@@ -3414,7 +3413,7 @@ if __name__ == "__main__":
     #plot_metallicity_fit_tests(2867, 'Par028', primary_Zdiag, args, fontsize=10)
     
     # ---------single galaxy plot: SFR map and correlation----------------------
-    #plot_metallicity_sfr_fig_single(1333, 'glass-a2744', primary_Zdiag, args, fontsize=10) # z-sfr plot
+    #plot_metallicity_sfr_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
     
     # ---------single galaxy plot: SFR-Z radial profile----------------------
     #plot_metallicity_sfr_radial_profile_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=13)
@@ -3431,7 +3430,7 @@ if __name__ == "__main__":
     #         plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10)
 
     # --------multi-panel Z map plots------------------
-    plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)
+    #plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)
 
     # --------multi-panel SFR-Z plots------------------
     #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
@@ -3442,7 +3441,7 @@ if __name__ == "__main__":
     #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
 
     # ---------loading master dataframe with only objects in objlist------------
-    #df = make_master_df(objlist, args, sum=True)
+    df = make_master_df(objlist, args, sum=True)
     
     # ---------metallicity latex table for paper----------------------
     #df_latex = make_latex_table(df, args, sum=True)
@@ -3451,7 +3450,7 @@ if __name__ == "__main__":
     #plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=15)
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
-    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsize=15)
+    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_R23_high', fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
     #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method=None)
