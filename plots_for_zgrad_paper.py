@@ -1091,6 +1091,9 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
     segmentation_map = np.roll(segmentation_map, args.ndelta_ypix, axis=1)
     args.segmentation_map_arcsec = trim_image(segmentation_map, args, skip_re_trim=True)
     args.segmentation_map = trim_image(segmentation_map, args)
+    
+    # -----------PSF array-----------
+    args.psf_array = make_psf('F150W', args, supersampling_factor=1)
 
     ####################################
     if field is not None and 'glass' in field and args.voronoi_snr == 4:
@@ -1206,20 +1209,41 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     linefit_original = original_fit(df, quant_x=quant_x, quant_y=quant)
     linefit_wls = wls_fit(df, quant_x=quant_x, quant_y=quant)
     if quant in ['logOH', 'Z', 'log_OH']:
-        linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
+        # run lenstronomy
+        linefit_lenstronomy = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)] #lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
+        
+        # run MCMC
         params_llim, params_median, params_ulim = mcmc_vorbin_fit(df, args, filter='F150W', quant_x=quant_x, quant_y=quant, plot_corner=False)
+        
+        # make best fit model with best fit parameters
+        df_best_model, _, _, _, _ = compute_model(params_median, args.psf_array, args.voronoi_bin_IDs, args.pix_size_arcsec, quant_y=quant)
+        if quant_x != 'distance_arcsec':
+            if args.re_limit is None: # quant_x is in kpc
+                df_best_model[quant_x] = df_best_model['distance_arcsec'] / cosmo.arcsec_per_kpc_proper(args.z).value  # converting kpc to arcsec to kpc
+            else: # quant_x is in Re
+                df_best_model[quant_x] = df_best_model['distance_arcsec'] / args.re_arcsec # converting from arcsec to Re
+
+        # convert the unit of best fit slope in order to plot/save
+        params_median = convert_slope_unit(params_median, args, quant_x=quant_x) # convert from dex/arcsecond to something else
         linefit_mcmc = unp.uarray(params_median[:2], np.mean([np.array(params_median[:2]) - np.array(params_llim[:2]), np.array(params_ulim[:2]) - np.array(params_median[:2])], axis=0))
-    
+   
     # -------plotting the data and the fits--------
     ax.scatter(df[quant_x], df[quant], c='grey', s=20, alpha=1)
     if quant + '_u' in df: ax.errorbar(df['distance'], df[quant], yerr=df[quant + '_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
 
     xarr = df[quant_x]
-    ax = plot_fitted_line(ax, linefit_original, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
-    ax = plot_fitted_line(ax, linefit_wls, xarr, 'sienna', args, quant=quant, short_label=short_label, index=1)
     if quant in ['logOH', 'Z', 'log_OH']:
-        ax = plot_fitted_line(ax, linefit_lenstronomy, xarr, 'green', args, quant=quant, short_label=short_label, index=2)
-        ax = plot_fitted_line(ax, linefit_mcmc, xarr, 'cornflowerblue', args, quant=quant, short_label=short_label, index=3)
+        #ax = plot_fitted_line(ax, linefit_original, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
+        #ax = plot_fitted_line(ax, linefit_wls, xarr, 'sienna', args, quant=quant, short_label=short_label, index=1)
+        #ax = plot_fitted_line(ax, linefit_lenstronomy, xarr, 'green', args, quant=quant, short_label=short_label, index=2)
+        #ax = plot_fitted_line(ax, linefit_mcmc, xarr, 'cornflowerblue', args, quant=quant, short_label=short_label, index=3)
+        ax = plot_fitted_line(ax, linefit_mcmc, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
+        ax.scatter(df_best_model[quant_x], df_best_model[quant + '_model'], c='salmon', s=20, alpha=0.5, lw=0.5)
+    else:
+        #ax = plot_fitted_line(ax, linefit_original, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
+        #ax = plot_fitted_line(ax, linefit_wls, xarr, 'sienna', args, quant=quant, short_label=short_label, index=1)
+        ax = plot_fitted_line(ax, linefit_wls, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
+
     ax.set_aspect('auto') 
 
     # --------annotating axis--------------
@@ -2951,7 +2975,7 @@ def bin_2D(value_array, id_array):
     return result_array
 
 # --------------------------------------------------------------------------------------------------------------------
-def compute_model(params, psf_array, bin_IDs_map, pixel_scale, quant_x='distance_arcsec', quant_y='log_OH'):
+def compute_model(params, psf_array, bin_IDs_map, pixel_scale, quant_y='log_OH'):
     '''
     Compute the model voronoi binned metallicity data from convolving a 2D metallicity profile (built with input gradient and morphology parameters)
     with a PSF array
@@ -2973,7 +2997,7 @@ def compute_model(params, psf_array, bin_IDs_map, pixel_scale, quant_x='distance
 
     # -------voronoi binning the smoothed map as per given vorbin segmentation----------
     logOH_map_model_binned = bin_2D(logOH_map_model_smoothed, bin_IDs_map)
-    logOH_df_model = pd.DataFrame({quant_x: distance_map.flatten(), quant_y + '_model': logOH_map_model_binned.flatten(), 'bin_ID': bin_IDs_map.data.flatten()})
+    logOH_df_model = pd.DataFrame({'distance_arcsec': distance_map.flatten(), quant_y + '_model': logOH_map_model_binned.flatten(), 'bin_ID': bin_IDs_map.data.flatten()})
     logOH_df_model = logOH_df_model.dropna().reset_index(drop=True)
     logOH_df_model['bin_ID'] = logOH_df_model['bin_ID'].astype(int)
     logOH_df_model = logOH_df_model.groupby(['bin_ID'], as_index=False).agg('mean')
@@ -2992,7 +3016,7 @@ def log_prior(params, bounds):
     return 0
 
 # --------------------------------------------------------------------------------------------------------------------
-def log_likelihood(params, logOH_df, psf_array, bin_IDs_map, bounds, pixel_scale, quant_x='distance_arcsec', quant_y='log_OH'):
+def log_likelihood(params, logOH_df, psf_array, bin_IDs_map, bounds, pixel_scale, quant_y='log_OH'):
     '''
     Likelihood function for running MCMC on elliptical metallicity models
     '''
@@ -3000,11 +3024,10 @@ def log_likelihood(params, logOH_df, psf_array, bin_IDs_map, bounds, pixel_scale
     if not np.isfinite(lnpr):
         return -np.inf
     
-    x = logOH_df[quant_x]
     y = logOH_df[quant_y]
     yerr = logOH_df[quant_y + '_u']
 
-    logOH_df_model, _, _, _, _= compute_model(params, psf_array, bin_IDs_map, pixel_scale, quant_x=quant_x, quant_y=quant_y)
+    logOH_df_model, _, _, _, _= compute_model(params, psf_array, bin_IDs_map, pixel_scale, quant_y=quant_y)
     logOH_df_merged = logOH_df.merge(logOH_df_model, on=['bin_ID'])
     model = logOH_df_merged[quant_y + '_model']
 
@@ -3033,11 +3056,32 @@ def make_psf(filter, args, supersampling_factor=1):
     return psf_array
 
 # --------------------------------------------------------------------------------------------------------------------
+def convert_slope_unit(params, args, quant_x='distance_arcsec'):
+    '''
+    Convert the slope (first element of the given parameter list) from dex/arcsecond to dex/kpc or dex/Re
+    Return the full parameter list
+    '''
+    if quant_x != 'distance_arcsec':
+        if args.re_limit is None: # distance is in kpc
+            params[0] *= cosmo.arcsec_per_kpc_proper(args.z).value # converting from dex/arcsec to dex/kpc
+        else: # distance is in Re
+            params[0] *= args.re_arcsec # converting from dex/arcsec to dex/Re
+    
+    return params
+
+# --------------------------------------------------------------------------------------------------------------------
 def mcmc_vorbin_fit(logOH_df, args, filter='F150W', quant_x='distance_arcsec', quant_y='log_OH', plot_corner=True):
     '''
     Fits the given x and y quantities by taking into account PSF smearing (using MCMC) and the given Voronoi bin segmentation map
     Returns fitted parameters
     '''
+    # ----------converting distance column of observed dataframe to arcseconds, if not already in arcseconds----------
+    if quant_x != 'distance_arcsec':
+        if args.re_limit is None: # distance is in kpc
+            logOH_df['distance_arcsec'] = logOH_df[quant_x] * cosmo.arcsec_per_kpc_proper(args.z).value  # converting kpc to arcsec
+        else: # distance is in Re
+            logOH_df['distance_arcsec'] = logOH_df[quant_x] * args.re_arcsec # converting from Re to arcsec
+
     # -----------initialising the parameters for MCMC---------------
     bin_IDs_map = args.voronoi_bin_IDs
 
@@ -3051,9 +3095,6 @@ def mcmc_vorbin_fit(logOH_df, args, filter='F150W', quant_x='distance_arcsec', q
 
     # ----------------checking if saved file exists--------------
     if not os.path.exists(mcmc_filename) or args.clobber_mcmc:
-        # ---------making the PSF---------------
-        psf_array = make_psf(filter, args, supersampling_factor=1)
-
         # -------setup backend-----------
         if os.path.exists(mcmc_filename): os.remove(mcmc_filename)
         backend = emcee.backends.HDFBackend(mcmc_filename)
@@ -3061,7 +3102,7 @@ def mcmc_vorbin_fit(logOH_df, args, filter='F150W', quant_x='distance_arcsec', q
         
         # -------running MCMC-----------
         pos = params_init + 1e-4 * np.random.randn(args.nwalkers, ndim)
-        sampler = emcee.EnsembleSampler(args.nwalkers, ndim, log_likelihood, args=(logOH_df, psf_array, bin_IDs_map, bounds, args.pix_size_arcsec, quant_x, quant_y), backend=backend)
+        sampler = emcee.EnsembleSampler(args.nwalkers, ndim, log_likelihood, args=(logOH_df, args.psf_array, bin_IDs_map, bounds, args.pix_size_arcsec, quant_y), backend=backend)
         dummy = sampler.run_mcmc(pos, args.niter, progress=True)
     else:
         print(f'\nReading saved MCMC results from {mcmc_filename}')
@@ -3076,18 +3117,6 @@ def mcmc_vorbin_fit(logOH_df, args, filter='F150W', quant_x='distance_arcsec', q
     params_ulim = [np.percentile(flat_samples[:, item], 84) for item in range(np.shape(flat_samples)[1])]
     if plot_corner: fig_corner = corner.corner(flat_samples, labels=labels, truths=params_median)
     
-    # ----------converting gradient units---------
-    if quant_x == 'distance':
-        factor = cosmo.arcsec_per_kpc_proper(args.z).value
-        params_llim[0] *= factor # converting from dex/arcsec to dex/kpc
-        params_median[0] *= factor # converting from dex/arcsec to dex/kpc
-        params_ulim[0] *= factor # converting from dex/arcsec to dex/kpc
-        
-        if args.re_limit is not None:
-            params_llim[0] *= args.re_kpc # converting from dex/kpc to dex/Re
-            params_median[0] *= args.re_kpc # converting from dex/kpc to dex/Re
-            params_ulim[0] *= args.re_kpc # converting from dex/kpc to dex/Re
-
     return [params_llim, params_median, params_ulim]
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -3120,11 +3149,8 @@ def lenstronomy_fit_wrap(logOH_df, args, filter='F150W', supersampling_factor=1,
     logOH_map_lenstronomy = logOH_map.copy()
     logOH_map_lenstronomy.data[np.isnan(unp.nominal_values(logOH_map_lenstronomy.data))] = ufloat(0, 1e20)
 
-    # ------making the PSF--------------
-    psf_array = make_psf(filter, args, supersampling_factor=supersampling_factor)
-
     # -----calling lenstronomy fitter----------------------
-    linefit_lenstronomy = lenstronomy_fit(filter_image, logOH_map_lenstronomy, psf_array, exptime=exptime, pixel_scale=args.pix_size_arcsec, supersampling_factor=supersampling_factor) # the output slope is dex/arcsec
+    linefit_lenstronomy = lenstronomy_fit(filter_image, logOH_map_lenstronomy, args.psf_array, exptime=exptime, pixel_scale=args.pix_size_arcsec, supersampling_factor=supersampling_factor) # the output slope is dex/arcsec
 
     if quant_x == 'distance':
         linefit_lenstronomy[0] *= cosmo.arcsec_per_kpc_proper(args.z).value # converting from dex/arcsec to dex/kpc
@@ -3269,8 +3295,14 @@ def plot_metallicity_fit_tests(objid, field, Zdiag, args, filter='F150W', fontsi
     # -------doing the radial fits--------------
     linefit_original = original_fit(logOH_df, quant_x=quant_x, quant_y=quant_y)
     linefit_wls = wls_fit(logOH_df, quant_x=quant_x, quant_y=quant_y)
+    # run lenstronomy
     linefit_lenstronomy, filter_image, logOH_map, logOH_map_lenstronomy = lenstronomy_fit_wrap(logOH_df, args, filter=filter, supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant_y, return_intermediate=True)
+    
+    # run MCMMC
     params_llim, params_median, params_ulim = mcmc_vorbin_fit(logOH_df, args, filter=filter, quant_x=quant_x, quant_y=quant_y, plot_corner=False)
+
+    # convert the unit of best fit slope in order to plot/save
+    params_median = convert_slope_unit(params_median, args, quant_x=quant_x) # convert from dex/arcsecond to something else
     linefit_mcmc = unp.uarray(params_median[:2], np.mean([np.array(params_median[:2]) - np.array(params_llim[:2]), np.array(params_ulim[:2]) - np.array(params_median[:2])], axis=0))
 
     # ---------setting up the figure----------------
@@ -3348,10 +3380,10 @@ if __name__ == "__main__":
     args.exclude_lines = []# ['SII']
     args.voronoi_line = 'OII'
     args.voronoi_snr = 3.
-    #args.re_limit = 2.5
+    args.re_limit = 2.5
 
-    args.nwalkers = 100
-    args.niter = 5000
+    args.nwalkers = 100 # 100
+    args.niter = 5000 # 5000
     args.ndiscard = 100
 
     primary_Zdiag = 'NB'
@@ -3430,7 +3462,7 @@ if __name__ == "__main__":
     #         plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10)
 
     # --------multi-panel Z map plots------------------
-    #plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)
+    plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)
 
     # --------multi-panel SFR-Z plots------------------
     #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
