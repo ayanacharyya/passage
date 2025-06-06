@@ -693,19 +693,33 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     ax.errorbar(9.04, 0.165, xerr=0.05, yerr=0.023, c='gray', fmt='none', lw=1, alpha=0.5)
 
     # --------plotting Sharda+21 data----------
-    legend_dict = {'sami': 'SAMI', 'manga': 'MaNGA', 'califa': 'CALIFA', 'sharda_scaling1': 'S21 scaling 1', 'sharda_scaling2': 'S21 scaling 2'}
-    marker_dict = {'sami': '+', 'manga': 'x', 'califa': '1', 'sharda_scaling1': 'v', 'sharda_scaling2': '^'}
-    ls_dict = {'sami': 'dotted', 'manga': 'dotted', 'califa': 'dotted', 'sharda_scaling1': 'solid', 'sharda_scaling2': 'dashed'}
-    color_dict = {'sami': 'firebrick', 'manga': 'chocolate', 'califa': 'darkgoldenrod', 'sharda_scaling1': 'k', 'sharda_scaling2': 'k'}
+    legend_dict = {'sami': 'SAMI', 'manga': 'MaNGA', 'califa': 'CALIFA', 'sharda_scaling1': 'S21 scaling 1', 'sharda_scaling2': 'S21 scaling 2', 'mingozzi2020_izi': 'Mingozzi+20 (IZI)', 'wang17': 'Wang+17', 'jones15': 'Jones+15'}
+    marker_dict = {'sami': '+', 'manga': 'x', 'califa': '1', 'sharda_scaling1': 'v', 'sharda_scaling2': '^', 'mingozzi2020_izi': '2', 'wang17': '3', 'jones15': '4'}
+    ls_dict = {'sami': 'dotted', 'manga': 'dotted', 'califa': 'dotted', 'sharda_scaling1': 'solid', 'sharda_scaling2': 'dashed', 'mingozzi2020_izi': 'dotted', 'wang17': 'dotted', 'jones15': 'dotted'}
+    color_dict = {'sami': 'firebrick', 'manga': 'chocolate', 'califa': 'darkgoldenrod', 'sharda_scaling1': 'k', 'sharda_scaling2': 'k', 'mingozzi2020_izi': 'crimson', 'wang17': 'brown', 'jones15': 'sienna'}
     
-    literature_files = glob.glob(str(args.root_dir / 'zgrad_paper_plots' / 'literature' / 'mzgr_*.csv'))
+    if args.re_limit is None: literature_files = glob.glob(str(args.root_dir / 'zgrad_paper_plots' / 'literature' / 'mzgr_*.csv'))
+    else: literature_files = glob.glob(str(args.root_dir / 'zgrad_paper_plots' / 'literature' / 'mzgr_*re.csv'))
     literature_files.sort(key=natural_keys)
 
     for index, this_file in enumerate(literature_files):
         sample = Path(this_file).stem.split('mzgr_')[1]
+        if '_re' in sample: sample = sample[:-3]
         df_lit = pd.read_csv(this_file, names=['log_mass', 'Zgrad'], sep=', ')
         if 'scaling' in sample: ax.plot(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=1, ls=ls_dict[sample], label=legend_dict[sample])
         else: ax.scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], ec='k', s=50, lw=2, marker=marker_dict[sample], label=legend_dict[sample])
+
+    # --------plotting GLASS-HST data----------
+    if args.re_limit is None:
+        sample = 'wang17'
+        df_lit = pd.read_csv(args.root_dir / 'zgrad_paper_plots' / 'literature' / f'mzgr_{sample}.csv')
+        ax.scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=1, label=legend_dict[sample])
+        ax.errorbar(df_lit['log_mass'], df_lit['Zgrad'], yerr=df_lit['Zgrad_u'], color=color_dict[sample], lw=0.5, fmt='none')
+
+        sample = 'jones15'
+        df_lit = pd.read_csv(args.root_dir / 'zgrad_paper_plots' / 'literature' / f'mzgr_{sample}.csv')
+        ax.scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=1, label=legend_dict[sample])
+        ax.errorbar(df_lit['log_mass'], df_lit['Zgrad'], yerr=df_lit['Zgrad_u'], color=color_dict[sample], lw=0.5, fmt='none')
 
     # --------plotting FOGGIE filled region----------
     xcol, ycol = 'log_mass', 'Zgrad'
@@ -724,6 +738,9 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
         thisnewdf[xcol] = xarr
         new_df = pd.concat([new_df, thisnewdf])    
     
+    if args.re_limit is not None:
+        typical_re = 1 # in kpc
+        new_df[ycol] = new_df[ycol] * typical_re # converting from dex/kpc to dex/Re
     ax = plot_filled_region(new_df, xcol, ycol, ax, color='salmon', noscatter=True, label='FOGGIE')
 
     # --------plotting Franchetto+21 data----------
@@ -739,7 +756,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(7.9, 11.2)
-    ax.set_ylim(-2.1, 1)
+    #ax.set_ylim(-2.1, 1)
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     figname = f'MZgrad_colorby_{colorcol}_Zdiag_{zgrad_col}_upto_{extent_text}.png'
@@ -845,10 +862,10 @@ def make_latex_table(df, args, Zdiag='NB', sum=True):
     Makes and saves a latex table for with metallicity and other columns, given a dataframe with list of objects and properties
     Returns the latex table as pandas dataframe
     '''
-    column_dict = {'field':'Field', 'objid':'ID', 'redshift':r'$z$', 'lp_mass':r'$\log$ M$_{\star}$/M$_{\odot}$', 'lp_SFR':r'$\log$ SFR (M$_{\odot}$/yr)', 'SFR':r'SFR (M$_{\odot}$/yr)', 'logOH_int_NB':'$\log$ O/H + 12$_{total}$', 'logOH_sum_NB':'$\log$ O/H + 12$_{total}$', 'logOH_slope_NB':r'$\nabla Z$ (dex/kpc)' if args.re_limit is None else r'$\nabla Z$ (dex/R$_e$)'}
+    column_dict = {'field':'Field', 'objid':'ID', 'redshift':r'$z$', 'lp_mass':r'$\log$ M$_{\star}$/M$_{\odot}$', 'lp_SFR':r'$\log$ SFR (M$_{\odot}$/yr)', 'SFR':r'SFR (M$_{\odot}$/yr)', 'logOH_int_NB':'$\log$ O/H + 12$_{total}$', 'logOH_sum_NB':'$\log$ O/H + 12$_{total}$', 'logOH_slope_NB':r'$\nabla Z$ (dex/kpc)' if args.re_limit is None else r'$\nabla Z$ (dex/R$_e$)', 'logOH_slope_mcmc_NB':r'$\nabla Z$ (dex/kpc)' if args.re_limit is None else r'$\nabla Z$ (dex/R$_e$)'}
     decimal_dict = defaultdict(lambda: 2, redshift=1, lp_mass=1, RA=4, Dec=4)
     base_cols = ['field', 'objid', 'RA', 'Dec', 'redshift', 'lp_mass', 'SFR']
-    cols_with_errors = [f'logOH_sum_{Zdiag}' if sum else f'logOH_int_{Zdiag}', f'logOH_slope_{Zdiag}', 'lp_mass', 'SFR']
+    cols_with_errors = [f'logOH_sum_{Zdiag}' if sum else f'logOH_int_{Zdiag}', f'logOH_slope_mcmc_{Zdiag}', 'lp_mass', 'SFR']
 
     tex_df = pd.DataFrame()
     for thiscol in base_cols + cols_with_errors:
@@ -3496,8 +3513,8 @@ if __name__ == "__main__":
     #plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=15)
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
-    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
-    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_wls_R23_high', fontsize=15)
+    plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
+    plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_wls_R23_high', fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
     #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method='my')
 
