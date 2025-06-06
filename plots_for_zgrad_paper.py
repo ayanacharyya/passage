@@ -656,7 +656,8 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     '''
     args.fontsize = fontsize
     print(f'Plotting MZgrad...')
-    colorcol = 'logOH_sum_' + zgrad_col.split('_')[-1] # choose from ['redshift', 'SFR', 'Z_SFR_slope', 'logOH_sum_NB', 'logOH_int_NB', 'O3Hb', 'EB_V']
+    if 'NB' in zgrad_col: colorcol = 'logOH_sum_' + zgrad_col.split('_')[-1] # choose from ['redshift', 'SFR', 'Z_SFR_slope', 'logOH_sum_NB', 'logOH_int_NB', 'O3Hb', 'EB_V']
+    else: colorcol = 'logOH_sum_' + '_'.join(zgrad_col.split('_')[-2:])
     lim_dict = defaultdict(lambda: [None, None], redshift=[1.7, 3.1])
     
     # ----------setting up the diagram----------
@@ -1180,13 +1181,29 @@ def plot_fitted_line(ax, linefit, xarr, fit_color, args, quant='log_OH', short_l
     Computes and plots the fitted line given the linear fit parameters, on an axisting axis handle
     Returns axis handle
     '''
-    y_fitted = np.poly1d(unp.nominal_values(linefit))(xarr)
+
+    if quant in ['logOH', 'Z', 'log_OH']: main_text = r'$\nabla$Z$_r$'
+    else: main_text = r'$\nabla$'
+    unit_text = 'dex/kpc' if args.re_limit is None else r'dex/R$_e$'
+
+    if len(np.shape(linefit)) == 1:
+        y_fitted = np.poly1d(unp.nominal_values(linefit))(xarr)
+        y_low = np.poly1d(unp.nominal_values(linefit) - unp.std_devs(linefit))(xarr)
+        y_up = np.poly1d(unp.nominal_values(linefit) + unp.std_devs(linefit))(xarr)
+        value_text = f'{linefit[0].n: .2f}' if short_label else f'{linefit[0]: .2f}'
+    
+    else:
+        y_fitted = np.poly1d(linefit[0])(xarr)
+        y_low = np.poly1d(linefit[1])(xarr)
+        y_up = np.poly1d(linefit[2])(xarr)
+        value_text = f'{linefit[0][0]: .2f}' if short_label else r'%.2f$^{%.2f}_{%.2f}$' % (linefit[0][0], linefit[0][0] - linefit[1][0], linefit[2][0] - linefit[0][0])
+    
     ax.plot(xarr, y_fitted, color=fit_color, lw=1, ls='dashed')
+    ax.fill_between(xarr, y_low, y_up, color=fit_color, lw=0, alpha=0.3)
+
     if label is None:
-        if quant in ['logOH', 'Z', 'log_OH']:
-            label = r'$\nabla$Z$_r$' + f' = {linefit[0].n: .2f}' if short_label else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} dex/kpc' if args.re_limit is None else r'$\nabla$Z$_r$' + f' = {linefit[0]: .2f} ' + r'dex/R$_e$'
-        else:
-            label = r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0].s: .2f}' if short_label else r'$\nabla$' + f'{quant}' + r'$_r$' + f' = {linefit[0]: .2f} dex/kpc' if args.re_limit is None else r'$\nabla$' + f' = {linefit[0]: .2f} ' + r'dex/R$_e$'
+        label = main_text + ' = ' + value_text
+        if not short_label: label += unit_text
     ax.text(0.1, 0.05 + index * 0.1, label, c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
     
     return ax
@@ -1208,7 +1225,7 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     
     linefit_original = original_fit(df, quant_x=quant_x, quant_y=quant)
     linefit_wls = wls_fit(df, quant_x=quant_x, quant_y=quant)
-    if quant in ['logOH', 'Z', 'log_OH']:
+    if quant in ['logOH', 'Z', 'log_OH'] and 'NB' in Zdiag:
         # run lenstronomy
         linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
         #linefit_lenstronomy = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
@@ -1216,30 +1233,28 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
         # run MCMC
         params_llim, params_median, params_ulim = mcmc_vorbin_fit(df, args, filter='F150W', quant_x=quant_x, quant_y=quant, plot_corner=False)
         
-        # make best fit model with best fit parameters
-        df_best_model, _, _, _, _ = compute_model(params_median, args.psf_array, args.voronoi_bin_IDs, args.pix_size_arcsec, quant_y=quant)
-        if quant_x != 'distance_arcsec':
-            if args.re_limit is None: # quant_x is in kpc
-                df_best_model[quant_x] = df_best_model['distance_arcsec'] / cosmo.arcsec_per_kpc_proper(args.z).value  # converting kpc to arcsec to kpc
-            else: # quant_x is in Re
-                df_best_model[quant_x] = df_best_model['distance_arcsec'] / args.re_arcsec # converting from arcsec to Re
-
         # convert the unit of best fit slope in order to plot/save
         params_median = convert_slope_unit(params_median, args, quant_x=quant_x) # convert from dex/arcsecond to something else
-        linefit_mcmc = unp.uarray(params_median[:2], np.mean([np.array(params_median[:2]) - np.array(params_llim[:2]), np.array(params_ulim[:2]) - np.array(params_median[:2])], axis=0))
+        params_llim = convert_slope_unit(params_llim, args, quant_x=quant_x) # convert from dex/arcsecond to something else
+        params_ulim = convert_slope_unit(params_ulim, args, quant_x=quant_x) # convert from dex/arcsecond to something else
+    else:
+        linefit_lenstronomy = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
+        nparams = 4
+        params_median = np.ones(nparams) * np.nan
+        params_llim = np.ones(nparams) * np.nan
+        params_ulim = np.ones(nparams) * np.nan
    
     # -------plotting the data and the fits--------
     ax.scatter(df[quant_x], df[quant], c='grey', s=20, alpha=1)
     if quant + '_u' in df: ax.errorbar(df['distance'], df[quant], yerr=df[quant + '_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
 
     xarr = df[quant_x]
-    if quant in ['logOH', 'Z', 'log_OH']:
+    if quant in ['logOH', 'Z', 'log_OH'] and 'NB' in Zdiag:
         #ax = plot_fitted_line(ax, linefit_original, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
         #ax = plot_fitted_line(ax, linefit_wls, xarr, 'sienna', args, quant=quant, short_label=short_label, index=1)
         #ax = plot_fitted_line(ax, linefit_lenstronomy, xarr, 'green', args, quant=quant, short_label=short_label, index=2)
         #ax = plot_fitted_line(ax, linefit_mcmc, xarr, 'cornflowerblue', args, quant=quant, short_label=short_label, index=3)
-        ax = plot_fitted_line(ax, linefit_mcmc, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
-        ax.scatter(df_best_model[quant_x], df_best_model[quant + '_model'], c='salmon', s=20, alpha=0.5, lw=0.5)
+        ax = plot_fitted_line(ax, [params_median[:2], params_llim[:2], params_ulim[:2]], xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
     else:
         #ax = plot_fitted_line(ax, linefit_original, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
         #ax = plot_fitted_line(ax, linefit_wls, xarr, 'sienna', args, quant=quant, short_label=short_label, index=1)
@@ -2015,7 +2030,7 @@ def plot_metallicity_fig_single(objid, field, Zdiag, args, fontsize=10):
     axes[0], _ = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], axes[0], args)
 
     # -----plotting 2D metallicity map-----------
-    Zlim = [7.5, 8.6]
+    Zlim = [7.1, 9.1]
     axes[1] = plot_2D_map(logOH_map, axes[1], f'log O/H + 12 ({Zdiag})', args, clabel='', takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=False, hide_yaxis=True, hide_cbar=False)
     axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', loc='lower right')
 
@@ -2103,7 +2118,7 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
         elif 'glass' in field: survey = 'glass'
         output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_allfits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
         ####################################
-        if 'glass' in field:
+        if 'glass' in field and 'SNR_4.0' in str(output_dfname):
             output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
             print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
         ####################################
@@ -2300,7 +2315,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     elif 'glass' in field: survey = 'glass'
     output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
     ####################################
-    if 'glass' in field:
+    if 'glass' in field and 'SNR_4.0' in str(output_dfname):
         output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
         print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
     ####################################
@@ -2389,7 +2404,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         elif 'glass' in field: survey = 'glass'
         output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
         ####################################
-        if 'glass' in field:
+        if 'glass' in field and 'SNR_4.0' in str(output_dfname):
             output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
             print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
         ####################################
@@ -3251,8 +3266,8 @@ def wls_fit(df, quant_x='distance_arcsec', quant_y='log_OH'):
     try:
         ones = np.ones(len(df))
         covariates = np.vstack((ones, df[quant_x])).T
-        wls_model_fit = WLS(df[quant_y], covariates, weights=1/(df[quant_y + '_u']**2)).fit()
-        linefit = [ufloat(wls_model_fit.params['x1'], 0), ufloat(wls_model_fit.params['const'], 0)]
+        wls_model_fit = WLS(df[quant_y], covariates, weights=1/(df[quant_y + '_u']**2) if (df[quant_y + '_u'] != 0).any() else 1).fit()
+        linefit = [ufloat(wls_model_fit.params['x1'], wls_model_fit.bse['x1']), ufloat(wls_model_fit.params['const'], wls_model_fit.bse['const'])]
     except:
         print(f'WARNING: Could not fit radial profile via WLS, returning nan fit parameters')
         linefit = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
@@ -3403,15 +3418,15 @@ if __name__ == "__main__":
     log_mass_lim = [7.5, 10]
 
     # -------setting up objects to plot--------------
-    Par28_objects = [300, 1303, 1849, 2727, 2867]
-    #Par28_objects = [2171] + Par28_objects
-    glass_objects = [1721, 1983, 1991]
-    #glass_objects = [1333, 2128] + glass_objects
+    Par28_objects = [300, 1303, 1849, 2867]
+    #Par28_objects = [2727] + Par28_objects
+    glass_objects = [1721, 1983, 1991, 2128]
+    #glass_objects = [1333] + glass_objects
 
     passage_objlist = [['Par028', item] for item in Par28_objects]
     glass_objlist = [['glass-a2744', item] for item in glass_objects]
     objlist = passage_objlist + glass_objlist
-    objlist_ha = [['Par028', item] for item in [300, 1303, 2867]] + [['glass-a2744', item] for item in [1721, 1983, 1991]]
+    objlist_ha = [['Par028', item] for item in [300, 1303, 2867]] + [['glass-a2744', item] for item in [1721, 1983, 1991, 2128]]
 
     # -----------setting up global properties-------------------
     args.snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
@@ -3442,7 +3457,7 @@ if __name__ == "__main__":
     
     # ---------single galaxy plot: Z map and gradient----------------------
     #plot_metallicity_fig_single(2867, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
-    #plot_metallicity_fig_single(1721, 'glass-a2744', primary_Zdiag, args, fontsize=10) # zgrad plot
+    #plot_metallicity_fig_single(2128, 'glass-a2744', primary_Zdiag, args, fontsize=10) # zgrad plot
     #plot_metallicity_fit_tests(2867, 'Par028', primary_Zdiag, args, fontsize=10)
     
     # ---------single galaxy plot: SFR map and correlation----------------------
@@ -3456,20 +3471,18 @@ if __name__ == "__main__":
 
     # --------to create dataframe of all metallicity quantities including radial fits, etc------------------
     # for Zdiag in args.Zdiag:
-    #     args.Zbranch = 'low'
-    #     plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10)
-    #     if not 'NB' in Zdiag:
-    #         args.Zbranch = 'high'
+    #     if 'NB' in Zdiag: continue
+    #     for args.Zbranch in ['low', 'high']:
     #         plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10)
 
     # --------multi-panel Z map plots------------------
-    plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)
+    #plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)
 
     # --------multi-panel SFR-Z plots------------------
     #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
 
     # ---------metallicity comparison plots----------------------
-    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
+    #plot_metallicity_comparison_fig(objlist args.Zdiag, args, Zbranch='low', fontsize=10)
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=10)
     #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
 
@@ -3484,9 +3497,8 @@ if __name__ == "__main__":
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
-    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_R23_high', fontsize=15)
+    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_wls_R23_high', fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
-    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method=None)
     #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method='my')
 
     # -----------line ratio histograms--------------
