@@ -37,18 +37,19 @@ def save_fig(fig, figname, args):
     '''
     Saves a given figure handle as a given output filename
     '''
-    plot_output_dir = args.root_dir / 'zgrad_paper_plots'
-    plot_output_dir.mkdir(exist_ok=True, parents=True)
-
-    figname = plot_output_dir / figname
 
     if args.fortalk:
-        mplcyberpunk.add_glow_effects()
-        try: mplcyberpunk.make_lines_glow()
-        except: pass
+        #mplcyberpunk.add_glow_effects()
+        #try: mplcyberpunk.make_lines_glow()
+        #except: pass
         try: mplcyberpunk.make_scatter_glow()
         except: pass
+        plot_output_dir = args.root_dir / 'zgrad_paper_plots_fortalk'
+    else:
+        plot_output_dir = args.root_dir / 'zgrad_paper_plots'
 
+    plot_output_dir.mkdir(exist_ok=True, parents=True)
+    figname = plot_output_dir / figname
     fig.savefig(figname, transparent=args.fortalk)
     print(f'\nSaved figure as {figname}')
     plt.show(block=False)
@@ -374,18 +375,19 @@ def make_master_df(objlist, args, sum=True):
         new_cols = np.hstack([['RA', 'Dec', 'redshift', 'EB_V'], np.hstack([[f'{line}', f'{line}_u'] for line in line_list])])
         for col in new_cols: df[col] = np.nan # creating provision for the new columns
 
-        args.only_integrated = True
         for index, row in df.iterrows():
             field = row['field']
             objid = row['objid']
             print(f'\nDoing object {field}:{objid} which is {index + 1} of {len(df)}..')
             full_hdu = load_full_fits(objid, field, args)
             
-            args = load_object_specific_args(full_hdu, args, skip_vorbin=True)
+            args = load_object_specific_args(full_hdu, args, skip_psf=True)
             df.loc[index, 'RA'] = full_hdu[0].header['RA']
             df.loc[index, 'Dec'] = full_hdu[0].header['Dec']
             df.loc[index, 'redshift'] = args.z
             df.loc[index, 'EB_V'] = args.EB_V.n
+            df.loc[index, 'pix_size_arcsec'] = args.pix_size_arcsec
+            df.loc[index, 'npix_in_vorbin'] = len(np.ma.compressed(args.voronoi_bin_IDs))
 
             for line in line_list:
                 try: _, _, line_int, line_sum, _ = get_emission_line_map(line, full_hdu, args, silent=True)
@@ -393,7 +395,6 @@ def make_master_df(objlist, args, sum=True):
                 if not sum: line_sum = line_int # choose the grizli reported integrated values
                 df.loc[index, f'{line}'] = line_sum.n
                 df.loc[index, f'{line}_u'] = line_sum.s  
-        args.only_integrated = False
 
         # --------get metallicity info----------
         df_logOH_passage = get_logOH_df(passage_objlist, args, survey='passage')
@@ -436,8 +437,10 @@ def make_master_df(objlist, args, sum=True):
     #     df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)  # in Gyr
 
     method = 'my'
-    beta, B, kappa, Sigma = 0.286, 51.6, 100., 0.1
+    beta, B, kappa = 0.286, 51.6, 100.
     slope = unp.uarray(df['logZ_logSFR_slope'], df['logZ_logSFR_slope_u'])
+    pix_area = df['npix_in_vorbin'] * df['pix_size_arcsec'] / df['redshift'].apply(lambda x: cosmo.arcsec_per_kpc_proper(x).value) # converting arcsec to kpc
+    Sigma = unp.uarray(df['SFR'] / pix_area, df['SFR_u'] / pix_area)
     t_mix = 1e3 * slope / (B * (Sigma ** beta) * (beta + slope * kappa)) # in Myr
     df['t_mix_' + method] = unp.nominal_values(t_mix)
     df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)
@@ -537,6 +540,7 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     print(f'Plotting SFMS...')
     if 'log_' in sfr_col and sfr_col not in df and sfr_col[4:] in df:
         df = break_column_into_uncertainty(df, sfr_col[4:], make_log=True)
+    df = df.sort_values(by='redshift')
 
     # ----------setting up the diagram----------
     fig, ax = plt.subplots(1, figsize=(8, 6))
@@ -545,20 +549,22 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     # ----------plotting----------
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub[sfr_col], c=np.log10(df_sub['OIII']/ df_sub['Hb']), marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis')
+        #p = ax.scatter(df_sub[mass_col], df_sub[sfr_col], c=np.log10(df_sub['OIII']/ df_sub['Hb']), marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
+        p = ax.scatter(df_sub[mass_col], df_sub[sfr_col], c=df_sub['redshift'], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
     if sfr_col + '_u' in df: ax.errorbar(df[mass_col], df[sfr_col], yerr=df[sfr_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[sfr_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 
     # ----------making colorbar----------
     cbar = plt.colorbar(p, pad=0.01)
-    cbar.set_label(r'$\log$ O III/H$\beta$', fontsize=args.fontsize)
+    #cbar.set_label(r'$\log$ O III/H$\beta$', fontsize=args.fontsize)
+    cbar.set_label(f'Redshift', fontsize=args.fontsize)
     cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
 
     # ----------plotting theoretical diagrams----------
     #ax = plot_SFMS_Whitaker14(ax, 2.0, color='yellowgreen')
     ax = plot_SFMS_Shivaei15(ax, color='salmon')
     ax = plot_SFMS_Popesso23(ax, 2.0, color='cornflowerblue')
-    ax = plot_SFMS_Popesso23(ax, 3.0, color='royalblue')
+    #ax = plot_SFMS_Popesso23(ax, 3.0, color='royalblue')
 
     # ---------annotate axes and save figure-------
     plt.legend(fontsize=args.fontsize, loc='lower right')
@@ -567,7 +573,7 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
-    ax.set_ylim(-1, 1.5)
+    ax.set_ylim(0, 1.2)
 
     figname = f'SFMS_colorby_redshift.png'
     save_fig(fig, figname, args)
@@ -594,7 +600,7 @@ def plot_MEx(df, args, mass_col='lp_mass', fontsize=10):
 
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub['O3Hb'], c=df_sub['redshift'], marker=m, s=100, edgecolor='k', lw=1, cmap='viridis', vmin=1.7, vmax=3.1)
+        p = ax.scatter(df_sub[mass_col], df_sub['O3Hb'], c=df_sub['redshift'], marker=m, s=100, edgecolor='k', lw=1, cmap='viridis', vmin=1.7, vmax=3.1, label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
     ax.errorbar(df[mass_col], df['O3Hb'], yerr=df['O3Hb_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df['O3Hb'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 
@@ -779,11 +785,11 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     # ----------plotting----------
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub['logOH_sum_NB'], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', vmin=7.5, vmax=9.1)
+        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub['logOH_sum_NB'], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', vmin=7.5, vmax=9.1, label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
     if zgrad_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], yerr=df[zgrad_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     
-    ax.axhline(0, ls='--', c='k', lw=0.5)
+    ax.axhline(0, ls='--', c='k' if not args.fortalk else 'w', lw=0.5)
 
     # ----------making colorbar----------
     cbar = plt.colorbar(p, pad=0.01)
@@ -792,11 +798,13 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
 
     # ---------annotate axes and save figure-------
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
-    ax.set_ylabel(r'$\log$ Z-$\log \Sigma_{*}$ slope', fontsize=args.fontsize)
+    ax.set_ylabel(r'$\log$ Z-$\log \Sigma_{\rm SFR}$ slope', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
     ax.set_ylim(-1, 2)
+
+    ax.legend(fontsize=args.fontsize, loc='upper left')
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     figname = f'MZsfr_colorby_Z_upto_{extent_text}.png'
@@ -811,6 +819,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     '''
     args.fontsize = fontsize
     print(f'Plotting M-t_mix...')
+    color_label_dict = {'logZ_logSFR_slope':r'$\log$ Z-$\log \Sigma_{*}$ slope', 'SFR': r'SFR (M$_{\odot}$/yr)'}
     
     # ----------setting up the diagram----------
     fig, ax = plt.subplots(1, figsize=(8, 6))
@@ -826,16 +835,29 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     for index, method in enumerate(mgas_methods):
         for index2, m in enumerate(pd.unique(df['marker'])):
             df_sub = df[df['marker'] == m]
-            p = ax.scatter(df_sub[mass_col], df_sub[f'{ycol}_{method}'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', vmin=-0.3, vmax=1.4, label=r'M$_{\rm gas}$ from ' + method if index2 == 0 and mgas_method is None else None)
+            p = ax.scatter(df_sub[mass_col], df_sub[f'{ycol}_{method}'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
         if f'{ycol}_{method}_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], yerr=df[f'{ycol}_{method}_u'], c='gray', fmt='none', lw=1, alpha=0.5)
         if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     
     if not mgas_method == 'my': ax.axhline(0, ls='--', c='k', lw=0.5)
 
+    # -------trend fitting-------------
+    # fit_color = 'salmon'
+    # method = 'my'
+    # df2 = df[[mass_col, f'{ycol}_{method}', f'{ycol}_{method}' + '_u']]
+    # df2 = df2.dropna(axis=0)
+    # df2 = df2.sort_values(mass_col)
+    # ones = np.ones(len(df2))
+    # covariates = np.vstack((ones, df2[mass_col])).T
+    # #wls_model_fit = WLS(df2[f'{ycol}_{method}'], covariates, weights=1 / df2[f'{ycol}_{method}_u'] ** 2).fit()
+    # wls_model_fit = WLS(df2[f'{ycol}_{method}'], covariates, weights=1).fit()
+    # linefit = [ufloat(wls_model_fit.params['x1'], wls_model_fit.bse['x1']), ufloat(wls_model_fit.params['const'], wls_model_fit.bse['const'])]
+    # ax = plot_fitted_line(ax, linefit, df2[mass_col], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
+
     # ----------making colorbar----------
     if mgas_method is not None:
         cbar = plt.colorbar(p, pad=0.01)
-        cbar.set_label(r'$\log$ Z-$\log \Sigma_{*}$ slope', fontsize=args.fontsize)
+        cbar.set_label(color_label_dict[colorcol], fontsize=args.fontsize)
         cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
     else:
         ax.legend(fontsize=args.fontsize)
@@ -847,11 +869,13 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
     if mgas_method is None or mgas_method == 'C23': ax.set_ylim(-0.7, 4.3)
-    elif mgas_method is not None and mgas_method == 'my': ax.set_ylim(None, None)
+    elif mgas_method is not None and mgas_method == 'my': ax.set_ylim(None, None) #(-0.01, 0.4) #
     else: ax.set_ylim(-0.5, 0.6)
 
+    ax.legend(fontsize=args.fontsize, loc='upper left')
+
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'M_tmix_colorby_Z-SFR_slope_{mgas_method}_upto_{extent_text}.png' if mgas_method is not None else f'M_tmix_upto_{extent_text}.png'
+    figname = f'M_tmix_colorby_{colorcol}_{mgas_method}_upto_{extent_text}.png' if mgas_method is not None else f'M_tmix_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -1079,7 +1103,7 @@ def load_1d_fits(objid, field, args):
     return od_hdu
 
 # --------------------------------------------------------------------------------------------------------------------
-def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum=True):
+def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum=True, skip_psf=False):
     '''
     Loads some object specific details into args
     Returns modified args
@@ -1111,7 +1135,7 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
     args.segmentation_map = trim_image(segmentation_map, args)
     
     # -----------PSF array-----------
-    args.psf_array = make_psf('F150W', args, supersampling_factor=1)
+    if not skip_psf: args.psf_array = make_psf('F150W', args, supersampling_factor=1)
 
     ####################################
     if field is not None and 'glass' in field and args.voronoi_snr == 4:
@@ -1242,13 +1266,13 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     
     linefit_original = original_fit(df, quant_x=quant_x, quant_y=quant)
     linefit_wls = wls_fit(df, quant_x=quant_x, quant_y=quant)
-    if quant in ['logOH', 'Z', 'log_OH'] and 'NB' in Zdiag:
+    if quant in ['logOH', 'Z', 'log_OH'] and Zdiag in ['NB', 'R23']:
         # run lenstronomy
         linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
         #linefit_lenstronomy = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
         
         # run MCMC
-        params_llim, params_median, params_ulim = mcmc_vorbin_fit(df, args, filter='F150W', quant_x=quant_x, quant_y=quant, plot_corner=False)
+        params_llim, params_median, params_ulim = mcmc_vorbin_fit(df, args, filter='F150W', quant_x=quant_x, quant_y=quant, plot_corner=False, Zdiag=f'{Zdiag}_{args.Zbranch}')
         
         # convert the unit of best fit slope in order to plot/save
         params_median = convert_slope_unit(params_median, args, quant_x=quant_x) # convert from dex/arcsecond to something else
@@ -1266,7 +1290,7 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     if quant + '_u' in df: ax.errorbar(df['distance'], df[quant], yerr=df[quant + '_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
 
     xarr = df[quant_x]
-    if quant in ['logOH', 'Z', 'log_OH'] and 'NB' in Zdiag:
+    if quant in ['logOH', 'Z', 'log_OH'] and Zdiag in ['NB', 'R23']:
         #ax = plot_fitted_line(ax, linefit_original, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
         #ax = plot_fitted_line(ax, linefit_wls, xarr, 'sienna', args, quant=quant, short_label=short_label, index=1)
         #ax = plot_fitted_line(ax, linefit_lenstronomy, xarr, 'green', args, quant=quant, short_label=short_label, index=2)
@@ -1862,7 +1886,7 @@ def plot_AGN_demarcation_figure_integrated(objlist, args, fontsize=10):
     # --------plotting the data-------------------------
     for marker in pd.unique(df['marker']):
         df_sub = df[df['marker'] == marker]
-        scatter_plot_handle = ax.scatter(unp.nominal_values(df_sub['x_ratio']), unp.nominal_values(df_sub['y_ratio']), c=df_sub['color'], cmap=args.diverging_cmap, vmin=-1, vmax=1, marker=marker, s=100, lw=2, edgecolor='w' if args.fortalk else 'k')
+        scatter_plot_handle = ax.scatter(unp.nominal_values(df_sub['x_ratio']), unp.nominal_values(df_sub['y_ratio']), c=df_sub['color'], cmap=args.diverging_cmap, vmin=-1, vmax=1, marker=marker, s=100, lw=2, edgecolor='w' if args.fortalk else 'k', label='GLASS (This work)' if marker == 's' else 'PASSAGE (This work)')
         ax.errorbar(unp.nominal_values(df_sub['x_ratio']), unp.nominal_values(df_sub['y_ratio']), xerr=unp.std_devs(df_sub['x_ratio']), yerr=unp.std_devs(df_sub['y_ratio']), c='gray', fmt='none', lw=2, alpha=0.5, zorder=-1)
     
     # --------annotating every point-------------------------
@@ -1874,7 +1898,7 @@ def plot_AGN_demarcation_figure_integrated(objlist, args, fontsize=10):
     cbar.ax.tick_params(labelsize=args.fontsize)
 
     ax.set_xlim(-2.5, 0.5)
-    ax.set_ylim(-1, 2)
+    ax.set_ylim(-1, 1)
     ax.set_xlabel(f'Log {get_ratio_labels("NeIII-3867/OII")}' if args.AGN_diag == 'Ne3O2' else f'Log {get_ratio_labels("SII/NII,Ha")}' if args.AGN_diag == 'H21' else f'Log {get_ratio_labels(f"{args.xnum_line}/{args.xden_line}")}', fontsize=args.fontsize)
     ax.set_ylabel(f'Log {get_ratio_labels("OIII/Hb")}', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
@@ -2124,7 +2148,7 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10):
             axes[1].add_artist(connect2)
         
         # ------plotting metallicity radial profile-----------
-        axes[2], linefit = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit], hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, short_label=True, Zdiag=Zdiag)
+        axes[2], linefit = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit], hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, short_label=False, Zdiag=Zdiag)
         linefit_original, linefit_wls, linefit_lenstronomy, params_llim, params_median, params_ulim = linefit
         linefit_mcmc = unp.uarray(params_median[:2], np.mean([np.array(params_median[:2]) - np.array(params_llim[:2]), np.array(params_ulim[:2]) - np.array(params_median[:2])], axis=0))
         axes[2].yaxis.set_label_position('right')
@@ -3103,7 +3127,7 @@ def convert_slope_unit(params, args, quant_x='distance_arcsec'):
     return params
 
 # --------------------------------------------------------------------------------------------------------------------
-def mcmc_vorbin_fit(logOH_df, args, filter='F150W', quant_x='distance_arcsec', quant_y='log_OH', plot_corner=True):
+def mcmc_vorbin_fit(logOH_df, args, filter='F150W', quant_x='distance_arcsec', quant_y='log_OH', plot_corner=True, Zdiag=''):
     '''
     Fits the given x and y quantities by taking into account PSF smearing (using MCMC) and the given Voronoi bin segmentation map
     Returns fitted parameters
@@ -3124,7 +3148,7 @@ def mcmc_vorbin_fit(logOH_df, args, filter='F150W', quant_x='distance_arcsec', q
     ndim = len(params_init)
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    mcmc_filename = args.root_dir / 'zgrad_paper_plots' / f'{args.field}_{args.id:05d}_logOH_MCMC_ndim_{ndim}_nwalkers_{args.nwalkers}_niter_{args.niter}_upto_{extent_text}.h5py'
+    mcmc_filename = args.root_dir / 'zgrad_paper_plots' / f'{args.field}_{args.id:05d}_logOH_Zdiag_{Zdiag}_MCMC_ndim_{ndim}_nwalkers_{args.nwalkers}_niter_{args.niter}_upto_{extent_text}.h5py'
 
     # ----------------checking if saved file exists--------------
     if not os.path.exists(mcmc_filename) or args.clobber_mcmc:
@@ -3275,11 +3299,13 @@ def lenstronomy_fit(light_map, logOH_map, psf_array, exptime=500, pixel_scale=0.
     return linefit
 
 # --------------------------------------------------------------------------------------------------------------------
-def wls_fit(df, quant_x='distance_arcsec', quant_y='log_OH'):
+def wls_fit(df_input, quant_x='distance_arcsec', quant_y='log_OH'):
     '''
     Fits the x and y columns using WLS
     Returns fitted parameters
     '''
+    df = df_input[[quant_x, quant_y, quant_y + '_u']]
+    df = df.dropna(axis=0)
     try:
         ones = np.ones(len(df))
         covariates = np.vstack((ones, df[quant_x])).T
@@ -3473,7 +3499,7 @@ if __name__ == "__main__":
     #df_agn_fluxes, df_agn = plot_AGN_demarcation_figure_integrated(objlist, args, fontsize=15) # AGN demarcation
     
     # ---------single galaxy plot: Z map and gradient----------------------
-    #plot_metallicity_fig_single(2867, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
+    #plot_metallicity_fig_single(1849, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
     #plot_metallicity_fig_single(2128, 'glass-a2744', primary_Zdiag, args, fontsize=10) # zgrad plot
     #plot_metallicity_fit_tests(2867, 'Par028', primary_Zdiag, args, fontsize=10)
     
@@ -3494,6 +3520,7 @@ if __name__ == "__main__":
 
     # --------multi-panel Z map plots------------------
     #plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)
+    #plot_metallicity_fig_multiple(objlist, 'R23', args, fontsize=10)
 
     # --------multi-panel SFR-Z plots------------------
     #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
@@ -3514,9 +3541,9 @@ if __name__ == "__main__":
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
-    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_wls_R23_high', fontsize=15)
+    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_R23_high', fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
-    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='logZ_logSFR_slope', mgas_method='my')
+    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='SFR', mgas_method='my')
 
     # -----------line ratio histograms--------------
     #full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)
