@@ -823,7 +823,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     '''
     args.fontsize = fontsize
     print(f'Plotting M-t_mix...')
-    color_label_dict = {'logZ_logSFR_slope':r'$\log$ Z-$\log \Sigma_{*}$ slope', 'SFR': r'SFR (M$_{\odot}$/yr)'}
+    color_label_dict = {'logZ_logSFR_slope':r'$\log$ Z-$\log \Sigma_{\rm SFR}$ slope', 'SFR': r'SFR (M$_{\odot}$/yr)'}
     
     # ----------setting up the diagram----------
     fig, ax = plt.subplots(1, figsize=(8, 6))
@@ -1175,7 +1175,7 @@ def plot_radial_profile_old(image, ax, args, ylim=None, xlim=None, hide_xaxis=Fa
     Plots and fits the radial profile from a given 2D image in a given axis
     Returns the axis handle and the linefit
     '''
-    label_dict = smart_dict({'SFR': r'$\log$ $\Sigma_*$ (M$_{\odot}$/yr/kpc$^2$)', 'logOH': r'$\log$ (O/H) + 12', 'Z': r'$\log$ (O/H) + 12'})
+    label_dict = smart_dict({'SFR': r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', 'logOH': r'$\log$ (O/H) + 12', 'Z': r'$\log$ (O/H) + 12'})
 
     # ----making the dataframe before radial profile plot--------------
     df = pd.DataFrame({'quant': unp.nominal_values(np.ma.compressed(image)), 'quant_u': unp.std_devs(np.ma.compressed(image))})
@@ -1259,7 +1259,7 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     Plots and fits the radial profile from a given 2D image in a given axis
     Returns the axis handle and the linefit
     '''
-    label_dict = smart_dict({'SFR': r'$\log$ $\Sigma_*$ (M$_{\odot}$/yr/kpc$^2$)', 'logOH': r'$\log$ (O/H) + 12', 'Z': r'$\log$ (O/H) + 12', 'log_OH': r'$\log$ (O/H) + 12'})
+    label_dict = smart_dict({'SFR': r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', 'logOH': r'$\log$ (O/H) + 12', 'Z': r'$\log$ (O/H) + 12', 'log_OH': r'$\log$ (O/H) + 12'})
 
     if args.re_limit is not None: df['distance'] /= args.re_kpc # converting from kpc to Re
     if args.radius_max is not None: df = df[df['distance'] <= args.radius_max]
@@ -2333,7 +2333,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
         axes = axes[2]
 
     # -----plotting 2D SFR map-----------
-    axes[0] = plot_2D_map(log_sfr_map, axes[0], r'$\log(\Sigma_*)$ (corrected)' if args.debug_Zsfr else r'$\log(\Sigma_*)$', args, clabel=r'$\log$ $\Sigma_*$ (M$_{\odot}$/yr/kpc$^2$)', takelog=False, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
+    axes[0] = plot_2D_map(log_sfr_map, axes[0], r'$\log(\Sigma_{\rm SFR})$ (corrected)' if args.debug_Zsfr else r'$\log(\Sigma_{\rm SFR})$', args, clabel=r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', takelog=False, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=False, hide_cbar=False)
 
     # ------plotting metallicity vs SFR-----------
     df = pd.DataFrame({'logOH': unp.nominal_values(np.ma.compressed(logOH_map)), 'logOH_u': unp.std_devs(np.ma.compressed(logOH_map)), 'log_sfr':unp.nominal_values(np.ma.compressed(log_sfr_map)), 'log_sfr_u': unp.std_devs(np.ma.compressed(log_sfr_map))})
@@ -2354,7 +2354,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     axes[1].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
     axes[1].set_ylim(Zlim[0], Zlim[1])
     axes[1].set_box_aspect(1)
-    axes[1] = annotate_axes(axes[1], r'$\log$ $\Sigma_*$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args)
+    axes[1] = annotate_axes(axes[1], r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args)
 
     # ----------append fit to dataframe and save-----------
     if 'Par' in field: survey = 'passage'
@@ -2418,7 +2418,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
     
         # -----plotting 2D SFR map-----------
         cmap = 'winter'
-        axes[0] = plot_2D_map(log_sfr_map, axes[0], None, args, clabel=r'$\log$ $\Sigma_*$ (M$_{\odot}$/yr/kpc$^2$)', takelog=False, cmap=cmap, vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=index < nrow - 1, hide_yaxis=False, hide_cbar=True)
+        axes[0] = plot_2D_map(log_sfr_map, axes[0], None, args, clabel=r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', takelog=False, cmap=cmap, vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=index < nrow - 1, hide_yaxis=False, hide_cbar=True)
         axes[0] = annotate_kpc_scale_bar(2, axes[0], args, label='2 kpc', color='brown', loc='lower right')
 
         # ------plotting metallicity vs SFR-----------
@@ -2441,7 +2441,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         axes[1].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
         axes[1].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
         axes[1].set_ylim(Zlim[0], Zlim[1])
-        axes[1] = annotate_axes(axes[1], r'$\log$ $\Sigma_*$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args, hide_xaxis=index < nrow - 1, hide_yaxis=False, hide_cbar=True)
+        axes[1] = annotate_axes(axes[1], r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args, hide_xaxis=index < nrow - 1, hide_yaxis=False, hide_cbar=True)
         axes[1].yaxis.set_label_position('right')
         axes[1].yaxis.tick_right()
 
@@ -2461,7 +2461,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
    # -------making colorbars for the entire fig----------
     cax = fig.add_axes([0.07, 0.95, 0.93 - 0.07, 0.01])    
     cbar = matplotlib.colorbar.ColorbarBase(cax, cmap=cmap, norm=mplcolors.Normalize(vmin=log_sfr_lim[0], vmax=log_sfr_lim[1]), orientation='horizontal')
-    cbar.set_label(r'$\log$ $\Sigma_*$ (M$_{\odot}$/yr/kpc$^2$)', fontsize=args.fontsize)
+    cbar.set_label(r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', fontsize=args.fontsize)
     cax.xaxis.set_label_position('top')
     cbar.ax.tick_params(labelsize=args.fontsize)
     
@@ -2514,7 +2514,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     axes[1].yaxis.tick_right()
     
     # -----plotting 2D SFR map-----------
-    axes[2] = plot_2D_map(log_sfr_map, axes[2], r'$\log$ $\Sigma_*$', args, clabel='', takelog=False, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=False, hide_cbar=False, hide_cbar_ticks=True, cticks_integer=False)
+    axes[2] = plot_2D_map(log_sfr_map, axes[2], r'$\log$ $\Sigma_{\rm SFR}$', args, clabel='', takelog=False, cmap='winter', vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=False, hide_yaxis=False, hide_cbar=False, hide_cbar_ticks=True, cticks_integer=False)
 
     # ----making SFR dataframe before radial profile plot--------------
     log_sfr_df = pd.DataFrame({'SFR': unp.nominal_values(np.ma.compressed(log_sfr_map)), 'SFR_u': unp.std_devs(np.ma.compressed(log_sfr_map))})
@@ -2554,7 +2554,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     axes[4].text(0.95, 0.05, f'ID #{objid}', fontsize=args.fontsize, c='k', ha='right', va='bottom', transform=axes[4].transAxes)
     axes[4].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
     axes[4].set_ylim(Zlim[0], Zlim[1])
-    axes[4] = annotate_axes(axes[4], r'$\log$ $\Sigma_*$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args, hide_xaxis=False, hide_yaxis=False, hide_cbar=True)
+    axes[4] = annotate_axes(axes[4], r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args, hide_xaxis=False, hide_yaxis=False, hide_cbar=True)
     axes[4].set_aspect('equal')
     # -----------saving figure------------
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
