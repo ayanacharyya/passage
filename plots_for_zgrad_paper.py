@@ -388,6 +388,7 @@ def make_master_df(objlist, args, sum=True):
             df.loc[index, 'EB_V'] = args.EB_V.n
             df.loc[index, 'pix_size_arcsec'] = args.pix_size_arcsec
             df.loc[index, 'npix_in_vorbin'] = len(np.ma.compressed(args.voronoi_bin_IDs))
+            df.loc[index, 're_kpc'] = args.re_kpc
 
             for line in line_list:
                 try: _, _, line_int, line_sum, _ = get_emission_line_map(line, full_hdu, args, silent=True)
@@ -669,7 +670,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     # ----------setting up the diagram----------
     fig, ax = plt.subplots(1, figsize=(8, 6))
     fig.subplots_adjust(left=0.12, right=0.99, bottom=0.1, top=0.95)
-    label_dict = smart_dict({'redshift': 'Redshift', 'logOH_sum_NB': r'$\log$ (O/H) + 12 [NB]'})
+    label_dict = smart_dict({'redshift': 'Redshift', 'logOH_sum_NB': r'$\log$ (O/H) + 12 [NB]', 'lp_mass': r'log M$_*$/M$_{\odot}$'})
 
     # ----------plotting----------
     if colorcol == 'O3Hb': df['O3Hb'] =np.log10(df['OIII'] / df['Hb'])
@@ -693,6 +694,30 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
 
     ax.axhline(0, ls='--', c='k', lw=0.5)
+
+    # --------plotting FOGGIE filled region----------
+    xcol = 'log_mass'
+    ycol = 'Zgrad'
+    foggie_filename = args.root_dir / 'zgrad_paper_plots' / 'literature' / 'FOGGIE_allhalos.csv'
+    df_foggie = pd.read_csv(foggie_filename)
+    if xcol != 'redshift': df_foggie = df_foggie[(df_foggie['log_mass'].between(8.5, 11.5)) & ~(df_foggie['halo'] == 8508)]
+    df_foggie = df_foggie.sort_values(by=xcol)
+    #ax.plot(df_foggie[xcol], df_foggie[ycol], c='sienna', lw=0.1, zorder=-2, alpha=0.5)
+
+    xarr = np.linspace(df_foggie[xcol].min(), df_foggie[xcol].max(), 1000) # uniform grid of redshift values
+    xarr = xarr[:-1] + np.diff(xarr) / 2.
+    new_df = pd.DataFrame()
+    for thishalo in pd.unique(df_foggie['halo']):
+        thisdf = df_foggie[df_foggie['halo'] == thishalo]
+        thisnewdf = pd.DataFrame()
+        thisnewdf[ycol] = np.interp(xarr, thisdf[xcol], thisdf[ycol]) # interpolating data from each halo onto the uniform grid
+        thisnewdf[xcol] = xarr
+        new_df = pd.concat([new_df, thisnewdf])    
+    
+    if args.re_limit is not None:
+        typical_re = 1 # in kpc
+        new_df[ycol] = new_df[ycol] * typical_re # converting from dex/kpc to dex/Re
+    ax = plot_filled_region(new_df, xcol, ycol, ax, color='salmon', noscatter=True, label='FOGGIE')
 
     # --------plotting Wang+22 data----------
     ax.scatter(9.04, 0.165, color='goldenrod', marker='*', s=200, lw=1, edgecolor='k', label='Wang+22')
@@ -727,28 +752,6 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
         ax.scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=1, label=legend_dict[sample])
         ax.errorbar(df_lit['log_mass'], df_lit['Zgrad'], yerr=df_lit['Zgrad_u'], color=color_dict[sample], lw=0.5, fmt='none')
 
-    # --------plotting FOGGIE filled region----------
-    xcol, ycol = 'log_mass', 'Zgrad'
-    foggie_filename = args.root_dir / 'zgrad_paper_plots' / 'literature' / 'FOGGIE_allhalos.csv'
-    df_foggie = pd.read_csv(foggie_filename)
-    df_foggie = df_foggie[(df_foggie['log_mass'].between(8.5, 11.5)) & ~(df_foggie['halo'] == 8508)]
-    #ax.plot(df_foggie[xcol], df_foggie[ycol], c='salmon', lw=0.1, zorder=-2, alpha=0.5)
-
-    xarr = np.linspace(df_foggie[xcol].min(), df_foggie[xcol].max(), 1000) # uniform grid of redshift values
-    xarr = xarr[:-1] + np.diff(xarr) / 2.
-    new_df = pd.DataFrame()
-    for thishalo in pd.unique(df_foggie['halo']):
-        thisdf = df_foggie[df_foggie['halo'] == thishalo]
-        thisnewdf = pd.DataFrame()
-        thisnewdf[ycol] = np.interp(xarr, thisdf[xcol], thisdf[ycol]) # interpolating data from each halo onto the uniform grid
-        thisnewdf[xcol] = xarr
-        new_df = pd.concat([new_df, thisnewdf])    
-    
-    if args.re_limit is not None:
-        typical_re = 1 # in kpc
-        new_df[ycol] = new_df[ycol] * typical_re # converting from dex/kpc to dex/Re
-    ax = plot_filled_region(new_df, xcol, ycol, ax, color='salmon', noscatter=True, label='FOGGIE')
-
     # --------plotting Franchetto+21 data----------
     coeff = [-0.199, 0.199 * 10 - 0.432] # Franchetto+21 eq 6
     xarr = log_mass_lim
@@ -757,7 +760,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
 
     # ---------annotate axes and save figure-------
     plt.legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
-    ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
+    ax.set_xlabel(label_dict[mass_col], fontsize=args.fontsize)
     ax.set_ylabel(r'log $\nabla$Z$_r$ (dex/kpc)' if args.re_limit is None else r'log $\nabla$Z$_r$ (dex/R$_e$)', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
@@ -765,7 +768,8 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     #ax.set_ylim(-2.1, 1)
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'MZgrad_colorby_{colorcol}_Zdiag_{zgrad_col}_upto_{extent_text}.png'
+    xcol_text = 'z' if mass_col == 'redshift' else 'M' if 'mass' in mass_col else mass_col
+    figname = f'{xcol_text}Zgrad_colorby_{colorcol}_Zdiag_{zgrad_col}_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -1622,8 +1626,8 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_spectra=Fa
     ncol = len(args.line_list) # one each for OII, OIII, Hb and NeIII line
 
     # -------setting up the figure layout------------
-    #fig = plt.figure(figsize=(10, 7) if args.plot_ratio_maps else (10, 5))
-    fig = plt.figure(figsize=(7.5, 7) if args.plot_ratio_maps else (8, 5))
+    if len(args.line_list) > 3: fig = plt.figure(figsize=(10, 7) if args.plot_ratio_maps else (10, 5))
+    else: fig = plt.figure(figsize=(7.5, 7) if args.plot_ratio_maps else (8, 5))
     fig.subplots_adjust(left=0.09, right=0.9, top=0.94, bottom=0.07)
     outer_gs = gridspec.GridSpec(2, 1, height_ratios=[1, 2 if args.plot_ratio_maps else 1], figure=fig, hspace=0.2) # Outer GridSpec: 2 rows – top (loose), bottom (tight)
 
@@ -1638,7 +1642,8 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_spectra=Fa
     if args.plot_ratio_maps:
         axes_ratio_maps = [fig.add_subplot(bottom_gs[1, item]) for item in np.arange(ncol)]
         #ratios_to_plot = ['OII/NeIII-3867', 'OIII/OII', 'OII/Hb', 'OIII/Hb']
-        ratios_to_plot = ['OIII/OII', 'OII/Hb', 'OIII/Hb']
+        if len(args.line_list) > 3: ratios_to_plot = ['OIII/OII', 'OII/Hb', 'OIII/Hb', 'Ha/Hb']
+        else: ratios_to_plot = ['OIII/OII', 'OII/Hb', 'OIII/Hb']
 
     # ----------loading the full.fits and 1D.fits files--------------
     full_hdu = load_full_fits(objid, field, args)
@@ -3451,6 +3456,7 @@ if __name__ == "__main__":
 
     args.plot_conditions = 'SNR,photometry'.split(',')
     #args.line_list = 'OII,NeIII-3867,Hb,OIII'.split(',')
+    #args.line_list = 'OII,Hb,OIII,Ha'.split(',')
     args.line_list = 'OII,Hb,OIII'.split(',')
     args.SNR_thresh = 2
     
@@ -3499,7 +3505,7 @@ if __name__ == "__main__":
     #df_agn_fluxes, df_agn = plot_AGN_demarcation_figure_integrated(objlist, args, fontsize=15) # AGN demarcation
     
     # ---------single galaxy plot: Z map and gradient----------------------
-    #plot_metallicity_fig_single(1849, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
+    #plot_metallicity_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
     #plot_metallicity_fig_single(2128, 'glass-a2744', primary_Zdiag, args, fontsize=10) # zgrad plot
     #plot_metallicity_fit_tests(2867, 'Par028', primary_Zdiag, args, fontsize=10)
     

@@ -344,6 +344,7 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     # -------proceeding with plotting--------
     ax.scatter(df[xcol], df[ycol], c=df['agn_dist'] if metallicity_multi_color else 'grey', cmap=args.diverging_cmap if metallicity_multi_color else None, s=20 if args.vorbin else 1, alpha=1 if args.vorbin else 0.2)
     if ycol + '_err' in df: ax.errorbar(df[xcol], df[ycol], yerr=df[ycol + '_err'], c='grey', fmt='none', lw=2 if args.vorbin else 0.5, alpha=0.2 if args.vorbin else 0.1)
+    for index, row in df.iterrows(): ax.text(row[xcol], row[ycol], row['bin_ID'].astype(int), c='k', fontsize=args.fontsize/1.5)
 
     if args.radius_max is not None: ax.set_xlim(0, args.radius_max) # kpc
     ax.set_ylim(ymin, ymax)
@@ -1584,7 +1585,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
                         }
 
                 # -------running NB--------------
-                #print(f'Deb1576: binID {this_ID}: nlines={len(obs_fluxes)}, {dict(zip(line_labels, obs_fluxes))}, norm_line = {norm_line}') ##
+                print(f'Deb1576: binID {this_ID}: nlines={len(obs_fluxes)}, {dict(zip(line_labels, obs_fluxes))}, norm_line = {norm_line}') ##
                 Result = NB_Model_HII(obs_fluxes, obs_errs, line_labels, **kwargs)
 
                 # -------estimating the resulting logOH, and associated uncertainty-----------
@@ -2407,7 +2408,7 @@ def plot_metallicity_fig(full_hdu, args):
 
         # ---------plotting-------------
         if logOH_map is not None:
-            lim = [8.1, 8.8] if args.Zdiag == 'NB' else [7.1, 8.1] if args.Zbranch =='low' else [8.1, 8.8]
+            lim = [7.1, 9.2] if args.Zdiag == 'NB' else [7.1, 8.1] if args.Zbranch =='low' else [8.1, 8.8]
             ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
             if args.plot_snr:
                 OH_map = 10 ** logOH_map.data
