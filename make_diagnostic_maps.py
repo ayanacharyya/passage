@@ -1903,7 +1903,7 @@ def get_Z(full_hdu, args):
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map_upto_{extent_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}{AGN_diag_text}{NB_text}{exclude_text}.fits'
-
+    
     # ------checking if the outputfile already exists--------------
     if os.path.exists(output_fitsname) and not args.clobber:
         print(f'\nReading metallicity map from existing fits file {output_fitsname}')
@@ -1917,6 +1917,7 @@ def get_Z(full_hdu, args):
         if args.Zdiag == 'NB': line_label_array = hdu.header['LINES'].split(',')
 
     else:
+        print(f'\nNot found{output_fitsname}: making new one..')
         # --------deriving the metallicity map-------------
         if args.Zdiag == 'NB':
             logOH_map, logOH_int, logOH_sum, line_label_array = get_Z_NB(full_hdu, args)
@@ -1945,7 +1946,7 @@ def get_Z(full_hdu, args):
         # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
             df = pd.DataFrame({'distance': distance_map.flatten(), 'log_OH': logOH_map_val.flatten(),'log_OH_u': logOH_map_err.flatten(), 'bin_ID': bin_IDs_map.flatten()})
             
-            if args.distance_from_AGN_line_map is not None: df['agn_dist'] = args.distance_from_AGN_line_map.data.flatten()
+            if 'distance_from_AGN_line_map' in args and args.distance_from_AGN_line_map is not None: df['agn_dist'] = args.distance_from_AGN_line_map.data.flatten()
             df = df.dropna().reset_index(drop=True)
             df['bin_ID'] = df['bin_ID'].astype(int)
             df = df.groupby(['bin_ID'], as_index=False).agg(np.mean)
@@ -2155,7 +2156,6 @@ def get_direct_image_per_filter(full_hdu, filter, target_header, args, plot_test
         direct_map = np.roll(direct_map, args.ndelta_ypix, axis=1)
         direct_map_wht = np.roll(direct_map_wht, args.ndelta_ypix, axis=1)
 
-
         # ---------computing uncertainty-------------
         direct_map_err = 0.1 * np.abs(direct_map) # 1 / np.sqrt(direct_map_wht)
         direct_map = unp.uarray(direct_map, direct_map_err)
@@ -2262,6 +2262,116 @@ def plot_direct_images_all_filters(full_hdu, args):
     return fig
 
 # --------------------------------------------------------------------------------------------------------------------
+def correct_ha_C20(N2_plus_Ha_map, logOH_map):
+    '''
+    Extract the H-alpha flux from the N2+Halpha compund, following C20 metallicity calibration
+    '''
+    #log_N2Ha_logOH_poly_coeff = [1, -10] # from approx fit to MAPPINGS models
+    log_N2Ha_logOH_poly_coeff = [-0.489, 1.513, -2.554, -5.293, -2.867][::-1] # from Table 2 N2 row of Curti+2019
+
+    if hasattr(N2_plus_Ha_map, "__len__"): # if it is an array
+        logOH_arr = logOH_map.data.flatten()
+        log_N2Ha_arr = []
+        for logOH in logOH_arr:
+            try:
+                #log_N2Ha = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH)
+                log_N2Ha = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH - 8.69) # because using C19 N2 calibration
+                log_N2Ha_arr.append(log_N2Ha)
+            except:
+                log_N2Ha_arr.append(np.nan)
+        log_N2Ha_map = np.ma.masked_where(logOH_map.mask, np.reshape(log_N2Ha_arr, np.shape(logOH_map)))
+        N2Ha_map = np.ma.masked_where(log_N2Ha_map.mask, 10 ** log_N2Ha_map.data)
+
+        Ha_data = N2_plus_Ha_map.data / (1 + N2Ha_map.data)
+        Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask | N2Ha_map.mask, Ha_data)
+    else: # for single values
+        log_N2Ha_int = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH_map - 8.69)
+        N2Ha_int = 10 ** log_N2Ha_int
+        Ha_map = N2_plus_Ha_map / (1 + N2Ha_int)
+
+    return Ha_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_direct_image(full_hdu, filter, args, skip_vorbin=False):
+    '''
+    Loads the direct image for a given filter for a given object
+    Returns the image
+    '''
+    try:
+        hdu = full_hdu['DSCI', filter.upper()]
+        image = hdu.data
+        image_wht = None
+        exptime = 1
+    except:
+        try:
+            hdu = full_hdu['DSCI', f'{filter}-CLEAR']
+            image = hdu.data
+            image_wht = None
+            exptime = full_hdu[0].header[f'T_{filter.upper()}']
+        except:
+            try:
+                hdu = full_hdu['DSCI', f'{filter.upper()}-{filter.upper()}-CLEAR']
+                image = hdu.data
+                image_wht = None
+                exptime = full_hdu[0].header[f'T_{filter.upper()}']
+            except:
+                full_field_filename = args.input_dir / f'{args.field}' / 'Products' / f'{args.field}_{filter.lower()}-clear_drz_sci.fits'
+                print(f'{filter.upper()} not found in full_hdu extension. Therefore trying to get cutout from full field image {full_field_filename}')
+            
+                exptime = fits.open(full_field_filename)[0].header['EXPTIME']
+                pos = SkyCoord(full_hdu[0].header['RA'], full_hdu[0].header['DEC'], unit = 'deg')
+                size = 2 * args.arcsec_limit * u.arcsec
+                target_header = full_hdu['DSCI', 'F140W'].header
+                
+                temp1, temp2 = args.only_seg, args.vorbin
+                args.only_seg, args.vorbin = False, False
+                image = get_cutout(full_field_filename, pos, size, target_header, args)
+                image_wht = get_cutout(str(full_field_filename).replace('sci', 'wht'), pos, size, target_header, args)
+                args.only_seg, args.vorbin = temp1, temp2
+
+    image = np.roll(image, args.ndelta_xpix, axis=0)
+    image = np.roll(image, args.ndelta_ypix, axis=1)
+
+    image = trim_image(image, args, skip_re_trim=False)
+
+    if image_wht is not None:
+        image_wht = np.roll(image_wht, args.ndelta_xpix, axis=0)
+        image_wht = np.roll(image_wht, args.ndelta_ypix, axis=1)
+
+        image_wht = trim_image(image_wht, args, skip_re_trim=False)
+        image_err = 0.1 * np.abs(image_wht) # 1 / np.sqrt(image_wht)
+    else:
+        image_err = None
+
+    if args.only_seg: seg_mask = args.segmentation_map != args.id
+    else: seg_mask = False
+    image = np.ma.masked_where(seg_mask, image)
+    if image_err is not None: image_err = np.ma.masked_where(seg_mask, image_err)        
+
+    if args.vorbin and not skip_vorbin:
+        # -----------discarding low-snr pixels BEFORE vorbin, if any-----------------
+        if args.snr_cut is not None:
+            snr_map = image / image_err
+            snr_mask = (~np.isfinite(snr_map)) | (snr_map < args.snr_cut)
+            image = np.ma.masked_where(snr_mask, image.data)
+            if image_err is not None: image_err = np.ma.masked_where(snr_mask, image_err.data)
+
+        # ------smoothing the map before voronoi binning--------
+        smoothing_kernel = Box2DKernel(args.kernel_size, mode=args.kernel_mode)
+        image = np.ma.masked_where(image.mask, convolve(image.data, smoothing_kernel))
+        if image_err is not None: 
+            image_err = np.ma.masked_where(image_err.mask, convolve(image_err.data, smoothing_kernel))
+            image, image_err = bin_2D(image, args.voronoi_bin_IDs, map_err=image_err)
+        else:
+            image = bin_2D(image, args.voronoi_bin_IDs)
+
+    if True: ##image_err is None:
+        image_err = np.zeros(np.shape(image))
+    image = unp.uarray(image, image_err)
+
+    return image, exptime
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_starburst_map(full_hdu, axes, args, radprof_axes=None, vorbin_axes=None, snr_axes=None):
     '''
     Plots the Ha map, direct F115W map and their ratio (starbursty-ness map) in a given axis handle
@@ -2269,25 +2379,12 @@ def plot_starburst_map(full_hdu, axes, args, radprof_axes=None, vorbin_axes=None
     '''
     # ---------getting the Ha map-------------
     ha_map, _, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=True)
+    logOH_map, _, _, _ = get_Z(full_hdu, args)
+    ha_map = correct_ha_C20(ha_map, logOH_map)
 
     # ---------getting the direct image-------------
     filter = 'F115W'
-    try:
-        filter_hdu = full_hdu['DSCI', f'{filter.upper()}-CLEAR']
-    except:
-        try:
-            filter_hdu = full_hdu['DSCI', f'{filter.upper()}']
-        except:
-            try:
-                filter_hdu = full_hdu['DSCI', f'CLEAR']
-            except:
-                try:
-                    filter_hdu = full_hdu['DSCI', f'{filter.upper()}-{filter.upper()}-CLEAR']
-                except:
-                    print(f'\nWARNING: DSCI {filter.upper()}-CLEAR or {filter.upper()} extensions not found in full_hdu, so attempting read in DSCI F140W')
-                    filter_hdu = full_hdu['DSCI', 'F140W']
-    target_header = filter_hdu.header
-    direct_map = get_direct_image_per_filter(full_hdu, filter, target_header, args)
+    direct_map, _ = get_direct_image(full_hdu, filter, args)
     if direct_map is None:
         fig = plt.gcf()
         for index, ax in enumerate(np.atleast_1d(axes)):
@@ -2297,6 +2394,8 @@ def plot_starburst_map(full_hdu, axes, args, radprof_axes=None, vorbin_axes=None
             if args.plot_snr: fig.delaxes(np.atleast_1d(snr_axes)[index])
         return axes, None, None
 
+    if args.vorbin:
+        direct_map
     # ---------getting the ratio and seg maps-------------
     new_mask = unp.nominal_values(direct_map.data) == 0
     direct_map[new_mask] = 1 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
@@ -2308,7 +2407,8 @@ def plot_starburst_map(full_hdu, axes, args, radprof_axes=None, vorbin_axes=None
     # --------making arrays for subplots-------------
     maps_dict = {'direct':direct_map, 'ha':ha_map, 'ratio':ratio_map}
     labels_dict = {'direct':filter, 'ha':r'H$\alpha$', 'ratio':r'H$\alpha$/' + filter}
-    lims_dict = {'direct':[-4.5, -2], 'ha':[-20, -18], 'ratio':[-17, -14]}
+    #lims_dict = {'direct':[-2.7, -1.2], 'ha':[-19, -17], 'ratio':[-17, -14]}
+    lims_dict = {'direct':[None, None], 'ha':[-19, -17], 'ratio':[None, None]}
     if len(np.atleast_1d(axes)) > 1: sequence_to_plot = ['direct', 'ha', 'ratio']
     else: sequence_to_plot = ['ratio']
 
