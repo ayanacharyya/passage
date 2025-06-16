@@ -126,7 +126,7 @@ def plot_glass_venn(args, fontsize=10):
     # ----------annotate and save the diagram----------
     fig = ax.figure
     fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
-    fig.text(0.9, 0.9, f'Total {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes, fontsize=args.fontsize)
+    fig.text(0.9, 0.9, f'GLASS\nTotal {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes, fontsize=args.fontsize)
 
     plot_conditions_text = ''
     if np.array(['snr' in item.lower() for item in label_arr]).any(): plot_conditions_text += ','.join(args.line_list) + f',SNR>{args.SNR_thresh}'
@@ -164,7 +164,7 @@ def plot_passage_venn(fields, args, fontsize=10):
     # ----------annotate and save the diagram----------
     fig = ax.figure
     fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
-    fig.text(0.9, 0.9, f'Total {len(df_passage)} objects', c='k', ha='right', va='top', transform=ax.transAxes, fontsize=args.fontsize)
+    fig.text(0.9, 0.9, f'PASSAGE\nTotal {len(df_passage)} objects', c='k', ha='right', va='top', transform=ax.transAxes, fontsize=args.fontsize)
 
     has_fields = [str(int(item[3:])) for item in pd.unique(df_passage['field'])]
     has_fields.sort(key=natural_keys)
@@ -1270,10 +1270,10 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     
     linefit_original = original_fit(df, quant_x=quant_x, quant_y=quant)
     linefit_wls = wls_fit(df, quant_x=quant_x, quant_y=quant)
-    if quant in ['logOH', 'Z', 'log_OH'] and Zdiag in ['NB', 'R23']:
+    if quant in ['logOH', 'Z', 'log_OH'] and Zdiag in ['NB']:#, 'R23']:
         # run lenstronomy
-        linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
-        #linefit_lenstronomy = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
+        #linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
+        linefit_lenstronomy = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
         
         # run MCMC
         params_llim, params_median, params_ulim = mcmc_vorbin_fit(df, args, filter='F150W', quant_x=quant_x, quant_y=quant, plot_corner=False, Zdiag=f'{Zdiag}_{args.Zbranch}')
@@ -1993,7 +1993,8 @@ def load_metallicity_map(field, objid, Zdiag, args):
     elif 'glass' in field: survey = 'glass'
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map_upto_{extent_text}{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}{AGN_diag_text}{exclude_text}.fits'
+    C25_text = '_wC25' if args.use_C25 else ''
+    output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map_upto_{extent_text}{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}{AGN_diag_text}{exclude_text}{C25_text}.fits'
     ####################################
     if 'glass' in field and 'SNR_4.0' in str(output_fitsname):
         output_fitsname = Path(str(output_fitsname).replace('SNR_4.0', 'SNR_2.0'))
@@ -2025,7 +2026,8 @@ def load_metallicity_df(field, objid, Zdiag, args, ensure_sii=False):
     exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and Zdiag == 'NB' else ''
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map_upto_{extent_text}{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}{AGN_diag_text}{exclude_text}.fits'
+    C25_text = '_wC25' if args.use_C25 else ''
+    output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map_upto_{extent_text}{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}{AGN_diag_text}{exclude_text}{C25_text}.fits'
     ####################################
     if 'glass' in field and 'SNR_4.0' in str(output_fitsname):
         output_fitsname = Path(str(output_fitsname).replace('SNR_4.0', 'SNR_2.0'))
@@ -3461,7 +3463,7 @@ if __name__ == "__main__":
     args.SNR_thresh = 2
     
     args.Zdiag = 'R2,R3,R23,NB'.split(',')
-    #args.Zdiag += ['O3O2']
+    args.Zdiag += ['O3O2']
     args.colorcol = 'distance' if args.re_limit is None else 'distance_re'
     args.phot_models = 'nb'
     log_mass_lim = [7.5, 10]
@@ -3487,7 +3489,7 @@ if __name__ == "__main__":
     SEL_Zdiags = [item for item in args.Zdiag if 'NB' not in item]
 
     # ---------venn diagram plot----------------------
-    #plot_passage_venn(['Par028'], args, fontsize=10)
+    #lot_passage_venn(['Par028'], args, fontsize=10)
     #plot_glass_venn(args, fontsize=10)
 
     # ---------photoionisation model plots----------------------
@@ -3519,10 +3521,10 @@ if __name__ == "__main__":
     #plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10, exclude_ids=[1303])
 
     # --------to create dataframe of all metallicity quantities including radial fits, etc------------------
-    # for Zdiag in args.Zdiag:
-    #     if 'NB' in Zdiag: continue
-    #     for args.Zbranch in ['low', 'high']:
-    #         plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10)
+    for Zdiag in args.Zdiag:
+        if 'NB' in Zdiag: continue
+        for args.Zbranch in ['low']:#, 'high']:
+            plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10)
 
     # --------multi-panel Z map plots------------------
     #plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)

@@ -106,7 +106,7 @@ def plot_SFMS_Popesso23(ax, redshift, color='cornflowerblue'):
     Then overplots this on a given existing axis handle
     Returns axis handle
     '''
-    a0, a1, b0, b1, b2 = 0.2, -0.034, -26.134, 4.722, -0.1925  # Table 2, Eq 10
+    a0, a1, b0, b1, b2 = ufloat(0.2,0.02), ufloat(-0.034, 0.002), ufloat(-26.134,0.015), ufloat(4.722, 0.012), ufloat(-0.1925, 0.0011)  # Table 2, Eq 10
     log_mass_low_lim = 8.7 # lower limit of mass they fitted up to
 
     age_at_z = cosmo.age(redshift).value # Gyr
@@ -117,8 +117,11 @@ def plot_SFMS_Popesso23(ax, redshift, color='cornflowerblue'):
     log_mass2 = np.linspace(log_mass_low_lim, ax.get_xlim()[1], 20)
     log_SFR2 = (a1 * age_at_z + b1) * log_mass2 + b2 * (log_mass2) ** 2 + b0 + a0 * age_at_z
 
-    ax.plot(log_mass1, log_SFR1, ls='dashed', c=color, lw=2)
-    ax.plot(log_mass2, log_SFR2, ls='solid', c=color, lw=2, label=f'Popesso+23: z~{redshift}')
+    ax.plot(log_mass1, unp.nominal_values(log_SFR1), ls='dashed', c=color, lw=2)
+    ax.fill_between(log_mass1, unp.nominal_values(log_SFR1) - unp.std_devs(log_SFR1)/2, unp.nominal_values(log_SFR1) + unp.std_devs(log_SFR1)/2, alpha=0.3, facecolor=color)
+
+    ax.plot(log_mass2, unp.nominal_values(log_SFR2), ls='solid', c=color, lw=2, label=f'Popesso+23: z~{redshift}')
+    ax.fill_between(log_mass2, unp.nominal_values(log_SFR2) - unp.std_devs(log_SFR2)/2, unp.nominal_values(log_SFR2) + unp.std_devs(log_SFR2)/2, alpha=0.3, facecolor=color)
 
     return ax
 

@@ -198,7 +198,8 @@ def compare_line_ratios(df, ratio_list, args, lim=[-2, 2]):
 
     # ----------saving the figure-----------------
     colorby_text = '' if args.nocolorcoding or args.colorcol == 'ez_z_phot' else f'_colby_{args.colorcol}'
-    figname = args.output_dir / 'plots' / f'sum_vs_int_line_ratio_comparison_{args.snr_text}{args.only_seg_text}_{",".join(ratio_list).replace("/", "-")}{args.colorby_text}.png'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = args.output_dir / 'plots' / f'sum_vs_int_line_ratio_comparison_{args.snr_text}{args.only_seg_text}_{",".join(ratio_list).replace("/", "-")}{args.colorby_text}_upto_{extent_text}.png'
     ax.figure.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
@@ -256,14 +257,15 @@ if __name__ == "__main__":
     args.fontsize = 15
     args.only_seg = True
     args.vorbin = True
-    args.AGN_diag = 'Ne3O2'
-    args.voronoi_line = 'NeIII-3867'
-    args.voronoi_snr = float(4)
-    args.exclude_lines = 'SII'
+    #args.AGN_diag = 'Ne3O2'
+    args.voronoi_line = 'OII'
+    args.voronoi_snr = float(3)
+    #args.exclude_lines = 'SII'
     args.version_dict = {'passage': 'v0.5', 'glass': 'orig'}
+    #args.re_limit = 2.5
 
-    args.line_list = 'OII,NeIII-3867,Hb,OIII'.split(',')
-    args.Zdiag = 'O3O2,R2,R3,R23,NB'.split(',')
+    args.line_list = 'OII,Hb,OIII,NeIII-3867'.split(',')
+    args.Zdiag = [] # = 'O3O2,R2,R3,R23,NB'.split(',')
     ratio_list = ['OIII/Hb', 'OII/Hb', 'OIII/OII', 'NeIII-3867/OII']
 
     col_arr = np.tile(['salmon', 'sienna', 'cornflowerblue', 'darkolivegreen', 'darkgoldenrod', 'darkorchid', 'darkcyan', 'hotpink', 'rosybrown', 'peru', 'darkorange'], 30)
@@ -271,9 +273,8 @@ if __name__ == "__main__":
     args.clim = [7, 9] if 'Z' in args.colorcol else [None, None]
 
     # -------setting up objects to plot--------------
-    Par28_objects = [300, 1303, 1849, 2171, 2727, 2867]
-    #glass_objects = [1333, 1721, 1983, 2128]
-    glass_objects = [1721, 1983, 2128]
+    Par28_objects = [300, 1303, 1849, 2867]
+    glass_objects = [1721, 1983, 1991, 2128]
 
     passage_objlist = [['Par028', item] for item in Par28_objects]
     glass_objlist = [['glass-a2744', item] for item in glass_objects]
@@ -287,16 +288,20 @@ if __name__ == "__main__":
     args.exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 else ''
 
     # -------loading the dataframe------------------
-    output_dfname = args.output_dir / 'catalogs' / f'sum_vs_int_comparison_{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zbranch-{args.Zbranch}_AGNdiag_{args.AGN_diag}{args.exclude_text}.csv'
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    output_dfname = args.output_dir / 'catalogs' / f'sum_vs_int_comparison_{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zbranch-{args.Zbranch}_AGNdiag_{args.AGN_diag}{args.exclude_text}_upto_{extent_text}.csv'
 
     if not os.path.exists(output_dfname) or args.clobber:
         # ---------setting up the dataframe---------------
-        df = pd.DataFrame(columns=np.hstack([['field', 'objid', 'redshift'], \
+        columns = np.hstack([['field', 'objid', 'redshift']])
+        if len(args.line_list) > 0: columns = np.hstack([columns, np.hstack([
                                              np.hstack([[f'{item}_int', f'{item}_int_u'] for item in args.line_list]), \
-                                             np.hstack([[f'{item}_sum', f'{item}_sum_u'] for item in args.line_list]),
+                                             np.hstack([[f'{item}_sum', f'{item}_sum_u'] for item in args.line_list])])])
+        if len(args.Zdiag) > 0: columns = np.hstack([columns, np.hstack([
                                              np.hstack([[f'Z_{item}_int', f'Z_{item}_int_u'] for item in args.Zdiag]), \
                                              np.hstack([[f'Z_{item}_sum', f'Z_{item}_sum_u'] for item in args.Zdiag]), \
-                                             ]))
+                                             ])])
+        df = pd.DataFrame(columns=columns)
 
         # -----------gathering emission line fluxes and metallicties for all objects into a dataframe-----------
         for index, obj in enumerate(objlist):
@@ -316,12 +321,13 @@ if __name__ == "__main__":
                 logOH_int_arr.append(logOH_int)
                 logOH_sum_arr.append(logOH_sum)
 
-            this_row = np.hstack([[field, objid, z], \
+            this_row = np.hstack([[field, objid, z]])
+            if len(args.line_list) > 0: this_row = np.hstack([this_row, np.hstack([
                                   np.hstack([[item.n, item.s] for item in line_int_arr]), \
-                                  np.hstack([[item.n, item.s] for item in line_sum_arr]), \
+                                  np.hstack([[item.n, item.s] for item in line_sum_arr])])])
+            if len(args.Zdiag) > 0: this_row = np.hstack([this_row, np.hstack([     
                                   np.hstack([[item.n, item.s] for item in logOH_int_arr]), \
-                                  np.hstack([[item.n, item.s] for item in logOH_sum_arr]), \
-                                  ])
+                                  np.hstack([[item.n, item.s] for item in logOH_sum_arr])])])
             this_df = pd.DataFrame(dict(map(lambda i, j: (i, [j]), df.columns, this_row)))
             df = pd.concat([df, this_df])
 
@@ -334,6 +340,7 @@ if __name__ == "__main__":
         df = pd.read_csv(output_dfname)
 
     # --------------prepare dataframe---------------
+    df['objid'] = df['objid'].astype(int)
     df_base = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
     df = df_base.merge(df, on=['field', 'objid'], how='left')
     df['marker'] = df['field'].map(lambda x: 's' if 'glass' in x else 'o')

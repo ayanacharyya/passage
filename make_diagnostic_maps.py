@@ -1679,15 +1679,19 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
     Calculates and returns the metallicity given observed line fluxes ratio and coefficient, according to Curti+2019
     '''
     # -----handling turnover situations, where measured ratio is beyond model peak ratio---------
+    metallicity_offset = 0 if args.use_C25 else 8.69
     reasonable_Z_limit = [7, 9]
     model = np.poly1d(coeff)
     model_diff = np.polyder(model, m=1)
-    model_turnovers = np.roots(model_diff) + 8.69
+    model_turnovers = np.roots(model_diff) + metallicity_offset
     possible_model_turnovers = model_turnovers[(model_turnovers > reasonable_Z_limit[0]) & (model_turnovers < reasonable_Z_limit[1])]
-    logOH_turnover = np.max(possible_model_turnovers) # based on solving the differential of polynomial with above coefficients, this is the value of Z where the relation peaks
-    ratio_turnover = model(logOH_turnover - 8.69)
+    if len(possible_model_turnovers) > 0:
+        logOH_turnover = np.max(possible_model_turnovers) # based on solving the differential of polynomial with above coefficients, this is the value of Z where the relation peaks
+        ratio_turnover = model(logOH_turnover - metallicity_offset)
+    else:
+        logOH_turnover, ratio_turnover = np.nan, np.nan
 
-    if ax is not None:
+    if ax is not None and np.isfinite(logOH_turnover):
         for index, ax1 in enumerate(ax):
             ax1.axvline(logOH_turnover, ls='--', c='k', lw=1, label='Turnover location' if index == 0 else None)
             ax1.axhline(ratio_turnover, ls='--', c='k', lw=1)
@@ -1705,30 +1709,34 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
     # --------computing the metallicitities------------
     log_OH = []
 
-    for this_ratio in ratio_arr:
+    for index2, this_ratio in enumerate(ratio_arr):
         this_ratio = unp.nominal_values(this_ratio)
-        if this_ratio > ratio_turnover:
+        if np.isfinite(ratio_turnover) and this_ratio > ratio_turnover:
             log_OH.append(ufloat(logOH_turnover, 0.))
-            #if ax is not None: ax[1].scatter(logOH_turnover, this_ratio, lw=0, s=50, c='cornflowerblue')
+            if ax is not None: ax[1].axhline(this_ratio, lw=1, ls='solid', c='cornflowerblue')
         else:
             try:
                 poly_to_solve = np.hstack([coeff[:-1], [coeff[-1] - this_ratio]])
                 roots = np.roots(poly_to_solve)
-                real_roots = np.sort(roots[np.isreal(roots)]) + 8.69 # see Table 1 caption in Curti+19
+                real_roots = np.sort(roots[np.isreal(roots)]) + metallicity_offset # see Table 1 caption in Curti+19
                 possible_roots = real_roots[(real_roots > reasonable_Z_limit[0]) & (real_roots < reasonable_Z_limit[1])]
                 if branch == 'high': # THIS IS WHERE MAKING THE CHOICE TO GO WITH THE HIGHER METALLICITY BRANCH, WHEREVER THE CHOICE NEEDS TO BE MADE
                     this_log_OH = np.max(possible_roots)
                 elif branch == 'low':
                     this_log_OH = np.min(possible_roots)
                 log_OH.append(ufloat(this_log_OH, 0.))
-                if ax is not None:
-                    col_arr = ['k', 'g', 'b']
-                    for index, real_root in enumerate(real_roots): ax[0].scatter(real_root, this_ratio, lw=0, s=10, c=col_arr[index] if len(real_roots) > 1 else 'r')
-                    ratio_turnover2 = max(model(model_turnovers[-2]-8.69), model(reasonable_Z_limit[0] - 8.69))
-                    ax[1].scatter(this_log_OH, this_ratio, lw=0, s=10, c='g' if branch == 'low' and this_ratio > ratio_turnover2 else 'b' if branch == 'high' and this_ratio > ratio_turnover2 else 'r')
             except:
-                log_OH.append(ufloat(np.nan, np.nan))
+                this_log_OH = np.nan
+                log_OH.append(ufloat(this_log_OH, 0))
                 if ax is not None: ax[1].axhline(this_ratio, lw=0.5, c='grey', alpha=0.3)
+            
+            if np.isfinite(this_log_OH) and ax is not None:
+                col_arr = ['k', 'g', 'b']
+                for index, real_root in enumerate(real_roots): ax[0].scatter(real_root, this_ratio, lw=0, s=10, c=col_arr[index] if len(real_roots) > 1 else 'r')
+                if len(model_turnovers) < 2: this_model_turnover = model_turnovers[0]
+                else: this_model_turnover = model_turnovers[-2]
+                ratio_turnover2 = max(model(this_model_turnover - metallicity_offset), model(reasonable_Z_limit[0] - metallicity_offset))
+                ax[1].scatter(this_log_OH, this_ratio, lw=0, s=10, c='g' if branch == 'low' and this_ratio > ratio_turnover2 else 'b' if branch == 'high' and this_ratio > ratio_turnover2 else 'r')
 
     log_OH = np.reshape(log_OH, np.shape(ratio))
     if mask is not None: log_OH = np.ma.masked_where(mask, log_OH)
@@ -1769,7 +1777,7 @@ def get_emission_line_maps(full_hdu, line_labels, args, silent=False):
 # --------------------------------------------------------------------------------------------------------------------
 def get_Z_C19(full_hdu, args):
     '''
-    Computes and returns the spatially resolved as well as intregrated metallicity based on a given Curti+2019 calibration, from a given HDU
+    Computes and returns the spatially resolved as well as intregrated metallicity based on a given Curti+2019 and Cataldi+2025 calibrations, from a given HDU
     '''
     # ------getting appropriate emission lines and calibration coefficients--------------
     if args.Zdiag == 'O3O2':
@@ -1780,7 +1788,8 @@ def get_Z_C19(full_hdu, args):
         except ValueError: ratio_int = ufloat(np.nan, np.nan)
         try: ratio_sum = unp.log10(line_sum_arr[0] / line_sum_arr[1])
         except ValueError: ratio_sum = ufloat(np.nan, np.nan)
-        coeff = [-0.691, -2.944, -1.308]  # c0-2 parameters from Table 2 of Curti+19 3rd row (O3O2)
+        if args.use_C25: coeff = [0.01124, 0.03072, 0.1251, -0.01470] # from Table 4 of Cataldi+25
+        else: coeff = [-0.691, -2.944, -1.308]  # c0-2 parameters from Table 2 of Curti+19 3rd row (O3O2)
 
     elif args.Zdiag == 'R3':
         line_map_arr, line_int_arr, line_sum_arr = get_emission_line_maps(full_hdu, ['OIII', 'Hb'], args, silent=args.only_integrated)
@@ -1790,7 +1799,8 @@ def get_Z_C19(full_hdu, args):
         except ValueError: ratio_int = ufloat(np.nan, np.nan)
         try: ratio_sum = unp.log10(line_sum_arr[0] / line_sum_arr[1])
         except ValueError: ratio_sum = ufloat(np.nan, np.nan)
-        coeff = [-0.277, -3.549, -3.593, -0.981]  # c0-3 parameters from Table 2 of Curti+19 2nd row (R3)
+        if args.use_C25: coeff = [-3.587, -4.475, 1.345, -0.08951] # from Table 4 of Cataldi+25
+        else: coeff = [-0.277, -3.549, -3.593, -0.981]  # c0-3 parameters from Table 2 of Curti+19 2nd row (R3)
 
     elif args.Zdiag == 'R23':
         line_map_arr, line_int_arr, line_sum_arr = get_emission_line_maps(full_hdu, ['OIII', 'OII', 'Hb'], args, silent=args.only_integrated)
@@ -1802,7 +1812,8 @@ def get_Z_C19(full_hdu, args):
         except ValueError: ratio_int = ufloat(np.nan, np.nan)
         try: ratio_sum = unp.log10((line_sum_arr[0] + line_sum_arr[1]) / line_sum_arr[2])
         except ValueError: ratio_sum = ufloat(np.nan, np.nan)
-        coeff = [0.527, -1.569, -1.652, -0.421]  # c0-3 parameters from Table 2 of Curti+19 4th row (R23)
+        if args.use_C25: coeff = [-2.555, -3.192, 0.9630, -0.06351] # from Table 4 of Cataldi+25
+        else: coeff = [0.527, -1.569, -1.652, -0.421]  # c0-3 parameters from Table 2 of Curti+19 4th row (R23)
 
     elif args.Zdiag == 'O3S2':
         line_map_arr, line_int_arr, line_sum_arr = get_emission_line_maps(full_hdu, ['OIII', 'Hb', 'SII', 'Ha'], args, silent=args.only_integrated)
@@ -1846,7 +1857,8 @@ def get_Z_C19(full_hdu, args):
         except ValueError: ratio_int = ufloat(np.nan, np.nan)
         try: ratio_sum = unp.log10(line_sum_arr[0] / line_sum_arr[1])
         except ValueError: ratio_sum = ufloat(np.nan, np.nan)
-        coeff = [0.435, -1.362, -5.655, -4.851, -0.478, 0.736]  # c0-3 parameters from Table 2 of Curti+19 1st row (R2)
+        if args.use_C25: coeff = [-6.481, 0.8163] # from Table 4 of Cataldi+25
+        else: coeff = [0.435, -1.362, -5.655, -4.851, -0.478, 0.736]  # c0-3 parameters from Table 2 of Curti+19 1st row (R2)
 
     else:
         print(f'Could not apply any of the metallicity diagnostics, so returning NaN metallicities')
@@ -1864,9 +1876,10 @@ def get_Z_C19(full_hdu, args):
         Z_limits = [7, 9.5]
         ratio_limits = [-0.5, 1.2]
 
+        metallicity_offset = 0 if args.use_C25 else 8.69
         xarr = np.linspace(Z_limits[0], Z_limits[1], 100)
-        ax[0].plot(xarr, np.poly1d(coeff)(xarr - 8.69), lw=1, c='k', ls='dotted', label='C20 calibration')
-        ax[1].plot(xarr, np.poly1d(coeff)(xarr - 8.69), lw=1, c='k', ls='dotted')
+        ax[0].plot(xarr, np.poly1d(coeff)(xarr - metallicity_offset), lw=1, c='k', ls='dotted', label='C20 calibration')
+        ax[1].plot(xarr, np.poly1d(coeff)(xarr - metallicity_offset), lw=1, c='k', ls='dotted')
 
         ax[0].set_ylim(ratio_limits[0], ratio_limits[1])
         ax[0].set_xlim(Z_limits[0], Z_limits[1])
@@ -1902,7 +1915,8 @@ def get_Z(full_hdu, args):
     Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map_upto_{extent_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}{AGN_diag_text}{NB_text}{exclude_text}.fits'
+    C25_text = '_wC25' if args.use_C25 else ''
+    output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map_upto_{extent_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}{AGN_diag_text}{NB_text}{exclude_text}{C25_text}.fits'
     
     # ------checking if the outputfile already exists--------------
     if os.path.exists(output_fitsname) and not args.clobber:
@@ -2508,7 +2522,7 @@ def plot_metallicity_fig(full_hdu, args):
 
         # ---------plotting-------------
         if logOH_map is not None:
-            lim = [7.1, 9.2] if args.Zdiag == 'NB' else [7.1, 8.1] if args.Zbranch =='low' else [8.1, 8.8]
+            lim = [7.1, 9.2] if args.Zdiag == 'NB' else [7.1, 9.2] if args.Zbranch =='low' else [7.1, 9.2]
             ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
             if args.plot_snr:
                 OH_map = 10 ** logOH_map.data
