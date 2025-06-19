@@ -735,7 +735,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
         thisnewdf[xcol] = xarr
         new_df = pd.concat([new_df, thisnewdf])    
     
-    axes[1], p2 = plot_filled_region(new_df, xcol, ycol, axes[1], color='salmon', noscatter=True, label='FOGGIE')
+    axes[1], p2 = plot_filled_region(new_df, xcol, ycol, axes[1], color='salmon', noscatter=True, label='FOGGIE (Acharyya+25)')
 
     # --------plotting Wang+22 data: for dex/kpc----------
     p3 = axes[1].scatter(9.04, 0.165, color='goldenrod', marker='*', s=200, lw=1, edgecolor='k', label='Wang+22')
