@@ -1680,7 +1680,7 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
     '''
     # -----handling turnover situations, where measured ratio is beyond model peak ratio---------
     metallicity_offset = 0 if args.use_C25 else 8.69
-    reasonable_Z_limit = [7, 9]
+    reasonable_Z_limit = [6.5, 9]
     model = np.poly1d(coeff)
     model_diff = np.polyder(model, m=1)
     model_turnovers = np.roots(model_diff) + metallicity_offset
@@ -1733,11 +1733,12 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
             if np.isfinite(this_log_OH) and ax is not None:
                 col_arr = ['k', 'g', 'b']
                 for index, real_root in enumerate(real_roots): ax[0].scatter(real_root, this_ratio, lw=0, s=10, c=col_arr[index] if len(real_roots) > 1 else 'r')
-                if len(model_turnovers) < 2: this_model_turnover = model_turnovers[0]
-                else: this_model_turnover = model_turnovers[-2]
-                ratio_turnover2 = max(model(this_model_turnover - metallicity_offset), model(reasonable_Z_limit[0] - metallicity_offset))
-                ax[1].scatter(this_log_OH, this_ratio, lw=0, s=10, c='g' if branch == 'low' and this_ratio > ratio_turnover2 else 'b' if branch == 'high' and this_ratio > ratio_turnover2 else 'r')
-
+                try:
+                    this_model_turnover = model_turnovers[-2]
+                    ratio_turnover2 = max(model(this_model_turnover - metallicity_offset), model(reasonable_Z_limit[0] - metallicity_offset))
+                    ax[1].scatter(this_log_OH, this_ratio, lw=0, s=10, c='g' if branch == 'low' and this_ratio > ratio_turnover2 else 'b' if branch == 'high' and this_ratio > ratio_turnover2 else 'r')
+                except:
+                    pass
     log_OH = np.reshape(log_OH, np.shape(ratio))
     if mask is not None: log_OH = np.ma.masked_where(mask, log_OH)
 
@@ -1873,7 +1874,7 @@ def get_Z_C19(full_hdu, args):
         if args.Zbranch == 'high': ax[1].set_xlabel('log(O/H)+12 = max(solution)', fontsize=args.fontsize)
         elif args.Zbranch == 'low': ax[1].set_xlabel('log(O/H)+12 = min(solution)', fontsize=args.fontsize)
         ax[0].set_ylabel(f'Observed log {args.Zdiag}', fontsize=args.fontsize)
-        Z_limits = [7, 9.5]
+        Z_limits = [6.5, 9.5]
         ratio_limits = [-0.5, 1.2]
 
         metallicity_offset = 0 if args.use_C25 else 8.69
