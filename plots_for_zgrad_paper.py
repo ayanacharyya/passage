@@ -770,22 +770,37 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     p5 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=1, label=legend_dict[sample], ec='k', marker=marker_dict[sample])
     axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad'], yerr=df_lit['Zgrad_u'], color=color_dict[sample], lw=0.5, fmt='none')
     
-    # --------plotting Li+25 (JWST) data: for dex/kpc----------
+    # --------NOT plotting Li+25 (NGDEEP) redshift-binnd data: dex/kpc----------
     sample = 'li25'
+    redshift_bins = [0.228323913043,0.83149495798,1.27080989010,1.7380614592,2.20353918995,2.72550200322,3.24097725652]
+    redshift_bin_err = [0.15068650322,0.11935359080,0.1508593450,0.150354201085,0.135542672091,0.131702882241,0.136858778221]
+    zgrad_bin = [-0.03853139,-0.03113908,-0.00728418,0.0219643,0.01319803,-0.03173848,-0.03036552]
+    zgrad_bin_err = [0.00374489,0.00333496,0.00166307,0.00397386,0.00409635,0.01259178,0.01507544]
+
+    # --------plotting Li+25 (ASPIRE + FRESCO) mass-binned data: for dex/kpc vs mass----------
+    mass_bin = [7.74, 8.44, 9.06, 7.67, 8.14]
+    mass_bin_err = [0.21, 0.25, 0.31, 0.19, 0.4]
+    zgrad_bin = [-0.42,-0.22,0,-0.62,-0.30]
+    zgrad_bin_err = [0.17,0.16,0.18,0.22,0.22]
+
+    p6 = axes[1].scatter(mass_bin, zgrad_bin, color=color_dict[sample], lw=1, label=legend_dict[sample] + ' (z > 5; binned)', marker='D', ec='k', s=100)
+    axes[1].errorbar(mass_bin, zgrad_bin, xerr=mass_bin_err, yerr=zgrad_bin_err, color=color_dict[sample], lw=0.5, fmt='none')
+
+    # --------plotting Li+25 (NGDEEP) data: for dex/kpc vs mass----------
     df_lit = pd.read_csv(literature_dir / 'zgrad_Li25.dat', delim_whitespace=True)
 
     df_lit_sub = df_lit[df_lit['id'].str.contains('stack')]
-    p6 = axes[1].scatter(df_lit_sub['logMass'], df_lit_sub['zgrad'], color=color_dict[sample], lw=1, label=legend_dict[sample] + ' (stack)', marker='D', ec='k', s=100)
+    p7 = axes[1].scatter(df_lit_sub['logMass'], df_lit_sub['zgrad'], color=color_dict[sample], lw=1, label=legend_dict[sample] + ' (6 < z < 7; stacked)', marker='h', ec='k', s=100)
     axes[1].errorbar(df_lit_sub['logMass'], df_lit_sub['zgrad'], yerr=df_lit_sub['zgrad_err'], color=color_dict[sample], lw=0.5, fmt='none')
 
     df_lit_sub = df_lit[~(df_lit['id'].str.contains('stack'))]
-    p7 = axes[1].scatter(df_lit_sub['logMass'], df_lit_sub['zgrad'], color=color_dict[sample], lw=1, label=legend_dict[sample], marker='o')
+    p8 = axes[1].scatter(df_lit_sub['logMass'], df_lit_sub['zgrad'], color=color_dict[sample], lw=1, label=legend_dict[sample] + ' (z < 3.5)', marker='h')
     axes[1].errorbar(df_lit_sub['logMass'], df_lit_sub['zgrad'], yerr=df_lit_sub['zgrad_err'], color=color_dict[sample], lw=0.5, fmt='none')
 
     # --------plotting Venturi+24 data: for dex/re and dex/kpc----------
     sample = 'venturi24'
     df_lit = pd.read_csv(literature_dir / f'mzgr_{sample}.csv', comment='#', delim_whitespace=True)
-    p8 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad_re'], color=color_dict[sample], lw=1, label=legend_dict[sample], marker=marker_dict[sample], ec='k')
+    p9 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad_re'], color=color_dict[sample], lw=1, label=legend_dict[sample], marker=marker_dict[sample], ec='k')
     axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad_re'], yerr=df_lit['Zgrad_re_u'], color=color_dict[sample], lw=0.5, fmt='none')
 
     axes[1].scatter(df_lit['log_mass'], df_lit['Zgrad_kpc'], color=color_dict[sample], lw=1, label=legend_dict[sample], marker=marker_dict[sample], ec='k')
@@ -794,10 +809,10 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     # --------plotting Franchetto+21 data: for dex/kpc----------
     coeff = [-0.199, 0.199 * 10 - 0.432] # Franchetto+21 eq 6
     xarr = log_mass_lim
-    p9 = axes[1].plot(xarr, np.poly1d(coeff)(xarr), color='limegreen', ls='dotted', label='F21 forbidden')[0]
+    p10 = axes[1].plot(xarr, np.poly1d(coeff)(xarr), color='limegreen', ls='dotted', label='F21 forbidden')[0]
 
     # ---------annotate axes and save figure-------
-    handles = handles1 + [p2, p3] + handles + [p4, p5, p6, p7, p8, p9]
+    handles = handles1 + [p2, p3] + handles + [p4, p5, p6, p7, p8, p9, p10]
     labels = [h.get_label() for h in handles]
     fig.legend(handles, labels, loc='upper center', ncol=6, bbox_to_anchor=(0.5, 0.99), fontsize=args.fontsize / args.fontfactor)
 
