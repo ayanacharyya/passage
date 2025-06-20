@@ -632,7 +632,7 @@ def plot_MEx(df, args, mass_col='lp_mass', fontsize=10):
 
     return
 
-# ---------------------------------------------
+# -------------------------------------------------------------------------------------------------------------------
 def plot_filled_region(df, xcol, ycol, ax, color=None, noscatter=False, zorder=None, alpha=0.5, label=None):
     '''
     Function to overplot a filled region between multiple y-values for each x-value
@@ -657,6 +657,24 @@ def plot_filled_region(df, xcol, ycol, ax, color=None, noscatter=False, zorder=N
     return ax, p
 
 # --------------------------------------------------------------------------------------------------------------------
+def extract_middle(text, prefix, suffix):
+    '''
+    Build regex pattern with optional prefix/suffix
+    Returns string
+    '''
+    start = text.find(prefix)
+    if start != -1:
+        start += len(prefix)
+    else:
+        start = 0  # no prefix, start from beginning
+
+    end = text.find(suffix, start)
+    if end == -1:
+        end = len(text)  # no suffix, go till end
+
+    return text[start:end]
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsize=10):
     '''
     Plots and saves the mass-metallicity gradient plot given a dataframe with list of objects and properties
@@ -664,55 +682,42 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     args.fontsize = fontsize
     print(f'Plotting MZgrad...')
     zgrad_col = np.atleast_1d(zgrad_col)
-    if 'NB' in zgrad_col[0]: colorcol = 'logOH_sum_' + zgrad_col[0].split('_')[-1] # choose from ['redshift', 'SFR', 'Z_SFR_slope', 'logOH_sum_NB', 'logOH_int_NB', 'O3Hb', 'EB_V']
-    else: colorcol = 'logOH_sum_' + '_'.join(zgrad_col[0].split('_')[-2:])
-    lim_dict = defaultdict(lambda: [None, None], redshift=[1.7, 3.1])
-
+    lim_dict = defaultdict(lambda: [None, None], redshift=[1.7, 3.1], lp_mass=[7.0, 11.2])
     literature_dir = args.root_dir / 'zgrad_paper_plots' / 'literature'
     
     # ----------setting up the diagram----------
-    fig, axes = plt.subplots(1, 2, figsize=(13, 6)) # one for dex/re and another for dex/kpc
-    fig.subplots_adjust(left=0.07, right=0.93, bottom=0.1, top=0.83, wspace=0.3)
+    fig, axes = plt.subplots(1, 2, figsize=(13.5, 6)) # one for dex/re and another for dex/kpc
+    fig.subplots_adjust(left=0.07, right=0.99, bottom=0.1, top=0.78, wspace=0.2)
     label_dict = smart_dict({'redshift': 'Redshift', 'logOH_sum_NB': r'$\log$ (O/H) + 12 [NB]', 'lp_mass': r'log M$_*$/M$_{\odot}$'})
 
     # ----------plotting----------
     df = df.sort_values(by=mass_col)
-    if colorcol == 'O3Hb': df['O3Hb'] =np.log10(df['OIII'] / df['Hb'])
-    
-    handles1 = []
+    color_arr = ['darkkhaki', 'teal', 'yellowgreen']
+    this_work = []
     for index, this_zgrad_col in enumerate(zgrad_col):
+        Zdiag = extract_middle(this_zgrad_col, prefix='logOH_slope_mcmc_', suffix='_low')
+        if Zdiag != 'NB':
+            if '_' in Zdiag: Zdiag = '; '.join(Zdiag.split('_'))
+            else: Zdiag += '; C20'
+        
         for m in pd.unique(df['marker']):
             df_sub = df[df['marker'] == m]
-            axes[0].scatter(df_sub[mass_col], df_sub[this_zgrad_col], c=df_sub[colorcol], marker=m, plotnonfinite=True, s=150 - index * 50, lw=1, edgecolor='k', vmin=lim_dict[colorcol][0], vmax=lim_dict[colorcol][1], cmap='viridis', label='GLASS (This work)' if m == 's' and index == 0 else 'PASSAGE (This work)' if index == 0 else None, zorder=200)
-            p = axes[1].scatter(df_sub[mass_col], df_sub[this_zgrad_col] / df_sub['re_kpc'], c=df_sub[colorcol], marker=m, plotnonfinite=True, s=150 - index * 50, lw=1, edgecolor='k', vmin=lim_dict[colorcol][0], vmax=lim_dict[colorcol][1], cmap='viridis', label='GLASS (This work)' if m == 's' and index == 0 else 'PASSAGE (This work)' if index == 0 else None, zorder=200)
-            handles1.append(p)
+            Zdiag_text = f'This work; {Zdiag}'
+            if index == 0: this_label = f'{Zdiag_text} (GLASS)' if m == 's' else f'{Zdiag_text} (PASSAGE)'
+            elif m == 'o': this_label = Zdiag_text
+            else: this_label = None
 
-        if len(zgrad_col) > 1:
-            axes[0].plot(df[mass_col], df[this_zgrad_col], c='cornflowerblue', lw=1, ls=['solid', 'dashed', 'dotted'][index]) # for dex/re
-            axes[1].plot(df[mass_col], df[this_zgrad_col] / df['re_kpc'], c='cornflowerblue', lw=1, ls=['solid', 'dashed', 'dotted'][index]) # for dex/kpc
+            axes[0].scatter(df_sub[mass_col], df_sub[this_zgrad_col], c=color_arr[index], marker=m, plotnonfinite=True, s=150 - index * 50, lw=1, edgecolor='k', cmap='viridis', label=this_label, zorder=200)
+            h = axes[1].scatter(df_sub[mass_col], df_sub[this_zgrad_col] / df_sub['re_kpc'], c=color_arr[index], marker=m, plotnonfinite=True, s=150 - index * 50, lw=1, edgecolor='k', cmap='viridis', label=this_label, zorder=200)
+            this_work.append(h)
 
         if this_zgrad_col + '_u' in df:
-            axes[0].errorbar(df[mass_col], df[this_zgrad_col], yerr=df[this_zgrad_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5, zorder=100)
-            axes[1].errorbar(df[mass_col], df[this_zgrad_col] / df_sub['re_kpc'], yerr=df[this_zgrad_col + '_u'] / df_sub['re_kpc'], c='gray', fmt='none', lw=1, alpha=0.5, zorder=100)
+            axes[0].errorbar(df[mass_col], df[this_zgrad_col], yerr=df[this_zgrad_col + '_u'], c=color_arr[index], fmt='none', lw=1, alpha=0.5, zorder=100)
+            axes[1].errorbar(df[mass_col], df[this_zgrad_col] / df_sub['re_kpc'], yerr=df[this_zgrad_col + '_u'] / df_sub['re_kpc'], c=color_arr[index], fmt='none', lw=1, alpha=0.5, zorder=100)
 
         if mass_col + '_u' in df:
-            axes[0].errorbar(df[mass_col], df[this_zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5, zorder=100)
-            axes[1].errorbar(df[mass_col], df[this_zgrad_col] / df_sub['re_kpc'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5, zorder=100)
-
-    # ----------making colorbar----------
-    try:
-        Zgrad = np.array(args.Zdiag)[[f'logOH_slope_{item}' == zgrad_col[0] for item in args.Zdiag]][0]
-        clabel = r'$\log$ (O/H) + 12' + f' [{Zgrad}]'
-    except:
-        try:
-            clabel = r'$\log$ (O/H) + 12' + f' [{zgrad_col[0].split("_")[3:4]}]'
-        except:
-            clabel = label_dict[colorcol]
-    divider = make_axes_locatable(axes[1])
-    cax = divider.append_axes('right', size='5%', pad=0.01)
-    cbar = plt.colorbar(p, cax=cax)
-    cbar.set_label(clabel, fontsize=args.fontsize)
-    cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
+            axes[0].errorbar(df[mass_col], df[this_zgrad_col], xerr=df[mass_col + '_u'], c=color_arr[index], fmt='none', lw=1, alpha=0.5, zorder=100)
+            axes[1].errorbar(df[mass_col], df[this_zgrad_col] / df_sub['re_kpc'], xerr=df[mass_col + '_u'], c=color_arr[index], fmt='none', lw=1, alpha=0.5, zorder=100)
 
     for ax in axes: ax.axhline(0, ls='--', c='k', lw=0.5)
 
@@ -735,19 +740,16 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
         thisnewdf[xcol] = xarr
         new_df = pd.concat([new_df, thisnewdf])    
     
-    axes[1], p2 = plot_filled_region(new_df, xcol, ycol, axes[1], color='salmon', noscatter=True, label='FOGGIE (Acharyya+25)')
+    axes[1], foggie = plot_filled_region(new_df, xcol, ycol, axes[1], color='salmon', noscatter=True, label='FOGGIE (Acharyya+25)')
 
-    # --------plotting Wang+22 data: for dex/kpc----------
-    p3 = axes[1].scatter(9.04, 0.165, color='goldenrod', marker='*', s=200, lw=1, edgecolor='k', label='Wang+22')
-    axes[1].errorbar(9.04, 0.165, xerr=0.05, yerr=0.023, c='gray', fmt='none', lw=1, alpha=0.5)
-
-    # --------plotting Sharda+21 data: for both dex/re and dex/kpc----------
+    # ---------for plotting other observed data from literature------------
     legend_dict = {'sami': 'SAMI', 'manga': 'MaNGA', 'califa': 'CALIFA', 'sharda_scaling1': 'S21 scaling 1', 'sharda_scaling2': 'S21 scaling 2', 'mingozzi2020_izi': 'Mingozzi+20 (IZI)', 'wang17': 'Wang+17', 'jones15': 'Jones+15', 'venturi24': 'Venturi+24', 'li25': 'Li+25'}
-    marker_dict = {'sami': '+', 'manga': 'x', 'califa': '1', 'sharda_scaling1': 'v', 'sharda_scaling2': '^', 'mingozzi2020_izi': '2', 'wang17': 'D', 'jones15': 'D', 'venturi24': 'D', 'li25': 'D'}
+    marker_dict = {'sami': '+', 'manga': 'x', 'califa': '1', 'sharda_scaling1': 'v', 'sharda_scaling2': '^', 'mingozzi2020_izi': '<', 'wang17': 'v', 'jones15': '^', 'venturi24': '>', 'li25': 'D'}
     ls_dict = {'sami': 'dotted', 'manga': 'dotted', 'califa': 'dotted', 'sharda_scaling1': 'solid', 'sharda_scaling2': 'dashed', 'mingozzi2020_izi': 'dotted', 'wang17': 'dotted', 'jones15': 'dotted', 'venturi24': 'dotted', 'li25': 'dotted'}
-    color_dict = {'sami': 'firebrick', 'manga': 'chocolate', 'califa': 'darkgoldenrod', 'sharda_scaling1': 'k', 'sharda_scaling2': 'k', 'mingozzi2020_izi': 'crimson', 'wang17': 'brown', 'jones15': 'sienna', 'venturi24': 'cornflowerblue', 'li25': 'grey'}
-    
-    handles = []
+    color_dict = {'sami': 'firebrick', 'manga': 'chocolate', 'califa': 'darkgoldenrod', 'sharda_scaling1': 'k', 'sharda_scaling2': 'k', 'mingozzi2020_izi': 'peru', 'wang17': 'brown', 'jones15': 'sandybrown', 'venturi24': 'bisque', 'li25': 'grey'}
+ 
+   # --------plotting Sharda+21 data: for both dex/re and dex/kpc----------
+    s21 = []
     for ax, search_text in zip(axes, ['mzgr_*re.csv', 'mzgr_*kpc.csv']):
         literature_files = glob.glob(str(literature_dir / search_text))
         literature_files.sort(key=natural_keys)
@@ -755,27 +757,47 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
         for index, this_file in enumerate(literature_files):
             sample = '_'.join(Path(this_file).stem.split('_')[1:-1])
             df_lit = pd.read_csv(this_file, names=['log_mass', 'Zgrad'], sep=', ')
-            if 'scaling' in sample: p = ax.plot(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=1, ls=ls_dict[sample], label=legend_dict[sample])[0]
-            else: p = ax.scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], ec='k', s=50, lw=2, marker=marker_dict[sample], label=legend_dict[sample])
-            if 're' in search_text: handles.append(p)
+            if 'scaling' in sample: h = ax.plot(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=1, ls=ls_dict[sample], label=legend_dict[sample])[0]
+            else: h = ax.scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], ec='k', s=50, lw=2, marker=marker_dict[sample], label=legend_dict[sample])
+            if 're' in search_text: s21.append(h)
 
-    # --------plotting GLASS-HST data: for dex/re----------
-    sample = 'wang17'
-    df_lit = pd.read_csv(literature_dir / f'mzgr_{sample}.csv')
-    p4 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=1, label=legend_dict[sample], ec='k', marker=marker_dict[sample])
-    axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad'], yerr=df_lit['Zgrad_u'], color=color_dict[sample], lw=0.5, fmt='none')
+    # --------plotting Mingozzi+2020 MaNGA data: for dex/re----------
+    sample = 'mingozzi2020_izi'
+    df_lit = pd.read_csv(literature_dir / f'mzgr_{sample}.csv', names=['log_mass', 'Zgrad'], sep=', ')
+    m20 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], ec='k', marker=marker_dict[sample])
 
+     # --------plotting GLASS-HST data: for dex/re----------
     sample = 'jones15'
     df_lit = pd.read_csv(literature_dir / f'mzgr_{sample}.csv')
-    p5 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=1, label=legend_dict[sample], ec='k', marker=marker_dict[sample])
+    j15 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], ec='k', marker=marker_dict[sample])
     axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad'], yerr=df_lit['Zgrad_u'], color=color_dict[sample], lw=0.5, fmt='none')
     
-    # --------NOT plotting Li+25 (NGDEEP) redshift-binnd data: dex/kpc----------
+    sample = 'wang17'
+    df_lit = pd.read_csv(literature_dir / f'mzgr_{sample}.csv')
+    w17 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], ec='k', marker=marker_dict[sample])
+    axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad'], yerr=df_lit['Zgrad_u'], color=color_dict[sample], lw=0.5, fmt='none')
+
+    # --------plotting Wang+22 data: for dex/kpc----------
+    w22 = axes[1].scatter(9.04, 0.165, color='goldenrod', marker='*', s=200, lw=0.5, edgecolor='k', label='Wang+22')
+    axes[1].errorbar(9.04, 0.165, xerr=0.05, yerr=0.023, c='gray', fmt='none', lw=1, alpha=0.5)
+
+   # --------NOT plotting Li+25 (NGDEEP) redshift-binnd data: dex/kpc----------
     sample = 'li25'
     redshift_bins = [0.228323913043,0.83149495798,1.27080989010,1.7380614592,2.20353918995,2.72550200322,3.24097725652]
     redshift_bin_err = [0.15068650322,0.11935359080,0.1508593450,0.150354201085,0.135542672091,0.131702882241,0.136858778221]
     zgrad_bin = [-0.03853139,-0.03113908,-0.00728418,0.0219643,0.01319803,-0.03173848,-0.03036552]
     zgrad_bin_err = [0.00374489,0.00333496,0.00166307,0.00397386,0.00409635,0.01259178,0.01507544]
+
+    # --------plotting Li+25 (NGDEEP) data: for dex/kpc vs mass----------
+    df_lit = pd.read_csv(literature_dir / 'zgrad_Li25.dat', delim_whitespace=True)
+
+    df_lit_sub = df_lit[df_lit['id'].str.contains('stack')]
+    l25s = axes[1].scatter(df_lit_sub['logMass'], df_lit_sub['zgrad'], color=color_dict[sample], lw=1, label=legend_dict[sample] + ' (6 < z < 7; stacked)', marker='h', ec='k', s=100)
+    axes[1].errorbar(df_lit_sub['logMass'], df_lit_sub['zgrad'], yerr=df_lit_sub['zgrad_err'], color=color_dict[sample], lw=0.5, fmt='none')
+
+    df_lit_sub = df_lit[~(df_lit['id'].str.contains('stack'))]
+    l25 = axes[1].scatter(df_lit_sub['logMass'], df_lit_sub['zgrad'], color=color_dict[sample], lw=0.5, label=legend_dict[sample] + ' (z < 3.5)', marker='h')
+    axes[1].errorbar(df_lit_sub['logMass'], df_lit_sub['zgrad'], yerr=df_lit_sub['zgrad_err'], color=color_dict[sample], lw=0.5, fmt='none')
 
     # --------plotting Li+25 (ASPIRE + FRESCO) mass-binned data: for dex/kpc vs mass----------
     mass_bin = [7.74, 8.44, 9.06, 7.67, 8.14]
@@ -783,51 +805,40 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     zgrad_bin = [-0.42,-0.22,0,-0.62,-0.30]
     zgrad_bin_err = [0.17,0.16,0.18,0.22,0.22]
 
-    p6 = axes[1].scatter(mass_bin, zgrad_bin, color=color_dict[sample], lw=1, label=legend_dict[sample] + ' (z > 5; binned)', marker='D', ec='k', s=100)
+    l25b = axes[1].scatter(mass_bin, zgrad_bin, color=color_dict[sample], lw=1, label=legend_dict[sample] + ' (z > 5; binned)', marker='D', ec='k', s=100)
     axes[1].errorbar(mass_bin, zgrad_bin, xerr=mass_bin_err, yerr=zgrad_bin_err, color=color_dict[sample], lw=0.5, fmt='none')
-
-    # --------plotting Li+25 (NGDEEP) data: for dex/kpc vs mass----------
-    df_lit = pd.read_csv(literature_dir / 'zgrad_Li25.dat', delim_whitespace=True)
-
-    df_lit_sub = df_lit[df_lit['id'].str.contains('stack')]
-    p7 = axes[1].scatter(df_lit_sub['logMass'], df_lit_sub['zgrad'], color=color_dict[sample], lw=1, label=legend_dict[sample] + ' (6 < z < 7; stacked)', marker='h', ec='k', s=100)
-    axes[1].errorbar(df_lit_sub['logMass'], df_lit_sub['zgrad'], yerr=df_lit_sub['zgrad_err'], color=color_dict[sample], lw=0.5, fmt='none')
-
-    df_lit_sub = df_lit[~(df_lit['id'].str.contains('stack'))]
-    p8 = axes[1].scatter(df_lit_sub['logMass'], df_lit_sub['zgrad'], color=color_dict[sample], lw=1, label=legend_dict[sample] + ' (z < 3.5)', marker='h')
-    axes[1].errorbar(df_lit_sub['logMass'], df_lit_sub['zgrad'], yerr=df_lit_sub['zgrad_err'], color=color_dict[sample], lw=0.5, fmt='none')
 
     # --------plotting Venturi+24 data: for dex/re and dex/kpc----------
     sample = 'venturi24'
     df_lit = pd.read_csv(literature_dir / f'mzgr_{sample}.csv', comment='#', delim_whitespace=True)
-    p9 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad_re'], color=color_dict[sample], lw=1, label=legend_dict[sample], marker=marker_dict[sample], ec='k')
+    v24 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad_re'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], marker=marker_dict[sample], ec='k')
     axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad_re'], yerr=df_lit['Zgrad_re_u'], color=color_dict[sample], lw=0.5, fmt='none')
 
-    axes[1].scatter(df_lit['log_mass'], df_lit['Zgrad_kpc'], color=color_dict[sample], lw=1, label=legend_dict[sample], marker=marker_dict[sample], ec='k')
+    axes[1].scatter(df_lit['log_mass'], df_lit['Zgrad_kpc'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], marker=marker_dict[sample], ec='k')
     axes[1].errorbar(df_lit['log_mass'], df_lit['Zgrad_kpc'], yerr=df_lit['Zgrad_kpc_u'], color=color_dict[sample], lw=0.5, fmt='none')
 
-    # --------plotting Franchetto+21 data: for dex/kpc----------
+     # --------plotting Franchetto+21 data: for dex/kpc----------
     coeff = [-0.199, 0.199 * 10 - 0.432] # Franchetto+21 eq 6
     xarr = log_mass_lim
-    p10 = axes[1].plot(xarr, np.poly1d(coeff)(xarr), color='limegreen', ls='dotted', label='F21 forbidden')[0]
+    f21 = axes[1].plot(xarr, np.poly1d(coeff)(xarr), color='cornflowerblue', ls='dotted', label=f'Franchetto+21')[0]
 
     # ---------annotate axes and save figure-------
-    handles = handles1 + [p2, p3] + handles + [p4, p5, p6, p7, p8, p9, p10]
+    handles = this_work + [j15, w17, m20] + s21 + [w22, v24, l25, l25s, l25b] + [f21, foggie]
     labels = [h.get_label() for h in handles]
-    fig.legend(handles, labels, loc='upper center', ncol=6, bbox_to_anchor=(0.5, 0.99), fontsize=args.fontsize / args.fontfactor)
+    fig.legend(handles, labels, loc='upper center', ncol=5, bbox_to_anchor=(0.5, 0.99), fontsize=args.fontsize / args.fontfactor)
 
     for ax in axes:
         #ax.legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
         ax.set_xlabel(label_dict[mass_col], fontsize=args.fontsize)
         ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
-        ax.set_xlim(7., 11.2)
+        ax.set_xlim(lim_dict[mass_col][0], lim_dict[mass_col][1])
     axes[0].set_ylabel(r'log $\nabla$Z$_r$ (dex/R$_e$)', fontsize=args.fontsize)
     axes[1].set_ylabel(r'log $\nabla$Z$_r$ (dex/kpc)', fontsize=args.fontsize)
-    #ax.set_ylim(-2.1, 1)
+    #axes[0].set_ylim(-0.5, 1)
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     xcol_text = 'z' if mass_col == 'redshift' else 'M' if 'mass' in mass_col else mass_col
-    figname = f'{xcol_text}Zgrad_colorby_{colorcol}_Zdiag_{",".join(zgrad_col)}_upto_{extent_text}.png'
+    figname = f'{xcol_text}Zgrad_Zdiag_{",".join(zgrad_col)}_upto_{extent_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -3610,7 +3621,7 @@ if __name__ == "__main__":
     #plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=15)
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
-    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
+    plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
     #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='SFR', mgas_method='my')
