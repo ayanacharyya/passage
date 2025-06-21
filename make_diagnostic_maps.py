@@ -1680,7 +1680,8 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
     '''
     # -----handling turnover situations, where measured ratio is beyond model peak ratio---------
     metallicity_offset = 0 if args.use_C25 else 8.69
-    reasonable_Z_limit = [6.5, 9]
+    reasonable_Z_limit = [7.0, 8.4] if args.use_C25 else [7.6, 8.9] # Z limits within which each calibration is valid
+    #reasonable_Z_limit = [6.5, 9.1]
     model = np.poly1d(coeff)
     model_diff = np.polyder(model, m=1)
     model_turnovers = np.roots(model_diff) + metallicity_offset
@@ -1696,7 +1697,6 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
             ax1.axvline(logOH_turnover, ls='--', c='k', lw=1, label='Turnover location' if index == 0 else None)
             ax1.axhline(ratio_turnover, ls='--', c='k', lw=1)
             #ax1.fill_betweenx([-5, 5], reasonable_Z_limit[0], reasonable_Z_limit[1], color='cyan', alpha=0.1, lw=0)
-        ax[0].legend(loc='lower left')
 
     # --------determining data and masks------------
     if np.ma.isMaskedArray(ratio):
@@ -1708,18 +1708,26 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
 
     # --------computing the metallicitities------------
     log_OH = []
+    no_solution_not_labelled = True
 
     for index2, this_ratio in enumerate(ratio_arr):
         this_ratio = unp.nominal_values(this_ratio)
         if np.isfinite(ratio_turnover) and this_ratio > ratio_turnover:
             log_OH.append(ufloat(logOH_turnover, 0.))
-            if ax is not None: ax[1].axhline(this_ratio, lw=1, ls='solid', c='cornflowerblue')
+            if ax is not None:
+                ax[0].axhline(this_ratio, lw=0.5, ls='solid', c='sienna', alpha=0.5, label='No solution' if no_solution_not_labelled else None)
+                no_solution_not_labelled = False
         else:
             try:
                 poly_to_solve = np.hstack([coeff[:-1], [coeff[-1] - this_ratio]])
                 roots = np.roots(poly_to_solve)
                 real_roots = np.sort(roots[np.isreal(roots)]) + metallicity_offset # see Table 1 caption in Curti+19
                 possible_roots = real_roots[(real_roots > reasonable_Z_limit[0]) & (real_roots < reasonable_Z_limit[1])]
+                
+                impossible_roots = list(set(real_roots) - set(possible_roots))
+                if ax is not None:
+                    for index, real_root in enumerate(impossible_roots): ax[0].scatter(real_root, this_ratio, lw=0, s=10, c='grey')
+
                 if branch == 'high': # THIS IS WHERE MAKING THE CHOICE TO GO WITH THE HIGHER METALLICITY BRANCH, WHEREVER THE CHOICE NEEDS TO BE MADE
                     this_log_OH = np.max(possible_roots)
                 elif branch == 'low':
@@ -1728,19 +1736,26 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
             except:
                 this_log_OH = np.nan
                 log_OH.append(ufloat(this_log_OH, 0))
-                if ax is not None: ax[1].axhline(this_ratio, lw=0.5, c='grey', alpha=0.3)
-            
+                if ax is not None:
+                    ax[0].axhline(this_ratio, ls='solid', lw=0.5, c='sienna', alpha=0.5, label='No solution' if no_solution_not_labelled else None)
+                    no_solution_not_labelled = False
+
             if np.isfinite(this_log_OH) and ax is not None:
-                col_arr = ['k', 'g', 'b']
-                for index, real_root in enumerate(real_roots): ax[0].scatter(real_root, this_ratio, lw=0, s=10, c=col_arr[index] if len(real_roots) > 1 else 'r')
+                col_arr = ['cornflowerblue', 'limegreen', 'k']
+                for index, real_root in enumerate(possible_roots): ax[0].scatter(real_root, this_ratio, ec='k', lw=0.5, s=50, c=col_arr[index] if len(real_roots) > 1 else 'salmon', zorder=100)
                 try:
                     this_model_turnover = model_turnovers[-2]
                     ratio_turnover2 = max(model(this_model_turnover - metallicity_offset), model(reasonable_Z_limit[0] - metallicity_offset))
-                    ax[1].scatter(this_log_OH, this_ratio, lw=0, s=10, c='g' if branch == 'low' and this_ratio > ratio_turnover2 else 'b' if branch == 'high' and this_ratio > ratio_turnover2 else 'r')
+                    ax[1].scatter(this_log_OH, this_ratio, ec='k', lw=0.5, s=50, c='limegreen' if branch == 'low' and this_ratio > ratio_turnover2 else 'cornfloweblue' if branch == 'high' and this_ratio > ratio_turnover2 else 'salmon', zorder=100)
                 except:
                     pass
     log_OH = np.reshape(log_OH, np.shape(ratio))
     if mask is not None: log_OH = np.ma.masked_where(mask, log_OH)
+    if ax is not None:
+        handles, labels = ax[0].get_legend_handles_labels()
+        fig = ax[0].figure
+        fig.legend(handles, labels, bbox_to_anchor=(0.9, 0.1), loc='lower right', fontsize=args.fontsize)
+        #ax[0].legend(loc='lower left')
 
     return log_OH
 
@@ -1874,13 +1889,22 @@ def get_Z_C19(full_hdu, args):
         if args.Zbranch == 'high': ax[1].set_xlabel('log(O/H)+12 = max(solution)', fontsize=args.fontsize)
         elif args.Zbranch == 'low': ax[1].set_xlabel('log(O/H)+12 = min(solution)', fontsize=args.fontsize)
         ax[0].set_ylabel(f'Observed log {args.Zdiag}', fontsize=args.fontsize)
+        allowed_Z_limit = [7.0, 8.4] if args.use_C25 else [7.6, 8.9] # Z limits within which each calibration is valid
         Z_limits = [6.5, 9.5]
-        ratio_limits = [-0.5, 1.2]
+        ratio_limits = [-0., 1.5]
 
         metallicity_offset = 0 if args.use_C25 else 8.69
-        xarr = np.linspace(Z_limits[0], Z_limits[1], 100)
-        ax[0].plot(xarr, np.poly1d(coeff)(xarr - metallicity_offset), lw=1, c='k', ls='dotted', label='C20 calibration')
-        ax[1].plot(xarr, np.poly1d(coeff)(xarr - metallicity_offset), lw=1, c='k', ls='dotted')
+        xarr_valid = np.linspace(allowed_Z_limit[0], allowed_Z_limit[1], 100)
+        ax[0].plot(xarr_valid, np.poly1d(coeff)(xarr_valid - metallicity_offset), lw=3, c='k', ls='solid', label='Valid C25 calibration' if args.use_C25 else 'Valid C20 calibration')
+        ax[1].plot(xarr_valid, np.poly1d(coeff)(xarr_valid - metallicity_offset), lw=3, c='k', ls='solid')
+
+        xarr_full = np.linspace(Z_limits[0], Z_limits[1], 100)
+        ax[0].plot(xarr_full, np.poly1d(coeff)(xarr_full - metallicity_offset), lw=0.5, c='k', ls='dotted', label='Extrapolated C25 calibration' if args.use_C25 else 'Extrapolated C20 calibration')
+        ax[1].plot(xarr_full, np.poly1d(coeff)(xarr_full - metallicity_offset), lw=0.5, c='k', ls='dotted')
+
+        # for ax1 in ax:
+        #     ax1.fill_betweenx([-5, 5], Z_limits[0], allowed_Z_limit[0], color='grey', lw=0, alpha=0.2, label='Calibration invalid')
+        #     ax1.fill_betweenx([-5, 5], allowed_Z_limit[1], Z_limits[1], color='grey', lw=0, alpha=0.2)
 
         ax[0].set_ylim(ratio_limits[0], ratio_limits[1])
         ax[0].set_xlim(Z_limits[0], Z_limits[1])
@@ -2523,7 +2547,7 @@ def plot_metallicity_fig(full_hdu, args):
 
         # ---------plotting-------------
         if logOH_map is not None:
-            lim = [7.1, 9.2] if args.Zdiag == 'NB' else [7.1, 9.2] if args.Zbranch =='low' else [7.1, 9.2]
+            lim = [7.0, 9.2]
             ax, logOH_radfit = plot_2D_map(logOH_map, ax, args, takelog=False, label=r'Z (%s)$_{\rm int}$ = %.1f $\pm$ %.1f' % (args.Zdiag, logOH_int.n, logOH_int.s), cmap='viridis', radprof_ax=radprof_ax, hide_yaxis=True if args.plot_ionisation_parameter else False, vmin=lim[0], vmax=lim[1], metallicity_multi_color=args.Zdiag == 'P25')
             if args.plot_snr:
                 OH_map = 10 ** logOH_map.data
