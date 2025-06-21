@@ -1897,7 +1897,7 @@ def get_Z_C19(full_hdu, args):
         ax[0].set_ylabel(f'Observed log {args.Zdiag}', fontsize=args.fontsize)
         allowed_Z_limit = [7.0, 8.4] if args.use_C25 else [7.6, 8.9] # Z limits within which each calibration is valid
         Z_limits = [6.5, 9.5]
-        ratio_limits = [None, None] # [-0., 1.5]
+        ratio_limits = [-0., 1.5]
 
         metallicity_offset = 0 if args.use_C25 else 8.69
         xarr_valid = np.linspace(allowed_Z_limit[0], allowed_Z_limit[1], 100)

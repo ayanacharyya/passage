@@ -2654,22 +2654,8 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
         args = load_object_specific_args(full_hdu, args, field=field)
         markersize = 80
         marker='o' if 'Par' in field else 's'
-        log_int_array = []
 
-        # --------looping over diagnostics---------------------
-        for index2, Zdiag in enumerate(Zdiag_arr):
-            this_df, this_logOH_int, this_logOH_sum = load_metallicity_df(field, objid, Zdiag, args)
-            if index2 == 0:
-                df = this_df
-            else:
-                df = pd.merge(df, this_df, on = ['distance', 'bin_ID'])
-            df = df.rename(columns={'log_OH': f'log_OH_{Zdiag}', 'log_OH_u': f'log_OH_{Zdiag}_err'})
-            df['distance_re'] = df['distance'] / args.re_kpc # converting from kpc to Re
-            #log_int_array.append(this_logOH_int)
-            log_int_array.append(this_logOH_sum)
-
-       # ------now plotting for every diag combination--------------
-        df['color'] = color
+        # ------now plotting for every diag combination--------------
         for col_index in range(ncol):
             for row_index in range(nrow):
                 ax = axes[row_index][col_index]
@@ -2681,10 +2667,19 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
                     Zdiag1 = Zdiag_arr[Z1_index]
                     Zdiag2 = Zdiag_arr[Z2_index]
 
-                    if f'log_OH_{Zdiag1}' in df and f'log_OH_{Zdiag2}' in df:
+                    # --------reading in the two dataframes-------
+                    df_Zdiag1, logOH_int_Zdiag1, logOH_sum_Zdiag1 = load_metallicity_df(field, objid, Zdiag1, args)
+                    df_Zdiag1 = df_Zdiag1.rename(columns={'log_OH': f'log_OH_{Zdiag1}', 'log_OH_u': f'log_OH_{Zdiag1}_err'})
+                    df_Zdiag2, logOH_int_Zdiag2, logOH_sum_Zdiag2 = load_metallicity_df(field, objid, Zdiag2, args)
+                    df_Zdiag2 = df_Zdiag2.rename(columns={'log_OH': f'log_OH_{Zdiag2}', 'log_OH_u': f'log_OH_{Zdiag2}_err'})
+                    df = pd.merge(df_Zdiag1, df_Zdiag2, on = ['distance', 'bin_ID'])
+                    df['distance_re'] = df['distance'] / args.re_kpc # converting from kpc to Re
+                    df['color'] = color
+                
+                    if len(df) > 0:
                         # ---plotting integrated--
-                        ax.scatter(log_int_array[Z1_index].n, log_int_array[Z2_index].n, s=markersize, c=color, lw=1, edgecolor='k', marker=marker)
-                        ax.errorbar(log_int_array[Z1_index].n, log_int_array[Z2_index].n, xerr=log_int_array[Z1_index].s, yerr=log_int_array[Z2_index].s, c='grey', fmt='none', lw=0.5, alpha=0.5)
+                        ax.scatter(logOH_sum_Zdiag1.n, logOH_sum_Zdiag2.n, s=markersize, c=color, lw=1, edgecolor='k', marker=marker)
+                        ax.errorbar(logOH_sum_Zdiag1.n, logOH_sum_Zdiag2.n, xerr=logOH_sum_Zdiag1.s, yerr=logOH_sum_Zdiag2.s, c='grey', fmt='none', lw=0.5, alpha=0.5)
 
                         # ---plotting spatially resolved--
                         p = ax.scatter(df[f'log_OH_{Zdiag1}'], df[f'log_OH_{Zdiag2}'], s=markersize/4, c=df[args.colorcol], lw=0, marker=marker, cmap=color_lim_dict[args.colorcol][3], vmin=color_lim_dict[args.colorcol][0], vmax=color_lim_dict[args.colorcol][1])
@@ -2695,10 +2690,9 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
                         if 'NB' in Zdiag2: [x.set_linewidth(2) for x in ax.spines.values()] # making thicker borders for NB axes
 
                         # ----annotate axis----------
-                        if index == len(objlist) - 1:
-                            ax.set_xlim(Z_limits)
-                            ax.set_ylim(Z_limits)
-                            ax = annotate_axes(ax, Zdiag1, Zdiag2, args, hide_xaxis=Z2_index < nrow, hide_yaxis=Z1_index)
+                        ax.set_xlim(Z_limits)
+                        ax.set_ylim(Z_limits)
+                        ax = annotate_axes(ax, Zdiag1, Zdiag2, args, hide_xaxis=Z2_index < nrow, hide_yaxis=Z1_index)
                     else:
                         print(f'Cannot plot {Zdiag1} vs {Zdiag2} comparison for object {objid}')
 
@@ -3576,8 +3570,8 @@ if __name__ == "__main__":
     #plot_metallicity_fig_multiple(objlist, 'R23', args, fontsize=10, do_mcmc=True)
 
     # ---------metallicity comparison plots----------------------
-    plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
-    plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=10)
+    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
+    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=10)
     #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
 
     # ---------single galaxy plot: SFR map and correlation----------------------
