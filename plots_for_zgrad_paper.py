@@ -2960,8 +2960,9 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
     '''
     args.fontsize = fontsize
     print(f'Plotting histogram of {Zdiag_arr} for {len(objlist)} objects..')
-    turnover_ratio_dict = {'OII/Hb':[0.4, 0.53], 'OIII/Hb':[0.7, 0.78], 'OII,OIII/Hb':[0.9, 0.96], 'OIII/OII':[0.8, 0.96]}
-    monosolution_uplim_dict = {'OII/Hb':-0.2, 'OIII/Hb':0.2, 'OII,OIII/Hb':0.4}
+    turnover_ratio_dict = {'OII/Hb':np.nan, 'OIII/Hb':0.87, 'OII,OIII/Hb':1.02, 'OIII/OII':np.nan} # these are the limiting line ratios obtained using Cataldi+25 calibrations
+    monosolution_uplim_dict = {'OII/Hb':0.38, 'OIII/Hb':0.67, 'OII,OIII/Hb':0.94, 'OIII/OII':1.31} # these are the limiting line ratios obtained using Cataldi+25 calibrations
+    monosolution_lolim_dict = {'OII/Hb':-0.77, 'OIII/Hb':0.29, 'OII,OIII/Hb':0.50, 'OIII/OII':0.38} # these are the limiting line ratios obtained using Cataldi+25 calibrations
     Zdiag_ratios_dict = {'R2':'OII/Hb', 'R3':'OIII/Hb', 'R23':'OII,OIII/Hb', 'O3O2':'OIII/OII'}
     
     if np.array(['/' in item for item in np.atleast_1d(Zdiag_arr)]).any(): ratios = np.atleast_1d(Zdiag_arr)
@@ -3035,12 +3036,16 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
         shade_alpha = 0.2
         patches = []
         if ratio in turnover_ratio_dict:
-            ax.fill_betweenx([-50, 50], turnover_ratio_dict[ratio][0], turnover_ratio_dict[ratio][1], color='cyan', alpha=shade_alpha, lw=0, label='_nolegend_', zorder=-10)
-            patches.append(matplotlib.patches.Patch(facecolor='cyan', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Turnover zone\n(uncertain solution)' if index == len(ratios) - 1 else None))
-            ax.fill_betweenx([-50, 50], turnover_ratio_dict[ratio][1], ax.get_xlim()[1], color='limegreen', alpha=shade_alpha, lw=0, label='_no_legend', zorder=-10)
-            patches.append(matplotlib.patches.Patch(facecolor='limegreen', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Outside model\n(no solution)' if index == len(ratios) - 1 else None))
+            if np.isfinite(turnover_ratio_dict[ratio]):
+                ax.fill_betweenx([-50, 50], turnover_ratio_dict[ratio], ax.get_xlim()[1], color='limegreen', alpha=shade_alpha, lw=0, label='_no_legend', zorder=-10)
+                patches.append(matplotlib.patches.Patch(facecolor='limegreen', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Outside model\n(no solution)' if index == len(ratios) - 1 else None))
+            elif ratio in monosolution_uplim_dict:
+                ax.fill_betweenx([-50, 50], monosolution_uplim_dict[ratio], ax.get_xlim()[1], color='limegreen', alpha=shade_alpha, lw=0, label='_no_legend', zorder=-10)
+                patches.append(matplotlib.patches.Patch(facecolor='limegreen', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Outside model\n(no solution)' if index == len(ratios) - 1 else None))
+
         if ratio in monosolution_uplim_dict:
-            ax.fill_betweenx([-50, 50], ax.get_xlim()[0], monosolution_uplim_dict[ratio], color='salmon', alpha=shade_alpha, lw=0, label='_no_legend_', zorder=-10)
+            if ax.get_xlim()[0] < monosolution_lolim_dict[ratio]: ax.fill_betweenx([-50, 50], ax.get_xlim()[0], monosolution_lolim_dict[ratio], color='limegreen', alpha=shade_alpha, lw=0, label='_no_legend_', zorder=-10)
+            ax.fill_betweenx([-50, 50],  monosolution_lolim_dict[ratio], monosolution_uplim_dict[ratio], color='salmon', alpha=shade_alpha, lw=0, label='_no_legend_', zorder=-10)
             patches.append(matplotlib.patches.Patch(facecolor='salmon', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Only high-Z branch\n(one solution)' if index == len(ratios) - 1 else None))
 
         ax.set_ylim(ylim)

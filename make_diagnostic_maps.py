@@ -1686,6 +1686,7 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
     model_diff = np.polyder(model, m=1)
     model_turnovers = np.roots(model_diff) + metallicity_offset
     possible_model_turnovers = model_turnovers[(model_turnovers > reasonable_Z_limit[0]) & (model_turnovers < reasonable_Z_limit[1])]
+
     if len(possible_model_turnovers) > 0:
         logOH_turnover = np.max(possible_model_turnovers) # based on solving the differential of polynomial with above coefficients, this is the value of Z where the relation peaks
         ratio_turnover = model(logOH_turnover - metallicity_offset)
@@ -1698,7 +1699,12 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
             ax1.axhline(ratio_turnover, ls='--', c='k', lw=1)
             #ax1.fill_betweenx([-5, 5], reasonable_Z_limit[0], reasonable_Z_limit[1], color='cyan', alpha=0.1, lw=0)
 
-    # --------determining data and masks------------
+    # ---------getting the line ratio limits of this diagnostics-----------
+    print(f'\nDeb1691: ratio at turnover = {ratio_turnover}') ##
+    print(f'Ratio at min valid metallicity = {model(reasonable_Z_limit[0] - metallicity_offset)}')
+    print(f'Ratio at max valid metallicity = {model(reasonable_Z_limit[1] - metallicity_offset)}')
+
+     # --------determining data and masks------------
     if np.ma.isMaskedArray(ratio):
         ratio_arr = np.atleast_1d(ratio.data).flatten()
         mask = ratio.mask
@@ -1891,7 +1897,7 @@ def get_Z_C19(full_hdu, args):
         ax[0].set_ylabel(f'Observed log {args.Zdiag}', fontsize=args.fontsize)
         allowed_Z_limit = [7.0, 8.4] if args.use_C25 else [7.6, 8.9] # Z limits within which each calibration is valid
         Z_limits = [6.5, 9.5]
-        ratio_limits = [-0., 1.5]
+        ratio_limits = [None, None] # [-0., 1.5]
 
         metallicity_offset = 0 if args.use_C25 else 8.69
         xarr_valid = np.linspace(allowed_Z_limit[0], allowed_Z_limit[1], 100)
