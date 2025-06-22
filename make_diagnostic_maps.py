@@ -1629,7 +1629,8 @@ def get_Z_NB(full_hdu, args):
     if args.use_original_NB_grid: line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
                        'Ha':'Halpha', 'SII':'SII6716', 'NeIII-3867':'NeIII3869'}
     else: line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
-                       'Ha':'NII6583_Halpha', 'SII':'SII6716_31', 'NeIII-3867':'NeIII3869'}
+                       'Ha':'NII6583_Halpha', 'SII':'SII6716_31', 'NeIII-3867':'NeIII3869', 'OII-7325':'OII7320', \
+                       'HeI-5877':'HeI5876', 'Hg':'Hgamma', 'Hd':'Hdelta'}
 
     line_map_array, line_int_array, line_sum_array, line_label_array, line_waves_array = [], [], [], [], []
     for line in args.available_lines:
@@ -1658,7 +1659,8 @@ def get_Z_NB(full_hdu, args):
         if args.only_integrated:
             print(f'Deb1485: {line}: sum={line_sum:.2e}, sum-snr={line_sum.n / line_sum.s:.1f}, int={line_int:.2e}, int-snr={line_int.n / line_int.s:.1f}')
 
-        if line_snr > 2 and line in line_label_dict.keys() and line not in args.exclude_lines:
+        #if line_snr > 2 and line in line_label_dict.keys() and line not in args.exclude_lines:
+        if line in line_label_dict.keys() and line not in args.exclude_lines:
             line_map_array.append(line_map)
             line_int_array.append(line_int)
             line_sum_array.append(line_sum)

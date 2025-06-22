@@ -535,7 +535,7 @@ def plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=10):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
+def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10, do_fit=False):
     '''
     Plots and saves the SF-main sequence diagram given a dataframe with list of objects and properties
     '''
@@ -558,6 +558,12 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[sfr_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if args.annotate:
         for index, row in df.iterrows(): ax.text(row[mass_col], row[sfr_col], f'{row["objid"]}', fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
+
+    # -------fitting-----------------
+    if do_fit:
+        df = df.sort_values(by=mass_col)
+        linefit_wls = wls_fit(df, quant_x=mass_col, quant_y=sfr_col)
+        ax = plot_fitted_line(ax, linefit_wls, df[mass_col], 'salmon', args, quant='', short_label='', index=0)
 
     # ----------making colorbar----------
     cbar = plt.colorbar(p, pad=0.01)
@@ -3587,7 +3593,7 @@ if __name__ == "__main__":
     #         plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10)
 
     # --------multi-panel Z map plots------------------
-    #plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10, do_mcmc=True)
+    plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10, do_mcmc=True)
     #plot_metallicity_fig_multiple(objlist, 'R23', args, fontsize=10, do_mcmc=True)
 
     # ---------metallicity comparison plots----------------------
@@ -3615,7 +3621,7 @@ if __name__ == "__main__":
     #plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #df_agn = plot_AGN_demarcation_figure_integrated(df, args, fontsize=15)
-    #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
+    #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15, do_fit=args.fit_correlation)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15, do_fit=args.fit_correlation)
