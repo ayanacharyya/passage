@@ -1311,7 +1311,7 @@ def plot_fitted_line(ax, linefit, xarr, fit_color, args, quant='log_OH', short_l
     Computes and plots the fitted line given the linear fit parameters, on an axisting axis handle
     Returns axis handle
     '''
-
+    xarr = np.linspace(np.min(xarr), np.max(xarr), 10)
     if quant in ['logOH', 'Z', 'log_OH']: main_text = r'$\nabla$Z$_r$'
     else: main_text = r'$\nabla$'
     unit_text = 'dex/kpc' if args.re_limit is None else r'dex/R$_e$'
@@ -1826,9 +1826,14 @@ def plot_AGN_demarcation_ax(x_num, x_den, y_num, y_den, ax, args, color=None, ma
     y_ratio = unp.log10(unp.uarray(df['ynum'], df['ynum_u']) / unp.uarray(df['yden'], df['yden_u']))
     x_ratio = unp.log10(unp.uarray(df['xnum'], df['xnum_u']) / unp.uarray(df['xden'], df['xden_u']))
 
-    if color is None: color = get_distance_map_from_AGN_line(df['xnum'], df['xden'], df['ynum'], df['yden'], args).data
+    if color is None:
+        color = get_distance_map_from_AGN_line(df['xnum'], df['xden'], df['ynum'], df['yden'], args).data
+        cmap, vmin, vmax = args.diverging_cmap, -1, 1
+    elif color == 'distance':
+        color = df['distance']
+        cmap, vmin, vmax = 'viridis', None, None
 
-    p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, cmap=args.diverging_cmap, vmin=-1, vmax=1, marker=marker, s=size, lw=lw, edgecolor='w' if args.fortalk else 'k', zorder=10)
+    p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=size, lw=lw, edgecolor='w' if args.fortalk else 'k', zorder=10)
     #p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=df['distance'], cmap='viridis', vmin=0, vmax=5, marker=marker, s=size, lw=lw, edgecolor='w' if args.fortalk else 'k', zorder=10)
     ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c='gray', fmt='none', lw=lw, alpha=0.5)
 
@@ -1858,14 +1863,14 @@ def plot_AGN_demarcation_object(full_hdu, args, ax, marker='o', fontsize=10, siz
         xden_int = xden_int / factor
         xden_sum = xden_sum / factor
 
+   # -----------spatially_resolved-----------------------
+    ax, scatter_plot_handle = plot_AGN_demarcation_ax(xnum_map, xden_map, ynum_map, yden_map, ax, args, marker=marker, size=size, lw=0.5, color=args.AGN_colorby if 'AGN_colorby' in args else None)
+
     # -----------integrated-----------------------
     #ax, _ = plot_AGN_demarcation_ax(xnum_int, xden_int, ynum_int, yden_int, ax, args, marker=marker, size=4*size, lw=2)
     ax, _ = plot_AGN_demarcation_ax(xnum_sum, xden_sum, ynum_sum, yden_sum, ax, args, marker=marker, size=4*size, lw=2)
 
-    # -----------spatially_resolved-----------------------
-    ax, scatter_plot_handle = plot_AGN_demarcation_ax(xnum_map, xden_map, ynum_map, yden_map, ax, args, marker=marker, size=size, lw=0.5)
-
-    # -----------2D map inset-----------------------
+     # -----------2D map inset-----------------------
     ax_inset = ax.inset_axes([0.68, 0.68, 0.3, 0.3])
     distance_from_AGN_line_map = get_distance_map_from_AGN_line(xnum_map, xden_map, ynum_map, yden_map, args)
     ax_inset = plot_2D_map(distance_from_AGN_line_map, ax_inset, '', args, takelog=False, cmap=args.diverging_cmap, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=True, hide_cbar=True)
@@ -1895,7 +1900,8 @@ def plot_AGN_demarcation_figure_single(objid, field, args, fontsize=10):
     # -----------annotating axes-----------------------
     theoretical_lines, line_labels = get_AGN_func_methods(args)
     cbar = plt.colorbar(scatter_plot_handle)
-    cbar.set_label(f'Distance from {theoretical_lines[0]} line', fontsize=args.fontsize)
+    unit_text = r'kpc' if args.re_limit is None else r'R_e'
+    cbar.set_label(f'Distance from center ({unit_text})' if 'AGN_colorby' in args and args.AGN_colorby == 'distance' else f'Distance from {theoretical_lines[0]} line', fontsize=args.fontsize)
     cbar.ax.tick_params(labelsize=args.fontsize)
 
     ax.set_xlim(-1.6, 0.5)
@@ -2028,7 +2034,8 @@ def plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10, exclude_ids
     cax = fig.add_axes([0.92 + 0.01, 0.1, 0.01, 0.98 - 0.1])
     if scatter_plot_handle is not None:
         cbar = plt.colorbar(scatter_plot_handle, cax=cax, orientation='vertical')
-        cbar.set_label(f'Distance from {theoretical_lines[0]} line', fontsize=args.fontsize)
+        unit_text = r'kpc' if args.re_limit is None else r'R_e'
+        cbar.set_label(f'Distance from center ({unit_text})' if 'AGN_colorby' in args and args.AGN_colorby == 'distance' else f'Distance from {theoretical_lines[0]} line', fontsize=args.fontsize)
         cbar.ax.tick_params(labelsize=args.fontsize)
     
     # -----------saving figure------------
@@ -2609,7 +2616,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     fit_color = 'salmon'
     #linefit = original_fit(df, quant_x='log_sfr', quant_y='logOH')
     linefit = wls_fit(df, quant_x='log_sfr', quant_y='logOH')
-    axes[4] = plot_fitted_line(axes[4], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0].n: .2f}')
+    axes[4] = plot_fitted_line(axes[4], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
 
     # --------annotating axis--------------
     axes[4].text(0.95, 0.05, f'ID #{objid}', fontsize=args.fontsize, c='k', ha='right', va='bottom', transform=axes[4].transAxes)
@@ -3559,13 +3566,14 @@ if __name__ == "__main__":
     #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12, show_log_spectra=False, show_log_map=True)
     
     # ---------single galaxy plot: AGN demarcation----------------------
+    #args.AGN_colorby = 'distance'
     #plot_AGN_demarcation_figure_single(1303, 'Par028', args, fontsize=15) # AGN demarcation
     # temp_objlistg = [['glass-a2744', item] for item in [1333, 1983, 2128, 1721, 2273, 1991, 1504, 562, 3015, 34, 1622, 2928, 2492]]
     # temp_objlistp = [['Par028', item] for item  in [235,300,502,668,1302,1303,1634,1675,1798,1849,2038,2171,2180,2706,2727,2797,2867]]
     # objlist = temp_objlistg + temp_objlistp
     
     # --------multi-panel AGN demarcation plots------------------
-    #plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10, exclude_ids=[1303])
+    #plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10)#, exclude_ids=[1303])
 
     # ---------single galaxy plot: Z map and gradient----------------------
     #plot_metallicity_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
