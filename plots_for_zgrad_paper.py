@@ -440,11 +440,11 @@ def make_master_df(objlist, args, sum=True):
     #     df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)  # in Gyr
 
     method = 'my'
-    beta, B, kappa = 0.286, 51.6, 100.
+    beta, B, kappa = 0.286, 51.6, 1.
     slope = unp.uarray(df['logZ_logSFR_slope'], df['logZ_logSFR_slope_u'])
-    pix_area = df['npix_in_vorbin'] * df['pix_size_arcsec'] / df['redshift'].apply(lambda x: cosmo.arcsec_per_kpc_proper(x).value) # converting arcsec to kpc
-    Sigma = unp.uarray(df['SFR'] / pix_area, df['SFR_u'] / pix_area)
-    t_mix = 1e3 * slope / (B * (Sigma ** beta) * (beta + slope * kappa)) # in Myr
+    df['pix_area'] = df['npix_in_vorbin'] * df['pix_size_arcsec'] / df['redshift'].apply(lambda x: cosmo.arcsec_per_kpc_proper(x).value) # converting arcsec to kpc
+    Sigma = unp.uarray(df['SFR'] / df['pix_area'], df['SFR_u'] / df['pix_area'])
+    t_mix = slope / (B * (Sigma ** beta) * (beta + slope * kappa)) # in yr
     df['t_mix_' + method] = unp.nominal_values(t_mix)
     df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)
 
@@ -873,6 +873,8 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
         p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub['logOH_sum_NB'], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', vmin=7.5, vmax=9.1, label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
     if zgrad_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], yerr=df[zgrad_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+    if args.annotate:
+        for index, row in df.iterrows(): ax.text(row[mass_col], row[zgrad_col], f'{row["objid"]}', fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
     
     ax.axhline(0, ls='--', c='k' if not args.fortalk else 'w', lw=0.5)
 
@@ -931,6 +933,9 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
         if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     
     if not mgas_method == 'my': ax.axhline(0, ls='--', c='k', lw=0.5)
+    ax.axhline(0, c='k', ls='--', lw=0.5)
+    if args.annotate:
+        for index, row in df.iterrows(): ax.text(row[mass_col], row[f'{ycol}_{method}'], f'{row["objid"]}', fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
 
     # -------fitting-----------------
     if do_fit:
@@ -948,7 +953,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
 
     # ---------annotate axes and save figure-------
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
-    ax.set_ylabel(r'Metal mixing timescale $t_{mix}$ ' + '(Myr)' if mgas_method == 'my' else '(Gyr)', fontsize=args.fontsize)
+    ax.set_ylabel(r'Metal mixing timescale $t_{mix}$ (yr)', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
@@ -956,7 +961,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     elif mgas_method is not None and mgas_method == 'my': ax.set_ylim(None, None) #(-0.01, 0.4) #
     else: ax.set_ylim(-0.5, 0.6)
 
-    ax.legend(fontsize=args.fontsize, loc='upper left')
+    ax.legend(fontsize=args.fontsize, loc='upper right')
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     figname = f'M_tmix_colorby_{colorcol}_{mgas_method}_upto_{extent_text}.png' if mgas_method is not None else f'M_tmix_upto_{extent_text}.png'
@@ -3605,8 +3610,8 @@ if __name__ == "__main__":
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
-    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15, do_fit=False)
-    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='SFR', mgas_method='my', do_fit=False)
+    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15, do_fit=args.fit_correlation)
+    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='SFR', mgas_method='my', do_fit=args.fit_correlation)
 
     # -----------line ratio histograms--------------
     #full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)

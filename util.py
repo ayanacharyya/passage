@@ -242,6 +242,7 @@ def parse_args():
     parser.add_argument('--debug_Zsfr', dest='debug_Zsfr', action='store_true', default=False, help='Debug the metallicity-sfr plots? Default is no.')
     parser.add_argument('--histbycol', metavar='histbycol', type=str, action='store', default=None, help='Column name whose average per bin would be shown on line ratio histogram y-axis; Default is None, i.e., the usual counts will be on histogram y-axis')
     parser.add_argument('--clobber_mcmc', dest='clobber_mcmc', action='store_true', default=False, help='Over-write existing MCMC file? Default is no.')
+    parser.add_argument('--fit_correlation', dest='fit_correlation', action='store_true', default=False, help='Fit a slope between x and y? Default is no.')
 
     # ------- args added for integrated_vs_summed.py ------------------------------
     parser.add_argument('--nocolorcoding', dest='nocolorcoding', action='store_true', default=False, help='No color-coding for scatter plots? Default is no.')
