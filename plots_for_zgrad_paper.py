@@ -746,10 +746,10 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     axes[1], foggie = plot_filled_region(new_df, xcol, ycol, axes[1], color='salmon', noscatter=True, label='FOGGIE (Acharyya+25)')
 
     # ---------for plotting other observed data from literature------------
-    legend_dict = {'sami': 'SAMI', 'manga': 'MaNGA', 'califa': 'CALIFA', 'sharda_scaling1': 'S21 scaling 1', 'sharda_scaling2': 'S21 scaling 2', 'mingozzi2020_izi': 'Mingozzi+20 (IZI)', 'wang17': 'Wang+17', 'jones15': 'Jones+15', 'venturi24': 'Venturi+24', 'li25': 'Li+25'}
-    marker_dict = {'sami': '+', 'manga': 'x', 'califa': '1', 'sharda_scaling1': 'v', 'sharda_scaling2': '^', 'mingozzi2020_izi': '<', 'wang17': 'v', 'jones15': '^', 'venturi24': '>', 'li25': 'D'}
-    ls_dict = {'sami': 'dotted', 'manga': 'dotted', 'califa': 'dotted', 'sharda_scaling1': 'solid', 'sharda_scaling2': 'dashed', 'mingozzi2020_izi': 'dotted', 'wang17': 'dotted', 'jones15': 'dotted', 'venturi24': 'dotted', 'li25': 'dotted'}
-    color_dict = {'sami': 'firebrick', 'manga': 'chocolate', 'califa': 'darkgoldenrod', 'sharda_scaling1': 'k', 'sharda_scaling2': 'k', 'mingozzi2020_izi': 'peru', 'wang17': 'brown', 'jones15': 'sandybrown', 'venturi24': 'bisque', 'li25': 'grey'}
+    legend_dict = {'sami': 'SAMI', 'manga': 'MaNGA', 'califa': 'CALIFA', 'sharda_scaling1': 'S21 scaling 1', 'sharda_scaling2': 'S21 scaling 2', 'mingozzi2020_izi': 'Mingozzi+20 (IZI)', 'wang17': 'Wang+17', 'jones15': 'Jones+15', 'venturi24': 'Venturi+24', 'li25': 'Li+25', 'ju25': 'Ju+25'}
+    marker_dict = {'sami': '+', 'manga': 'x', 'califa': '1', 'sharda_scaling1': 'v', 'sharda_scaling2': '^', 'mingozzi2020_izi': '<', 'wang17': 'v', 'jones15': '^', 'venturi24': '>', 'li25': 'D', 'ju25': 'd'}
+    ls_dict = {'sami': 'dotted', 'manga': 'dotted', 'califa': 'dotted', 'sharda_scaling1': 'solid', 'sharda_scaling2': 'dashed', 'mingozzi2020_izi': 'dotted', 'wang17': 'dotted', 'jones15': 'dotted', 'venturi24': 'dotted', 'li25': 'dotted', 'ju25': 'dotted'}
+    color_dict = {'sami': 'firebrick', 'manga': 'chocolate', 'califa': 'darkgoldenrod', 'sharda_scaling1': 'k', 'sharda_scaling2': 'k', 'mingozzi2020_izi': 'peru', 'wang17': 'brown', 'jones15': 'sandybrown', 'venturi24': 'bisque', 'li25': 'grey', 'ju25': 'lightskyblue'}
  
    # --------plotting Sharda+21 data: for both dex/re and dex/kpc----------
     s21 = []
@@ -815,18 +815,27 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     sample = 'venturi24'
     df_lit = pd.read_csv(literature_dir / f'mzgr_{sample}.csv', comment='#', delim_whitespace=True)
     v24 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad_re'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], marker=marker_dict[sample], ec='k')
+    axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad_re'], xerr=df_lit['log_mass_u'], yerr=df_lit['Zgrad_re_u'], color=color_dict[sample], lw=0.5, fmt='none')
+
+    axes[1].scatter(df_lit['log_mass'], df_lit['Zgrad_kpc'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], marker=marker_dict[sample], ec='k')
+    axes[1].errorbar(df_lit['log_mass'], df_lit['Zgrad_kpc'], xerr=df_lit['log_mass_u'], yerr=df_lit['Zgrad_kpc_u'], color=color_dict[sample], lw=0.5, fmt='none')
+
+    # --------plotting Ju+25 data: for dex/re and dex/kpc----------
+    sample = 'ju25'
+    df_lit = pd.read_csv(literature_dir / f'mzgr_{sample}.csv', comment='#', delim_whitespace=True)
+    j25 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad_re'], color=color_dict[sample], lw=0.5, label=legend_dict[sample] + ' (z~1)', marker=marker_dict[sample], ec='k')
     axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad_re'], yerr=df_lit['Zgrad_re_u'], color=color_dict[sample], lw=0.5, fmt='none')
 
     axes[1].scatter(df_lit['log_mass'], df_lit['Zgrad_kpc'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], marker=marker_dict[sample], ec='k')
     axes[1].errorbar(df_lit['log_mass'], df_lit['Zgrad_kpc'], yerr=df_lit['Zgrad_kpc_u'], color=color_dict[sample], lw=0.5, fmt='none')
 
-     # --------plotting Franchetto+21 data: for dex/kpc----------
+    # --------plotting Franchetto+21 data: for dex/kpc----------
     coeff = [-0.199, 0.199 * 10 - 0.432] # Franchetto+21 eq 6
     xarr = log_mass_lim
     f21 = axes[1].plot(xarr, np.poly1d(coeff)(xarr), color='cornflowerblue', ls='dotted', label=f'Franchetto+21')[0]
 
     # ---------annotate axes and save figure-------
-    handles = this_work + [j15, w17, m20] + s21 + [w22, v24, l25, l25s, l25b] + [f21, foggie]
+    handles = this_work + [j15, w17, m20] + s21 + [w22, v24, l25, l25s, l25b, j25] + [f21, foggie]
     labels = [h.get_label() for h in handles]
     fig.legend(handles, labels, loc='upper center', ncol=5, bbox_to_anchor=(0.5, 0.99), fontsize=args.fontsize / args.fontfactor)
 
@@ -847,7 +856,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=10):
+def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=10, do_fit=False):
     '''
     Plots and saves the mass vs metallicity-SFR slope given a dataframe with list of objects and properties
     '''
@@ -866,6 +875,12 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     
     ax.axhline(0, ls='--', c='k' if not args.fortalk else 'w', lw=0.5)
+
+    # -------fitting-----------------
+    if do_fit:
+        df = df.sort_values(by=mass_col)
+        linefit_wls = wls_fit(df, quant_x=mass_col, quant_y=zgrad_col)
+        ax = plot_fitted_line(ax, linefit_wls, df[mass_col], 'salmon', args, quant='', short_label='', index=0)
 
     # ----------making colorbar----------
     cbar = plt.colorbar(p, pad=0.01)
@@ -889,7 +904,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_method='G20', colorcol='logZ_logSFR_slope'):
+def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_method='G20', colorcol='logZ_logSFR_slope', do_fit=False):
     '''
     Plots and saves the mass vs mixing timescale given a dataframe with list of objects and properties
     '''
@@ -917,18 +932,11 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     
     if not mgas_method == 'my': ax.axhline(0, ls='--', c='k', lw=0.5)
 
-    # -------trend fitting-------------
-    # fit_color = 'salmon'
-    # method = 'my'
-    # df2 = df[[mass_col, f'{ycol}_{method}', f'{ycol}_{method}' + '_u']]
-    # df2 = df2.dropna(axis=0)
-    # df2 = df2.sort_values(mass_col)
-    # ones = np.ones(len(df2))
-    # covariates = np.vstack((ones, df2[mass_col])).T
-    # #wls_model_fit = WLS(df2[f'{ycol}_{method}'], covariates, weights=1 / df2[f'{ycol}_{method}_u'] ** 2).fit()
-    # wls_model_fit = WLS(df2[f'{ycol}_{method}'], covariates, weights=1).fit()
-    # linefit = [ufloat(wls_model_fit.params['x1'], wls_model_fit.bse['x1']), ufloat(wls_model_fit.params['const'], wls_model_fit.bse['const'])]
-    # ax = plot_fitted_line(ax, linefit, df2[mass_col], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
+    # -------fitting-----------------
+    if do_fit:
+        df = df.sort_values(by=mass_col)
+        linefit_wls = wls_fit(df, quant_x=mass_col, quant_y=f'{ycol}_{method}')
+        ax = plot_fitted_line(ax, linefit_wls, df[mass_col], 'salmon', args, quant='', short_label='', index=0)
 
     # ----------making colorbar----------
     if mgas_method is not None:
@@ -3597,8 +3605,8 @@ if __name__ == "__main__":
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
-    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
-    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='SFR', mgas_method='my')
+    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15, do_fit=False)
+    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='SFR', mgas_method='my', do_fit=False)
 
     # -----------line ratio histograms--------------
     #full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)
