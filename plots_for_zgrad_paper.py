@@ -3593,7 +3593,7 @@ if __name__ == "__main__":
     #         plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10)
 
     # --------multi-panel Z map plots------------------
-    plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10, do_mcmc=True)
+    #plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10, do_mcmc=True)
     #plot_metallicity_fig_multiple(objlist, 'R23', args, fontsize=10, do_mcmc=True)
 
     # ---------metallicity comparison plots----------------------

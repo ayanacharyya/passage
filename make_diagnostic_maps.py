@@ -1111,7 +1111,9 @@ def compute_SFR(Ha_flux, distance):
         net_mask = False
 
     Ha_lum = Ha_flux * 4 * np.pi * (distance.to('cm').value) ** 2 # converting to ergs/s (luminosity)
-    sfr = Ha_lum * 7.9e-42 # luminosity in ergs/s; SFR in Msun/yr
+    #sfr = Ha_lum * 7.9e-42 # luminosity in ergs/s; SFR in Msun/yr; from Kennicutt+1998
+    #sfr = Ha_lum * 10**(-41.67) # luminosity in ergs/s; SFR in Msun/yr; from Reddy+2022
+    sfr = Ha_lum * ufloat(7.5, 1.3) * 10 ** (-42) # luminosity in ergs/s; SFR in Msun/yr; from Shivaei+2015
 
     if hasattr(Ha_flux, "__len__"): # if it is an array
         sfr = np.ma.masked_where(net_mask, sfr)
@@ -1668,10 +1670,12 @@ def get_Z_NB(full_hdu, args):
             line_waves_array.append(rest_wave_dict[line] * 10) # factor of 10 to convert from nm to Angstroms
 
     logOH_map = compute_Z_NB(line_label_array, line_waves_array, line_map_array) if not args.only_integrated else None
-    if (np.array(line_int_array) > 0).all(): logOH_int = compute_Z_NB(line_label_array, line_waves_array, line_int_array)
-    else: logOH_int = ufloat(np.nan, np.nan)
-    if (np.array(line_sum_array) > 0).all(): logOH_sum = compute_Z_NB(line_label_array, line_waves_array, line_sum_array)
-    else: logOH_sum = ufloat(np.nan, np.nan)
+    # if (np.array(line_int_array) > 0).all(): logOH_int = compute_Z_NB(line_label_array, line_waves_array, line_int_array)
+    # else: logOH_int = ufloat(np.nan, np.nan)
+    # if (np.array(line_int_array) > 0).all(): logOH_sum = compute_Z_NB(line_label_array, line_waves_array, line_sum_array)
+    # else: logOH_sum = ufloat(np.nan, np.nan)
+    logOH_int = compute_Z_NB(line_label_array, line_waves_array, line_int_array)
+    logOH_sum = compute_Z_NB(line_label_array, line_waves_array, line_sum_array)
 
     return logOH_map, logOH_int, logOH_sum, line_label_array
 
