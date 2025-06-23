@@ -44,6 +44,7 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import curve_fit, brentq
 from scipy import ndimage
 from scipy.optimize import minimize
+from scipy.odr import ODR, Model, RealData
 
 import regions
 from regions import Regions, PixCoord
@@ -190,6 +191,7 @@ try:
     ipython = get_ipython()
     if ipython is not None:
         ipython.run_line_magic('load_ext', 'autoreload')
+        ipython.run_line_magic('reload_ext', 'autoreload')
         ipython.run_line_magic('autoreload', '2')
 except Exception:
     pass
