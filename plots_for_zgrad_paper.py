@@ -440,11 +440,14 @@ def make_master_df(objlist, args, sum=True):
     #     df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)  # in Gyr
 
     method = 'my'
-    beta, B, kappa = 0.286, 51.6, 1.
+    A, alpha = 2.5e-4, 1.5
+    beta = 1 - 1/alpha
+    B = A ** (1 / alpha)
     slope = unp.uarray(df['logZ_logSFR_slope'], df['logZ_logSFR_slope_u'])
     df['pix_area'] = df['npix_in_vorbin'] * df['pix_size_arcsec'] / df['redshift'].apply(lambda x: cosmo.arcsec_per_kpc_proper(x).value) # converting arcsec to kpc
     Sigma = unp.uarray(df['SFR'] / df['pix_area'], df['SFR_u'] / df['pix_area'])
-    t_mix = slope / (B * (Sigma ** beta) * (beta + slope * kappa)) # in yr
+    t_mix = slope / (B * (Sigma ** beta) * (beta + slope)) # in yr
+    #t_mix = slope / (B * (Sigma ** beta) * beta) # in yr
     df['t_mix_' + method] = unp.nominal_values(t_mix)
     df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)
 
@@ -973,7 +976,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     elif mgas_method is not None and mgas_method == 'my': ax.set_ylim(None, None) #(-0.01, 0.4) #
     else: ax.set_ylim(-0.5, 0.6)
 
-    ax.legend(fontsize=args.fontsize, loc='best')
+    ax.legend(fontsize=args.fontsize / args.fontfactor, loc='upper right')
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     figname = f'M_tmix_colorby_{colorcol}_{mgas_method}_upto_{extent_text}.png' if mgas_method is not None else f'M_tmix_upto_{extent_text}.png'
