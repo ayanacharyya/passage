@@ -562,8 +562,8 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10, do_fi
     # -------fitting-----------------
     if do_fit:
         df = df.sort_values(by=mass_col)
-        linefit_wls = wls_fit(df, quant_x=mass_col, quant_y=sfr_col)
-        ax = plot_fitted_line(ax, linefit_wls, df[mass_col], 'salmon', args, quant='', short_label='', index=0)
+        linefit_odr = odr_fit(df, quant_x=mass_col, quant_y=sfr_col)
+        ax = plot_fitted_line(ax, linefit_odr, df[mass_col], 'salmon', args, quant='', short_label=True, index=0)
 
     # ----------making colorbar----------
     cbar = plt.colorbar(p, pad=0.01)
@@ -887,8 +887,14 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     # -------fitting-----------------
     if do_fit:
         df = df.sort_values(by=mass_col)
-        linefit_wls = wls_fit(df, quant_x=mass_col, quant_y=zgrad_col)
-        ax = plot_fitted_line(ax, linefit_wls, df[mass_col], 'salmon', args, quant='', short_label='', index=0)
+        #linefit = odr_fit(df, quant_x=mass_col, quant_y=zgrad_col)
+        #ax = plot_fitted_line(ax, linefit, df[mass_col], 'salmon', args, quant='', short_label=True, index=0)
+        df = df.dropna(subset = [mass_col, zgrad_col], axis=0)
+        linefit = np.polyfit(df[mass_col], df[zgrad_col], 1)
+        xarr = np.linspace(ax.get_xlim()[0] * 1.001, ax.get_xlim()[1] * 0.999, 10)
+        y_fitted = np.poly1d(linefit)(xarr)
+        ax.plot(xarr, y_fitted, color='salmon', lw=1, ls='dashed')
+        ax.text(0.1, 0.05, f' Slope = {linefit[0]: .2f}', c='salmon', fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
 
     # ----------making colorbar----------
     cbar = plt.colorbar(p, pad=0.01)
@@ -901,7 +907,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
-    ax.set_ylim(-1, 2)
+    ax.set_ylim(-15, 10)
 
     ax.legend(fontsize=args.fontsize, loc='upper left')
 
@@ -922,7 +928,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     
     # ----------setting up the diagram----------
     fig, ax = plt.subplots(1, figsize=(8, 6))
-    fig.subplots_adjust(left=0.12, right=0.99, bottom=0.1, top=0.95)
+    fig.subplots_adjust(left=0.14, right=0.99, bottom=0.1, top=0.95)
 
     if mgas_method is None:
         mgas_methods = [item.split('_')[-1] for item in df.columns if 'log_mgas' in item]
@@ -946,8 +952,8 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     # -------fitting-----------------
     if do_fit:
         df = df.sort_values(by=mass_col)
-        linefit_wls = wls_fit(df, quant_x=mass_col, quant_y=f'{ycol}_{method}')
-        ax = plot_fitted_line(ax, linefit_wls, df[mass_col], 'salmon', args, quant='', short_label='', index=0)
+        linefit_odr = odr_fit(df, quant_x=mass_col, quant_y=f'{ycol}_{method}')
+        ax = plot_fitted_line(ax, linefit_odr, df[mass_col], 'salmon', args, quant='', short_label=True, index=0)
 
     # ----------making colorbar----------
     if mgas_method is not None:
@@ -967,7 +973,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     elif mgas_method is not None and mgas_method == 'my': ax.set_ylim(None, None) #(-0.01, 0.4) #
     else: ax.set_ylim(-0.5, 0.6)
 
-    ax.legend(fontsize=args.fontsize, loc='upper right')
+    ax.legend(fontsize=args.fontsize, loc='best')
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     figname = f'M_tmix_colorby_{colorcol}_{mgas_method}_upto_{extent_text}.png' if mgas_method is not None else f'M_tmix_upto_{extent_text}.png'
@@ -1326,7 +1332,7 @@ def plot_fitted_line(ax, linefit, xarr, fit_color, args, quant='log_OH', short_l
         y_fitted = np.poly1d(unp.nominal_values(linefit))(xarr)
         y_low = np.poly1d(unp.nominal_values(linefit) - unp.std_devs(linefit))(xarr)
         y_up = np.poly1d(unp.nominal_values(linefit) + unp.std_devs(linefit))(xarr)
-        value_text = f'{linefit[0].n: .2f}' if short_label else f'{linefit[0]: .2f}'
+        value_text = f'{linefit[0]: .2f}'
     
     else:
         y_fitted = np.poly1d(linefit[0])(xarr)
@@ -1360,7 +1366,7 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     quant_x = 'distance'
     
     linefit_original = original_fit(df, quant_x=quant_x, quant_y=quant)
-    linefit_wls = wls_fit(df, quant_x=quant_x, quant_y=quant)
+    linefit_odr = odr_fit(df, quant_x=quant_x, quant_y=quant)
     if do_mcmc:
         # run lenstronomy
         linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
@@ -1387,14 +1393,14 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     xarr = df[quant_x]
     if do_mcmc:
         #ax = plot_fitted_line(ax, linefit_original, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
-        #ax = plot_fitted_line(ax, linefit_wls, xarr, 'sienna', args, quant=quant, short_label=short_label, index=1)
+        #ax = plot_fitted_line(ax, linefit_odr, xarr, 'sienna', args, quant=quant, short_label=short_label, index=1)
         #ax = plot_fitted_line(ax, linefit_lenstronomy, xarr, 'green', args, quant=quant, short_label=short_label, index=2)
         #ax = plot_fitted_line(ax, linefit_mcmc, xarr, 'cornflowerblue', args, quant=quant, short_label=short_label, index=3)
         ax = plot_fitted_line(ax, [params_median[:2], params_llim[:2], params_ulim[:2]], xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
     else:
         #ax = plot_fitted_line(ax, linefit_original, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
-        #ax = plot_fitted_line(ax, linefit_wls, xarr, 'sienna', args, quant=quant, short_label=short_label, index=1)
-        ax = plot_fitted_line(ax, linefit_wls, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
+        #ax = plot_fitted_line(ax, linefit_odr, xarr, 'sienna', args, quant=quant, short_label=short_label, index=1)
+        ax = plot_fitted_line(ax, linefit_odr, xarr, 'salmon', args, quant=quant, short_label=short_label, index=0)
 
     ax.set_aspect('auto') 
 
@@ -1403,8 +1409,8 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     if ylim is not None: ax.set_ylim(ylim[0], ylim[1])
     if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)' if args.re_limit is None else r'Radius (R$_e$)', label_dict[quant], args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
     
-    if quant in ['logOH', 'Z', 'log_OH']: return ax, [linefit_original, linefit_wls, linefit_lenstronomy, params_llim, params_median, params_ulim]
-    else: return ax, [linefit_original, linefit_wls]
+    if quant in ['logOH', 'Z', 'log_OH']: return ax, [linefit_original, linefit_odr, linefit_lenstronomy, params_llim, params_median, params_ulim]
+    else: return ax, [linefit_original, linefit_odr]
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_linelist(ax, fontsize=10, line_list_file=None, show_log_flux=False):
@@ -2227,7 +2233,7 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10, do_mcmc=Fal
         
         # ------plotting metallicity radial profile-----------
         axes[2], linefit = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit], hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, short_label=False, Zdiag=Zdiag, do_mcmc=do_mcmc)
-        linefit_original, linefit_wls, linefit_lenstronomy, params_llim, params_median, params_ulim = linefit
+        linefit_original, linefit_odr, linefit_lenstronomy, params_llim, params_median, params_ulim = linefit
         linefit_mcmc = unp.uarray(params_median[:2], np.mean([np.array(params_median[:2]) - np.array(params_llim[:2]), np.array(params_ulim[:2]) - np.array(params_median[:2])], axis=0))
         axes[2].yaxis.set_label_position('right')
         axes[2].yaxis.tick_right()
@@ -2244,7 +2250,7 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10, do_mcmc=Fal
         df_logOH_fit = pd.DataFrame({'field': field, 'objid': objid, 
                                      'logOH_sum': logOH_sum.n, 'logOH_sum_u': logOH_sum.s, 'logOH_int': logOH_int.n, 'logOH_int_u': logOH_int.s, 
                                      'logOH_cen': linefit_original[1].n, 'logOH_cen_u': linefit_original[1].s, 'logOH_slope': linefit_original[0].n, 'logOH_slope_u': linefit_original[0].s, 
-                                     'logOH_cen_wls': linefit_wls[1].n, 'logOH_cen_wls_u': linefit_wls[1].s, 'logOH_slope_wls': linefit_wls[0].n, 'logOH_slope_wls_u': linefit_wls[0].s, 
+                                     'logOH_cen_wls': linefit_odr[1].n, 'logOH_cen_wls_u': linefit_odr[1].s, 'logOH_slope_wls': linefit_odr[0].n, 'logOH_slope_wls_u': linefit_odr[0].s, 
                                      'logOH_cen_lenstronomy': linefit_lenstronomy[1].n, 'logOH_cen_lenstronomy_u': linefit_lenstronomy[1].s, 'logOH_slope_lenstronomy': linefit_lenstronomy[0].n, 'logOH_slope_lenstronomy_u': linefit_lenstronomy[0].s, 
                                      'logOH_cen_mcmc': linefit_mcmc[1].n, 'logOH_cen_mcmc_u': linefit_mcmc[1].s, 'logOH_slope_mcmc': linefit_mcmc[0].n, 'logOH_slope_mcmc_u': linefit_mcmc[0].s,
                                      'logOH_cen_mcmc_llim': params_llim[1], 'logOH_cen_mcmc_ulim': params_ulim[1], 'logOH_slope_mcmc_llim': params_llim[0], 'logOH_slope_mcmc_ulim': params_ulim[0],
@@ -2418,11 +2424,10 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     axes[1].scatter(df['log_sfr'], df['logOH'], c='grey', s=20, alpha=1)
     axes[1].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
 
-    # -------radial fitting-------------
+    # -------Z vs SFR fitting-------------
     fit_color = 'salmon'
-    #linefit = original_fit(df, quant_x='log_sfr', quant_y='logOH')
-    linefit = wls_fit(df, quant_x='log_sfr', quant_y='logOH')
-    axes[1] = plot_fitted_line(axes[1], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0].n: .2f}')
+    linefit = odr_fit(df, quant_x='log_sfr', quant_y='logOH')
+    axes[1] = plot_fitted_line(axes[1], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
 
     # --------annotating axis--------------
     axes[1].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
@@ -2505,11 +2510,10 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         axes[1].scatter(df['log_sfr'], df['logOH'], c='grey', s=20, alpha=1)
         axes[1].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
 
-        # -------radial fitting-------------
+        # -------Z vs SFR fitting-------------
         fit_color = 'salmon'
-        #linefit = original_fit(df, quant_x='log_sfr', quant_y='logOH')
-        linefit = wls_fit(df, quant_x='log_sfr', quant_y='logOH')
-        axes[1] = plot_fitted_line(axes[1], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0].n: .2f}')
+        linefit = odr_fit(df, quant_x='log_sfr', quant_y='logOH')
+        axes[1] = plot_fitted_line(axes[1], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
 
         # --------annotating axis--------------
         axes[1].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
@@ -2618,10 +2622,9 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     axes[4].scatter(df['log_sfr'], df['logOH'], c='grey', s=20, alpha=1)
     axes[4].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
 
-    # -------radial fitting-------------
+    # -------Z vs SFR fitting-------------
     fit_color = 'salmon'
-    #linefit = original_fit(df, quant_x='log_sfr', quant_y='logOH')
-    linefit = wls_fit(df, quant_x='log_sfr', quant_y='logOH')
+    linefit = odr_fit(df, quant_x='log_sfr', quant_y='logOH')
     axes[4] = plot_fitted_line(axes[4], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
 
     # --------annotating axis--------------
@@ -2630,6 +2633,20 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     axes[4].set_ylim(Zlim[0], Zlim[1])
     axes[4] = annotate_axes(axes[4], r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args, hide_xaxis=False, hide_yaxis=False, hide_cbar=True)
     axes[4].set_aspect('equal')
+
+    # ----------append fit to dataframe and save-----------
+    if 'Par' in field: survey = 'passage'
+    elif 'glass' in field: survey = 'glass'
+    output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
+    ####################################
+    if 'glass' in field and 'SNR_4.0' in str(output_dfname):
+        output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
+        print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
+    ####################################
+    df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'logZ_logSFR_cen': linefit[1].n, 'logZ_logSFR_cen_u': linefit[1].s, 'logZ_logSFR_slope': linefit[0].n, 'logZ_logSFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, 'extent_unit': 'arcsec' if args.re_limit is None else 're', 'extent_value': args.arcsec_limit if args.re_limit is None else args.re_limit}, index=[0])
+    df_Zsfr_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
+    print(f'Appended metallicity-sfr fit to catalog file {output_dfname}')
+
     # -----------saving figure------------
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     figname = f'metallicity-sfr_radial_profile_{objid:05d}_upto_{extent_text}.png'
@@ -3412,6 +3429,26 @@ def original_fit(df, quant_x='distance_arcsec', quant_y='log_OH'):
     return linefit
 
 # --------------------------------------------------------------------------------------------------------------------
+def odr_fit(df_input, quant_x='distance_arcsec', quant_y='log_OH'):
+    '''
+    Fits the x and y columns using WLS
+    Returns fitted parameters
+    '''
+    df = df_input[[quant_x, quant_y, quant_y + '_u']]
+    df = df.dropna(axis=0)
+    try:
+        model = Model(lambda param, x: np.poly1d(param)(x))
+        data = RealData(df[quant_x], df[quant_y], sy=df[quant_y + '_u'] if quant_y + '_u' in df else None, sx=df[quant_x + '_u'] if quant_x + '_u' in df else None)
+        odr = ODR(data, model, beta0=[1., 0.])  # Initial guess for slope and intercept
+        output = odr.run()
+        linefit = [ufloat(output.beta[0], output.sd_beta[0]), ufloat(output.beta[1], output.sd_beta[1])]
+    except:
+        print(f'WARNING: Could not fit radial profile via ODR, returning nan fit parameters')
+        linefit = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
+
+    return linefit
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_metallicity_fit_tests(objid, field, Zdiag, args, filter='F150W', fontsize=10):
     '''
     Test various radial fitting methods (polyfit, WLS, lenstronomy)
@@ -3432,7 +3469,7 @@ def plot_metallicity_fit_tests(objid, field, Zdiag, args, filter='F150W', fontsi
 
     # -------doing the radial fits--------------
     linefit_original = original_fit(logOH_df, quant_x=quant_x, quant_y=quant_y)
-    linefit_wls = wls_fit(logOH_df, quant_x=quant_x, quant_y=quant_y)
+    linefit_odr = odr_fit(logOH_df, quant_x=quant_x, quant_y=quant_y)
     # run lenstronomy
     linefit_lenstronomy, filter_image, logOH_map, logOH_map_lenstronomy = lenstronomy_fit_wrap(logOH_df, args, filter=filter, supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant_y, return_intermediate=True)
     
@@ -3490,7 +3527,7 @@ def plot_metallicity_fit_tests(objid, field, Zdiag, args, filter='F150W', fontsi
     xarr = logOH_df[quant_x]
     
     radprof_ax.plot(xarr, np.poly1d(unp.nominal_values(linefit_original))(xarr), color='salmon', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit_original[0].n:.2f}')
-    radprof_ax.plot(xarr, np.poly1d(unp.nominal_values(linefit_wls))(xarr), color='sienna', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit_wls[0].n:.2f}')
+    radprof_ax.plot(xarr, np.poly1d(unp.nominal_values(linefit_odr))(xarr), color='sienna', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit_odr[0].n:.2f}')
     radprof_ax.plot(xarr, np.poly1d(unp.nominal_values(linefit_lenstronomy))(xarr), color='green', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit_lenstronomy[0].n:.2f}')
     radprof_ax.plot(xarr, np.poly1d(unp.nominal_values(linefit_mcmc))(xarr), color='cornflowerblue', lw=1, ls='dashed', label=r'$\nabla$Z$_r$ = ' + f'{linefit_mcmc[0].n:.2f}')
     radprof_ax.legend(fontsize=args.fontsize / args.fontfactor, loc='upper left')
