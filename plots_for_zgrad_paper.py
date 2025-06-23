@@ -2449,6 +2449,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     print(f'Appended metallicity-sfr fit to catalog file {output_dfname}')
 
 # -----------saving figure------------
+    axes[1].text(0.05, 0.85, r'$\log$(M/M$_{\odot}$) =' + f'{args.log_mass: .2f}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
     axes[1].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
     debug_text = '_debug' if args.debug_Zsfr else ''
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
@@ -2516,6 +2517,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         axes[1] = plot_fitted_line(axes[1], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
 
         # --------annotating axis--------------
+        axes[0].text(0.05, 0.95, r'$\log$(M/M$_{\odot}$) =' + f'{args.log_mass: .2f}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[0].transAxes)
         axes[1].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
         axes[1].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
         axes[1].set_ylim(Zlim[0], Zlim[1])
@@ -2628,6 +2630,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     axes[4] = plot_fitted_line(axes[4], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
 
     # --------annotating axis--------------
+    axes[4].text(0.05, 0.95, r'$\log$(M/M$_{\odot}$) =' + f'{args.log_mass: .2f}', fontsize=args.fontsize, c='k', ha='left', va='top', transform=axes[4].transAxes)
     axes[4].text(0.95, 0.05, f'ID #{objid}', fontsize=args.fontsize, c='k', ha='right', va='bottom', transform=axes[4].transAxes)
     axes[4].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
     axes[4].set_ylim(Zlim[0], Zlim[1])
