@@ -2067,7 +2067,7 @@ def load_metallicity_map(field, objid, Zdiag, args):
     Returns 2D image
     '''
     Zbranch_text = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
-    exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and Zdiag == 'NB' else ''
+    exclude_text = f'_without_{",".join(args.exclude_lines)}' if len(args.exclude_lines) > 0 and Zdiag == 'NB' else ''
     if 'Par' in field: survey = 'passage'
     elif 'glass' in field: survey = 'glass'
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
@@ -2102,7 +2102,7 @@ def load_metallicity_df(field, objid, Zdiag, args, ensure_sii=False):
     if 'Par' in field: survey = 'passage'
     elif 'glass' in field: survey = 'glass'
     Zbranch_text = '' if np.array([item in Zdiag for item in ['NB', 'P25']]).any() else f'-{args.Zbranch}'
-    exclude_text = f'_without_{args.exclude_lines}' if len(args.exclude_lines) > 0 and Zdiag == 'NB' else ''
+    exclude_text = f'_without_{",".join(args.exclude_lines)}' if len(args.exclude_lines) > 0 and Zdiag == 'NB' else ''
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     C25_text = '_wC25' if args.use_C25 and 'NB' not in Zdiag else ''
@@ -2770,41 +2770,44 @@ def plot_nb_comparison_sii(objlist, args, fontsize=10):
     print(f'Plotting NB comparison wth and without SII..')
 
     # -------setting limits and colors-----------
-    Z_limits = [7.1, 9.1]
-    color_lim_dict = {'color':[None, None, '', ''], 'bin_ID':[None, None, 'Voronoi bin ID', 'rainbow'], 'radius':[0, 5, 'Galactocentric distance (kpc)', 'cividis'], 'agn_dist':[-1, 1, f'Distance from {args.AGN_diag} SF line', args.diverging_cmap]}
+    Z_limits = [7.0, 9.1]
+    color_lim_dict = {'color':[None, None, '', ''], 'bin_ID':[None, None, 'Voronoi bin ID', 'rainbow'], 'distance':[0, 5, 'Galactocentric distance (kpc)', 'cividis'], 'distance_re':[0, 1.5, r'Galactocentric distance (R$_e$)', 'cividis'], 'agn_dist':[-1, 1, f'Distance from {args.AGN_diag} SF line', args.diverging_cmap]}
     color = 'brown'
     counter = 0
 
     # --------setting up full figure----------------------------------
-    fig, ax = plt.subplots(1, 1, figsize=(6, 5))
-    fig.subplots_adjust(left=0.13, right=0.9, bottom=0.12, top=0.98)
+    fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+    fig.subplots_adjust(left=0.12, right=0.88, bottom=0.12, top=0.98)
    
     # --------looping over objects---------------------
     for index, obj in enumerate(objlist):
         field = obj[0]
         objid = obj[1]
+        full_hdu = load_full_fits(objid, field, args)
+        args = load_object_specific_args(full_hdu, args, field=field)
         markersize = 80
         marker='o' if 'Par' in field else 's'
 
         # --------looping over diagnostics---------------------
-        args.exclude_lines = ''
+        args.exclude_lines = []
         df_wsii, this_logOH_int_wsii, this_logOH_sum_wsii = load_metallicity_df(field, objid, 'NB', args, ensure_sii=True)
         if df_wsii is None: continue
         else: counter += 1
-        args.exclude_lines = 'SII'
+        args.exclude_lines = ['SII']
         df_wosii, this_logOH_int_wosii, this_logOH_sum_wosii = load_metallicity_df(field, objid, 'NB', args)
 
-        df = pd.merge(df_wsii, df_wosii, on = ['radius', 'bin_ID', 'agn_dist'], suffixes = ('_with_SII', '_without_SII'))
-
-        # ---plotting integrated--
-        ax.scatter(this_logOH_sum_wsii.n, this_logOH_sum_wosii.n, s=markersize, c=color, lw=1, edgecolor='k', marker=marker)
-        ax.errorbar(this_logOH_sum_wsii.n, this_logOH_sum_wosii.n, xerr=this_logOH_sum_wsii.s, yerr=this_logOH_sum_wosii.s, c='grey', fmt='none', lw=0.5, alpha=0.5)
+        df = pd.merge(df_wsii, df_wosii, on = ['distance', 'bin_ID'], suffixes = ('_with_SII', '_without_SII'))
+        df['distance_re'] = df['distance'] / args.re_kpc # converting from kpc to Re
 
         # ---plotting spatially resolved--
         p = ax.scatter(df[f'log_OH_with_SII'], df[f'log_OH_without_SII'], s=markersize/4, c=df[args.colorcol], lw=0, marker=marker, cmap=color_lim_dict[args.colorcol][3], vmin=color_lim_dict[args.colorcol][0], vmax=color_lim_dict[args.colorcol][1])
         ax.errorbar(df[f'log_OH_with_SII'], df[f'log_OH_without_SII'], xerr=df[f'log_OH_u_with_SII'], yerr=df[f'log_OH_u_without_SII'], c='grey', fmt='none', lw=0.1, alpha=0.5)
 
         ax.plot(Z_limits, Z_limits, ls='dotted', lw=0.1, c='k')
+
+        # ---plotting integrated--
+        ax.scatter(this_logOH_sum_wsii.n, this_logOH_sum_wosii.n, s=markersize, c=color, lw=1, edgecolor='k', marker=marker)
+        ax.errorbar(this_logOH_sum_wsii.n, this_logOH_sum_wosii.n, xerr=this_logOH_sum_wsii.s, yerr=this_logOH_sum_wosii.s, c='grey', fmt='none', lw=0.5, alpha=0.5)
 
         # ----annotate axis----------
         ax.set_xlim(Z_limits)
@@ -3250,7 +3253,11 @@ def mcmc_vorbin_fit(logOH_df, args, filter='F150W', quant_x='distance_arcsec', q
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     C25_text = '_wC25' if args.use_C25 and 'NB' not in Zdiag else ''
-    mcmc_filename = args.root_dir / 'zgrad_paper_plots' / f'{args.field}_{args.id:05d}_logOH_Zdiag_{Zdiag}_MCMC_ndim_{ndim}_nwalkers_{args.nwalkers}_niter_{args.niter}_upto_{extent_text}{C25_text}.h5py'
+    Zbranch_text = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
+    exclude_text = f'_without_{",".join(args.exclude_lines)}' if len(args.exclude_lines) > 0 and 'NB' in Zdiag else ''
+    AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
+ 
+    mcmc_filename = args.root_dir / 'zgrad_paper_plots' / f'{args.field}_{args.id:05d}_logOH_Zdiag_{Zdiag}_MCMC_ndim_{ndim}_nwalkers_{args.nwalkers}_niter_{args.niter}_upto_{extent_text}{C25_text}{AGN_diag_text}{exclude_text}.h5py'
 
     # ----------------checking if saved file exists--------------
     if not os.path.exists(mcmc_filename) or args.clobber_mcmc:
@@ -3558,7 +3565,7 @@ if __name__ == "__main__":
     args.only_seg = True
     args.vorbin = True
     args.plot_ratio_maps = True
-    args.exclude_lines = []# ['SII']
+    args.exclude_lines = ['SII']
     args.voronoi_line = 'OII'
     args.voronoi_snr = 3.
     args.re_limit = 2.5
@@ -3642,7 +3649,6 @@ if __name__ == "__main__":
     # ---------metallicity comparison plots----------------------
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=10)
-    #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
 
     # ---------single galaxy plot: SFR map and correlation----------------------
     #plot_metallicity_sfr_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
@@ -3656,6 +3662,7 @@ if __name__ == "__main__":
     # --------multi-panel SFR-Z plots------------------
     #objlist_ha = [[row['field'], row['objid']] for index, row in df[df['redshift'] < 2.8].iterrows()]
     #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
+    #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
 
     # ---------metallicity latex table for paper----------------------
     #df_latex = make_latex_table(df, args, sum=True)
