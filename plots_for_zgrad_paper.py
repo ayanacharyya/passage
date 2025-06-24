@@ -948,7 +948,35 @@ def plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH
         ax = plot_fitted_line(ax, linefit, df[mass_col], 'salmon', args, quant='', short_label=True, index=0)
 
     # --------plotting literature relations----------
-    ax = plot_MZR_literature(ax)
+    #ax = plot_MZR_literature(ax)
+    def zahid_func(log_mass, Z0, M0, gamma):
+        return Z0 - np.log10(1 + (10**log_mass/10**M0)**(-gamma))
+    
+    zahid_data_13 = pd.DataFrame({'Sample':['SHELS', 'DEEP2', 'Y12', 'E06'], \
+                                    'Redshift':[0.29, 0.78, 1.24, 2.26], \
+                                    'Z0':[9.130, 9.161, 9.06, 9.06], \
+                                    'Z0_u':[0.007, 0.026, 0.36, 0.27], \
+                                    'Z0_fl':[0, 0, 0, 0], \
+                                    'M0':[9.304, 9.661, 9.6, 9.7], \
+                                    'gamma':[0.77, 0.65, 0.7, 0.6]}) # these are based on KK04 frame and need to be converted to PPN2
+    #zahid_data_13['Z0_PPN2'], zahid_data_13['Z0_PPN2_u'], _ = np.vstack(np.array(zahid_data_13.apply(lambda row: convert(row, diagnostic='Z0_KK04', coeff=[-1.3188000, 35.051680, -309.54480, 916.7484], llim=8.2, ulim=9.2), axis=1))).transpose() # K08 table3 col 2 last set of rows
+    zahid_data_13['linestyle'] = 'dashed' # because these metallicities have been converted
+
+    zahid_data_14 = pd.DataFrame({'Sample':['SDSS', 'COSMOS'], \
+                                    'Redshift':[0.08, 1.55], \
+                                    'Z0':[8.710, 8.740], \
+                                    'Z0_u':[0.001, 0.042], \
+                                    'M0':[8.76, 9.93], \
+                                    'gamma':[0.66, 0.88]}) # these are based on PPN2 frame already and need not be coverted
+    zahid_data_14['linestyle'] = 'solid' # because these metallicities have NOT been converted
+
+    zahid_data = pd.concat([zahid_data_13, zahid_data_14], join='inner', ignore_index=True).reset_index(drop=True)
+    zahid_data = zahid_data.sort_values(by='Redshift').reset_index(drop=True)
+
+    col_ar = ['orange', 'black', 'cyan', 'seagreen', 'blue', 'salmon', 'gray']
+    for i in range(len(zahid_data)):
+        xarr = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 20)
+        ax.plot(xarr, zahid_func(xarr, zahid_data['Z0'][i], zahid_data['M0'][i], zahid_data['gamma'][i]), color=col_ar[i], lw=2, ls=zahid_data['linestyle'][i], label= 'z = '+str(zahid_data['Redshift'][i]) + '; ' + zahid_data['Sample'][i], zorder=-5)
 
     # ----------making colorbar----------
     cbar = plt.colorbar(p, pad=0.01)
@@ -963,7 +991,7 @@ def plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
     ax.set_ylim(7.0, 9.1)
 
-    ax.legend(fontsize=args.fontsize, loc='upper left')
+    ax.legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     figname = f'MZR_colorby_{colorcol}_upto_{extent_text}.png'
