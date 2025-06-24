@@ -1089,7 +1089,7 @@ def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False
     ax, xratio_name, yratio_name = plot_ratio_grid(df, ax, args, color1='seagreen', color2='cornflowerblue', color3='slategray')
 
     # ------annotate figure-----------------------
-    ax.grid(which='both', color='gray', linestyle='solid', linewidth=1, alpha=0.3)
+    #ax.grid(which='both', color='gray', linestyle='solid', linewidth=1, alpha=0.3)
     ax.set_xlabel('Log ' + get_ratio_labels(xratio_name), fontsize=args.fontsize)
     ax.set_ylabel(f'Log {get_ratio_labels(yratio_name)}', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
