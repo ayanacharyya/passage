@@ -11,7 +11,7 @@ from util import *
 
 from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df, make_set
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
-from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
+from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_MZR_literature
 from make_diagnostic_maps import get_re, get_cutout, get_emission_line_map, get_offsets_from_center, annotate_PAs, get_linelist, get_EB_V, get_voronoi_bin_IDs, get_voronoi_bin_distances, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
 
 plt.rcParams['ytick.direction'] = 'in'
@@ -538,7 +538,7 @@ def plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=10):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10, do_fit=False):
+def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     '''
     Plots and saves the SF-main sequence diagram given a dataframe with list of objects and properties
     '''
@@ -563,7 +563,7 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10, do_fi
         for index, row in df.iterrows(): ax.text(row[mass_col], row[sfr_col], f'{row["objid"]}', fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
 
     # -------fitting-----------------
-    if do_fit:
+    if args.fit_correlation:
         df = df.sort_values(by=mass_col)
         linefit_odr = odr_fit(df, quant_x=mass_col, quant_y=sfr_col)
         ax = plot_fitted_line(ax, linefit_odr, df[mass_col], 'salmon', args, quant='', short_label=True, index=0)
@@ -865,7 +865,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=10, do_fit=False):
+def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=10):
     '''
     Plots and saves the mass vs metallicity-SFR slope given a dataframe with list of objects and properties
     '''
@@ -888,7 +888,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     ax.axhline(0, ls='--', c='k' if not args.fortalk else 'w', lw=0.5)
 
     # -------fitting-----------------
-    if do_fit:
+    if args.fit_correlation:
         df = df.sort_values(by=mass_col)
         #linefit = odr_fit(df, quant_x=mass_col, quant_y=zgrad_col)
         #ax = plot_fitted_line(ax, linefit, df[mass_col], 'salmon', args, quant='', short_label=True, index=0)
@@ -921,7 +921,58 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_method='G20', colorcol='logZ_logSFR_slope', do_fit=False):
+def plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH_slope_mcmc_NB', fontsize=10):
+    '''
+    Plots and saves the mass vs metallicity given a dataframe with list of objects and properties
+    '''
+    args.fontsize = fontsize
+    print(f'Plotting MZR...')
+
+    # ----------setting up the diagram----------
+    fig, ax = plt.subplots(1, figsize=(8, 6))
+    fig.subplots_adjust(left=0.12, right=0.99, bottom=0.1, top=0.95)
+
+    # ----------plotting----------
+    for m in pd.unique(df['marker']):
+        df_sub = df[df['marker'] == m]
+        p = ax.scatter(df_sub[mass_col], df_sub[z_col], c=df_sub[colorcol], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
+    if z_col + '_u' in df: ax.errorbar(df[mass_col], df[z_col], yerr=df[z_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+    if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[z_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+    if args.annotate:
+        for index, row in df.iterrows(): ax.text(row[mass_col], row[z_col], f'{row["objid"]}', fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
+    
+    # -------fitting-----------------
+    if args.fit_correlation:
+        df = df.sort_values(by=mass_col)
+        linefit = odr_fit(df, quant_x=mass_col, quant_y=z_col)
+        ax = plot_fitted_line(ax, linefit, df[mass_col], 'salmon', args, quant='', short_label=True, index=0)
+
+    # --------plotting literature relations----------
+    ax = plot_MZR_literature(ax)
+
+    # ----------making colorbar----------
+    cbar = plt.colorbar(p, pad=0.01)
+    cbar.set_label(r'log $\nabla$Z$_r$ (dex/kpc)' if args.re_limit is None else r'log $\nabla$Z$_r$ (dex/R$_e$)', fontsize=args.fontsize)
+    cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
+
+    # ---------annotate axes and save figure-------
+    ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
+    ax.set_ylabel(r'$\log$ (O/H) + 12 [NB]', fontsize=args.fontsize)
+    ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+
+    ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
+    ax.set_ylim(7.0, 9.1)
+
+    ax.legend(fontsize=args.fontsize, loc='upper left')
+
+    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
+    figname = f'MZR_colorby_{colorcol}_upto_{extent_text}.png'
+    save_fig(fig, figname, args)
+
+    return
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_method='G20', colorcol='logZ_logSFR_slope'):
     '''
     Plots and saves the mass vs mixing timescale given a dataframe with list of objects and properties
     '''
@@ -953,7 +1004,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
         for index, row in df.iterrows(): ax.text(row[mass_col], row[f'{ycol}_{method}'], f'{row["objid"]}', fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
 
     # -------fitting-----------------
-    if do_fit:
+    if args.fit_correlation:
         df = df.sort_values(by=mass_col)
         linefit_odr = odr_fit(df, quant_x=mass_col, quant_y=f'{ycol}_{method}')
         ax = plot_fitted_line(ax, linefit_odr, df[mass_col], 'salmon', args, quant='', short_label=True, index=0)
@@ -3671,11 +3722,12 @@ if __name__ == "__main__":
     #plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #df_agn = plot_AGN_demarcation_figure_integrated(df, args, fontsize=15)
-    #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15, do_fit=args.fit_correlation)
+    #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
-    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15, do_fit=args.fit_correlation)
-    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='SFR', mgas_method='my', do_fit=args.fit_correlation)
+    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
+    #plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH_slope_mcmc_NB', fontsize=15)
+    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='SFR', mgas_method='my')
 
     # -----------line ratio histograms--------------
     #full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)
