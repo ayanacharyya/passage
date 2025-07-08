@@ -57,7 +57,7 @@ def parse_args():
     parser.add_argument('--pixscale', metavar='pixscale', type=float, action='store', default=0.04, help='Pixel scale (in arcsec/pixel) of the thumbnails produced; default is 0.04')
 
     # ------- args added for read_line_catalog.py ------------------------------
-    parser.add_argument('--nbins', metavar='nbins', type=int, action='store', default=30, help='No. of bins for plotting the histogram. Default is 30')
+    parser.add_argument('--nbins', metavar='nbins', type=int, action='store', default=5, help='No. of bins for plotting the histogram. Default is 30')
     parser.add_argument('--mag_lim', metavar='mag_lim', type=float, action='store', default=None, help='magnitude limit above which to search for targets; default is None')
 
     # ------- args added for make_region_files.py ------------------------------
@@ -105,6 +105,7 @@ def parse_args():
     parser.add_argument('--plot_target_frame', dest='plot_target_frame', action='store_true', default=False, help='Annotate plot axes in the object/target frame of reference? Default is no.')
     parser.add_argument('--arcsec_limit', metavar='arcsec_limit', type=float, action='store', default=1.0, help='Half box size (in arcsec) of the thumbnails to plot; default is 1.5')
     parser.add_argument('--re_limit', metavar='arcsec_limit', type=float, action='store', default=None, help='Effective radius to limit all analysis to; default is None (uses arcsec_limit)')
+    parser.add_argument('--radbin', dest='radbin', action='store_true', default=False, help='Radially bin the 2D emission line maps? Default is no.')
     parser.add_argument('--vorbin', dest='vorbin', action='store_true', default=False, help='Voronoi bin the 2D emission line maps? Default is no.')
     parser.add_argument('--voronoi_snr', metavar='voronoi_snr', type=float, action='store', default=3, help='Target SNR to Voronoi bin the emission line maps to; default is 3')
     parser.add_argument('--voronoi_line', metavar='voronoi_line', type=str, action='store', default='Hb', help='Which emission line to be used for computing the Voronoi bins? Default is None i.e., the given emission line itself')

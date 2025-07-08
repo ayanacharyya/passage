@@ -380,7 +380,7 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
     return ax, linefit
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, radprof_ax=None, vorbin_ax=None, snr_ax=None, image_err=None, metallicity_multi_color=False, fontsize=None):
+def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=False, radprof_ax=None, vorbin_ax=None, snr_ax=None, image_err=None, metallicity_multi_color=False, fontsize=None, plot_circles_at=[]):
     '''
     Plots the emission map for a given line in the given axis
     Returns the axis handle
@@ -449,7 +449,8 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
     if args.plot_circle_at_arcsec is not None: ax.add_patch(plt.Circle((0, 0), args.plot_circle_at_arcsec, color='r', fill=False, lw=0.5)) # additional circle for debugging purpose
     if 're_arcsec' in args: ax.add_patch(plt.Circle((0, 0), args.re_arcsec if args.re_limit is None else 1., color='w', fill=False, lw=0.5))
     if 'segmentation_map' in args: ax.contour(args.segmentation_map != args.id, levels=0, colors='w' if args.fortalk else 'k', extent=args.extent, linewidths=0.5) # demarcating the segmentation map zone
-
+    for this_circle in plot_circles_at: ax.add_patch(plt.Circle((0, 0), this_circle, color='sienna', fill=False, lw=1))
+    
     if args.vorbin and args.plot_vorbin and vorbin_ax is not None:
         vorbin_IDs = args.voronoi_bin_IDs
         vorbin_IDs = np.ma.masked_where(image.mask, vorbin_IDs)
@@ -640,7 +641,6 @@ def get_voronoi_bin_IDs(full_hdu, snr_thresh, plot=False, quiet=True, args=None)
     #bad_mask = seg_mask
     input_map = np.ma.masked_where(bad_mask, input_map)
     input_map_err = np.ma.masked_where(bad_mask, input_map_err)
-    input_snr = np.ma.masked_where(bad_mask, input_snr)
 
     # ------------debugging checks: input maps---------------------- 
     if args is not None and args.debug_vorbin:
@@ -679,7 +679,7 @@ def get_voronoi_bin_IDs(full_hdu, snr_thresh, plot=False, quiet=True, args=None)
 
     # --------extracting only those bins with SNR above a certain threshold for ALL relevant lines--------------
     relevant_lines = [args.voronoi_line] #  ['OII', 'Hb', 'OIII'] # 
-    final_snr_cut = snr_thresh # snr_thresh OR 0 OR -100 (some very low number)
+    final_snr_cut = 0 # snr_thresh OR 0 OR -100 (some very low number)
     bad_mask = seg_mask
     for index, line in enumerate(relevant_lines):
         line_map2, _, _, _, _ = get_emission_line_map(line, full_hdu, args, for_vorbin=True)
@@ -727,6 +727,132 @@ def get_voronoi_bin_IDs(full_hdu, snr_thresh, plot=False, quiet=True, args=None)
         sys.exit(f'Exiting here because of --debug_vorbin mode; if you want to run the full code as usual then remove the --debug_vorbin option and re-run')
 
     return binID_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def bin_2D_radial(map, bin_IDs, map_err=None, debug_vorbin=False, ax=None):
+    '''
+    Binning a given 2D array according to a given bin IDs map, to get the mean flux in each bin
+    '''
+    valid_mask = bin_IDs.data.ravel() >= 0
+    map_flat = map.ravel()[valid_mask]
+    bin_IDs_flat = bin_IDs.data.ravel()[valid_mask]
+    n_bins = len(np.unique(bin_IDs_flat))
+
+    # mean fluxes per bin
+    map_sum = np.bincount(bin_IDs_flat, weights=map_flat, minlength=n_bins)
+    bin_counts = np.bincount(bin_IDs_flat, minlength=n_bins)
+    map_mean = map_sum / bin_counts
+
+    binned_map = np.full_like(map, np.nan, dtype=float)
+    valid_pixels = bin_IDs.data >= 0
+    binned_map[valid_pixels] = map_mean[bin_IDs.data[valid_pixels]]
+    binned_map = np.ma.masked_where(bin_IDs.mask, binned_map)
+
+    # Sum errors in quadrature per bin: sqrt(sum(err^2))
+    if map_err is not None:
+        map_err_flat = map_err.ravel()[valid_mask]
+        map_err_squared_sum = np.bincount(bin_IDs_flat, weights=map_err_flat**2, minlength=n_bins)
+        map_err_rms = np.sqrt(map_err_squared_sum) / bin_counts
+
+        binned_map_err = np.full_like(map, np.nan, dtype=float)
+        binned_map_err[valid_pixels] = map_err_rms[bin_IDs.data[valid_pixels]]
+        binned_map_err = np.ma.masked_where(bin_IDs.mask, binned_map_err)
+
+        # --------computing how many bins with SNR above a certain threshold for the given line--------------
+        snr = binned_map / binned_map_err
+        print(f'Upon radial binning, out of {len(np.unique(np.ma.compressed(bin_IDs)))} radbins {len(np.unique(np.ma.compressed(np.ma.masked_where(bin_IDs.mask | (snr <= 0), bin_IDs.data))))} have SNR>0 and {len(np.unique(np.ma.compressed(np.ma.masked_where(bin_IDs.mask | (snr < 3), bin_IDs.data))))} have SNR>=3\n')
+
+    if debug_vorbin:
+        col_arr = plt.cm.viridis(np.linspace(0, 1, n_bins))
+        for index, this_bin_ID in enumerate(np.unique(bin_IDs_flat)):
+            this_bin_mask = bin_IDs_flat == this_bin_ID
+            all_pixel_fluxes = map_flat[this_bin_mask]
+            all_pixel_errors = map_err_flat[this_bin_mask]
+            all_pixels_snr = all_pixel_fluxes / all_pixel_errors
+
+            good_fluxes_mask = all_pixels_snr > 0
+            good_pixel_fluxes = all_pixel_fluxes[good_fluxes_mask]
+
+            print(f'Deb763: id {int(this_bin_ID)}/{n_bins}: {len(all_pixel_fluxes)} pixels; {len(good_pixel_fluxes)} good pixels') ##
+            if ax is not None:
+                hist, bin_edges = np.histogram(all_pixels_snr, bins=50, density=True, range=(-5, 5))
+                bin_centers = bin_edges[:-1] + np.diff(bin_edges)
+                ax.step(bin_centers, hist + index * 1., lw=0.5, where='mid', color=col_arr[index])
+
+    if map_err is None: return binned_map
+    else: return binned_map, binned_map_err
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_radial_bin_IDs(full_hdu, snr_thresh=3, plot=False, quiet=True, args=None):
+    '''
+    Compute the radial bin IDs a given 2D map and corresponding uncertainty
+    Returns the 2D map (of same shape as input map) with just the IDs
+    '''
+
+    # -------debugging checks: initial maps-----------
+    if args is not None and args.debug_vorbin:
+        line_map, _, _, _, _ = get_emission_line_map('OII', full_hdu, args, dered=False, for_vorbin=True)
+        input_map = np.ma.masked_where(line_map.mask, unp.nominal_values(line_map))
+        input_map_err = np.ma.masked_where(line_map.mask, unp.std_devs(line_map))
+        input_snr = input_map / input_map_err
+
+        fig, axes_all = plt.subplots(2, 4, figsize=(11, 5))
+        fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.07, wspace=0.3, hspace=0.1)
+        cmap = 'viridis'
+        axes_top = axes_all[0]
+        fig.text(0.05, 0.98, f'{args.field}: ID {args.id}: Voronoi binning diagnostics', fontsize=args.fontsize, c='k', ha='left', va='top')
+
+        snr_min, snr_max = np.nanmin(input_snr.data), np.nanmax(input_snr.data)
+        combined_cmap = get_combined_cmap([snr_min, 0, snr_thresh, snr_max], ['Greys', 'Reds', cmap], new_name='my_colormap')
+        plot_2D_map(input_map, axes_top[0], args, takelog=False, label=f'input {args.voronoi_line} map', cmap=cmap, hide_yaxis=False, hide_xaxis=True)
+        plot_2D_map(input_map_err, axes_top[1], args, takelog=False, label=f'input {args.voronoi_line} err', cmap=cmap, hide_yaxis=True, hide_xaxis=True)
+        plot_2D_map(input_snr, axes_top[2], args, takelog=False, label='input SNR', cmap=combined_cmap, hide_yaxis=True, vmin=snr_min, vmax=snr_max, hide_xaxis=True)
+
+    # -------getting the distance map and radially binning-----------
+    distance_map = get_distance_map(np.shape(args.segmentation_map), args, for_distmap=True) # kpc
+    if args.re_limit is None:
+        radial_bin_edges = custom_spaced_grid(0,  5, args.nbins + 1, power=1.5)
+    else:
+        radial_bin_edges = custom_spaced_grid(0,  args.re_limit, args.nbins + 1, power=1.5) # user power = 1 for linspace
+        distance_map /= args.re_kpc # converting from kpc to Re units
+
+    print(f'Using {args.nbins} bins with bin edges {radial_bin_edges} {"kpc" if args.re_limit is None else "Re"} for radial binning..')
+    binID_map = np.digitize(distance_map, radial_bin_edges)
+    if args.only_seg: seg_mask = args.segmentation_map != args.id
+    else: seg_mask = False
+    binID_map = np.ma.masked_where(seg_mask | binID_map == args.nbins + 1, binID_map)
+    if args.re_limit is None: radial_bin_edges *= cosmo.arcsec_per_kpc_proper(args.z).value # converting from kpc to arcsec units
+
+    # -------debugging checks: final binned maps-----------
+    if args is not None and args.debug_vorbin:
+        axes_bottom = axes_all[1]
+
+        plot_2D_map(binID_map, axes_bottom[3], args, takelog=False, label='radial bin IDs', cmap=random_cmap, hide_yaxis=True, vmin=-1, vmax=np.max(binID_map), plot_circles_at=radial_bin_edges[1:])
+        
+        map, map_err = bin_2D_radial(input_map, binID_map, map_err=input_map_err, debug_vorbin=args.debug_vorbin, ax=axes_top[3])
+        axes_top[3].text(axes_top[3].get_xlim()[0] + np.diff(axes_top[3].get_xlim())[0] * 0.05, axes_top[3].get_ylim()[1] - np.diff(axes_top[3].get_ylim())[0] * 0.05, 'SNR of pixels in each bin', c='k', ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
+        axes_top[3].axvline(0, ls='dotted', c='grey', lw=0.5)
+        snr = map / map_err
+        snr_min, snr_max = np.nanmin(snr.data), np.nanmax(snr.data)
+        combined_cmap = get_combined_cmap([snr_min, 0, snr_thresh, snr_max], ['Greys', 'Reds', cmap], new_name='my_colormap')
+        plot_2D_map(map, axes_bottom[0], args, takelog=False, label=f'binned {args.voronoi_line} map', cmap=cmap, hide_yaxis=False, plot_circles_at=radial_bin_edges[1:])
+        plot_2D_map(map_err, axes_bottom[1], args, takelog=False, label=f'binned {args.voronoi_line} err', cmap=cmap, hide_yaxis=True, plot_circles_at=radial_bin_edges[1:])
+        plot_2D_map(snr, axes_bottom[2], args, takelog=False, label='binned SNR', cmap=combined_cmap, hide_yaxis=True, vmin=snr_min, vmax=snr_max, plot_circles_at=radial_bin_edges[1:])
+
+        figname = fig_dir / f'{args.field}_{args.id:05d}_vorbin_debug{snr_text}{vorbin_text}.png'
+        fig.savefig(figname)
+        print(f'Saved figure to {figname}')
+        plt.show(block=False)
+        sys.exit(f'Exiting here because of --debug_vorbin mode; if you want to run the full code as usual then remove the --debug_vorbin option and re-run')
+
+    return binID_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def custom_spaced_grid(start, stop, num, power=1.5):
+    linear = np.linspace(0, 1, num) # Generate linearly spaced numbers between 0 and 1
+    nonlinear = linear ** power # Apply a non-linear transformation
+    
+    return start + (stop - start) * nonlinear
 
 # --------------------------------------------------------------------------------------------------------------------
 def cut_by_segment(map, args):
@@ -840,6 +966,7 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
 
     # -----------getting the dereddened flux value-----------------
     if dered and not for_vorbin:
+        print(f'Deb970: {line}, args.EB_V = {args.EB_V}') ##
         line_map_quant = get_dereddened_flux(unp.uarray(line_map, line_map_err), line_wave, args.EB_V)
         line_map = unp.nominal_values(line_map_quant)
         line_map_err = unp.std_devs(line_map_quant)
@@ -852,7 +979,10 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
         line_map = None
     else:
         # -----------voronoi binning the flux and err maps-----------------
-        if args.vorbin and not for_vorbin:
+        if args.radbin and not for_vorbin:
+            line_map, line_map_err = bin_2D_radial(line_map, args.voronoi_bin_IDs, map_err=line_map_err)
+            
+        elif args.vorbin and not for_vorbin:
 
             # -----------discarding low-snr pixels BEFORE vorbin, if any-----------------
             if args.snr_cut is not None:
@@ -1567,12 +1697,12 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
             good_obs = obs_fluxes >= 0
             obs_fluxes = obs_fluxes[good_obs]
             obs_errs = obs_errs[good_obs]
-            line_labels = np.array(line_label_array)[good_obs]
+            line_labels = list(np.array(line_label_array)[good_obs])
             line_waves = np.array(line_waves_array)[good_obs]
 
             if len(line_labels) > 1:
                 # -------setting up NB parameters----------
-                dered = 'Hbeta' in line_labels and 'Halpha' in line_labels
+                dered = 'Hbeta' in line_labels and 'Halpha' in line_labels and args.dered_in_NB
                 norm_line = 'Hbeta' if 'Hbeta' in line_labels else 'OIII5007' if 'OIII5007' in line_labels else 'NII6583_Halpha'
                 kwargs = {'prior_plot': os.path.join(out_dir, 'prior_plots', f'{this_ID}_HII_prior_plot.pdf'),
                         'likelihood_plot': os.path.join(out_dir, 'likelihood_plots', f'{this_ID}_HII_likelihood_plot.pdf'),
@@ -1587,7 +1717,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
                         }
 
                 # -------running NB--------------
-                print(f'Deb1576: binID {this_ID}: nlines={len(obs_fluxes)}, {dict(zip(line_labels, obs_fluxes))}, norm_line = {norm_line}') ##
+                print(f'Deb1576: binID {this_ID}: nlines={len(obs_fluxes)}, {dict(zip(line_labels, obs_fluxes))}, norm_line = {norm_line}, dereddening on the fly? {dered}') ##
                 Result = NB_Model_HII(obs_fluxes, obs_errs, line_labels, **kwargs)
 
                 # -------estimating the resulting logOH, and associated uncertainty-----------
@@ -1598,10 +1728,10 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
                 logOH_err = np.mean([logOH_est - logOH_low, logOH_high - logOH_est])
                 logOH = ufloat(logOH_est, logOH_err)
                 
-                print(f'Ran NB for unique ID {this_ID} ({counter} out of {len(unique_IDs_array)}) with {len(obs_fluxes)} good fluxes in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
+                print(f'Ran NB for unique ID {this_ID} ({counter + 1} out of {len(unique_IDs_array)}) with {len(obs_fluxes)} good fluxes in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
             else:
                 logOH = ufloat(np.nan, np.nan)
-                print(f'Could not run NB for unique ID {this_ID} ({counter} out of {len(unique_IDs_array)}) with only {len(obs_fluxes)} good fluxes')
+                print(f'Could not run NB for unique ID {this_ID} ({counter + 1} out of {len(unique_IDs_array)}) with only {len(obs_fluxes)} good fluxes')
 
             counter += 1
             logOH_dict_unique_IDs.update({this_ID: logOH}) # updating to unique ID dictionary once logOH has been calculated for this unique ID
@@ -1631,12 +1761,12 @@ def get_Z_NB(full_hdu, args):
     if args.use_original_NB_grid: line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
                        'Ha':'Halpha', 'SII':'SII6716', 'NeIII-3867':'NeIII3869'}
     else: line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
-                       'Ha':'NII6583_Halpha', 'SII':'SII6716_31', 'NeIII-3867':'NeIII3869', 'OII-7325':'OII7320', \
+                       'Ha':'Halpha' if args.dered_in_NB else 'NII6583_Halpha', 'SII':'SII6716_31', 'NeIII-3867':'NeIII3869', 'OII-7325':'OII7320', \
                        'HeI-5877':'HeI5876', 'Hg':'Hgamma', 'Hd':'Hdelta'}
 
     line_map_array, line_int_array, line_sum_array, line_label_array, line_waves_array = [], [], [], [], []
     for line in args.available_lines:
-        line_map, line_wave, line_int, line_sum, _ = get_emission_line_map(line, full_hdu, args, dered=not args.dered_in_NB, silent=args.only_integrated)
+        line_map, line_wave, line_int, line_sum, _ = get_emission_line_map(line, full_hdu, args, dered=not args.dered_in_NB, silent=False)
         if not args.do_not_correct_flux:
             factor = 1.
             if args.use_original_NB_grid:
@@ -1648,7 +1778,7 @@ def get_Z_NB(full_hdu, args):
                     ratio_5007_to_4959 = 2.98  # from grizli source code
                     factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
                     print(f'Un-correcting OIII to include the 4959 component back, i.e. dividing by factor {factor:.3f} because in NB, OIII = 5007+4959')
-                if line == 'Ha':
+                if line == 'Ha' and not args.dered_in_NB:
                     factor = 0.823  # from grizli source code
                     print(f'Un-correcting Ha to include the NII component back, i.e. dividing by factor {factor:.3f} because NB can use line summation')
             if line_map is not None: line_map = np.ma.masked_where(line_map.mask, line_map.data / factor)
@@ -1952,7 +2082,7 @@ def get_Z(full_hdu, args):
     Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    C25_text = '_wC25' if args.use_C25 else ''
+    C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
     output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map_upto_{extent_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}{AGN_diag_text}{NB_text}{exclude_text}{C25_text}.fits'
     
     # ------checking if the outputfile already exists--------------
@@ -2430,7 +2560,7 @@ def plot_starburst_map(full_hdu, axes, args, radprof_axes=None, vorbin_axes=None
     '''
     # ---------getting the Ha map-------------
     ha_map, _, _, _, _ = get_emission_line_map('Ha', full_hdu, args, dered=True)
-    logOH_map, _, _, _ = get_Z(full_hdu, args)
+    logOH_map, _, _ = get_Z(full_hdu, args)
     ha_map = correct_ha_C20(ha_map, logOH_map)
 
     # ---------getting the direct image-------------
@@ -3061,62 +3191,97 @@ def plot_DIG_figure(full_hdu, args):
     return fig, cdig_map
 
 # --------------------------------------------------------------------------------------------------------------------
+def myimshow(data, ax, contour=None, re_pix=None, label='', cmap='viridis'):
+    '''
+    Utility function to plot a 2D data array on to ax, and plot center and segmentation map
+    Returns ax
+    '''
+    ax.imshow(data, origin='lower', cmap=cmap)
+    cen_x, cen_y = int(np.shape(data)[0] / 2), int(np.shape(data)[1] / 2)
+    ax.scatter(cen_y, cen_x, marker='x', c='k')
+    if contour is not None: ax.contour(contour, levels=0, colors='w', linewidths=0.5)
+    ax.text(0.9, 0.9, label, c='w', fontsize=args.fontsize, ha='right', va='top', transform=ax.transAxes)
+    if re_pix is not None: ax.add_patch(plt.Circle((cen_y, cen_x), re_pix, color='r', fill=False, lw=0.5))
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def myradprof(radius, flux, ax, args, re_kpc, label=''):
+    '''
+    Utility function to plot the flux radial profile on to ax, and plot the half light radius
+    Returns ax
+    '''
+    ax.scatter(radius, np.cumsum(flux))
+    ax.axvline(re_kpc, c='k', ls='dotted')
+    ax.axhline(0.5 * np.sum(flux), c='k', ls='dashed')
+    ax.text(0.9, 0.9, label, c='k', fontsize=args.fontsize, ha='right', va='top', transform=ax.transAxes)
+    ax.text(0.9, 0.1, f're = {re_kpc:.2f} kpc', c='k', fontsize=args.fontsize, ha='right', va='top', transform=ax.transAxes)
+    ax.set_xlabel('Radius (kpc)')
+    ax.set_ylabel(f'Cumulative flux')
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
 def get_re(full_hdu, args, filter='F200W'):
     '''
     Computes the half-light radius in the direct image with the given filter
     Returns the radius
     '''
+    # ----------getting the PSF--------------
+    niriss = webbpsf.NIRISS()
+    niriss.filter = filter
+    niriss.pixelscale = args.pix_size_arcsec
+    psf = niriss.calc_psf(fov_arcsec=1 if 'glass' in args.field else 0.5, oversample=1)
+    psf_array = psf[0].data
+    psf_array /= psf_array.sum()
+
+    # -------reading in direct image----------
     dir_img, filter = read_direct_image(full_hdu, filter=filter)
-    
+
+    # -------compute re----------
     if dir_img is not None:
         dir_img = trim_image(dir_img, args=args, skip_re_trim=True)
         segmentation_map = full_hdu['SEG'].data
         segmentation_map = trim_image(segmentation_map, args, skip_re_trim=True)
-
-        smoothing_kernel = Box2DKernel(5, mode=args.kernel_mode)
-        dir_img_smoothed = convolve(dir_img, smoothing_kernel)
-        dir_img_shifted = np.roll(dir_img_smoothed, args.ndelta_xpix, axis=0)
+        
+        dir_img_shifted = np.roll(dir_img, args.ndelta_xpix, axis=0)
         dir_img_shifted = np.roll(dir_img_shifted, args.ndelta_ypix, axis=1)
         segmentation_map_shifted = np.roll(segmentation_map, args.ndelta_xpix, axis=0)
         segmentation_map_shifted = np.roll(segmentation_map_shifted, args.ndelta_ypix, axis=1)
 
-        distance_map = get_distance_map(np.shape(dir_img_shifted), args, for_distmap=True)
-        flux = np.ma.compressed(np.ma.masked_where(segmentation_map_shifted != args.id, dir_img_shifted)).flatten()
-        radius = np.ma.compressed(np.ma.masked_where(segmentation_map_shifted != args.id, distance_map)).flatten()
+        dir_img_deconvolved = richardson_lucy(dir_img_shifted, psf_array, num_iter=20)
 
-        flux = [x for _, x in sorted(zip(radius, flux), key=lambda pair: pair[0])]
+        distance_map = get_distance_map(np.shape(dir_img_shifted), args, for_distmap=True)
+        radius = np.ma.compressed(np.ma.masked_where(segmentation_map_shifted != args.id, distance_map)).flatten()
+        
+        flux_shifted = np.ma.compressed(np.ma.masked_where(segmentation_map_shifted != args.id, dir_img_shifted)).flatten()
+        flux_deconvolved = np.ma.compressed(np.ma.masked_where(segmentation_map_shifted != args.id, dir_img_deconvolved)).flatten()
+
+        flux_shifted = [x for _, x in sorted(zip(radius, flux_shifted), key=lambda pair: pair[0])]
+        flux_deconvolved = [x for _, x in sorted(zip(radius, flux_deconvolved), key=lambda pair: pair[0])]
         radius = sorted(radius)
 
-        re_kpc = radius[np.where(np.cumsum(flux) >= 0.5 * np.sum(flux))[0][0]]
+        re_kpc_shifted = radius[np.where(np.cumsum(flux_shifted) >= 0.5 * np.sum(flux_shifted))[0][0]]
+        re_kpc_deconvolved = radius[np.where(np.cumsum(flux_deconvolved) >= 0.5 * np.sum(flux_deconvolved))[0][0]]
+        re_kpc = re_kpc_deconvolved
+        
         re_arcsec = re_kpc * cosmo.arcsec_per_kpc_proper(args.z).value # arcsec
         re_pix = re_arcsec / args.pix_size_arcsec
         print(f'For {args.field}:{args.id}: Determined half-light radius from {filter} direct image = {re_kpc:.2f} kpc (={re_arcsec:.2f} arcsec = {re_pix:.1f} pixel)')
 
         if args.debug_re:
-            fig, axes = plt.subplots(1, 3, figsize=(14, 4))
-            fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.12, wspace=0.3, hspace=0.1)
+            fig, axes = plt.subplots(2, 3, figsize=(10, 6))
+            fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.3, hspace=0.1)
             cmap = 'viridis'
             fig.text(0.05, 0.98, f'{args.field}: ID {args.id}: Effective radius diagnostics', fontsize=args.fontsize, c='k', ha='left', va='top')
 
-            axes[0].imshow(dir_img, origin='lower', cmap=cmap)
-            cen_x, cen_y = int(np.shape(dir_img)[0] / 2), int(np.shape(dir_img)[1] / 2)
-            axes[0].scatter(cen_y, cen_x, marker='x', c='k')
-            axes[0].contour(segmentation_map != args.id, levels=0, colors='w', linewidths=0.5)
-            axes[0].text(0.9, 0.9, 'Original', c='w', fontsize=args.fontsize, ha='right', va='top', transform=axes[0].transAxes)
+            axes[0][0] = myimshow(dir_img, axes[0][0], contour=segmentation_map != args.id, re_pix=re_pix, label='Original', cmap=cmap)
+            axes[0][1] = myimshow(dir_img_shifted, axes[0][1], contour=segmentation_map_shifted != args.id, re_pix=re_pix, label='Shifted', cmap=cmap)
+            axes[1][0] = myimshow(psf_array, axes[1][0], re_pix=re_pix, label='PSF', cmap=cmap)
+            axes[1][1] = myimshow(dir_img_deconvolved, axes[1][1], contour=segmentation_map_shifted != args.id, re_pix=re_pix, label='Deconvolved', cmap=cmap)
 
-            axes[1].imshow(dir_img_shifted, origin='lower', cmap=cmap)
-            cen_x, cen_y = int(np.shape(dir_img_shifted)[0] / 2), int(np.shape(dir_img_shifted)[1] / 2)
-            axes[1].scatter(cen_y, cen_x, marker='x', c='k')
-            axes[1].contour(segmentation_map_shifted != args.id, levels=0, colors='w', linewidths=0.5)
-            axes[1].text(0.9, 0.9, 'Shifted', c='w', fontsize=args.fontsize, ha='right', va='top', transform=axes[1].transAxes)
-            axes[1].add_patch(plt.Circle((cen_y, cen_x), re_pix, color='r', fill=False, lw=0.5))
-
-            axes[2].scatter(radius, np.cumsum(flux))
-            axes[2].axvline(re_kpc, c='k', ls='dotted')
-            axes[2].axhline(0.5 * np.sum(flux), c='k', ls='dashed')
-            axes[2].text(0.9, 0.9, 'Light profile', c='w', fontsize=args.fontsize, ha='right', va='top', transform=axes[2].transAxes)
-            axes[2].set_xlabel('Radius (kpc)')
-            axes[2].set_ylabel(f'Cumulative {filter} flux')
+            axes[0][2] = myradprof(radius, flux_shifted, axes[0][2], args, re_kpc_shifted, label='Light profile (shifted)')
+            axes[1][2] = myradprof(radius, flux_deconvolved, axes[1][2], args, re_kpc_deconvolved, label='Light profile (deconvolved)')
 
             plt.show(block=False)
             sys.exit(f'Exiting here because of --debug_re mode; if you want to run the full code as usual then remove the --debug_re option and re-run')
@@ -3234,7 +3399,7 @@ if __name__ == "__main__":
     snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
     only_seg_text = '_onlyseg' if args.only_seg else ''
     pixscale_text = '' if args.pixscale == 0.04 else f'_{args.pixscale}arcsec_pix'
-    vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
+    vorbin_text = f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}' if args.vorbin else f'_radbin_{args.nbins}bins' if args.radbin else ''
     description_text = f'all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}'
 
     # ---------determining list of fields----------------
@@ -3388,7 +3553,7 @@ if __name__ == "__main__":
             args.pix_size_arcsec = utils.get_wcs_pscale(line_wcs)
             imsize_arcsec = full_hdu['DSCI'].data.shape[0] * args.pix_size_arcsec
             args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
-            args.EB_V = 0. # until gets over-written, if both H alpha and H beta lines are present
+            args.EB_V = 0. # until it gets over-written, if both H alpha and H beta lines are present
 
             # --------determining true center of object---------------------
             args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W')
@@ -3403,11 +3568,6 @@ if __name__ == "__main__":
             segmentation_map = np.roll(segmentation_map, args.ndelta_ypix, axis=1)
             args.segmentation_map = trim_image(segmentation_map, args)
 
-            # ---------------dust value---------------
-            if all([line in args.available_lines for line in ['Ha', 'Hb']]) and not args.test_cutout:
-                try: _, args.EB_V, _ = get_EB_V(full_hdu, args, verbose=True, silent=args.only_integrated)
-                except: args.EB_V = 0.
-
             # ---------------voronoi binning stuff---------------
             if args.vorbin and args.voronoi_line is not None and not args.only_integrated:
                 if args.voronoi_line in args.available_lines:
@@ -3420,6 +3580,25 @@ if __name__ == "__main__":
                 if args.voronoi_bin_IDs is None:
                     print(f'Voronoi binning was not possible, therefore skipping this object..')
                     continue
+
+            # ---------------radially binning stuff---------------
+            if args.radbin and not args.only_integrated:
+                args.voronoi_bin_IDs = get_radial_bin_IDs(full_hdu, snr_thresh=args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
+                args.voronoi_bin_distances = get_voronoi_bin_distances(full_hdu, 'OIII', args)
+                args.vorbin = True
+
+                if args.voronoi_bin_IDs is None:
+                    print(f'Voronoi binning was not possible, therefore skipping this object..')
+                    continue
+
+            # ---------------dust value---------------
+            if all([line in args.available_lines for line in ['Ha', 'Hb']]) and not args.test_cutout:
+                try: 
+                    EB_V_map, EB_V_int, EB_V_sum = get_EB_V(full_hdu, args, verbose=True, silent=args.only_integrated)
+                    args.EB_V = EB_V_sum
+                except:
+                    args.EB_V = 0.
+                    print(f'Could not properly compute EB-V so assigning E(B-V)={args.EB_V}')
 
             # ---------initialising the starburst figure------------------------------
             if args.test_cutout or args.plot_direct_filters:

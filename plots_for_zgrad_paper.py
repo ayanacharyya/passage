@@ -12,7 +12,7 @@ from util import *
 from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df, make_set
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
 from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_MZR_literature
-from make_diagnostic_maps import get_re, get_cutout, get_emission_line_map, get_offsets_from_center, annotate_PAs, get_linelist, get_EB_V, get_voronoi_bin_IDs, get_voronoi_bin_distances, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
+from make_diagnostic_maps import get_re, get_cutout, get_emission_line_map, get_offsets_from_center, annotate_PAs, get_linelist, get_EB_V, get_voronoi_bin_IDs, get_radial_bin_IDs, get_voronoi_bin_distances, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
 
 plt.rcParams['ytick.direction'] = 'in'
 plt.rcParams['ytick.right'] = True
@@ -381,7 +381,7 @@ def make_master_df(objlist, args, sum=True):
             print(f'\nDoing object {field}:{objid} which is {index + 1} of {len(df)}..')
             full_hdu = load_full_fits(objid, field, args)
             
-            args = load_object_specific_args(full_hdu, args, skip_psf=True)
+            args = load_object_specific_args(full_hdu, args, skip_psf=True, field=field)
             df.loc[index, 'RA'] = full_hdu[0].header['RA']
             df.loc[index, 'Dec'] = full_hdu[0].header['Dec']
             df.loc[index, 'redshift'] = args.z
@@ -1332,6 +1332,12 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
     if args.vorbin and args.voronoi_line is not None and not skip_vorbin:
         args.voronoi_bin_IDs = get_voronoi_bin_IDs(full_hdu, voronoi_snr, plot=False, quiet=True, args=args)
         args.voronoi_bin_distances = get_voronoi_bin_distances(full_hdu, 'OIII', args)
+
+    # ---------------radially binning stuff---------------
+    if args.radbin and args.voronoi_line is not None and not args.only_integrated:
+        args.voronoi_bin_IDs = get_radial_bin_IDs(full_hdu, snr_thresh=args.voronoi_snr, plot=False, quiet=True, args=args)
+        args.voronoi_bin_distances = get_voronoi_bin_distances(full_hdu, 'OIII', args)
+        args.vorbin = True
 
     # ---------------dust value---------------
     try: _, args.EB_V, _ = get_EB_V(full_hdu, args, verbose=False, silent=True)
@@ -2530,7 +2536,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     df_Zsfr_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
     print(f'Appended metallicity-sfr fit to catalog file {output_dfname}')
 
-# -----------saving figure------------
+    # -----------saving figure------------
     axes[1].text(0.05, 0.85, r'$\log$(M/M$_{\odot}$) =' + f'{args.log_mass: .2f}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
     axes[1].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
     debug_text = '_debug' if args.debug_Zsfr else ''
@@ -2580,7 +2586,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
     
         # -----plotting 2D SFR map-----------
         cmap = 'winter'
-        axes[0] = plot_2D_map(log_sfr_map, axes[0], None, args, clabel=r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', takelog=False, cmap=cmap, vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=index < nrow - 1, hide_yaxis=False, hide_cbar=True)
+        axes[0] = plot_2D_map(log_sfr_map, axes[0], r'$\log$(M/M$_{\odot}$) =' + f'{args.log_mass: .2f}', args, clabel=r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', takelog=False, cmap=cmap, vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=index < nrow - 1, hide_yaxis=False, hide_cbar=True)
         axes[0] = annotate_kpc_scale_bar(2, axes[0], args, label='2 kpc', color='brown', loc='lower right')
 
         # ------plotting metallicity vs SFR-----------
@@ -2599,7 +2605,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         axes[1] = plot_fitted_line(axes[1], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
 
         # --------annotating axis--------------
-        axes[0].text(0.05, 0.95, r'$\log$(M/M$_{\odot}$) =' + f'{args.log_mass: .2f}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[0].transAxes)
+        #axes[0].text(0.05, 0.95, r'$\log$(M/M$_{\odot}$) =' + f'{args.log_mass: .2f}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[0].transAxes)
         axes[1].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
         axes[1].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
         axes[1].set_ylim(Zlim[0], Zlim[1])
@@ -3527,6 +3533,13 @@ def odr_fit(df_input, quant_x='distance_arcsec', quant_y='log_OH'):
     Returns fitted parameters
     '''
     df = df_input[[quant_x, quant_y, quant_y + '_u']]
+    recenter_y = False
+    # ---------rescaling y-axis for better fit----------
+    if recenter_y and 'OH' in quant_y:
+        recenter_to = 8.0
+        df[quant_y] = df[quant_y] - recenter_to
+        print(f'\nDeb3541: in odfit(), recentering {quant_y} to {recenter_to}..')
+
     df = df.dropna(axis=0)
     try:
         model = Model(lambda param, x: np.poly1d(param)(x))
@@ -3534,6 +3547,7 @@ def odr_fit(df_input, quant_x='distance_arcsec', quant_y='log_OH'):
         odr = ODR(data, model, beta0=[1., 0.])  # Initial guess for slope and intercept
         output = odr.run()
         linefit = [ufloat(output.beta[0], output.sd_beta[0]), ufloat(output.beta[1], output.sd_beta[1])]
+        if recenter_y and 'OH' in quant_y: linefit[1] = linefit[1] + recenter_to
     except:
         print(f'WARNING: Could not fit radial profile via ODR, returning nan fit parameters')
         linefit = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
@@ -3642,9 +3656,10 @@ if __name__ == "__main__":
     args.fontsize = 10
     args.fontfactor = 1.3
     args.only_seg = True
-    args.vorbin = True
     args.plot_ratio_maps = True
-    args.exclude_lines = ['SII']
+    args.exclude_lines = [] #['SII']
+    args.radbin = True
+    #args.vorbin = True
     args.voronoi_line = 'OII'
     args.voronoi_snr = 3.
     args.re_limit = 2.5
@@ -3683,7 +3698,7 @@ if __name__ == "__main__":
     # -----------setting up global properties-------------------
     args.snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
     args.only_seg_text = '_onlyseg' if args.only_seg else ''
-    args.vorbin_text = '' if not args.vorbin else f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}'
+    args.vorbin_text = f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}' if args.vorbin else f'_radbin_{args.nbins}bins' if args.radbin else ''
 
     # ------additional variables, for clarity-------------
     all_ratios = ['OII/Hb', 'OIII/Hb', 'OII,OIII/Hb', 'OIII/OII', 'OIII/OII,OIII'] #'NeIII-3867/OII', 
