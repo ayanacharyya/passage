@@ -699,7 +699,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     
     # ----------setting up the diagram----------
     fig, axes = plt.subplots(1, 2, figsize=(13.5, 6)) # one for dex/re and another for dex/kpc
-    fig.subplots_adjust(left=0.07, right=0.99, bottom=0.1, top=0.78, wspace=0.2)
+    fig.subplots_adjust(left=0.072, right=0.99, bottom=0.1, top=0.78, wspace=0.2)
     label_dict = smart_dict({'redshift': 'Redshift', 'logOH_sum_NB': r'$\log$ (O/H) + 12 [NB]', 'lp_mass': r'log M$_*$/M$_{\odot}$'})
 
     # ----------plotting----------
@@ -725,11 +725,11 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
 
         if this_zgrad_col + '_u' in df:
             axes[0].errorbar(df[mass_col], df[this_zgrad_col], yerr=df[this_zgrad_col + '_u'], c=color_arr[index], fmt='none', lw=1, alpha=0.5, zorder=100)
-            axes[1].errorbar(df[mass_col], df[this_zgrad_col] / df_sub['re_kpc'], yerr=df[this_zgrad_col + '_u'] / df_sub['re_kpc'], c=color_arr[index], fmt='none', lw=1, alpha=0.5, zorder=100)
+            axes[1].errorbar(df[mass_col], df[this_zgrad_col] / df['re_kpc'], yerr=df[this_zgrad_col + '_u'] / df['re_kpc'], c=color_arr[index], fmt='none', lw=1, alpha=0.5, zorder=100)
 
         if mass_col + '_u' in df:
             axes[0].errorbar(df[mass_col], df[this_zgrad_col], xerr=df[mass_col + '_u'], c=color_arr[index], fmt='none', lw=1, alpha=0.5, zorder=100)
-            axes[1].errorbar(df[mass_col], df[this_zgrad_col] / df_sub['re_kpc'], xerr=df[mass_col + '_u'], c=color_arr[index], fmt='none', lw=1, alpha=0.5, zorder=100)
+            axes[1].errorbar(df[mass_col], df[this_zgrad_col] / df['re_kpc'], xerr=df[mass_col + '_u'], c=color_arr[index], fmt='none', lw=1, alpha=0.5, zorder=100)
 
     for ax in axes: ax.axhline(0, ls='--', c='k', lw=0.5)
 
@@ -789,6 +789,10 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     w17 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], ec='k', marker=marker_dict[sample])
     axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad'], yerr=df_lit['Zgrad_u'], color=color_dict[sample], lw=0.5, fmt='none')
 
+    # --------plotting Wang+19 data: for dex/kpc----------
+    w19 = axes[1].scatter([9.05, 9.41], [0.12, 0.11], color='sienna', marker='*', s=100, lw=0.5, edgecolor='k', label='Wang+19')
+    axes[1].errorbar([9.05, 9.41], [0.12, 0.11], xerr=[0.05, 0.01], yerr=[0.01, 0.02], c='gray', fmt='none', lw=1, alpha=0.5)
+
     # --------plotting Wang+22 data: for dex/kpc----------
     w22 = axes[1].scatter(9.04, 0.165, color='goldenrod', marker='*', s=200, lw=0.5, edgecolor='k', label='Wang+22')
     axes[1].errorbar(9.04, 0.165, xerr=0.05, yerr=0.023, c='gray', fmt='none', lw=1, alpha=0.5)
@@ -844,7 +848,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     f21 = axes[1].plot(xarr, np.poly1d(coeff)(xarr), color='cornflowerblue', ls='dotted', label=f'Franchetto+21')[0]
 
     # ---------annotate axes and save figure-------
-    handles = this_work + [j15, w17, m20] + s21 + [w22, v24, l25, l25s, l25b, j25] + [f21, foggie]
+    handles = this_work + [j15, w17, w19, m20] + s21 + [w22, v24, l25, l25s, l25b, j25] + [f21, foggie]
     labels = [h.get_label() for h in handles]
     fig.legend(handles, labels, loc='upper center', ncol=5, bbox_to_anchor=(0.5, 0.99), fontsize=args.fontsize / args.fontfactor)
 
@@ -1461,7 +1465,7 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
         #linefit_lenstronomy = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
         
         # run MCMC
-        params_llim, params_median, params_ulim = mcmc_vorbin_fit(df, args, filter='F150W', quant_x=quant_x, quant_y=quant, plot_corner=False, Zdiag=f'{Zdiag}_{args.Zbranch}')
+        params_llim, params_median, params_ulim = mcmc_vorbin_fit(df, args, filter='F150W', quant_x=quant_x, quant_y=quant, plot_corner=False, Zdiag=Zdiag)
         
         # convert the unit of best fit slope in order to plot/save
         params_median = convert_slope_unit(params_median, args, quant_x=quant_x) # convert from dex/arcsecond to something else
@@ -2158,7 +2162,8 @@ def load_metallicity_map(field, objid, Zdiag, args):
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     C25_text = '_wC25' if args.use_C25 and 'NB' not in Zdiag else ''
-    output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map_upto_{extent_text}{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}{AGN_diag_text}{exclude_text}{C25_text}.fits'
+    dered_text = '_dered' if args.dered_in_NB and 'NB' in Zdiag else ''
+    output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map_upto_{extent_text}{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}{AGN_diag_text}{exclude_text}{C25_text}{dered_text}.fits'
     ####################################
     if 'glass' in field and 'SNR_4.0' in str(output_fitsname):
         output_fitsname = Path(str(output_fitsname).replace('SNR_4.0', 'SNR_2.0'))
@@ -2191,7 +2196,8 @@ def load_metallicity_df(field, objid, Zdiag, args, ensure_sii=False):
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     C25_text = '_wC25' if args.use_C25 and 'NB' not in Zdiag else ''
-    output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map_upto_{extent_text}{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}{AGN_diag_text}{exclude_text}{C25_text}.fits'
+    dered_text = '_dered' if args.dered_in_NB and 'NB' in Zdiag else ''
+    output_fitsname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'{field}_{objid:05d}_logOH_map_upto_{extent_text}{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}{AGN_diag_text}{exclude_text}{C25_text}{dered_text}.fits'
     ####################################
     if 'glass' in field and 'SNR_4.0' in str(output_fitsname):
         output_fitsname = Path(str(output_fitsname).replace('SNR_4.0', 'SNR_2.0'))
@@ -2361,7 +2367,8 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10, do_mcmc=Fal
     Zbranch_text = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     C25_text = '_wC25' if args.use_C25 and 'NB' not in Zdiag else ''
-    figname = f'metallicity_multi_panel_Zdiag_{Zdiag}{Zbranch_text}_upto_{extent_text}{C25_text}.png'
+    dered_text = '_dered' if args.dered_in_NB and 'NB' in Zdiag else ''
+    figname = f'metallicity_multi_panel{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}_upto_{extent_text}{C25_text}{dered_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -3338,11 +3345,12 @@ def mcmc_vorbin_fit(logOH_df, args, filter='F150W', quant_x='distance_arcsec', q
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     C25_text = '_wC25' if args.use_C25 and 'NB' not in Zdiag else ''
-    Zbranch_text = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
+    Zbranch_text = '' if Zdiag in ['NB', 'P25'] else f'_{args.Zbranch}'
     exclude_text = f'_without_{",".join(args.exclude_lines)}' if len(args.exclude_lines) > 0 and 'NB' in Zdiag else ''
+    dered_text = '_dered' if args.dered_in_NB and 'NB' in Zdiag else ''
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
  
-    mcmc_filename = args.root_dir / 'zgrad_paper_plots' / f'{args.field}_{args.id:05d}_logOH_Zdiag_{Zdiag}_MCMC_ndim_{ndim}_nwalkers_{args.nwalkers}_niter_{args.niter}_upto_{extent_text}{C25_text}{AGN_diag_text}{exclude_text}.h5py'
+    mcmc_filename = args.root_dir / 'zgrad_paper_plots' / f'{args.field}_{args.id:05d}_logOH{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}_MCMC_ndim_{ndim}_nwalkers_{args.nwalkers}_niter_{args.niter}_upto_{extent_text}{C25_text}{AGN_diag_text}{exclude_text}{dered_text}.h5py'
 
     # ----------------checking if saved file exists--------------
     if not os.path.exists(mcmc_filename) or args.clobber_mcmc:
@@ -3664,6 +3672,7 @@ if __name__ == "__main__":
     args.voronoi_snr = 3.
     args.re_limit = 2.5
     args.use_C25 = True
+    args.dered_in_NB = True
 
     args.nwalkers = 100 # 100
     args.niter = 5000 # 5000
@@ -3766,7 +3775,7 @@ if __name__ == "__main__":
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #df_agn = plot_AGN_demarcation_figure_integrated(df, args, fontsize=15)
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
-    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
+    plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
     #plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH_slope_mcmc_NB', fontsize=15)

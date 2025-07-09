@@ -679,7 +679,7 @@ def get_voronoi_bin_IDs(full_hdu, snr_thresh, plot=False, quiet=True, args=None)
 
     # --------extracting only those bins with SNR above a certain threshold for ALL relevant lines--------------
     relevant_lines = [args.voronoi_line] #  ['OII', 'Hb', 'OIII'] # 
-    final_snr_cut = 0 # snr_thresh OR 0 OR -100 (some very low number)
+    final_snr_cut = snr_thresh # snr_thresh OR 0 OR -100 (some very low number)
     bad_mask = seg_mask
     for index, line in enumerate(relevant_lines):
         line_map2, _, _, _, _ = get_emission_line_map(line, full_hdu, args, for_vorbin=True)
@@ -966,7 +966,6 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
 
     # -----------getting the dereddened flux value-----------------
     if dered and not for_vorbin:
-        print(f'Deb970: {line}, args.EB_V = {args.EB_V}') ##
         line_map_quant = get_dereddened_flux(unp.uarray(line_map, line_map_err), line_wave, args.EB_V)
         line_map = unp.nominal_values(line_map_quant)
         line_map_err = unp.std_devs(line_map_quant)
@@ -1703,7 +1702,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
             if len(line_labels) > 1:
                 # -------setting up NB parameters----------
                 dered = 'Hbeta' in line_labels and 'Halpha' in line_labels and args.dered_in_NB
-                norm_line = 'Hbeta' if 'Hbeta' in line_labels else 'OIII5007' if 'OIII5007' in line_labels else 'NII6583_Halpha'
+                norm_line = 'Hbeta' if 'Hbeta' in line_labels else 'OIII5007' if 'OIII5007' in line_labels else 'NII6583_Halpha' if 'NII6583_Halpha' in line_labels else 'Halpha' if 'Halpha' in line_labels else line_labels[0]
                 kwargs = {'prior_plot': os.path.join(out_dir, 'prior_plots', f'{this_ID}_HII_prior_plot.pdf'),
                         'likelihood_plot': os.path.join(out_dir, 'likelihood_plots', f'{this_ID}_HII_likelihood_plot.pdf'),
                         'posterior_plot': os.path.join( out_dir, 'posterior_plots', f'{this_ID}_HII_posterior_plot.pdf'),
@@ -2083,7 +2082,8 @@ def get_Z(full_hdu, args):
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
-    output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map_upto_{extent_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}{AGN_diag_text}{NB_text}{exclude_text}{C25_text}.fits'
+    dered_text = '_dered' if args.dered_in_NB and 'NB' in args.Zdiag else ''
+    output_fitsname = args.output_dir / 'catalogs' / f'{args.field}_{args.id:05d}_logOH_map_upto_{extent_text}{snr_text}{only_seg_text}{vorbin_text}_Zdiag_{args.Zdiag}{Zbranch_text}{AGN_diag_text}{NB_text}{exclude_text}{C25_text}{dered_text}.fits'
     
     # ------checking if the outputfile already exists--------------
     if os.path.exists(output_fitsname) and not args.clobber:
