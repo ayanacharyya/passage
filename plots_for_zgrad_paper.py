@@ -3034,7 +3034,7 @@ def get_line_ratio_df(objlist, ratios, args):
                                 })
                 if index == 0: # doing the distance only the first time, as it should be the same every time really
                     distance_map = get_distance_map(np.shape(dummy_map), args)
-                    #distance_map = np.ma.masked_where(net_mask, distance_map)
+                    distance_map = np.ma.masked_where(net_mask, distance_map)
                     df['distance'] = np.ma.compressed(distance_map)
                 
                 df = df.groupby('bin_ID', as_index=False).agg(np.mean)
@@ -3780,7 +3780,7 @@ if __name__ == "__main__":
     #plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #df_agn = plot_AGN_demarcation_figure_integrated(df, args, fontsize=15)
-    #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
+    plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)

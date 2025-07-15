@@ -3565,6 +3565,7 @@ if __name__ == "__main__":
                 obj = catalog[catalog['id']==args.id][0]
                 args.mag = obj['mag_auto']
             except:
+                print(f'ID {args.id} not found in phot catalog')
                 args.mag = np.nan
 
             if args.use_elliptical_bins:
