@@ -305,7 +305,19 @@ def get_distance_map(image_shape, args, for_distmap=False):
     if not args.vorbin or for_distmap:
         pixscale_kpc = args.pix_size_arcsec/ cosmo.arcsec_per_kpc_proper(args.z).value # kpc
         center_pix = image_shape[0] / 2.
-        distance_map = np.array([[np.sqrt((i - center_pix)**2 + (j - center_pix)**2) for j in range(image_shape[1])] for i in range(image_shape[0])]) * pixscale_kpc # kpc
+
+        if args.use_elliptical_bins:
+            y, x = np.indices(image_shape)
+            x_shift = x - center_pix 
+            y_shift = y - center_pix
+
+            # Rotate coordinates to align with major axis
+            x_rot = x_shift * np.cos(args.pa) + y_shift * np.sin(args.pa) # args.pa is in radians
+            y_rot = -x_shift * np.sin(args.pa) + y_shift * np.cos(args.pa)
+            
+            distance_map = np.sqrt(x_rot**2 + (y_rot / args.q)**2) * pixscale_kpc # kpc
+        else:
+            distance_map = np.array([[np.sqrt((i - center_pix)**2 + (j - center_pix)**2) for j in range(image_shape[1])] for i in range(image_shape[0])]) * pixscale_kpc # kpc
     else:
         distance_map = args.voronoi_bin_distances
 
@@ -449,7 +461,8 @@ def plot_2D_map(image, ax, args, takelog=True, label=None, cmap=None, vmin=None,
     if args.plot_circle_at_arcsec is not None: ax.add_patch(plt.Circle((0, 0), args.plot_circle_at_arcsec, color='r', fill=False, lw=0.5)) # additional circle for debugging purpose
     if 're_arcsec' in args: ax.add_patch(plt.Circle((0, 0), args.re_arcsec if args.re_limit is None else 1., color='w', fill=False, lw=0.5))
     if 'segmentation_map' in args: ax.contour(args.segmentation_map != args.id, levels=0, colors='w' if args.fortalk else 'k', extent=args.extent, linewidths=0.5) # demarcating the segmentation map zone
-    for this_circle in plot_circles_at: ax.add_patch(plt.Circle((0, 0), this_circle, color='sienna', fill=False, lw=1))
+    #for this_circle in plot_circles_at: ax.add_patch(plt.Circle((0, 0), this_circle, color='sienna', fill=False, lw=1))
+    for this_circle in plot_circles_at: ax.add_patch(matplotlib.patches.Ellipse((0, 0), width = 2 * this_circle, height = 2 * this_circle * args.q, angle=np.degrees(args.pa), color='sienna', fill=False, lw=1))
     
     if args.vorbin and args.plot_vorbin and vorbin_ax is not None:
         vorbin_IDs = args.voronoi_bin_IDs
@@ -808,8 +821,10 @@ def get_radial_bin_IDs(full_hdu, snr_thresh=3, plot=False, quiet=True, args=None
         plot_2D_map(input_map_err, axes_top[1], args, takelog=False, label=f'input {args.voronoi_line} err', cmap=cmap, hide_yaxis=True, hide_xaxis=True)
         plot_2D_map(input_snr, axes_top[2], args, takelog=False, label='input SNR', cmap=combined_cmap, hide_yaxis=True, vmin=snr_min, vmax=snr_max, hide_xaxis=True)
 
-    # -------getting the distance map and radially binning-----------
+    # -------getting the radial distance map-----------
     distance_map = get_distance_map(np.shape(args.segmentation_map), args, for_distmap=True) # kpc
+
+    # -------radially binning-----------
     if args.re_limit is None:
         radial_bin_edges = custom_spaced_grid(0,  5, args.nbins + 1, power=1.5)
     else:
@@ -3399,7 +3414,7 @@ if __name__ == "__main__":
     snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
     only_seg_text = '_onlyseg' if args.only_seg else ''
     pixscale_text = '' if args.pixscale == 0.04 else f'_{args.pixscale}arcsec_pix'
-    vorbin_text = f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}' if args.vorbin else f'_radbin_{args.nbins}bins' if args.radbin else ''
+    vorbin_text = f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}' if args.vorbin else f'_ellbin_{args.nbins}bins' if args.radbin and args.use_elliptical_bins else f'_radbin_{args.nbins}bins' if args.radbin else ''
     description_text = f'all_diag_plots{radial_plot_text}{snr_text}{only_seg_text}'
 
     # ---------determining list of fields----------------
@@ -3546,13 +3561,21 @@ if __name__ == "__main__":
             args.distance = cosmo.luminosity_distance(args.z)
             args.pix_arcsec = full_hdu[5].header['PIXASEC']
             args.pa_arr = np.unique([full_hdu[0].header[item] for item in list(full_hdu[0].header.keys()) if 'PA00' in item])
-            try: args.mag = catalog[catalog['id'] == args.id]['mag_auto'].data.data[0]
-            except: args.mag = np.nan
+            try:
+                obj = catalog[catalog['id']==args.id][0]
+                args.mag = obj['mag_auto']
+            except:
+                args.mag = np.nan
+
+            if args.use_elliptical_bins:
+                args.q = obj['b_image'] / obj['a_image']
+                args.pa = obj['theta_image'] # radians
 
             line_wcs = pywcs.WCS(full_hdu['DSCI'].header)
             args.pix_size_arcsec = utils.get_wcs_pscale(line_wcs)
             imsize_arcsec = full_hdu['DSCI'].data.shape[0] * args.pix_size_arcsec
-            args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
+            offset = args.pix_size_arcsec / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
+            args.extent = (-args.arcsec_limit - offset, args.arcsec_limit - offset, -args.arcsec_limit - offset, args.arcsec_limit - offset)
             args.EB_V = 0. # until it gets over-written, if both H alpha and H beta lines are present
 
             # --------determining true center of object---------------------
@@ -3560,7 +3583,10 @@ if __name__ == "__main__":
 
             # --------determining effective radius of object---------------------
             args.re_kpc, args.re_arcsec = get_re(full_hdu, args, filter='F150W')
-            if args.re_limit is not None: args.extent = (-args.re_limit, args.re_limit, -args.re_limit, args.re_limit)
+            if args.re_limit is not None:
+                args.pix_size_re = args.pix_size_arcsec / args.re_arcsec
+                offset = args.pix_size_re / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
+                args.extent = (-args.re_limit - offset, args.re_limit - offset, -args.re_limit - offset, args.re_limit - offset)
             
             # ---------------segmentation map---------------
             segmentation_map = full_hdu['SEG'].data

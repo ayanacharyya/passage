@@ -152,6 +152,7 @@ def parse_args():
     parser.add_argument('--debug_offset', dest='debug_offset', action='store_true', default=False, help='Do extra plots and prints for debugging offset calculation from center? Default is no.')
     parser.add_argument('--debug_re', dest='debug_re', action='store_true', default=False, help='Do extra plots and prints for debugging effective radius calculation? Default is no.')
     parser.add_argument('--use_C25', dest='use_C25', action='store_true', default=False, help='Use the Cataldi+2025 calibrations rather than Curti+2020? Default is no.')
+    parser.add_argument('--use_elliptical_bins', dest='use_elliptical_bins', action='store_true', default=False, help='Make elliptical bins instead of radial? Default is no.')
 
     # ------- args added for get_field_stats.py ------------------------------
     parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')

@@ -126,7 +126,7 @@ def plot_glass_venn(args, fontsize=10):
     # ----------annotate and save the diagram----------
     fig = ax.figure
     fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
-    fig.text(0.9, 0.9, f'GLASS\nTotal {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes, fontsize=args.fontsize)
+    fig.text(0.9, 0.9, f'(b) GLASS\nTotal {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes, fontsize=args.fontsize)
 
     plot_conditions_text = ''
     if np.array(['snr' in item.lower() for item in label_arr]).any(): plot_conditions_text += ','.join(args.line_list) + f',SNR>{args.SNR_thresh}'
@@ -164,7 +164,7 @@ def plot_passage_venn(fields, args, fontsize=10):
     # ----------annotate and save the diagram----------
     fig = ax.figure
     fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
-    fig.text(0.9, 0.9, f'PASSAGE\nTotal {len(df_passage)} objects', c='k', ha='right', va='top', transform=ax.transAxes, fontsize=args.fontsize)
+    fig.text(0.9, 0.9, f'(a) PASSAGE\nTotal {len(df_passage)} objects', c='k', ha='right', va='top', transform=ax.transAxes, fontsize=args.fontsize)
 
     has_fields = [str(int(item[3:])) for item in pd.unique(df_passage['field'])]
     has_fields.sort(key=natural_keys)
@@ -186,20 +186,17 @@ def get_sfr_df(objlist, args, Zdiag, Zdiag_branch='low', survey='passage', sum=T
     '''
     df = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
 
-    filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
-    ####################################
-    if 'glass' in survey:
-        filename = Path(str(filename).replace('SNR_4.0', 'SNR_2.0'))
-        print(f'\nWARNING: Actually choosing sfr df corresponding to vorbin SNR=2 for {survey}')
-    ####################################
+    filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits.csv'
     
     df_sfr = pd.read_csv(filename)
-    df_sfr = df_sfr.drop_duplicates(subset=['field', 'objid', 'Zdiag', 'Zdiag_branch', 'AGN_diag', 'extent_value', 'extent_unit'], keep='last')
+    df_sfr = df_sfr.drop_duplicates(subset=['field', 'objid', 'Zdiag', 'Zdiag_branch', 'AGN_diag', 'extent_value', 'extent_unit', 'dered_in_NB', 'snr_text', 'only_seg', 'vorbin_text'], keep='last')
+    
     if args.re_limit is not None: df_sfr = df_sfr[(df_sfr['extent_unit'] == 're') & (df_sfr['extent_value'] == args.re_limit)]
     else: df_sfr = df_sfr[(df_sfr['extent_unit'] == 'arcsec') & (df_sfr['extent_value'] == args.arcsec_limit)]
-    df_sfr = df_sfr[(df_sfr['Zdiag'] == Zdiag) & (df_sfr['Zdiag_branch'] == Zdiag_branch)]
     if args.AGN_diag != 'None': df_sfr = df_sfr[df_sfr['AGN_diag'] == args.AGN_diag]
-    df_sfr = df_sfr.drop(['Zdiag', 'Zdiag_branch', 'AGN_diag'], axis=1)
+    df_sfr = df_sfr[(df_sfr['Zdiag'] == Zdiag) & (df_sfr['Zdiag_branch'] == Zdiag_branch) & (df_sfr['dered_in_NB'] == args.dered_in_NB) & (df_sfr['only_seg'] == args.only_seg) & (df_sfr['vorbin_text'] == args.vorbin_text)]
+    
+    df_sfr = df_sfr.drop(['Zdiag', 'Zdiag_branch', 'AGN_diag', 'dered_in_NB', 'snr_text', 'only_seg', 'vorbin_text'], axis=1)
     df_sfr = pd.merge(df, df_sfr, on=['field', 'objid'], how='left')
 
     cols_to_extract = ['field', 'objid', 'logZ_logSFR_slope', 'logZ_logSFR_slope_u']
@@ -218,20 +215,16 @@ def get_logOH_df(objlist, args, survey='passage'):
     '''
     df = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
 
-    filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_allfits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
-    ####################################
-    if 'glass' in survey:
-        filename = Path(str(filename).replace('SNR_4.0', 'SNR_2.0'))
-        print(f'\nWARNING: Actually choosing logOH df corresponding to vorbin SNR=2 for {survey}')
-    ####################################
+    filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_allfits.csv'
     
     df_logOH = pd.read_csv(filename)
-    df_logOH = df_logOH.drop_duplicates(subset=['field', 'objid', 'Zdiag_branch', 'Zdiag', 'extent_value', 'extent_unit'], keep='last')
+    df_logOH = df_logOH.drop_duplicates(subset=['field', 'objid', 'Zdiag_branch', 'Zdiag', 'extent_value', 'extent_unit', 'dered_in_NB', 'snr_text', 'only_seg', 'vorbin_text'], keep='last')
     if args.re_limit is not None: df_logOH = df_logOH[(df_logOH['extent_unit'] == 're') & (df_logOH['extent_value'] == args.re_limit)]
     else: df_logOH = df_logOH[(df_logOH['extent_unit'] == 'arcsec') & (df_logOH['extent_value'] == args.arcsec_limit)]    
     if args.AGN_diag != 'None': df_logOH = df_logOH[df_logOH['AGN_diag'] == args.AGN_diag]
+    df_logOH = df_logOH[(df_logOH['dered_in_NB'] == args.dered_in_NB) & (df_logOH['only_seg'] == args.only_seg) & (df_logOH['vorbin_text'] == args.vorbin_text)]
 
-    df_logOH = df_logOH.drop(['extent_unit', 'extent_value', 'AGN_diag'], axis=1)
+    df_logOH = df_logOH.drop(['extent_unit', 'extent_value', 'AGN_diag', 'dered_in_NB', 'snr_text', 'only_seg', 'vorbin_text'], axis=1)
     df_logOH = pd.merge(df, df_logOH, on=['field', 'objid'], how='inner')
 
     substrings = ['logOH', 'pa', 'q']
@@ -847,8 +840,13 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     xarr = log_mass_lim
     f21 = axes[1].plot(xarr, np.poly1d(coeff)(xarr), color='cornflowerblue', ls='dotted', label=f'Franchetto+21')[0]
 
+    # --------plotting Sun+25 FIRE2 data: for dex/kpc----------
+    xarr = [8.299, 10.006, 10.743]
+    yarr = [-0.03115, -0.01311, -0.03508] # these data grabbed from the red line in Fig 6 left panel of Sun+25 using WebPlotDigititizer
+    fire2 = axes[1].plot(xarr, yarr, color='maroon', ls='solid', label=f'FIRE-2 (Sun+25)')[0]
+
     # ---------annotate axes and save figure-------
-    handles = this_work + [j15, w17, w19, m20] + s21 + [w22, v24, l25, l25s, l25b, j25] + [f21, foggie]
+    handles = this_work + [j15, w17, w19, m20] + s21 + [w22, v24, l25, l25s, l25b, j25] + [f21, foggie, fire2]
     labels = [h.get_label() for h in handles]
     fig.legend(handles, labels, loc='upper center', ncol=5, bbox_to_anchor=(0.5, 0.99), fontsize=args.fontsize / args.fontfactor)
 
@@ -883,7 +881,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     # ----------plotting----------
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub['logOH_sum_NB'], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', vmin=7.5, vmax=9.1, label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
+        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub['logOH_sum_NB'], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', vmin=7.5, vmax=9.1, label='GLASS' if m == 's' else 'PASSAGE')
     if zgrad_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], yerr=df[zgrad_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if args.annotate:
@@ -914,7 +912,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
-    ax.set_ylim(-15, 10)
+    #ax.set_ylim(-15, 10)
 
     ax.legend(fontsize=args.fontsize, loc='upper left')
 
@@ -1303,6 +1301,18 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
     args.pix_size_arcsec = utils.get_wcs_pscale(line_wcs)
     args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
     args.available_lines = np.array(['OIII' if item == 'OIII-5007' else item for item in args.available_lines])  # replace 'OIII-5007' with 'OIII'
+
+    # ----------getting info from the photometric catalog-------------
+    if args.use_elliptical_bins:
+        if 'glass' in field: survey_name, args.drv = 'glass', 'orig'
+        elif 'Par' in field: survey_name, args.drv = 'passage', 'v0.5'
+        catalog_file = args.root_dir / f'{survey_name}_data/' / args.drv / args.field / 'Products' / f'{args.field}_photcat.fits'
+        catalog = GTable.read(catalog_file)
+        
+        obj = catalog[catalog['id']==args.id][0]
+        args.mag = obj['mag_auto']        
+        args.q = obj['b_image'] / obj['a_image']
+        args.pa = obj['theta_image'] # radians
 
     # -------determining true center of object-------------
     args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W')
@@ -2222,7 +2232,32 @@ def load_metallicity_df(field, objid, Zdiag, args, ensure_sii=False):
     return logOH_df, logOH_int, logOH_sum
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_metallicity_fig_single(objid, field, Zdiag, args, fontsize=10):
+def append_to_logOH_fit_df(field, objid, logOH_int, logOH_sum, linefit_original, linefit_odr, linefit_lenstronomy, linefit_mcmc, params_llim, params_ulim, params_median, Zdiag, args):
+    '''
+    Looks for existing csv file with radial fitting info for metallicity and appends new fitted parameters to the csv file
+    '''
+    if 'Par' in field: survey = 'passage'
+    elif 'glass' in field: survey = 'glass'
+    output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_allfits.csv'
+    
+    df_logOH_fit = pd.DataFrame({'field': field, 'objid': objid, \
+                                    'logOH_sum': logOH_sum.n, 'logOH_sum_u': logOH_sum.s, 'logOH_int': logOH_int.n, 'logOH_int_u': logOH_int.s, \
+                                    'logOH_cen': linefit_original[1].n, 'logOH_cen_u': linefit_original[1].s, 'logOH_slope': linefit_original[0].n, 'logOH_slope_u': linefit_original[0].s, \
+                                    'logOH_cen_wls': linefit_odr[1].n, 'logOH_cen_wls_u': linefit_odr[1].s, 'logOH_slope_wls': linefit_odr[0].n, 'logOH_slope_wls_u': linefit_odr[0].s, \
+                                    'logOH_cen_lenstronomy': linefit_lenstronomy[1].n, 'logOH_cen_lenstronomy_u': linefit_lenstronomy[1].s, 'logOH_slope_lenstronomy': linefit_lenstronomy[0].n, 'logOH_slope_lenstronomy_u': linefit_lenstronomy[0].s, \
+                                    'logOH_cen_mcmc': linefit_mcmc[1].n, 'logOH_cen_mcmc_u': linefit_mcmc[1].s, 'logOH_slope_mcmc': linefit_mcmc[0].n, 'logOH_slope_mcmc_u': linefit_mcmc[0].s, \
+                                    'logOH_cen_mcmc_llim': params_llim[1], 'logOH_cen_mcmc_ulim': params_ulim[1], 'logOH_slope_mcmc_llim': params_llim[0], 'logOH_slope_mcmc_ulim': params_ulim[0], \
+                                    'q_mcmc': params_median[2], 'q_mcmc_llim': params_llim[2], 'q_mcmc_ulim': params_ulim[2], \
+                                    'pa_mcmc': params_median[3], 'pa_mcmc_llim': params_llim[3], 'pa_mcmc_ulim': params_ulim[3], \
+                                    'Zdiag': f'{Zdiag}_C25' if args.use_C25 and 'NB' not in Zdiag else f'{Zdiag}', 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, 'dered_in_NB': args.dered_in_NB, \
+                                    'extent_unit': 'arcsec' if args.re_limit is None else 're', 'extent_value': args.arcsec_limit if args.re_limit is None else args.re_limit, \
+                                    'snr_text': args.snr_text, 'only_seg': args.only_seg, 'vorbin_text': args.vorbin_text}, \
+                                    index=[0])
+    df_logOH_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
+    print(f'Appended metallicity fit to catalog file {output_dfname}')
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_metallicity_fig_single(objid, field, Zdiag, args, fontsize=10, do_mcmc=False):
     '''
     Plots and saves a single figure with the direct image, 2D metallicity map and metallicity radial profile for a given object
     '''
@@ -2253,7 +2288,7 @@ def plot_metallicity_fig_single(objid, field, Zdiag, args, fontsize=10):
     axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', loc='lower right')
 
     # ------plotting metallicity radial profile-----------
-    axes[2], _ = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit], Zdiag=Zdiag)
+    axes[2], _ = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit], Zdiag=Zdiag, do_mcmc=do_mcmc)
 
     # -------zoom-in annotation------------------
     if args.re_limit is not None:
@@ -2333,28 +2368,7 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10, do_mcmc=Fal
         axes[2].yaxis.tick_right()
    
         # ----------append fit to dataframe and save-----------
-        if 'Par' in field: survey = 'passage'
-        elif 'glass' in field: survey = 'glass'
-        output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_allfits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
-        ####################################
-        if 'glass' in field and 'SNR_4.0' in str(output_dfname):
-            output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
-            print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
-        ####################################
-        df_logOH_fit = pd.DataFrame({'field': field, 'objid': objid, 
-                                     'logOH_sum': logOH_sum.n, 'logOH_sum_u': logOH_sum.s, 'logOH_int': logOH_int.n, 'logOH_int_u': logOH_int.s, 
-                                     'logOH_cen': linefit_original[1].n, 'logOH_cen_u': linefit_original[1].s, 'logOH_slope': linefit_original[0].n, 'logOH_slope_u': linefit_original[0].s, 
-                                     'logOH_cen_wls': linefit_odr[1].n, 'logOH_cen_wls_u': linefit_odr[1].s, 'logOH_slope_wls': linefit_odr[0].n, 'logOH_slope_wls_u': linefit_odr[0].s, 
-                                     'logOH_cen_lenstronomy': linefit_lenstronomy[1].n, 'logOH_cen_lenstronomy_u': linefit_lenstronomy[1].s, 'logOH_slope_lenstronomy': linefit_lenstronomy[0].n, 'logOH_slope_lenstronomy_u': linefit_lenstronomy[0].s, 
-                                     'logOH_cen_mcmc': linefit_mcmc[1].n, 'logOH_cen_mcmc_u': linefit_mcmc[1].s, 'logOH_slope_mcmc': linefit_mcmc[0].n, 'logOH_slope_mcmc_u': linefit_mcmc[0].s,
-                                     'logOH_cen_mcmc_llim': params_llim[1], 'logOH_cen_mcmc_ulim': params_ulim[1], 'logOH_slope_mcmc_llim': params_llim[0], 'logOH_slope_mcmc_ulim': params_ulim[0],
-                                     'q_mcmc': params_median[2], 'q_mcmc_llim': params_llim[2], 'q_mcmc_ulim': params_ulim[2],
-                                     'pa_mcmc': params_median[3], 'pa_mcmc_llim': params_llim[3], 'pa_mcmc_ulim': params_ulim[3],
-                                     'Zdiag': f'{Zdiag}_C25' if args.use_C25 and 'NB' not in Zdiag else f'{Zdiag}', 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, 
-                                     'extent_unit': 'arcsec' if args.re_limit is None else 're', 
-                                     'extent_value': args.arcsec_limit if args.re_limit is None else args.re_limit}, index=[0])
-        df_logOH_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
-        print(f'Appended metallicity fit to catalog file {output_dfname}')
+        append_to_logOH_fit_df(field, objid, logOH_int, logOH_sum, linefit_original, linefit_odr, linefit_lenstronomy, linefit_mcmc, params_llim, params_ulim, params_median, Zdiag, args)
 
     # -------making colorbars for the entire fig----------
     cax = fig.add_axes([0.07, 0.96, 0.93 - 0.07, 0.01])    
@@ -2474,6 +2488,23 @@ def get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=None, logOH_sum=None)
     return N2_plus_Ha_map, Ha_map, sfr_map, sfr_map_corrected, sfr_int_corrected, sfr_sum_corrected
 
 # --------------------------------------------------------------------------------------------------------------------
+def append_to_sfr_fit_df(field, objid, sfr_int, sfr_sum, linefit, Zdiag, args):
+    '''
+    Looks for existing csv file with radial fitting info for SFR-metallicity correlations and appends new fitted parameters to the csv file
+    '''
+    if 'Par' in field: survey = 'passage'
+    elif 'glass' in field: survey = 'glass'
+    output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits.csv'
+
+    df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'logZ_logSFR_cen': linefit[1].n, \
+                                'logZ_logSFR_cen_u': linefit[1].s, 'logZ_logSFR_slope': linefit[0].n, 'logZ_logSFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, \
+                                'extent_unit': 'arcsec' if args.re_limit is None else 're', 'extent_value': args.arcsec_limit if args.re_limit is None else args.re_limit, 'dered_in_NB': args.dered_in_NB, \
+                                'snr_text': args.snr_text, 'only_seg': args.only_seg, 'vorbin_text': args.vorbin_text}, \
+                                index=[0])
+    df_Zsfr_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
+    print(f'Appended metallicity-sfr fit to catalog file {output_dfname}')
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     '''
     Plots and saves a single figure with the SFR map, metallicity vs SFR plot for a given object
@@ -2520,7 +2551,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     axes[1].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
 
     # -------Z vs SFR fitting-------------
-    fit_color = 'salmon'
+    fit_color = 'cornflowerblue'
     linefit = odr_fit(df, quant_x='log_sfr', quant_y='logOH')
     axes[1] = plot_fitted_line(axes[1], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
 
@@ -2531,17 +2562,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     axes[1] = annotate_axes(axes[1], r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args)
 
     # ----------append fit to dataframe and save-----------
-    if 'Par' in field: survey = 'passage'
-    elif 'glass' in field: survey = 'glass'
-    output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
-    ####################################
-    if 'glass' in field and 'SNR_4.0' in str(output_dfname):
-        output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
-        print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
-    ####################################
-    df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'logZ_logSFR_cen': linefit[1].n, 'logZ_logSFR_cen_u': linefit[1].s, 'logZ_logSFR_slope': linefit[0].n, 'logZ_logSFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, 'extent_unit': 'arcsec' if args.re_limit is None else 're', 'extent_value': args.arcsec_limit if args.re_limit is None else args.re_limit}, index=[0])
-    df_Zsfr_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
-    print(f'Appended metallicity-sfr fit to catalog file {output_dfname}')
+    append_to_sfr_fit_df(field, objid, sfr_int, sfr_sum, linefit, Zdiag, args)
 
     # -----------saving figure------------
     axes[1].text(0.05, 0.85, r'$\log$(M/M$_{\odot}$) =' + f'{args.log_mass: .2f}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
@@ -2607,7 +2628,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         axes[1].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
 
         # -------Z vs SFR fitting-------------
-        fit_color = 'salmon'
+        fit_color = 'cornflowerblue'
         linefit = odr_fit(df, quant_x='log_sfr', quant_y='logOH')
         axes[1] = plot_fitted_line(axes[1], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
 
@@ -2621,17 +2642,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         axes[1].yaxis.tick_right()
 
         # ----------append fit to dataframe and save-----------
-        if 'Par' in field: survey = 'passage'
-        elif 'glass' in field: survey = 'glass'
-        output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
-        ####################################
-        if 'glass' in field and 'SNR_4.0' in str(output_dfname):
-            output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
-            print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
-        ####################################
-        df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'logZ_logSFR_cen': linefit[1].n, 'logZ_logSFR_cen_u': linefit[1].s, 'logZ_logSFR_slope': linefit[0].n, 'logZ_logSFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, 'extent_unit': 'arcsec' if args.re_limit is None else 're', 'extent_value': args.arcsec_limit if args.re_limit is None else args.re_limit}, index=[0])
-        df_Zsfr_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
-        print(f'Appended metallicity-sfr fit to catalog file {output_dfname}')
+        append_to_sfr_fit_df(field, objid, sfr_int, sfr_sum, linefit, Zdiag, args)
 
    # -------making colorbars for the entire fig----------
     cax = fig.add_axes([0.07, 0.95, 0.93 - 0.07, 0.01])    
@@ -2720,7 +2731,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     axes[4].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
 
     # -------Z vs SFR fitting-------------
-    fit_color = 'salmon'
+    fit_color = 'cornflowerblue'
     linefit = odr_fit(df, quant_x='log_sfr', quant_y='logOH')
     axes[4] = plot_fitted_line(axes[4], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
 
@@ -2733,17 +2744,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     axes[4].set_aspect('equal')
 
     # ----------append fit to dataframe and save-----------
-    if 'Par' in field: survey = 'passage'
-    elif 'glass' in field: survey = 'glass'
-    output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits{args.snr_text}{args.only_seg_text}{args.vorbin_text}.csv'
-    ####################################
-    if 'glass' in field and 'SNR_4.0' in str(output_dfname):
-        output_dfname = Path(str(output_dfname).replace('SNR_4.0', 'SNR_2.0'))
-        print(f'\nWARNING: Actually choosing appending df corresponding to vorbin SNR=2 for {field}-{objid}') ##
-    ####################################
-    df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'logZ_logSFR_cen': linefit[1].n, 'logZ_logSFR_cen_u': linefit[1].s, 'logZ_logSFR_slope': linefit[0].n, 'logZ_logSFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, 'extent_unit': 'arcsec' if args.re_limit is None else 're', 'extent_value': args.arcsec_limit if args.re_limit is None else args.re_limit}, index=[0])
-    df_Zsfr_fit.to_csv(output_dfname, index=None, mode='a', header=not os.path.exists(output_dfname))
-    print(f'Appended metallicity-sfr fit to catalog file {output_dfname}')
+    append_to_sfr_fit_df(field, objid, sfr_int, sfr_sum, linefit, Zdiag, args)
 
     # -----------saving figure------------
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
@@ -3551,8 +3552,8 @@ def odr_fit(df_input, quant_x='distance_arcsec', quant_y='log_OH'):
     df = df.dropna(axis=0)
     try:
         model = Model(lambda param, x: np.poly1d(param)(x))
-        data = RealData(df[quant_x], df[quant_y], sy=df[quant_y + '_u'] if quant_y + '_u' in df else None, sx=df[quant_x + '_u'] if quant_x + '_u' in df else None)
-        odr = ODR(data, model, beta0=[1., 0.])  # Initial guess for slope and intercept
+        data = RealData(df[quant_x], df[quant_y], sy=df[quant_y + '_u'] if quant_y + '_u' in df and np.sum(df[quant_y + '_u']) > 0 else None, sx=df[quant_x + '_u'] if quant_x + '_u' in df and np.sum(df[quant_x + '_u']) > 0 else None)
+        odr = ODR(data, model, beta0=[0., 0.])  # Initial guess for slope and intercept
         output = odr.run()
         linefit = [ufloat(output.beta[0], output.sd_beta[0]), ufloat(output.beta[1], output.sd_beta[1])]
         if recenter_y and 'OH' in quant_y: linefit[1] = linefit[1] + recenter_to
@@ -3666,10 +3667,15 @@ if __name__ == "__main__":
     args.only_seg = True
     args.plot_ratio_maps = True
     args.exclude_lines = [] #['SII']
+    
     args.radbin = True
+    args.nbins = 5
+    args.use_elliptical_bins = True
+    
     #args.vorbin = True
-    args.voronoi_line = 'OII'
-    args.voronoi_snr = 3.
+    #args.voronoi_line = 'OII'
+    #args.voronoi_snr = 3.
+    
     args.re_limit = 2.5
     args.use_C25 = True
     args.dered_in_NB = True
@@ -3707,14 +3713,14 @@ if __name__ == "__main__":
     # -----------setting up global properties-------------------
     args.snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
     args.only_seg_text = '_onlyseg' if args.only_seg else ''
-    args.vorbin_text = f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}' if args.vorbin else f'_radbin_{args.nbins}bins' if args.radbin else ''
+    args.vorbin_text = f'_vorbin_at_{args.voronoi_line}_SNR_{args.voronoi_snr}' if args.vorbin else f'_ellbin_{args.nbins}bins' if args.radbin and args.use_elliptical_bins else f'_radbin_{args.nbins}bins' if args.radbin else ''
 
     # ------additional variables, for clarity-------------
     all_ratios = ['OII/Hb', 'OIII/Hb', 'OII,OIII/Hb', 'OIII/OII', 'OIII/OII,OIII'] #'NeIII-3867/OII', 
     SEL_Zdiags = [item for item in args.Zdiag if 'NB' not in item]
 
     # ---------venn diagram plot----------------------
-    #lot_passage_venn(['Par028'], args, fontsize=10)
+    #plot_passage_venn(['Par028'], args, fontsize=10)
     #plot_glass_venn(args, fontsize=10)
 
     # ---------photoionisation model plots----------------------
@@ -3735,8 +3741,8 @@ if __name__ == "__main__":
     #plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10)#, exclude_ids=[1303])
 
     # ---------single galaxy plot: Z map and gradient----------------------
-    #plot_metallicity_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # zgrad plot
-    #plot_metallicity_fig_single(2128, 'glass-a2744', primary_Zdiag, args, fontsize=10) # zgrad plot
+    #plot_metallicity_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10, do_mcmc=False) # zgrad plot
+    #plot_metallicity_fig_single(2128, 'glass-a2744', primary_Zdiag, args, fontsize=10, do_mcmc=False) # zgrad plot
     #plot_metallicity_fit_tests(2867, 'Par028', primary_Zdiag, args, fontsize=10)
     
     # --------to create dataframe of all metallicity quantities including radial fits, etc------------------
@@ -3763,9 +3769,9 @@ if __name__ == "__main__":
     df = make_master_df(objlist, args, sum=True)
     
     # --------multi-panel SFR-Z plots------------------
-    #objlist_ha = [[row['field'], row['objid']] for index, row in df[df['redshift'] < 2.8].iterrows()]
-    #plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
-    #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
+    # objlist_ha = [[row['field'], row['objid']] for index, row in df[df['redshift'] < 2.8].iterrows()]
+    # plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
+    # #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
 
     # ---------metallicity latex table for paper----------------------
     #df_latex = make_latex_table(df, args, sum=True)
@@ -3775,7 +3781,7 @@ if __name__ == "__main__":
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #df_agn = plot_AGN_demarcation_figure_integrated(df, args, fontsize=15)
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
-    plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
+    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
     #plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH_slope_mcmc_NB', fontsize=15)
