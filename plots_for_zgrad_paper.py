@@ -96,8 +96,10 @@ def plot_glass_venn(args, fontsize=10):
     # -------loading the data--------------
     #glass_catalog_filename = args.root_dir / 'glass_data' / 'a2744_spec_cat_niriss_20250401.fits'
     glass_catalog_filename = args.root_dir / 'glass_data' / 'full_internal_em_line_data.fits'
+    #glass_catalog_filename = args.root_dir / 'glass_data' / 'hlsp_glass-jwst_jwst_niriss_abell2744_v1.0_cat.fits'
+    
     tab = Table(fits.open(glass_catalog_filename)[1].data)
-    tab.remove_column('cdf_z') # because multi dimension column does not agree well with pandas
+    if 'cdf_z' in tab.columns: tab.remove_column('cdf_z') # because multi dimension column does not agree well with pandas
     df = tab.to_pandas()
 
     set_arr = []
@@ -126,7 +128,7 @@ def plot_glass_venn(args, fontsize=10):
     # ----------annotate and save the diagram----------
     fig = ax.figure
     fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
-    fig.text(0.9, 0.9, f'(b) GLASS\nTotal {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes, fontsize=args.fontsize)
+    fig.text(0.9, 0.9, f'GLASS\nTotal {len(df)} objects', c='k', ha='right', va='top', transform=ax.transAxes, fontsize=args.fontsize)
 
     plot_conditions_text = ''
     if np.array(['snr' in item.lower() for item in label_arr]).any(): plot_conditions_text += ','.join(args.line_list) + f',SNR>{args.SNR_thresh}'
@@ -164,7 +166,7 @@ def plot_passage_venn(fields, args, fontsize=10):
     # ----------annotate and save the diagram----------
     fig = ax.figure
     fig.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
-    fig.text(0.9, 0.9, f'(a) PASSAGE\nTotal {len(df_passage)} objects', c='k', ha='right', va='top', transform=ax.transAxes, fontsize=args.fontsize)
+    fig.text(0.9, 0.9, f'PASSAGE\nTotal {len(df_passage)} objects', c='k', ha='right', va='top', transform=ax.transAxes, fontsize=args.fontsize)
 
     has_fields = [str(int(item[3:])) for item in pd.unique(df_passage['field'])]
     has_fields.sort(key=natural_keys)
@@ -418,6 +420,15 @@ def make_master_df(objlist, args, sum=True):
     df = df_base.merge(df, on=['field', 'objid'], how='left')
     df['marker'] = df['field'].apply(lambda x: get_marker_type(x))
     
+    # --------compute OII-based SFRs-----------
+    distance = cosmo.luminosity_distance(df['redshift'])
+    OII_lum = unp.uarray(df['OII'], df['OII_u']) * 4 * np.pi * ((distance.values * u.Mpc).to('cm').value) ** 2 # converting to ergs/s (luminosity)
+    #SFR_OII = OII_lum * 1.26e-41 # luminosity in ergs/s; SFR in Msun/yr; from Vulcani+2010; Salpeter IMF
+    #SFR_OII = OII_lum * ufloat(6.58, 1.65) * 10 ** (-42) # luminosity in ergs/s; SFR in Msun/yr; from Kewley+2004 eq 4; agrees well with Selpeter IMF
+    SFR_OII = (10 ** ufloat(-39.69, 0.07)) * (OII_lum ** ufloat(0.96, 0.01)) # luminosity in ergs/s; SFR in Msun/yr; from Figueira+2022 Table 6 second-to-last row; Chabrier IMF
+    df['SFR_OII'] = unp.nominal_values(SFR_OII)
+    df['SFR_OII_u'] = unp.std_devs(SFR_OII)
+
     # ------computing mixing timescales-----------
     #Zdiag = 'NB'
     #Z_SFR_slope = unp.uarray(df['logZ_logSFR_slope'], df['logZ_logSFR_slope_u']) * (10 ** (unp.uarray(df[f'logOH_sum_{Zdiag}'], df[f'logOH_sum_{Zdiag}_u']) - 8.69)) / unp.uarray(df['SFR'], df['SFR_u']) # computing Z-SFR slope from logZ-logSFR slope
@@ -539,19 +550,27 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     print(f'Plotting SFMS...')
     if 'log_' in sfr_col and sfr_col not in df and sfr_col[4:] in df:
         df = break_column_into_uncertainty(df, sfr_col[4:], make_log=True)
-    df = df.sort_values(by='redshift')
 
+    sfr_col2 = 'log_SFR_OII'
+    if sfr_col2 is not None and 'log_' in sfr_col2 and sfr_col2 not in df and sfr_col2[4:] in df:
+        df = break_column_into_uncertainty(df, sfr_col2[4:], make_log=True)
+
+    df = df.sort_values(by='redshift')
     # ----------setting up the diagram----------
     fig, ax = plt.subplots(1, figsize=(8, 6))
-    fig.subplots_adjust(left=0.12, right=0.99, bottom=0.1, top=0.95)
+    fig.subplots_adjust(left=0.13, right=0.99, bottom=0.1, top=0.95)
 
     # ----------plotting----------
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        #p = ax.scatter(df_sub[mass_col], df_sub[sfr_col], c=np.log10(df_sub['OIII']/ df_sub['Hb']), marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
         p = ax.scatter(df_sub[mass_col], df_sub[sfr_col], c=df_sub['redshift'], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
+        if sfr_col2 is not None: ax.scatter(df_sub[mass_col], df_sub[sfr_col2], marker=m, s=100, lw=1, edgecolor='k', facecolors='none')
     if sfr_col + '_u' in df: ax.errorbar(df[mass_col], df[sfr_col], yerr=df[sfr_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[sfr_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+    if sfr_col2 is not None:
+        ax.errorbar(df[mass_col], df[sfr_col2], yerr=df[sfr_col2 + '_u'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+        #for i, row in df.iterrows(): ax.arrow(row[mass_col], row[sfr_col], 0, row[sfr_col2] - row[sfr_col], lw=0.5, color='grey', length_includes_head=True, head_width=3e-2)
+        #ax.vlines(df[mass_col], df[sfr_col], df[sfr_col2], color='k', ls='dashed', lw=0.5, zorder=-10)
     if args.annotate:
         for index, row in df.iterrows(): ax.text(row[mass_col], row[sfr_col], f'{row["objid"]}', fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
 
@@ -580,7 +599,7 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
-    ax.set_ylim(0, 1.2)
+    ax.set_ylim(-0.5, 1.5)
 
     figname = f'SFMS_colorby_redshift.png'
     save_fig(fig, figname, args)
@@ -1009,7 +1028,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     args.fontsize = fontsize
     print(f'Plotting M-t_mix...')
     color_label_dict = {'logZ_logSFR_slope':r'$\log$ Z-$\log \Sigma_{\rm SFR}$ slope', 'SFR': r'SFR (M$_{\odot}$/yr)'}
-    
+
     # ----------setting up the diagram----------
     fig, ax = plt.subplots(1, figsize=(8, 6))
     fig.subplots_adjust(left=0.14, right=0.99, bottom=0.1, top=0.95)
@@ -1022,9 +1041,12 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
 
     # ----------plotting----------
     for index, method in enumerate(mgas_methods):
+        if 'log_' in f'{ycol}_{method}' and f'{ycol}_{method}' not in df and f'{ycol}_{method}'[4:] in df:
+            df = break_column_into_uncertainty(df, f'{ycol}_{method}'[4:], make_log=True)
+
         for index2, m in enumerate(pd.unique(df['marker'])):
             df_sub = df[df['marker'] == m]
-            p = ax.scatter(df_sub[mass_col], df_sub[f'{ycol}_{method}'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
+            p = ax.scatter(df_sub[mass_col], df_sub[f'{ycol}_{method}'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS' if m == 's' else 'PASSAGE')
         if f'{ycol}_{method}_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], yerr=df[f'{ycol}_{method}_u'], c='gray', fmt='none', lw=1, alpha=0.5)
         if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     
@@ -1049,12 +1071,12 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
 
     # ---------annotate axes and save figure-------
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
-    ax.set_ylabel(r'Metal mixing timescale $t_{mix}$ (yr)', fontsize=args.fontsize)
+    ax.set_ylabel(r'log (Metal mixing timescale $t_{mix}$ (yr))', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
     if mgas_method is None or mgas_method == 'C23': ax.set_ylim(-0.7, 4.3)
-    elif mgas_method is not None and mgas_method == 'my': ax.set_ylim(None, None) #(-0.01, 0.4) #
+    elif mgas_method is not None and mgas_method == 'my': ax.set_ylim(2.2, 3.7) # (None, None) #(-0.01, 0.4) #
     else: ax.set_ylim(-0.5, 0.6)
 
     ax.legend(fontsize=args.fontsize / args.fontfactor, loc='upper right')
@@ -2683,7 +2705,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     args = load_object_specific_args(full_hdu, args, field=field)
     logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
     logOH_df, _, _ = load_metallicity_df(field, objid, Zdiag, args)
-    Zlim = [7.5, 8.9]
+    Zlim = [7., 8.9]
     log_sfr_lim = [-1., 0.5]
 
     # ----------getting the SFR maps------------------
@@ -3780,12 +3802,13 @@ if __name__ == "__main__":
     #plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #df_agn = plot_AGN_demarcation_figure_integrated(df, args, fontsize=15)
-    plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
+    #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
+    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_lenstronomy_NB'], fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
     #plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH_slope_mcmc_NB', fontsize=15)
-    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='SFR', mgas_method='my')
+    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='log_t_mix', fontsize=15, colorcol='SFR', mgas_method='my')
 
     # -----------line ratio histograms--------------
     #full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)
