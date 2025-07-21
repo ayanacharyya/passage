@@ -14,21 +14,25 @@ from util import *
 start_time = datetime.now()
 
 # ---------plots a grid in 2 ratios--------------------------------------
-def plot_ratio_grid(df_ratios, ax, args, color1='salmon', color2='cornflowerblue', color3='sienna'):
+def plot_ratio_grid(df_ratios, ax, args, color1='salmon', color2='cornflowerblue', color3='sienna', zorder=None):
     '''
     Plots the grid of a specific given line ratio for a given value of Z, q, P, on an existing axis handle
     Returns the axis handle and ratio names
     '''
-    if args.phot_models.lower() in ['mappings', 'map']: line_names_dict = smart_dict({'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'NeIII':'[NeIII]3869', 'NeIII-3867':'[NeIII]3869', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31'}) # to map between user input line labels and line labels used in ratio_list.txt file
-    elif args.phot_models.lower() in ['nebulabayes', 'nb']: line_names_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'})
+    if args.phot_models.lower() in ['mappings', 'map']:
+        line_names_dict = smart_dict({'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'NeIII':'[NeIII]3869', 'NeIII-3867':'[NeIII]3869', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31', 'HeI':'HeI3889'}) # to map between user input line labels and line labels used in ratio_list.txt file
+        ratio_labels_concat_str = ','
+    elif args.phot_models.lower() in ['nebulabayes', 'nb']:
+        line_names_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869', 'HeI':'HeI3889'})
+        ratio_labels_concat_str = '_'
 
     # ------------getting the line ratio names------------------
-    x_num_labels = ','.join([line_names_dict[item] for item in args.xnum_line.split(',')])
-    x_den_labels = ','.join([line_names_dict[item] for item in args.xden_line.split(',')])
+    x_num_labels = ratio_labels_concat_str.join([line_names_dict[item] for item in args.xnum_line.split(',')])
+    x_den_labels = ratio_labels_concat_str.join([line_names_dict[item] for item in args.xden_line.split(',')])
     xratio_name = f'{x_num_labels}/{x_den_labels}'
 
-    y_num_labels = ','.join([line_names_dict[item] for item in args.ynum_line.split(',')])
-    y_den_labels = ','.join([line_names_dict[item] for item in args.yden_line.split(',')])
+    y_num_labels = ratio_labels_concat_str.join([line_names_dict[item] for item in args.ynum_line.split(',')])
+    y_den_labels = ratio_labels_concat_str.join([line_names_dict[item] for item in args.yden_line.split(',')])
     yratio_name = f'{y_num_labels}/{y_den_labels}'
 
     if args.slice_at_quantity1 is not None:
@@ -46,13 +50,13 @@ def plot_ratio_grid(df_ratios, ax, args, color1='salmon', color2='cornflowerblue
 
         for j, quant1 in enumerate(np.unique(df_sub[args.quantity1])):
             df_sub_sub = df_sub[df_sub[args.quantity1] == quant1]
-            if not args.fit_y_envelope: ax.plot(np.log10(df_sub_sub[xratio_name]), np.log10(df_sub_sub[yratio_name]), color=color1, lw=1, alpha=(j+1)/len(np.unique(df_sub[args.quantity1])))
-            else: ax.scatter(np.log10(df_sub_sub[xratio_name]), np.log10(df_sub_sub[yratio_name]), color=color1, s=5, alpha=(j+1)/len(np.unique(df_sub[args.quantity1])))
+            if not args.fit_y_envelope: ax.plot(np.log10(df_sub_sub[xratio_name]), np.log10(df_sub_sub[yratio_name]), color=color1, lw=1, alpha=(j+1)/len(np.unique(df_sub[args.quantity1])), zorder=zorder)
+            else: ax.scatter(np.log10(df_sub_sub[xratio_name]), np.log10(df_sub_sub[yratio_name]), color=color1, s=5, alpha=(j+1)/len(np.unique(df_sub[args.quantity1])), zorder=zorder)
             if args.annotate and i == len(np.unique(df_ratios[args.quantity3])) - 1: ax.annotate(f'{args.quantity1} = {quant1:.2f}', xy=(np.log10(df_sub_sub[xratio_name].values[0]), np.log10(df_sub_sub[yratio_name].values[0])), xytext=(np.log10(df_sub_sub[xratio_name].values[0]) - 0.2, np.log10(df_sub_sub[yratio_name].values[0]) - 0.1), color=color1, fontsize=args.fontsize/1.5, arrowprops=dict(arrowstyle="->", connectionstyle="arc3", color=color1))
 
         for j, quant2 in enumerate(np.unique(df_sub[args.quantity2])):
             df_sub_sub = df_sub[df_sub[args.quantity2] == quant2]
-            if not args.fit_y_envelope: ax.plot(np.log10(df_sub_sub[xratio_name]), np.log10(df_sub_sub[yratio_name]), color=color2, lw=1, alpha=(j+1)/len(np.unique(df_sub[args.quantity2])))
+            if not args.fit_y_envelope: ax.plot(np.log10(df_sub_sub[xratio_name]), np.log10(df_sub_sub[yratio_name]), color=color2, lw=1, alpha=(j+1)/len(np.unique(df_sub[args.quantity2])), zorder=zorder)
             if args.annotate and i == len(np.unique(df_ratios[args.quantity3])) - 1: ax.annotate(f'{args.quantity2} = {quant2:.2f}', xy=(np.log10(df_sub_sub[xratio_name].values[-1]), np.log10(df_sub_sub[yratio_name].values[-1])), xytext=(np.log10(df_sub_sub[xratio_name].values[-1]) - 0.1, np.log10(df_sub_sub[yratio_name].values[-1]) + 0.1), color=color2, fontsize=args.fontsize/1.5, arrowprops=dict(arrowstyle="->", connectionstyle="arc3", color=color2))
 
         if args.annotate: ax.annotate(f'{args.quantity3} = {quant3:.2f}', xy=(np.log10(df_sub[xratio_name].values[-1]), np.log10(df_sub[yratio_name].values[-1])), xytext=(np.log10(df_sub[xratio_name].values[-1]) + 0.3, np.log10(df_sub[yratio_name].values[-1]) - 0.2), color=color3, fontsize=args.fontsize / 1.5, arrowprops=dict(arrowstyle="->", connectionstyle="arc3", color=color3))
@@ -60,7 +64,7 @@ def plot_ratio_grid(df_ratios, ax, args, color1='salmon', color2='cornflowerblue
     for i, quant1 in enumerate(np.unique(df_ratios[args.quantity1])):
         for j, quant2 in enumerate(np.unique(df_ratios[args.quantity2])):
             df_sub = df_ratios[(df_ratios[args.quantity1] == quant1) & (df_ratios[args.quantity2] == quant2)]
-            if not args.fit_y_envelope: ax.plot(np.log10(df_sub[xratio_name]), np.log10(df_sub[yratio_name]), color=color3, lw=0.5, alpha=0.7)
+            if not args.fit_y_envelope: ax.plot(np.log10(df_sub[xratio_name]), np.log10(df_sub[yratio_name]), color=color3, lw=0.5, alpha=0.7, zorder=zorder)
 
     return ax, xratio_name, yratio_name
 
@@ -75,7 +79,7 @@ def plot_ratio_grid_fig(df_ratios, args):
     fig.subplots_adjust(left=0.13, right=0.98, bottom=0.1, top=0.95, wspace=0.2)
 
     # --------plot the model ratios---------------
-    ax, xratio_name, yratio_name = plot_ratio_grid(df_ratios, ax, args)
+    ax, xratio_name, yratio_name = plot_ratio_grid(df_ratios, ax, args, color1='grey', color2='slategrey', color3='k')
 
     # ------annotate figure-----------------------
     ax.grid(which='both', color='gray', linestyle='solid', linewidth=1, alpha=0.3)
@@ -106,6 +110,9 @@ def plot_ratio_grid_fig(df_ratios, args):
         xbins = np.log10(grouped[xratio_name].mean().values)
         ybins = np.log10(grouped[yratio_name].max().values)
         ax.plot(xbins, ybins, c='r', lw=0.5)
+        good_mask = np.isfinite(xbins) & np.isfinite(ybins)
+        xbins = xbins[good_mask]
+        ybins = ybins[good_mask]
 
         col_arr = ['brown', 'darkgreen', 'cornflowerblue']
         for index, (p_init, func) in enumerate(zip(p_init_arr, func_arr)):
@@ -113,6 +120,17 @@ def plot_ratio_grid_fig(df_ratios, args):
             ax.plot(xarr, func(xarr, *p_init), c=col_arr[index], lw=1, ls='--')
             ax.plot(xarr, func(xarr, *popt), c=col_arr[index], lw=2)
             ax.text(0.98, 0.01 + index * 0.07, f'fit{index+1} = [{",".join([f"{item:.2f}" for item in popt])}]', c=col_arr[index], ha='right', va='bottom', fontsize=args.fontsize, transform=ax.transAxes)
+
+    # ---------overplotting PASSAGE data (just for testing)-----------
+    plot_obs = False
+    if plot_obs and 'NeIII' in xratio_name and 'OII' in xratio_name and 'OIII' in yratio_name and 'Hb' in yratio_name:
+        xratio_obs = [-0.90640806, -0.61399704, -0.91189729, -1.05308799, -0.36810436, -0.70009846, -0.29619577]
+        xratio_obs_u = [0.19461307, 0.22285751, 0.15153192, 0.13117345, 0.16905686, 0.1220704 , 0.16279206]
+        yratio_obs = [0.72876648, -0.37213436,  0.60250344,  0.35938713,  0.65592483, 0.56240128,  0.48488258]
+        yratio_obs_u = [0.10834597, 0.14484821, 0.04069497, 0.0399341 , 0.09941895, 0.06530041, 0.04538175]
+        id_obs = [2727, 300, 1303, 2867, 1721, 1983, 1991]
+        ax.errorbar(xratio_obs, yratio_obs, xerr=xratio_obs_u, yerr=yratio_obs_u, c='sienna', ms=10, mec='k', ecolor='grey', linestyle='none', fmt='o')
+        for index in range(len(id_obs)): ax.text(xratio_obs[index], yratio_obs[index], id_obs[index], fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
 
     # --------for talk plots--------------
     if args.fortalk:
@@ -335,7 +353,7 @@ if __name__ == "__main__":
         df_grid['log q'] = np.round(df_grid['log U'] + np.log10(3e10), 1)
 
         quant_names_dict = {'Z':'12 + log O/H', 'log(q)':'log q', 'log(P/k)':'log P/k', 'log(U)':'log U'}
-        line_label_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'})
+        line_label_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869', 'NeIII,HeI': 'NeIII3869_HeI3889'})
 
         quant_names = [quant_names_dict[quant] for quant in [args.quantity1, args.quantity2, args.quantity3]]
         df_ratios = df_grid[quant_names].sort_values(by=quant_names)

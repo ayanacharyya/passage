@@ -123,7 +123,7 @@ def plot_glass_venn(args, fontsize=10):
     petal_labels = generate_petal_labels(dataset_dict.values(), fmt="{size}")
     petal_labels = {logic: value if int(value) > 0 else '' for logic, value in petal_labels.items()}
     colors = generate_colors(cmap=cmap, n_colors=len(label_arr))
-    ax = draw_venn(petal_labels=petal_labels, dataset_labels=dataset_dict.keys(), hint_hidden=False, colors=colors, figsize=(8, 6), fontsize=args.fontsize, legend_loc='lower left', ax=None)
+    ax = draw_venn(petal_labels=petal_labels, dataset_labels=dataset_dict.keys(), hint_hidden=False, colors=colors, figsize=(8, 6), fontsize=args.fontsize, legend_loc='upper left', ax=None)
 
     # ----------annotate and save the diagram----------
     fig = ax.figure
@@ -551,7 +551,7 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     if 'log_' in sfr_col and sfr_col not in df and sfr_col[4:] in df:
         df = break_column_into_uncertainty(df, sfr_col[4:], make_log=True)
 
-    sfr_col2 = 'log_SFR_OII'
+    sfr_col2 = None # 'log_SFR_OII'
     if sfr_col2 is not None and 'log_' in sfr_col2 and sfr_col2 not in df and sfr_col2[4:] in df:
         df = break_column_into_uncertainty(df, sfr_col2[4:], make_log=True)
 
@@ -587,10 +587,10 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
 
     # ----------plotting theoretical diagrams----------
-    #ax = plot_SFMS_Whitaker14(ax, 2.0, color='yellowgreen')
+    #ax = plot_SFMS_Whitaker14(ax, 2, color='yellowgreen')
     ax = plot_SFMS_Shivaei15(ax, color='salmon')
-    ax = plot_SFMS_Popesso23(ax, 2.0, color='cornflowerblue')
-    #ax = plot_SFMS_Popesso23(ax, 3.0, color='royalblue')
+    ax = plot_SFMS_Popesso23(ax, 2, color='cornflowerblue')
+    #ax = plot_SFMS_Popesso23(ax, 3, color='royalblue')
 
     # ---------annotate axes and save figure-------
     plt.legend(fontsize=args.fontsize, loc='lower right')
@@ -599,7 +599,7 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
-    ax.set_ylim(-0.5, 1.5)
+    ax.set_ylim(-0.5, 1.2 if sfr_col2 is None else 1.5)
 
     figname = f'SFMS_colorby_redshift.png'
     save_fig(fig, figname, args)
@@ -1228,7 +1228,7 @@ def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False
     # ---------saving figure--------------
     if args.phot_models.lower() in ['mappings', 'map']: phot_model_text = 'mappings'
     elif args.phot_models.lower() in ['nebulabayes', 'nb']: phot_model_text = 'NebulaBayes'
-    figname = f'{phot_model_text}_grid_{yratio_name.replace("/", "-")}_va_{xratio_name.replace("/", "-")}.png'
+    figname = f'{phot_model_text}_grid_{yratio_name.replace("/", "-")}_vs_{xratio_name.replace("/", "-")}.png'
     save_fig(fig, figname, args)
 
     return
