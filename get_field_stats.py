@@ -143,7 +143,7 @@ def plot_venn(df, args, silent=False):
         if not silent: print('\n')
         condition = np.isfinite(df['lp_mass'])
         #set_arr, label_arr = make_set(df, condition, 'Stellar mass available', set_arr, label_arr, silent=silent)
-        set_arr, label_arr = make_set(df, condition, 'COSMOS-Web photometry available', set_arr, label_arr, silent=silent)
+        set_arr, label_arr = make_set(df, condition, 'COSMOS-Web\nphotometry available', set_arr, label_arr, silent=silent)
 
     if 'lp_SFR' in df:
         condition = df['lp_SFR'] > args.log_SFR_thresh
@@ -164,7 +164,7 @@ def plot_venn(df, args, silent=False):
     petal_labels = generate_petal_labels(dataset_dict.values(), fmt="{size}")
     petal_labels = {logic: value if int(value) > 0 else '' for logic, value in petal_labels.items()}
     colors = generate_colors(cmap=cmap, n_colors=len(label_arr))
-    ax = draw_venn(petal_labels=petal_labels, dataset_labels=dataset_dict.keys(), hint_hidden=False, colors=colors, figsize=(8, 6), fontsize=args.fontsize, legend_loc='lower left', ax=None)
+    ax = draw_venn(petal_labels=petal_labels, dataset_labels=dataset_dict.keys(), hint_hidden=False, colors=colors, figsize=(8, 6), fontsize=args.fontsize, legend_loc='upper left', ax=None)
 
     # ---------printing the conditions for each non-zero petal label----------
     if not silent: print('\n')
