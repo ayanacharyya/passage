@@ -2757,7 +2757,7 @@ def get_AGN_func_methods(args):
     else:
         sys.exit('Choose AGN_diag to be one among VO87,H21,O2O3,O2Hb,Ne3O2')
 
-    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021', 'B22_S2Ha':'Backhaus+2022', 'B22_Ne3O2':'Backhaus+2022', 'MAPPINGS':'MAPPINGS', 'F24':'Feuillet+2024', 'NB':'NB'}
+    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021', 'B22_S2Ha':'Backhaus+2022', 'B22_Ne3O2':'Backhaus+2022', 'MAPPINGS':'MAPPINGS', 'F24':'Feuillet+2024', 'NB':'This work'}
     line_labels = [label_dict[item] for item in theoretical_lines]
 
     return theoretical_lines, line_labels
@@ -2782,7 +2782,7 @@ def AGN_func(x, theoretical_line):
     elif theoretical_line == 'MAPPINGS':  # new eqn based on MAPPINGS models
         y = np.poly1d([0.05, -0.25, 0.15, 0.89])(x)
     elif theoretical_line == 'NB':  # new eqn based on NebulaBayes models
-        y = np.poly1d([0.09, -0.03, 0.01, 0.70])(x)
+        y = np.poly1d([0.09, -0.03, 0.01, 0.70])(x) #without accounting for HeI, so x-axis is NeIII/OII
     else:
         sys.exit(f'Requested theoreitcal line {theoretical_line} should be one of K01,S24,H21,B@@_S2Ha,B22_Ne3O2')
     return y
