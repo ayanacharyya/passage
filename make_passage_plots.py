@@ -120,7 +120,7 @@ def plot_SFMS_Popesso23(ax, redshift, color='cornflowerblue'):
     ax.plot(log_mass1, unp.nominal_values(log_SFR1), ls='dashed', c=color, lw=2)
     ax.fill_between(log_mass1, unp.nominal_values(log_SFR1) - unp.std_devs(log_SFR1)/2, unp.nominal_values(log_SFR1) + unp.std_devs(log_SFR1)/2, alpha=0.3, facecolor=color)
 
-    ax.plot(log_mass2, unp.nominal_values(log_SFR2), ls='solid', c=color, lw=2, label=f'Popesso+23: z~{redshift}')
+    ax.plot(log_mass2, unp.nominal_values(log_SFR2), ls='solid', c=color, lw=2, label=f'Popesso+23: z = {redshift}')
     ax.fill_between(log_mass2, unp.nominal_values(log_SFR2) - unp.std_devs(log_SFR2)/2, unp.nominal_values(log_SFR2) + unp.std_devs(log_SFR2)/2, alpha=0.3, facecolor=color)
 
     return ax
