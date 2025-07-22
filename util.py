@@ -634,7 +634,7 @@ def make_COSMOS_subset_table(filename, args):
     print(f'Saved subset table as {outfilename}')
 
 # ----------------------------------------------------------------------------------------------------------
-def get_crossmatch(df1, df2, sep_threshold=1., df1_idcol='id', df2_idcol='id'):
+def get_crossmatch(df1, df2, sep_threshold=0.1, df1_idcol='id', df2_idcol='id'):
     '''
     Determines crossmatch between two dataframes df1 and df2
     df1 and df2 should have df1_idcol, and df2_idcol respectively, and they each have columns: ra, dec
@@ -686,7 +686,7 @@ def split_COSMOS_subset_table_by_par(args, old_dir_format=True, fields=None):
             df['passage_id'] = thisfield + '-' + df['id'].astype(str)  # making a unique combination of field and object id
 
             # -------cross-matching RA/DEC of both catalogs------
-            df_crossmatch = get_crossmatch(df, df_cosmos, sep_threshold=1.0, df1_idcol='passage_id', df2_idcol='ID')
+            df_crossmatch = get_crossmatch(df, df_cosmos, sep_threshold=0.1, df1_idcol='passage_id', df2_idcol='ID')
             df_crossmatch = df_crossmatch.rename(columns={'df1_id': 'passage_id', 'df2_id': 'ID'})
 
             if len(df_crossmatch) > 0:
@@ -741,7 +741,7 @@ def split_COSMOSWebb_table_by_par(args, filename=None, old_dir_format=True, fiel
             df['passage_id'] = thisfield + '-' + df['id'].astype(str)  # making a unique combination of field and object id
 
             # -------cross-matching RA/DEC of both catalogs------
-            df_crossmatch = get_crossmatch(df, df_cosmos, sep_threshold=1.0, df1_idcol='passage_id', df2_idcol='ID_SE++')
+            df_crossmatch = get_crossmatch(df, df_cosmos, sep_threshold=0.1, df1_idcol='passage_id', df2_idcol='ID_SE++')
             df_crossmatch = df_crossmatch.rename(columns={'df1_id': 'passage_id', 'df2_id': 'ID_SE++'})
 
             if len(df_crossmatch) > 0:

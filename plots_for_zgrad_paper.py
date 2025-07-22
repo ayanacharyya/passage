@@ -346,6 +346,21 @@ def get_glass_masses_from_He2024(df, mass_col='lp_mass', id_col='objid', field_c
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
+def get_sfr_from_oii(OII_flux, redshift):
+    '''
+    Derives SFR given the OII flux and redshift (to convert flux into luminosity) following Figueira+2022
+    Returns SFR
+    '''
+    distance = cosmo.luminosity_distance(redshift)
+    OII_lum = OII_flux * 4 * np.pi * (distance.to('cm').value ** 2) # converting to ergs/s (luminosity)
+    
+    #SFR_OII = OII_lum * 1.26e-41 # luminosity in ergs/s; SFR in Msun/yr; from Vulcani+2010; Salpeter IMF
+    #SFR_OII = OII_lum * ufloat(6.58, 1.65) * 10 ** (-42) # luminosity in ergs/s; SFR in Msun/yr; from Kewley+2004 eq 4; agrees well with Selpeter IMF
+    SFR_OII = (10 ** ufloat(-39.69, 0.07)) * (OII_lum ** ufloat(0.96, 0.01)) # luminosity in ergs/s; SFR in Msun/yr; from Figueira+2022 Table 6 second-to-last row; Chabrier IMF
+
+    return SFR_OII
+
+# --------------------------------------------------------------------------------------------------------------------
 def make_master_df(objlist, args, sum=True):
     '''
     Creates and returns a dataframe that holds all the relevant global properties for a given list of objects
@@ -421,11 +436,7 @@ def make_master_df(objlist, args, sum=True):
     df['marker'] = df['field'].apply(lambda x: get_marker_type(x))
     
     # --------compute OII-based SFRs-----------
-    distance = cosmo.luminosity_distance(df['redshift'])
-    OII_lum = unp.uarray(df['OII'], df['OII_u']) * 4 * np.pi * ((distance.values * u.Mpc).to('cm').value) ** 2 # converting to ergs/s (luminosity)
-    #SFR_OII = OII_lum * 1.26e-41 # luminosity in ergs/s; SFR in Msun/yr; from Vulcani+2010; Salpeter IMF
-    #SFR_OII = OII_lum * ufloat(6.58, 1.65) * 10 ** (-42) # luminosity in ergs/s; SFR in Msun/yr; from Kewley+2004 eq 4; agrees well with Selpeter IMF
-    SFR_OII = (10 ** ufloat(-39.69, 0.07)) * (OII_lum ** ufloat(0.96, 0.01)) # luminosity in ergs/s; SFR in Msun/yr; from Figueira+2022 Table 6 second-to-last row; Chabrier IMF
+    SFR_OII = get_sfr_from_oii(unp.uarray(df['OII'], df['OII_u']), df['redshift'].values)
     df['SFR_OII'] = unp.nominal_values(SFR_OII)
     df['SFR_OII_u'] = unp.std_devs(SFR_OII)
 
@@ -551,9 +562,11 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     if 'log_' in sfr_col and sfr_col not in df and sfr_col[4:] in df:
         df = break_column_into_uncertainty(df, sfr_col[4:], make_log=True)
 
-    sfr_col2 = None # 'log_SFR_OII'
+    sfr_col2 = 'log_SFR_OII' # None # 
     if sfr_col2 is not None and 'log_' in sfr_col2 and sfr_col2 not in df and sfr_col2[4:] in df:
         df = break_column_into_uncertainty(df, sfr_col2[4:], make_log=True)
+        to_replace = df[sfr_col] == df[sfr_col2]
+        df.loc[df[sfr_col] == df[sfr_col2], [sfr_col, sfr_col + '_u']] = [np.nan, np.nan]
 
     df = df.sort_values(by='redshift')
     # ----------setting up the diagram----------
@@ -1079,7 +1092,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     elif mgas_method is not None and mgas_method == 'my': ax.set_ylim(2.2, 3.7) # (None, None) #(-0.01, 0.4) #
     else: ax.set_ylim(-0.5, 0.6)
 
-    ax.legend(fontsize=args.fontsize / args.fontfactor, loc='upper right')
+    ax.legend(fontsize=args.fontsize, loc='upper right')
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     figname = f'M_tmix_colorby_{colorcol}_{mgas_method}_upto_{extent_text}.png' if mgas_method is not None else f'M_tmix_upto_{extent_text}.png'
@@ -1146,10 +1159,11 @@ def get_line_labels(lines):
     '''
     Returns a list of nice labels including latex math mode for a givenlist line name
     '''
-    label_dict = smart_dict({'OIII': r'O III', 'OIII5007': r'O III $\lambda$5007', \
-                            'NeIII-3867': r'Ne III', 'NeIII': r'Ne III $\lambda$3869', 'NeIII3869': r'Ne III $\lambda$3869', \
-                            'OII': r'O II', 'OII3726_29': r'O II $\lambda$3727,29', 'OII3727_29': r'O II $\lambda$3727,29', \
-                            'Hbeta': r'H$\beta$', 'Hb': r'H$\beta$'})
+    label_dict = smart_dict({'OIII': r'[O III] $\lambda$5007', 'OIII5007': r'[O III] $\lambda$5007', \
+                            'NeIII-3867': r'[Ne III]  $\lambda$3869', 'NeIII': r'[Ne III] $\lambda$3869', 'NeIII3869': r'[Ne III] $\lambda$3869', \
+                            'OII': r'[O II] $\lambda$3727,29', 'OII3726_29': r'[O II] $\lambda$3727,29', 'OII3727_29': r'[O II] $\lambda$3727,29', \
+                            'Hbeta': r'H$\beta$', 'Hb': r'H$\beta$', \
+                            'Halpha': r'H$\alpha$', 'Ha': r'H$\alpha$'})
     lines = np.atleast_1d(lines)
     labels = ['+'.join([label_dict[item] for item in line.split(',')]) for line in lines]
 
@@ -2479,35 +2493,49 @@ def get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=None, logOH_sum=None)
     '''
     distance = cosmo.luminosity_distance(args.z)
 
-    # -------deriving H-alpha map-----------
-    N2_plus_Ha_map, _, N2_plus_Ha_int, N2_plus_Ha_sum, _ = get_emission_line_map('Ha', full_hdu, args, silent=True)
-    sfr_map = compute_SFR(N2_plus_Ha_map, distance) # N2_plus_Ha_map here is really Ha_map, because the correction has not been undone yet
-    sfr_map.data[sfr_map.data==0] = np.nan
+    # --------deriving the Ha-based SFR where Halpha available---------
+    if 'Ha' in args.available_lines:
+        # -------deriving H-alpha map-----------
+        N2_plus_Ha_map, _, N2_plus_Ha_int, N2_plus_Ha_sum, _ = get_emission_line_map('Ha', full_hdu, args, silent=True)
+        sfr_map = compute_SFR(N2_plus_Ha_map, distance) # N2_plus_Ha_map here is really Ha_map, because the correction has not been undone yet
+        sfr_map.data[sfr_map.data==0] = np.nan
 
-    # ----------correcting Ha map------------
-    if not args.do_not_correct_flux:
-        factor = 0.823 # from James et al. 2023?
-        N2_plus_Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask, N2_plus_Ha_map.data / factor)
+        # ----------correcting Ha map------------
+        if not args.do_not_correct_flux:
+            factor = 0.823 # from James et al. 2023?
+            N2_plus_Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask, N2_plus_Ha_map.data / factor)
 
-    Ha_map = get_corrected_ha(N2_plus_Ha_map, logOH_map, args)
+        Ha_map = get_corrected_ha(N2_plus_Ha_map, logOH_map, args)
 
-    # -------deriving SFR map-----------
-    sfr_map_corrected = compute_SFR(Ha_map, distance)
+        # -------deriving SFR map-----------
+        sfr_map_corrected = compute_SFR(Ha_map, distance)
 
-    # -------deriving the integrated SFR------------
-    if logOH_int is not None:
-        Ha_int = get_corrected_ha(N2_plus_Ha_int, logOH_int, args)
-        sfr_int_corrected = compute_SFR(Ha_int, distance)
-    else:
-        sfr_int_corrected = ufloat(np.nan, np.nan)
+        # -------deriving the integrated SFR------------
+        if logOH_int is not None:
+            Ha_int = get_corrected_ha(N2_plus_Ha_int, logOH_int, args)
+            sfr_int_corrected = compute_SFR(Ha_int, distance)
+        else:
+            sfr_int_corrected = ufloat(np.nan, np.nan)
 
-    if logOH_sum is not None:
-        Ha_sum = get_corrected_ha(N2_plus_Ha_sum, logOH_sum, args)
-        sfr_sum_corrected = compute_SFR(Ha_sum, distance)
-    else:
-        sfr_sum_corrected = ufloat(np.nan, np.nan)
+        if logOH_sum is not None:
+            Ha_sum = get_corrected_ha(N2_plus_Ha_sum, logOH_sum, args)
+            sfr_sum_corrected = compute_SFR(Ha_sum, distance)
+        else:
+            sfr_sum_corrected = ufloat(np.nan, np.nan)
 
-    return N2_plus_Ha_map, Ha_map, sfr_map, sfr_map_corrected, sfr_int_corrected, sfr_sum_corrected
+        return N2_plus_Ha_map, Ha_map, sfr_map, sfr_map_corrected, sfr_int_corrected, sfr_sum_corrected
+
+    # --------deriving the OII-based SFR in case Halpha unavailable---------
+    elif 'OII' in args.available_lines:
+        print(f'\nH-alpha unavailable for ID {args.id}, so deriving SFR from OII..')
+        OII_map, _, OII_int, OII_sum, _ = get_emission_line_map('OII', full_hdu, args, silent=True)
+        sfr_map = get_sfr_from_oii(OII_map.data, args.z)
+        sfr_map = np.ma.masked_where(OII_map.mask, sfr_map)
+
+        sfr_int = get_sfr_from_oii(OII_int, args.z)
+        sfr_sum = get_sfr_from_oii(OII_sum, args.z)
+
+        return None, OII_map, None, sfr_map, sfr_int, sfr_sum
 
 # --------------------------------------------------------------------------------------------------------------------
 def append_to_sfr_fit_df(field, objid, sfr_int, sfr_sum, linefit, Zdiag, args):
@@ -2609,8 +2637,8 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
     log_sfr_lim = [-1.4, 0.5]
 
    # -------setting up the figure--------------------
-    nrow, ncol = 3, 2
-    fig = plt.figure(figsize=(9, 6))
+    nrow, ncol = 4, 2
+    fig = plt.figure(figsize=(9, 6) if nrow == 3 else (9, 7.5))
     fig.subplots_adjust(left=0.07, right=0.93, bottom=0.08, top=0.9, wspace=0., hspace=0.)
     outer_gs = gridspec.GridSpec(nrow, ncol, figure=fig, wspace=0.4, hspace=0.)
 
@@ -2867,6 +2895,9 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
         cbar = fig.colorbar(p, cax=cbar_ax, orientation='horizontal')
         cbar.set_label(color_lim_dict[args.colorcol][2], fontsize=args.fontsize)
         cbar.ax.tick_params(labelsize=args.fontsize)
+
+    # -----low/high branch text-------------
+    fig.text(0.95, 0.85, f'{Zbranch.title()} metallicity\nbranch chosen', fontsize=args.fontsize, c='k', ha='right', va='top')
 
     # ------------saving the full figure--------------------------
     colorby_text = f'_colorby_{args.colorcol}' if args.colorcol != 'color' else ''
@@ -3198,16 +3229,16 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
         patches = []
         if ratio in turnover_ratio_dict:
             if np.isfinite(turnover_ratio_dict[ratio]):
-                ax.fill_betweenx([-50, 50], turnover_ratio_dict[ratio], ax.get_xlim()[1], color='limegreen', alpha=shade_alpha, lw=0, label='_no_legend', zorder=-10)
-                patches.append(matplotlib.patches.Patch(facecolor='limegreen', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Outside model\n(no solution)' if index == len(ratios) - 1 else None))
+                ax.fill_betweenx([-50, 50], turnover_ratio_dict[ratio], ax.get_xlim()[1], color='salmon', alpha=shade_alpha, lw=0, label='_no_legend', zorder=-10)
+                patches.append(matplotlib.patches.Patch(facecolor='salmon', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Outside model\n(no solution)' if index == len(ratios) - 1 else None))
             elif ratio in monosolution_uplim_dict:
-                ax.fill_betweenx([-50, 50], monosolution_uplim_dict[ratio], ax.get_xlim()[1], color='limegreen', alpha=shade_alpha, lw=0, label='_no_legend', zorder=-10)
-                patches.append(matplotlib.patches.Patch(facecolor='limegreen', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Outside model\n(no solution)' if index == len(ratios) - 1 else None))
+                ax.fill_betweenx([-50, 50], monosolution_uplim_dict[ratio], ax.get_xlim()[1], color='salmon', alpha=shade_alpha, lw=0, label='_no_legend', zorder=-10)
+                patches.append(matplotlib.patches.Patch(facecolor='salmon', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Outside model\n(no solution)' if index == len(ratios) - 1 else None))
 
         if ratio in monosolution_uplim_dict:
-            if ax.get_xlim()[0] < monosolution_lolim_dict[ratio]: ax.fill_betweenx([-50, 50], ax.get_xlim()[0], monosolution_lolim_dict[ratio], color='limegreen', alpha=shade_alpha, lw=0, label='_no_legend_', zorder=-10)
-            ax.fill_betweenx([-50, 50],  monosolution_lolim_dict[ratio], monosolution_uplim_dict[ratio], color='salmon', alpha=shade_alpha, lw=0, label='_no_legend_', zorder=-10)
-            patches.append(matplotlib.patches.Patch(facecolor='salmon', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Only high-Z branch\n(one solution)' if index == len(ratios) - 1 else None))
+            if ax.get_xlim()[0] < monosolution_lolim_dict[ratio]: ax.fill_betweenx([-50, 50], ax.get_xlim()[0], monosolution_lolim_dict[ratio], color='salmon', alpha=shade_alpha, lw=0, label='_no_legend_', zorder=-10)
+            ax.fill_betweenx([-50, 50],  monosolution_lolim_dict[ratio], monosolution_uplim_dict[ratio], color='limegreen', alpha=shade_alpha, lw=0, label='_no_legend_', zorder=-10)
+            patches.append(matplotlib.patches.Patch(facecolor='limegreen', edgecolor='black', linewidth=1, alpha=shade_alpha, label='Only high-Z branch\n(one solution)' if index == len(ratios) - 1 else None))
 
         ax.set_ylim(ylim)
         ax.set_xlabel(f'Log {ratio.replace(",", "+")}', fontsize=args.fontsize)
@@ -3782,7 +3813,7 @@ if __name__ == "__main__":
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=10)
 
     # ---------single galaxy plot: SFR map and correlation----------------------
-    #plot_metallicity_sfr_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
+    #plot_metallicity_sfr_fig_single(1849, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
     
     # ---------single galaxy plot: SFR-Z radial profile----------------------
     #plot_metallicity_sfr_radial_profile_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=13)
@@ -3791,8 +3822,8 @@ if __name__ == "__main__":
     df = make_master_df(objlist, args, sum=True)
     
     # --------multi-panel SFR-Z plots------------------
+    #plot_metallicity_sfr_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)#, exclude_ids=[1303])
     # objlist_ha = [[row['field'], row['objid']] for index, row in df[df['redshift'] < 2.8].iterrows()]
-    # plot_metallicity_sfr_fig_multiple(objlist_ha, primary_Zdiag, args, fontsize=10, exclude_ids=[1303])
     # #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
 
     # ---------metallicity latex table for paper----------------------

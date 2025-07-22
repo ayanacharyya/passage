@@ -142,7 +142,7 @@ def plot_venn(df, args, silent=False):
     if 'lp_mass' in df:
         if not silent: print('\n')
         condition = np.isfinite(df['lp_mass'])
-        #set_arr, label_arr = make_set(df, condition, 'Stellar mass available', set_arr, label_arr, silent=silent)
+        set_arr, label_arr = make_set(df, condition, 'Stellar mass available', set_arr, label_arr, silent=silent)
         set_arr, label_arr = make_set(df, condition, 'COSMOS-Web\nphotometry available', set_arr, label_arr, silent=silent)
 
     if 'lp_SFR' in df:
@@ -572,7 +572,7 @@ def get_crossmatch_with_cosmos(df, args, cosmos_name='web'):
     # -------cross-matching RA/DEC of both catalogs------
     if len(df_cosmos) > 0:
         print(f'\nDoing cross-matching between PASSAGE and COSMOS catalogs..')
-        df_crossmatch = get_crossmatch(df, df_cosmos, sep_threshold=1.0, df1_idcol='par_obj', df2_idcol='id')
+        df_crossmatch = get_crossmatch(df, df_cosmos, sep_threshold=0.1, df1_idcol='par_obj', df2_idcol='id')
         df_crossmatch = df_crossmatch.rename(columns={'df1_id':'passage_id', 'df2_id':'cosmos_id'})
         df_crossmatch = pd.merge(df_crossmatch[['passage_id', 'cosmos_id']], df_cosmos, left_on='cosmos_id', right_on='id', how='inner').drop(['id', 'ra', 'dec'], axis=1)
 

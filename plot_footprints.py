@@ -254,7 +254,7 @@ if __name__ == "__main__":
             df = df[df['objid'].isin([1303,1934,2734,2867,300,2903])].reset_index(drop=True) # only choosing the pre-determined good galaxies
             print(f'Using only the pre-determined good galaxies, and there are {len(df)} of them..')
 
-        fig = plot_skycoord_from_df(df, fig.axes[0], color='red', alpha=1, size=2, fontsize=args.fontsize)
+        fig = plot_skycoord_from_df(df, fig.axes[0], color='red', alpha=1, size=0.2, fontsize=args.fontsize)
 
     # ------getting sky region of interest-----------------
     passage_reg_filename = list(reg_files_dir.glob('*PASSAGE*.reg'))[0]
@@ -276,10 +276,10 @@ if __name__ == "__main__":
     if args.plot_cosmoswebb_objects:
         df = read_COSMOSWebb_catalog(args=args, filename=args.input_dir / 'COSMOS/COSMOS_Web_for_Ayan_Dec24_nofluxes.fits')
         df = df[Par28_sky_region.contains(SkyCoord(df['ra'], df['dec'], unit='deg'), pywcs.WCS(bg_img_hdu[0].header))]
-        fig = plot_skycoord_from_df(df, fig.axes[0], color='forestgreen', alpha=1, size=1, fontsize=args.fontsize)
+        fig = plot_skycoord_from_df(df, fig.axes[0], color='forestgreen', alpha=1, size=0.1, fontsize=args.fontsize)
         zCOSMOS_text += '_with_COSMOSWebb'
 
-        # ------saving figure---------
+    # ------saving figure---------
     if args.fortalk:
         mplcyberpunk.add_glow_effects()
         try: mplcyberpunk.make_lines_glow()
