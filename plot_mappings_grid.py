@@ -79,7 +79,7 @@ def plot_ratio_grid_fig(df_ratios, args):
     fig.subplots_adjust(left=0.13, right=0.98, bottom=0.1, top=0.95, wspace=0.2)
 
     # --------plot the model ratios---------------
-    ax, xratio_name, yratio_name = plot_ratio_grid(df_ratios, ax, args, color1='grey', color2='slategrey', color3='k')
+    ax, xratio_name, yratio_name = plot_ratio_grid(df_ratios, ax, args)#, color1='grey', color2='slategrey', color3='k')
 
     # ------annotate figure-----------------------
     ax.grid(which='both', color='gray', linestyle='solid', linewidth=1, alpha=0.3)
@@ -131,6 +131,17 @@ def plot_ratio_grid_fig(df_ratios, args):
         id_obs = [2727, 300, 1303, 2867, 1721, 1983, 1991]
         ax.errorbar(xratio_obs, yratio_obs, xerr=xratio_obs_u, yerr=yratio_obs_u, c='sienna', ms=10, mec='k', ecolor='grey', linestyle='none', fmt='o')
         for index in range(len(id_obs)): ax.text(xratio_obs[index], yratio_obs[index], id_obs[index], fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
+
+    # ---------overplotting SDSS and KBSS loci from Garg+2022 (just for testing)-----------
+    plot_loci = True
+    if plot_loci and 'NII' in xratio_name and 'Ha' in xratio_name and 'OIII' in yratio_name and 'Hb' in yratio_name:
+        xarr = np.linspace(-1.5, -0.4, 20)
+        yarr_sdss = 0.61 / (xarr + 0.08) + 1.10 # Eq 1 of Garg+22
+        yarr_kbss = 0.61 / (xarr - 0.22) + 1.12 # Eq 2 of Garg+22
+
+        ax.plot(xarr ,yarr_sdss, c='k', lw=2, label='SDSS (z~0)', zorder=100)
+        ax.plot(xarr ,yarr_kbss, c='crimson', lw=2, label='KBSS (z~2)', zorder=100)
+        ax.fill_between(xarr, yarr_kbss - 0.18, yarr_kbss + 0.18, color='crimson', alpha=0.5, lw=0, zorder=100)
 
     # --------for talk plots--------------
     if args.fortalk:
