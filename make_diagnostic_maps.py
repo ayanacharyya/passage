@@ -1743,6 +1743,12 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
                 logOH = ufloat(logOH_est, logOH_err)
                 
                 print(f'Ran NB for unique ID {this_ID} ({counter + 1} out of {len(unique_IDs_array)}) with {len(obs_fluxes)} good fluxes in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
+
+                best_model_dict = Result.Posterior.best_model
+                if 'Halpha' in line_labels and 'NII6583' in line_labels:
+                    N2Ha_model = best_model_dict['table'].loc['NII6583', 'Model'] / best_model_dict['table'].loc['Halpha', 'Model']
+                    print(f'N2Ha = {N2Ha_model}')
+            
             else:
                 logOH = ufloat(np.nan, np.nan)
                 print(f'Could not run NB for unique ID {this_ID} ({counter + 1} out of {len(unique_IDs_array)}) with only {len(obs_fluxes)} good fluxes')
@@ -1776,7 +1782,7 @@ def get_Z_NB(full_hdu, args):
                        'Ha':'Halpha', 'SII':'SII6716', 'NeIII-3867':'NeIII3869'}
     else: line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
                        'Ha':'Halpha' if args.dered_in_NB else 'NII6583_Halpha', 'SII':'SII6716_31', 'NeIII-3867':'NeIII3869', 'OII-7325':'OII7320', \
-                       'HeI-5877':'HeI5876', 'Hg':'Hgamma', 'Hd':'Hdelta'}
+                       'HeI-5877':'HeI5876', 'Hg':'Hgamma', 'Hd':'Hdelta', 'NII':'NII6583'}
 
     line_map_array, line_int_array, line_sum_array, line_label_array, line_waves_array = [], [], [], [], []
     for line in args.available_lines:
@@ -1813,6 +1819,24 @@ def get_Z_NB(full_hdu, args):
             line_label_array.append(line_label_dict[line])
             line_waves_array.append(rest_wave_dict[line] * 10) # factor of 10 to convert from nm to Angstroms
 
+    # -------also adding NII flux to list if Halpha and NII are being used separately by NB----------
+    add_nii = False
+    if add_nii and 'Ha' in args.available_lines and args.dered_in_NB:
+        print(f'Providing the NII components separately to NB, since Halpha was already corrected for NII')
+        line = 'Ha'
+        line_map, line_wave, line_int, line_sum, _ = get_emission_line_map(line, full_hdu, args, dered=not args.dered_in_NB, silent=False)
+        factor = 0.823  # from grizli source code
+        line_map = np.ma.masked_where(line_map.mask, line_map.data * (1 - factor) / factor)
+        line_int = line_int  * (1 - factor) / factor
+        line_sum = line_sum  * (1 - factor) / factor
+
+        line_map_array.append(line_map)
+        line_int_array.append(line_int)
+        line_sum_array.append(line_sum)
+        line_label_array.append('NII6583')
+        line_waves_array.append(6583.454) # factor of 10 to convert from nm to Angstroms
+
+    # ----------calling NB----------------------
     logOH_map = compute_Z_NB(line_label_array, line_waves_array, line_map_array) if not args.only_integrated else None
     # if (np.array(line_int_array) > 0).all(): logOH_int = compute_Z_NB(line_label_array, line_waves_array, line_int_array)
     # else: logOH_int = ufloat(np.nan, np.nan)
