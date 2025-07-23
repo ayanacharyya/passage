@@ -71,6 +71,7 @@ def parse_args():
     parser.add_argument('--plot_zcosmos_objects', dest='plot_zcosmos_objects', action='store_true', default=False, help='Overplot the (thousands of) zCOSMOS targets? Default is no.')
     parser.add_argument('--plot_cosmos2020_objects', dest='plot_cosmos2020_objects', action='store_true', default=False, help='Overplot the (millions of) COSMOS2020 targets? Default is no.')
     parser.add_argument('--plot_cosmoswebb_objects', dest='plot_cosmoswebb_objects', action='store_true', default=False, help='Overplot the (millions of) COSMOSWebb targets? Default is no.')
+    parser.add_argument('--plot_glass_objects', dest='plot_glass_objects', action='store_true', default=False, help='Overplot the GLASS-NIRISS targets? Default is no.')
     parser.add_argument('--only_passage_regions', dest='only_passage_regions', action='store_true', default=False, help='Overplot ONLY the PASSAGE Par regions? Default is no.')
     parser.add_argument('--fg_image_dir', metavar='fg_image_dir', type=str, action='store', default=None, help='Which folder to be used for looking for the foreground image?')
     parser.add_argument('--fg_file', metavar='fg_file', type=str, action='store', default=None, help='Which file to be used for plotting the foreground images?')
