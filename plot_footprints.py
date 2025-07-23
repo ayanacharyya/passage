@@ -278,6 +278,11 @@ if __name__ == "__main__":
         df = df[Par28_sky_region.contains(SkyCoord(df['ra'], df['dec'], unit='deg'), pywcs.WCS(bg_img_hdu[0].header))]
         fig = plot_skycoord_from_df(df, fig.axes[0], color='forestgreen', alpha=1, size=0.1, fontsize=args.fontsize)
         zCOSMOS_text += '_with_COSMOSWebb'
+    if args.plot_glass_objects:
+        df = pd.read_csv('/Users/acharyya/Downloads/glass_objects.csv')
+        df = df.rename(columns={'RA':'ra', 'Dec':'dec'})
+        fig = plot_skycoord_from_df(df, fig.axes[0], color='blue', alpha=1, size=0.1, fontsize=args.fontsize)
+        zCOSMOS_text += '_with_GLASS'
 
     # ------saving figure---------
     if args.fortalk:
