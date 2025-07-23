@@ -465,6 +465,18 @@ def make_master_df(objlist, args, sum=True):
     #t_mix = slope / (B * (Sigma ** beta) * beta) # in yr
     df['t_mix_' + method] = unp.nominal_values(t_mix)
     df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)
+    # log_t_mix = unp.log10(t_mix)
+    # df['log_t_mix_' + method] = unp.nominal_values(log_t_mix)
+    # df['log_t_mix_' + method + '_u'] = unp.std_devs(log_t_mix)
+
+    # --------computing dynamical time scale-------
+    log_t_dyn = unp.log10(2.1e7 * (df['re_kpc'] ** 1.5) * ((10 ** unp.uarray(df['lp_mass'], df['lp_mass_u']) / 1e9) ** -0.5))
+    df['log_t_dyn'] = unp.nominal_values(log_t_dyn)
+    df['log_t_dyn_u'] = unp.std_devs(log_t_dyn)
+
+    # log_t_ratio = unp.log10(unp.uarray(df['t_mix_' + method], df['t_mix_' + method + '_u'])) - log_t_dyn
+    # df['log_t_ratio'] = unp.nominal_values(log_t_ratio)
+    # df['log_t_ratio_u'] = unp.std_devs(log_t_ratio)
 
     return df
 
@@ -944,7 +956,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
-    #ax.set_ylim(-15, 10)
+    ax.set_ylim(-3, 3)
 
     ax.legend(fontsize=args.fontsize, loc='upper left')
 
@@ -1060,10 +1072,12 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
         for index2, m in enumerate(pd.unique(df['marker'])):
             df_sub = df[df['marker'] == m]
             p = ax.scatter(df_sub[mass_col], df_sub[f'{ycol}_{method}'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS' if m == 's' else 'PASSAGE')
+            #p = ax.scatter(df_sub[mass_col], df_sub[f'log_t_ratio'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS' if m == 's' else 'PASSAGE')
+            #ax.scatter(df_sub[mass_col], df_sub['log_t_dyn'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis')
         if f'{ycol}_{method}_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], yerr=df[f'{ycol}_{method}_u'], c='gray', fmt='none', lw=1, alpha=0.5)
         if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+        #if f'log_t_dyn_u' in df: ax.errorbar(df[mass_col], df['log_t_dyn'], yerr=df['log_t_dyn_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     
-    if not mgas_method == 'my': ax.axhline(0, ls='--', c='k', lw=0.5)
     ax.axhline(0, c='k', ls='--', lw=0.5)
     if args.annotate:
         for index, row in df.iterrows(): ax.text(row[mass_col], row[f'{ycol}_{method}'], f'{row["objid"]}', fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
@@ -1084,12 +1098,14 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
 
     # ---------annotate axes and save figure-------
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
-    ax.set_ylabel(r'log (Metal mixing timescale $t_{mix}$ (yr))', fontsize=args.fontsize)
+    ax.set_ylabel(r'log (Metal mixing timescale $t_{mix}$ (yr))' if 'log_' in ycol else r'Metal mixing timescale $t_{mix}$ (yr)', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
     if mgas_method is None or mgas_method == 'C23': ax.set_ylim(-0.7, 4.3)
-    elif mgas_method is not None and mgas_method == 'my': ax.set_ylim(2.2, 3.7) # (None, None) #(-0.01, 0.4) #
+    elif mgas_method is not None and mgas_method == 'my':
+        if 'log_' in ycol: ax.set_ylim(None, None) #(2.2, 3.7) # 
+        else: ax.set_ylim(-100, 1100) #(None, None) #(2.2, 3.7) # 
     else: ax.set_ylim(-0.5, 0.6)
 
     ax.legend(fontsize=args.fontsize, loc='upper right')
@@ -1356,9 +1372,12 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
     # --------determining effective radius of object---------------------
     args.re_kpc, args.re_arcsec = get_re(full_hdu, args, filter='F150W')
     if args.re_limit is not None:
-        args.extent = (-args.re_limit, args.re_limit, -args.re_limit, args.re_limit)
+        args.pix_size_re = args.pix_size_arcsec / args.re_arcsec
+        offset = args.pix_size_re / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
+        args.extent = (-args.re_limit - offset, args.re_limit - offset, -args.re_limit - offset, args.re_limit - offset)
     else:
-        args.extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
+        offset = args.pix_size_arcsec / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
+        args.extent = (-args.arcsec_limit - offset, args.arcsec_limit - offset, -args.arcsec_limit - offset, args.arcsec_limit - offset)
 
     # ---------------segmentation map---------------
     segmentation_map = full_hdu['SEG'].data
@@ -1638,7 +1657,7 @@ def annotate_axes(ax, xlabel, ylabel, args, label='', clabel='', hide_xaxis=Fals
     Annotates the axis of a given 2D image
     Returns the axis handle
     '''
-    ax.text(0.1, 0.9, label, c='k', fontsize=args.fontsize/args.fontfactor, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9), transform=ax.transAxes)
+    ax.text(0.05, 0.9, label, c='k', fontsize=args.fontsize/args.fontfactor, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9), transform=ax.transAxes)
 
     ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=3, prune='both'))
     ax.xaxis.set_minor_locator(ticker.AutoMinorLocator(4))
@@ -1765,7 +1784,8 @@ def plot_rgb_image(full_hdu, filters, ax, args, hide_xaxis=False, hide_yaxis=Fal
     rgb_image = make_rgb(image_arr[0], image_arr[1], image_arr[2], interval=ManualInterval(vmin=0, vmax=maximum), stretch=SqrtStretch())
 
     # -------plot RGB image---------
-    extent = (-args.arcsec_limit, args.arcsec_limit, -args.arcsec_limit, args.arcsec_limit)
+    offset = args.pix_size_arcsec / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
+    extent = (-args.arcsec_limit - offset, args.arcsec_limit - offset, -args.arcsec_limit - offset, args.arcsec_limit - offset)
     p = ax.imshow(rgb_image, origin='lower', extent=extent, alpha=1)
     ax.set_aspect('auto') 
 
@@ -1833,7 +1853,7 @@ def plot_line_ratio_maps(full_hdu, ratio_labels, axes, args, cmap='cividis', vmi
 
         ratio_map = np.ma.masked_where(line_map_num.mask | line_map_den.mask, line_map_num.data / line_map_den.data)
         log_text = r'log ' if takelog else ''
-        ax = plot_2D_map(ratio_map, ax, ratio, args, takelog=takelog, clabel=log_text + 'flux ratio', cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
+        ax = plot_2D_map(ratio_map, ax, get_ratio_labels(ratio), args, takelog=takelog, clabel=log_text + 'flux ratio', cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
 
     return axes
 
@@ -1848,7 +1868,7 @@ def plot_line_maps(full_hdu, line_labels, axes, args, cmap='cividis', vmin=None,
         line = line_labels[index]
         line_map, _, _, _, _ = get_emission_line_map(line, full_hdu, args, dered=True, silent=True)
         log_text = r'$\log$ ' if takelog else ''
-        ax = plot_2D_map(line_map, ax, line, args, takelog=takelog, clabel=log_text + r'SB (ergs/s/cm$^2$/kpc$^2$)', cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
+        ax = plot_2D_map(line_map, ax, get_line_labels(line), args, takelog=takelog, clabel=log_text + r'SB (ergs/s/cm$^2$/kpc$^2$)', cmap=cmap, vmin=vmin, vmax=vmax, hide_xaxis=hide_xaxis, hide_yaxis=index, hide_cbar=index < len(axes) - 1)
 
     return axes
 
@@ -2112,7 +2132,7 @@ def plot_AGN_demarcation_figure_integrated(df_input, args, fontsize=10):
 
     # -----------annotating axes-----------------------
     cbar = plt.colorbar(scatter_plot_handle)
-    cbar.set_label(f'Distance from {theoretical_lines[0]} line', fontsize=args.fontsize)
+    cbar.set_label(f'Distance from maximum upper envelope', fontsize=args.fontsize)
     cbar.ax.tick_params(labelsize=args.fontsize)
 
     ax.set_xlim(-2.5, 0.5)
@@ -2829,7 +2849,7 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
 
     # -------setting limits and colors-----------
     Z_limits = [7.0, 9.1]
-    color_lim_dict = {'color':[None, None, '', ''], 'bin_ID':[None, None, 'Voronoi bin ID', 'rainbow'], 'distance':[0, 5, 'Galactocentric distance (kpc)', 'cividis'], 'distance_re':[0, 1.5, r'Galactocentric distance (R$_e$)', 'cividis'], 'agn_dist':[-1, 1, f'Distance from {args.AGN_diag} SF line', args.diverging_cmap]}
+    color_lim_dict = {'color':[None, None, '', ''], 'bin_ID':[None, None, 'Voronoi bin ID', 'rainbow'], 'distance':[0, 5, 'Galactocentric\ndistance (kpc)', 'cividis'], 'distance_re':[0, 1.5, 'Galactocentric\ndistance ' + r'(R$_e$)', 'cividis'], 'agn_dist':[-1, 1, f'Distance from {args.AGN_diag} SF line', args.diverging_cmap]}
     color = 'brown'
 
     # --------setting up full figure----------------------------------
@@ -2897,7 +2917,7 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
         cbar.ax.tick_params(labelsize=args.fontsize)
 
     # -----low/high branch text-------------
-    fig.text(0.95, 0.85, f'{Zbranch.title()} metallicity\nbranch chosen', fontsize=args.fontsize, c='k', ha='right', va='top')
+    fig.text(0.95, 0.75, f'{Zbranch.title()} metallicity\nbranch chosen', fontsize=args.fontsize, c='k', ha='right', va='top')
 
     # ------------saving the full figure--------------------------
     colorby_text = f'_colorby_{args.colorcol}' if args.colorcol != 'color' else ''
@@ -3722,7 +3742,7 @@ if __name__ == "__main__":
     args.exclude_lines = [] #['SII']
     
     args.radbin = True
-    args.nbins = 5
+    args.nbins = 4
     args.use_elliptical_bins = True
     
     #args.vorbin = True
@@ -3809,8 +3829,8 @@ if __name__ == "__main__":
     #plot_metallicity_fig_multiple(objlist, 'R23', args, fontsize=10, do_mcmc=True)
 
     # ---------metallicity comparison plots----------------------
-    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=10)
-    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=10)
+    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='low', fontsize=20)
+    #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=20)
 
     # ---------single galaxy plot: SFR map and correlation----------------------
     #plot_metallicity_sfr_fig_single(1849, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
@@ -3839,7 +3859,7 @@ if __name__ == "__main__":
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_lenstronomy_NB'], fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
     #plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH_slope_mcmc_NB', fontsize=15)
-    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='log_t_mix', fontsize=15, colorcol='SFR', mgas_method='my')
+    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='SFR', mgas_method='my')
 
     # -----------line ratio histograms--------------
     #full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)
