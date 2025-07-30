@@ -177,8 +177,8 @@ def compare_line_ratios(df, ratio_list, args, lim=[-2, 2]):
         ax.errorbar(df[ratio_name_int], df[ratio_name_sum], xerr=df[ratio_name_int + '_u'], yerr=df[ratio_name_sum + '_u'], fmt='none', c='gray', lw=0.5, zorder=-2)
 
         # --------annotating the figure-----------
-        ax.set_xlabel(f'Log {get_ratio_labels(ratio)} (Grizli)', fontsize=args.fontsize)
-        ax.set_ylabel(f'Log {get_ratio_labels(ratio)} (Sum)', fontsize=args.fontsize)
+        ax.set_xlabel(f'Log {get_ratio_labels(ratio, omit_lambda=True)} (Grizli)', fontsize=args.fontsize)
+        ax.set_ylabel(f'Log {get_ratio_labels(ratio, omit_lambda=True)} (Sum)', fontsize=args.fontsize)
 
         ax.plot([lim[0], lim[1]], [lim[0], lim[1]], c='k', ls='dotted', lw=1, zorder=-5)
 
@@ -256,13 +256,19 @@ if __name__ == "__main__":
     # -----------setting up hard-coded values-------------------
     args.fontsize = 15
     args.only_seg = True
-    args.vorbin = True
+    
+    #args.vorbin = True
     #args.AGN_diag = 'Ne3O2'
-    args.voronoi_line = 'OII'
-    args.voronoi_snr = float(3)
+    #args.voronoi_line = 'OII'
+    #args.voronoi_snr = float(3)
     #args.exclude_lines = 'SII'
+    
+    args.radbin = True
+    args.nbins = 5
+    args.use_elliptical_bins = True
+
     args.version_dict = {'passage': 'v0.5', 'glass': 'orig'}
-    #args.re_limit = 2.5
+    args.re_limit = 2.5
 
     args.line_list = 'OII,Hb,OIII,NeIII-3867'.split(',')
     args.Zdiag = [] # = 'O3O2,R2,R3,R23,NB'.split(',')
@@ -310,7 +316,7 @@ if __name__ == "__main__":
             print(f'\nDoing object {field}:{objid} which is {index + 1} of {len(objlist)}..')
 
             full_hdu = load_full_fits(objid, field, args)
-            args = load_object_specific_args(full_hdu, args)
+            args = load_object_specific_args(full_hdu, args, field=field)
             z = full_hdu[0].header['redshift']
 
             _, line_int_arr, line_sum_arr = get_emission_line_maps(full_hdu, args.line_list, args, silent=True)
