@@ -399,6 +399,7 @@ def make_master_df(objlist, args, sum=True):
             df.loc[index, 'pix_size_arcsec'] = args.pix_size_arcsec
             df.loc[index, 'npix_in_vorbin'] = len(np.ma.compressed(args.voronoi_bin_IDs))
             df.loc[index, 're_kpc'] = args.re_kpc
+            df.loc[index, 're_arcsec'] = args.re_arcsec
 
             args.only_integrated = True
             for line in line_list:
@@ -952,7 +953,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
 
     # ---------annotate axes and save figure-------
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
-    ax.set_ylabel(r'$\log$ Z-$\log \Sigma_{\rm SFR}$ slope', fontsize=args.fontsize)
+    ax.set_ylabel(r'$\log$ (O/H) + 12 - $\log \Sigma_{\rm SFR}$ slope', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
@@ -1104,14 +1105,45 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
     if mgas_method is None or mgas_method == 'C23': ax.set_ylim(-0.7, 4.3)
     elif mgas_method is not None and mgas_method == 'my':
-        if 'log_' in ycol: ax.set_ylim(None, None) #(2.2, 3.7) # 
-        else: ax.set_ylim(-100, 1100) #(None, None) #(2.2, 3.7) # 
+        if 'log_' in ycol: ax.set_ylim(2.2, 3.7) # (None, None) #
+        else: ax.set_ylim(-100, 1100) #(None, None) #
     else: ax.set_ylim(-0.5, 0.6)
 
     ax.legend(fontsize=args.fontsize, loc='upper right')
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     figname = f'M_tmix_colorby_{colorcol}_{mgas_method}_upto_{extent_text}.png' if mgas_method is not None else f'M_tmix_upto_{extent_text}.png'
+    save_fig(fig, figname, args)
+
+    return
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_re_histogram(df, args, fontsize=10):
+    '''
+    Plots and saves the histogram of R_e (in arcseconds) given a dataframe with list of objects and properties
+    '''
+    args.fontsize = fontsize
+    PSF_FWHM_arcsec_dict = {'F115W': 0.094, 'F150W': 0.092, 'F200W': 0.106} # value of PSF FWHM derived from Table 1 of https://jwst-docs.stsci.edu/jwst-near-infrared-imager-and-slitless-spectrograph/niriss-performance/niriss-point-spread-functions#gsc.tab=0
+
+    # ----------setting up the diagram----------
+    fig, ax = plt.subplots(1, figsize=(8, 6))
+    fig.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.95)
+
+    # ----------plotting----------
+    ax.hist(df['re_arcsec'], histtype='step', lw=2, color='cornflowerblue')
+    
+    # -----over-plotting F150W PSF radius------------
+    color = 'sienna'
+    filter = 'F150W'
+    ax.axvline(PSF_FWHM_arcsec_dict[filter] / 2, ls='dashed', lw=2, color=color)
+    ax.text(1.1 * PSF_FWHM_arcsec_dict[filter] / 2, ax.get_ylim()[0] + 0.5 * np.diff(ax.get_ylim())[0], r'0.5 $\times$ ' + f'FWHM ({filter})', rotation=90, va='center', ha='left', fontsize=args.fontsize, color=color)
+
+    # ---------annotate axes and save figure-------
+    ax.set_xlabel(r'R$_e$ (arcseconds)', fontsize=args.fontsize)
+    ax.set_ylabel(r'Frequency', fontsize=args.fontsize)
+    ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+
+    figname = f'Re_histogram.png'
     save_fig(fig, figname, args)
 
     return
@@ -1171,7 +1203,17 @@ def get_photoionisation_model_grid(args):
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_line_labels(lines):
+def remove_lambda_from_label(label):
+    '''
+    Remove the wavelength info from a given line label
+    Return the rest of the label
+    '''
+    str_to_find = '$\lambda'
+    if str_to_find in label: return label[ : label.find(str_to_find) - 1]
+    else: return label
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_line_labels(lines, omit_lambda=False):
     '''
     Returns a list of nice labels including latex math mode for a givenlist line name
     '''
@@ -1181,18 +1223,18 @@ def get_line_labels(lines):
                             'Hbeta': r'H$\beta$', 'Hb': r'H$\beta$', \
                             'Halpha': r'H$\alpha$', 'Ha': r'H$\alpha$'})
     lines = np.atleast_1d(lines)
-    labels = ['+'.join([label_dict[item] for item in line.split(',')]) for line in lines]
+    labels = ['+'.join([remove_lambda_from_label(label_dict[item]) if omit_lambda else label_dict[item] for item in line.split(',')]) for line in lines]
 
     if len(lines) == 1: labels = labels[0]
     return labels
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_ratio_labels(ratio_name):
+def get_ratio_labels(ratio_name, omit_lambda=False):
     '''
     Returns a nice label including latex math mode for a given ratio name
     '''
     lines = ratio_name.split('/')
-    label = '/'.join(get_line_labels(lines))
+    label = '/'.join(get_line_labels(lines, omit_lambda=omit_lambda))
 
     return label
 
@@ -1409,8 +1451,12 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
         args.vorbin = True
 
     # ---------------dust value---------------
-    try: _, args.EB_V, _ = get_EB_V(full_hdu, args, verbose=False, silent=True)
-    except: args.EB_V = ufloat(0, 0)
+    try:
+        _, EB_V_int, EB_V_sum = get_EB_V(full_hdu, args, verbose=False, silent=True)
+        if sum: args.EB_V = EB_V_sum
+        else: args.EB_V = EB_V_int
+    except:
+        args.EB_V = ufloat(0, 0)
 
     # ----------global stellar mass----------------------
     if field is not None:
@@ -1762,14 +1808,18 @@ def plot_rgb_image(full_hdu, filters, ax, args, hide_xaxis=False, hide_yaxis=Fal
     Returns the axis handle
     '''
     print(f'Plotting the RGB images with filters {filters}..')
+    PSF_FWHM_arcsec_dict = {'F115W': 0.094, 'F150W': 0.092, 'F200W': 0.106} # value of PSF FWHM derived from Table 1 of https://jwst-docs.stsci.edu/jwst-near-infrared-imager-and-slitless-spectrograph/niriss-performance/niriss-point-spread-functions#gsc.tab=0
 
     # -------get image for each filter---------
     image_arr, exptime_arr = [], []
+    col_arr = ['r', 'lightgreen', 'cornflowerblue']
     for index, filter in enumerate(filters):
         image, exptime = get_direct_image(full_hdu, filter, args)
         image_arr.append(image)
         exptime_arr.append(exptime)
-        if not hide_filter_names: ax.text(0.05, 0.95 - index * 0.1, f'{filter}', c=['r', 'lightgreen', 'cornflowerblue'][index], fontsize=args.fontsize / args.fontfactor, ha='left', va='top', transform=ax.transAxes, zorder=10)
+        if not hide_filter_names:
+            ax.text(0.05, 0.95 - index * 0.1, f'{filter}', c=col_arr[index], fontsize=args.fontsize / args.fontfactor, ha='left', va='top', transform=ax.transAxes, zorder=10)
+            if filter == 'F150W': ax.add_patch(plt.Circle((0.35, 0.93 - index * 0.1), PSF_FWHM_arcsec_dict[filter]/2, color=col_arr[index], fill=True, lw=0.5, transform=ax.transAxes)) # for over-plotting PSF size
 
     # -------normalising each image to exptime---------
     for index in range(len(exptime_arr)):
@@ -1805,7 +1855,7 @@ def plot_rgb_image(full_hdu, filters, ax, args, hide_xaxis=False, hide_yaxis=Fal
     ax.set_xlim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
     ax.set_ylim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
 
-    if 'segmentation_map_arcsec' in args: ax.contour(args.segmentation_map_arcsec != args.id, levels=0, colors='w', extent=extent, linewidths=0.5)
+    if 'segmentation_map_arcsec' in args: ax.contour(args.segmentation_map_arcsec != args.id, levels=0, colors='w', extent=extent, linewidths=0.5) # for over-plotting segmentation map
     if not skip_annotate: ax = annotate_axes(ax, 'arcsec', 'arcsec', args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
 
     return ax, rgb_image
@@ -2586,8 +2636,8 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     full_hdu = load_full_fits(objid, field, args)
     args = load_object_specific_args(full_hdu, args, field=field)
     logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
-    Zlim = [7.0, 9.1]
-    log_sfr_lim = [-1.4, 0.5]
+    Zlim = [7.0, 9.0]
+    log_sfr_lim = [-2, 0.7]
 
     # --------setting up the figure------------
     fig, axes = plt.subplots(3 if args.debug_Zsfr else 1, 2, figsize=(5.7, 7) if args.debug_Zsfr else (7, 3))
@@ -2653,8 +2703,8 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
     objlist = [item for item in objlist if not item[1] in exclude_ids]
     print(f'Plotting metallicity-SFR figure for {len(objlist)} objects..')
 
-    Zlim = [7.1, 9.1]
-    log_sfr_lim = [-1.4, 0.5]
+    Zlim = [7.0, 9.0]
+    log_sfr_lim = [-2, 0.7]
 
    # -------setting up the figure--------------------
     nrow, ncol = 4, 2
@@ -2703,7 +2753,6 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         axes[1] = plot_fitted_line(axes[1], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
 
         # --------annotating axis--------------
-        #axes[0].text(0.05, 0.95, r'$\log$(M/M$_{\odot}$) =' + f'{args.log_mass: .2f}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[0].transAxes)
         axes[1].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
         axes[1].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
         axes[1].set_ylim(Zlim[0], Zlim[1])
@@ -3742,7 +3791,7 @@ if __name__ == "__main__":
     args.exclude_lines = [] #['SII']
     
     args.radbin = True
-    args.nbins = 4
+    args.nbins = 5
     args.use_elliptical_bins = True
     
     #args.vorbin = True
@@ -3833,7 +3882,7 @@ if __name__ == "__main__":
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=20)
 
     # ---------single galaxy plot: SFR map and correlation----------------------
-    #plot_metallicity_sfr_fig_single(1849, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
+    #plot_metallicity_sfr_fig_single(300, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
     
     # ---------single galaxy plot: SFR-Z radial profile----------------------
     #plot_metallicity_sfr_radial_profile_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=13)
@@ -3859,7 +3908,8 @@ if __name__ == "__main__":
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_lenstronomy_NB'], fontsize=15)
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
     #plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH_slope_mcmc_NB', fontsize=15)
-    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=15, colorcol='SFR', mgas_method='my')
+    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='log_t_mix', fontsize=15, colorcol='SFR', mgas_method='my')
+    #plot_re_histogram(df, args, fontsize=15)
 
     # -----------line ratio histograms--------------
     #full_df_spaxels, full_df_int = get_line_ratio_df(objlist, all_ratios, args)
