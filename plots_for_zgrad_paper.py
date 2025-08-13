@@ -589,7 +589,7 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     # ----------plotting----------
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub[sfr_col], c=df_sub['redshift'], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
+        p = ax.scatter(df_sub[mass_col], df_sub[sfr_col], c=df_sub['redshift'], marker=m, plotnonfinite=True, s=200 if args.fortalk else 100, lw=1, edgecolor='k', cmap='summer' if args.fortalk else 'viridis', label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
         if sfr_col2 is not None: ax.scatter(df_sub[mass_col], df_sub[sfr_col2], marker=m, s=100, lw=1, edgecolor='k', facecolors='none')
     if sfr_col + '_u' in df: ax.errorbar(df[mass_col], df[sfr_col], yerr=df[sfr_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[sfr_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
@@ -926,7 +926,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     # ----------plotting----------
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub['logOH_sum_NB'], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', vmin=7.5, vmax=9.1, label='GLASS' if m == 's' else 'PASSAGE')
+        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub['logOH_sum_NB'], marker=m, plotnonfinite=True, s=200 if args.fortalk else 100, lw=1, edgecolor='k', cmap='summer' if args.fortalk else 'viridis', vmin=7.5, vmax=9.1, label='GLASS' if m == 's' else 'PASSAGE')
     if zgrad_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], yerr=df[zgrad_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if args.annotate:
@@ -982,7 +982,7 @@ def plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH
     # ----------plotting----------
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub[z_col], c=df_sub[colorcol], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
+        p = ax.scatter(df_sub[mass_col], df_sub[z_col], c=df_sub[colorcol], marker=m, plotnonfinite=True, s=500 if args.fortalk else 100, lw=1, edgecolor='k', cmap='summer' if args.fortalk else 'viridis', label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
     if z_col + '_u' in df: ax.errorbar(df[mass_col], df[z_col], yerr=df[z_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[z_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if args.annotate:
@@ -1038,7 +1038,7 @@ def plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
     ax.set_ylim(7.0, 9.1)
 
-    ax.legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
+    ax.legend(fontsize=args.fontsize / args.fontfactor, loc='lower right', markerscale=0.5 if args.fortalk else 1)
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     figname = f'MZR_colorby_{colorcol}_upto_{extent_text}.png'
@@ -1072,7 +1072,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
 
         for index2, m in enumerate(pd.unique(df['marker'])):
             df_sub = df[df['marker'] == m]
-            p = ax.scatter(df_sub[mass_col], df_sub[f'{ycol}_{method}'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS' if m == 's' else 'PASSAGE')
+            p = ax.scatter(df_sub[mass_col], df_sub[f'{ycol}_{method}'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=200 if args.fortalk else 100, lw=1, edgecolor='k', cmap='summer' if args.fortalk else 'viridis', label='GLASS' if m == 's' else 'PASSAGE')
             #p = ax.scatter(df_sub[mass_col], df_sub[f'log_t_ratio'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS' if m == 's' else 'PASSAGE')
             #ax.scatter(df_sub[mass_col], df_sub['log_t_dyn'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis')
         if f'{ycol}_{method}_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], yerr=df[f'{ycol}_{method}_u'], c='gray', fmt='none', lw=1, alpha=0.5)
