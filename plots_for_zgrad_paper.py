@@ -48,6 +48,8 @@ def save_fig(fig, figname, args):
     else:
         plot_output_dir = args.root_dir / 'zgrad_paper_plots'
 
+    if 'pjw' in args.drv: plot_output_dir = Path(str(plot_output_dir) + '_pjw')
+
     plot_output_dir.mkdir(exist_ok=True, parents=True)
     figname = plot_output_dir / figname
     fig.savefig(figname, transparent=args.fortalk)
@@ -367,7 +369,9 @@ def make_master_df(objlist, args, sum=True):
     Returns dataframe
     '''
     sum_text = '_sum' if sum else '_grizli_int'
-    filename = args.root_dir / 'zgrad_paper_plots' / f'master_df_using{sum_text}_with_COSMOS{cosmos_name}.csv'
+    plot_output_dir = args.root_dir / 'zgrad_paper_plots'
+    if 'pjw' in args.drv: plot_output_dir = Path(str(plot_output_dir) + '_pjw')
+    filename = plot_output_dir / f'master_df_using{sum_text}_with_COSMOS{cosmos_name}.csv'
     
     # -------------making the master df-------------------
     if not os.path.exists(filename) or args.clobber:
@@ -459,11 +463,11 @@ def make_master_df(objlist, args, sum=True):
     A, alpha = 2.5e-4, 1.5
     beta = 1 - 1/alpha
     B = A ** (1 / alpha)
-    slope = unp.uarray(df['logZ_logSFR_slope'], df['logZ_logSFR_slope_u'])
+    log_slope = unp.uarray(df['logZ_logSFR_slope'], df['logZ_logSFR_slope_u'])
     df['pix_area'] = df['npix_in_vorbin'] * df['pix_size_arcsec'] / df['redshift'].apply(lambda x: cosmo.arcsec_per_kpc_proper(x).value) # converting arcsec to kpc
     Sigma = unp.uarray(df['SFR'] / df['pix_area'], df['SFR_u'] / df['pix_area'])
-    t_mix = slope / (B * (Sigma ** beta) * (beta + slope)) # in yr
-    #t_mix = slope / (B * (Sigma ** beta) * beta) # in yr
+    t_mix = log_slope / (B * (Sigma ** beta) * (beta + log_slope)) # in yr
+    #t_mix = log_slope / (B * (Sigma ** beta) * beta) # in yr
     df['t_mix_' + method] = unp.nominal_values(t_mix)
     df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)
     # log_t_mix = unp.log10(t_mix)
@@ -1054,7 +1058,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     args.fontsize = fontsize
     print(f'Plotting M-t_mix...')
     color_label_dict = {'logZ_logSFR_slope':r'$\log$ Z-$\log \Sigma_{\rm SFR}$ slope', 'SFR': r'SFR (M$_{\odot}$/yr)'}
-
+    
     # ----------setting up the diagram----------
     fig, ax = plt.subplots(1, figsize=(8, 6))
     fig.subplots_adjust(left=0.14, right=0.99, bottom=0.1, top=0.95)
@@ -1067,9 +1071,18 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
 
     # ----------plotting----------
     for index, method in enumerate(mgas_methods):
+        # ----------discarding negative mixing times, before plotting, if any------
+        quant = f'{ycol}_{method}'[4:] if 'log_' in f'{ycol}_{method}' else f'{ycol}_{method}'
+        bad = df[quant] < 0
+        if bad.sum() > 0:
+            print(f'\nDiscarding {bad.sum()} objects (IDs: {df[bad]["objid"].values}) before plotting as they had negative mixing timescales..\n')
+            df = df[~bad]
+        
+        # ---------making log columns---------
         if 'log_' in f'{ycol}_{method}' and f'{ycol}_{method}' not in df and f'{ycol}_{method}'[4:] in df:
             df = break_column_into_uncertainty(df, f'{ycol}_{method}'[4:], make_log=True)
 
+        # ---------------plotting-------------
         for index2, m in enumerate(pd.unique(df['marker'])):
             df_sub = df[df['marker'] == m]
             p = ax.scatter(df_sub[mass_col], df_sub[f'{ycol}_{method}'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=200 if args.fortalk else 100, lw=1, edgecolor='k', cmap='summer' if args.fortalk else 'viridis', label='GLASS' if m == 's' else 'PASSAGE')
@@ -1398,8 +1411,9 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
 
     # ----------getting info from the photometric catalog-------------
     if args.use_elliptical_bins:
+
         if 'glass' in field: survey_name, args.drv = 'glass', 'orig'
-        elif 'Par' in field: survey_name, args.drv = 'passage', 'v0.5'
+        elif 'Par' in field: survey_name, args.drv = 'passage', args.drv_orig
         catalog_file = args.root_dir / f'{survey_name}_data/' / args.drv / args.field / 'Products' / f'{args.field}_photcat.fits'
         catalog = GTable.read(catalog_file)
         
@@ -3780,6 +3794,7 @@ def plot_metallicity_fit_tests(objid, field, Zdiag, args, filter='F150W', fontsi
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
+    args.drv_orig = args.drv
     if not args.keep: plt.close('all')
     if args.colorcol == 'ez_z_phot': args.colorcol = 'color'
 
@@ -3808,7 +3823,7 @@ if __name__ == "__main__":
 
     primary_Zdiag = 'NB'
     cosmos_name = 'web' # choose between '2020' (i.e. COSMOS2020 catalog) or 'web' (i.e. COSMOSWeb catalog))
-    args.version_dict = {'passage': 'v0.5', 'glass': 'orig'}
+    args.version_dict = {'passage': args.drv_orig, 'glass': 'orig'}
 
     args.plot_conditions = 'SNR,photometry'.split(',')
     #args.line_list = 'OII,NeIII-3867,Hb,OIII'.split(',')
@@ -3827,6 +3842,9 @@ if __name__ == "__main__":
     #Par28_objects = [2727] + Par28_objects
     glass_objects = [1721, 1983, 1991, 1333]
     #glass_objects = [2128] + glass_objects
+
+    obj_segid_dict = {300:288, 1303:1321, 1849:1862, 2867:2801}
+    if 'pjw' in args.drv: Par28_objects = [obj_segid_dict[item] for item in Par28_objects]
 
     passage_objlist = [['Par028', item] for item in Par28_objects]
     glass_objlist = [['glass-a2744', item] for item in glass_objects]
@@ -3850,7 +3868,7 @@ if __name__ == "__main__":
     #plot_photoionisation_models('OIII/Hb', 'Z', args, fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
-    #plot_galaxy_example_fig(1303, 'Par028', args, fontsize=12, show_log_spectra=False, show_log_map=True)
+    #plot_galaxy_example_fig(1321, 'Par028', args, fontsize=12, show_log_spectra=False, show_log_map=True)
     
     # ---------single galaxy plot: AGN demarcation----------------------
     #args.AGN_colorby = 'distance'
