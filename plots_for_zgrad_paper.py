@@ -916,7 +916,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=10):
+def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', colorcol='logOH_sum_NB', fontsize=10):
     '''
     Plots and saves the mass vs metallicity-SFR slope given a dataframe with list of objects and properties
     '''
@@ -930,7 +930,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
     # ----------plotting----------
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
-        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub['logOH_sum_NB'], marker=m, plotnonfinite=True, s=200 if args.fortalk else 100, lw=1, edgecolor='k', cmap='summer' if args.fortalk else 'viridis', vmin=7.5, vmax=9.1, label='GLASS' if m == 's' else 'PASSAGE')
+        p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub[colorcol] if colorcol is not None else 'crimson', marker=m, plotnonfinite=True, s=200 if args.fortalk else 100, lw=1, edgecolor='k', cmap='summer' if args.fortalk else 'viridis', vmin=7.5, vmax=9.1, label='GLASS' if m == 's' else 'PASSAGE')
     if zgrad_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], yerr=df[zgrad_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
     if args.annotate:
@@ -951,9 +951,10 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', font
         ax.text(0.1, 0.05, f' Slope = {linefit[0]: .2f}', c='salmon', fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
 
     # ----------making colorbar----------
-    cbar = plt.colorbar(p, pad=0.01)
-    cbar.set_label(r'$\log$ (O/H) + 12 [NB]', fontsize=args.fontsize)
-    cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
+    if colorcol is not None:
+        cbar = plt.colorbar(p, pad=0.01)
+        cbar.set_label(r'$\log$ (O/H) + 12 [NB]', fontsize=args.fontsize)
+        cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
 
     # ---------annotate axes and save figure-------
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
@@ -1085,7 +1086,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
         # ---------------plotting-------------
         for index2, m in enumerate(pd.unique(df['marker'])):
             df_sub = df[df['marker'] == m]
-            p = ax.scatter(df_sub[mass_col], df_sub[f'{ycol}_{method}'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=200 if args.fortalk else 100, lw=1, edgecolor='k', cmap='summer' if args.fortalk else 'viridis', label='GLASS' if m == 's' else 'PASSAGE')
+            p = ax.scatter(df_sub[mass_col], df_sub[f'{ycol}_{method}'], c='seagreen' if colorcol is None else df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=200 if args.fortalk else 100, lw=1, edgecolor='k', cmap='summer' if args.fortalk else 'viridis', label='GLASS' if m == 's' else 'PASSAGE')
             #p = ax.scatter(df_sub[mass_col], df_sub[f'log_t_ratio'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS' if m == 's' else 'PASSAGE')
             #ax.scatter(df_sub[mass_col], df_sub['log_t_dyn'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis')
         if f'{ycol}_{method}_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], yerr=df[f'{ycol}_{method}_u'], c='gray', fmt='none', lw=1, alpha=0.5)
@@ -1103,7 +1104,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
         ax = plot_fitted_line(ax, linefit_odr, df[mass_col], 'salmon', args, quant='', short_label=True, index=0)
 
     # ----------making colorbar----------
-    if mgas_method is not None:
+    if mgas_method is not None and colorcol is not None:
         cbar = plt.colorbar(p, pad=0.01)
         cbar.set_label(color_label_dict[colorcol], fontsize=args.fontsize)
         cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
@@ -3900,7 +3901,7 @@ if __name__ == "__main__":
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=20)
 
     # ---------single galaxy plot: SFR map and correlation----------------------
-    #plot_metallicity_sfr_fig_single(300, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
+    #plot_metallicity_sfr_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
     
     # ---------single galaxy plot: SFR-Z radial profile----------------------
     #plot_metallicity_sfr_radial_profile_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=13)
@@ -3924,7 +3925,7 @@ if __name__ == "__main__":
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_lenstronomy_NB'], fontsize=15)
-    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)
+    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15), colorcol=None)
     #plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH_slope_mcmc_NB', fontsize=15)
     #plot_Mtmix(df, args, mass_col='lp_mass', ycol='log_t_mix', fontsize=15, colorcol='SFR', mgas_method='my')
     #plot_re_histogram(df, args, fontsize=15)
