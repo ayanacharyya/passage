@@ -69,10 +69,12 @@ def parse_args():
     parser.add_argument('--bg_file', metavar='bg_file', type=str, action='store', default=None, help='Which file to be used for plotting the background image?')
     parser.add_argument('--bg_image_dir', metavar='bg_image_dir', type=str, action='store', default=None, help='Which folder to be used for looking for the background image?')
     parser.add_argument('--plot_zcosmos_objects', dest='plot_zcosmos_objects', action='store_true', default=False, help='Overplot the (thousands of) zCOSMOS targets? Default is no.')
+    parser.add_argument('--plot_zcosmos_subset', dest='plot_zcosmos_subset', action='store_true', default=False, help='Overplot the (few) zCOSMOS targets that overlap within COSMOS WFC3+ACS FoV? Default is no.')
     parser.add_argument('--plot_cosmos2020_objects', dest='plot_cosmos2020_objects', action='store_true', default=False, help='Overplot the (millions of) COSMOS2020 targets? Default is no.')
     parser.add_argument('--plot_cosmoswebb_objects', dest='plot_cosmoswebb_objects', action='store_true', default=False, help='Overplot the (millions of) COSMOSWebb targets? Default is no.')
     parser.add_argument('--plot_glass_objects', dest='plot_glass_objects', action='store_true', default=False, help='Overplot the GLASS-NIRISS targets? Default is no.')
     parser.add_argument('--only_passage_regions', dest='only_passage_regions', action='store_true', default=False, help='Overplot ONLY the PASSAGE Par regions? Default is no.')
+    parser.add_argument('--no_passage_regions', dest='no_passage_regions', action='store_true', default=False, help='DO NOT overplot any PASSAGE Par region? Default is no.')
     parser.add_argument('--fg_image_dir', metavar='fg_image_dir', type=str, action='store', default=None, help='Which folder to be used for looking for the foreground image?')
     parser.add_argument('--fg_file', metavar='fg_file', type=str, action='store', default=None, help='Which file to be used for plotting the foreground images?')
     parser.add_argument('--plot_fg_data', dest='plot_fg_data', action='store_true', default=False, help='Overplot the data of the foreground file? Default is no.')
@@ -546,7 +548,7 @@ def read_COSMOSWebb_catalog(args=None, filename=None, aperture=1.0):
     if filename is None:
         if args is None: input_dir = '/Users/acharyya/Work/astro/passage/passage_data'
         else: input_dir = args.input_dir
-        filename = Path(input_dir) / 'COSMOS' / 'COSMOS_Web_for_Ayan_Dec23.fits'
+        filename = Path(input_dir) / 'COSMOS' / 'COSMOS_Web_for_Ayan_Dec24.fits'
 
     print(f'Reading in {filename}, might take a while..')
     start_time2 = datetime.now()

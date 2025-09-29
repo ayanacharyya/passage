@@ -5,7 +5,8 @@
     Created: 18-06-24
     Last modified: 18-06-24
     Example: run plot_footprints.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field COSMOS
-             run plot_footprints.py --bg COSMOS --plot_zcosmos
+             run plot_footprints.py --bg COSMOS --plot_zcosmos_objects
+             run plot_footprints.py --bg COSMOS --plot_zcosmos_subset --no_passage_region
              run plot_footprints.py --bg_image_dir /Volumes/Elements/acharyya_backup/Work/astro/passage/passage_data/COSMOS/imaging_orig/ --bg_file ACS_814_030mas_077_sci.fits
              run plot_footprints.py --fortalk
              run plot_footprints.py --fg_file mosaic_miri_f770w_COSMOS-Web_60mas_A*_v0_5_i2d.fits
@@ -201,7 +202,7 @@ if __name__ == "__main__":
     elif args.fg_file is not None and 'miri' in args.fg_file: reg_filenames = list(reg_files_dir.glob('*%s*MIRI*.reg' %args.bg))
     elif args.fg_file is not None and 'nircam' in args.fg_file: reg_filenames = list(reg_files_dir.glob('*%s*NIRCam*.reg' %args.bg))
     else: reg_filenames = list(reg_files_dir.glob('*%s*.reg' %args.bg))
-    reg_filenames += list(reg_files_dir.glob('*PASSAGE*.reg'))
+    if not args.no_passage_regions: reg_filenames += list(reg_files_dir.glob('*PASSAGE*.reg'))
 
     if len(reg_filenames) == 0: sys.exit(f'No {args.bg} reg file in {reg_files_dir}')
 
@@ -268,6 +269,10 @@ if __name__ == "__main__":
         df = df[Par28_sky_region.contains(SkyCoord(df['ra'], df['dec'], unit='deg'), pywcs.WCS(bg_img_hdu[0].header))]
         fig = plot_skycoord_from_df(df, fig.axes[0], color='aqua', alpha=0.3, size=2, fontsize=args.fontsize)
         zCOSMOS_text += '_with_zCOSMOS'
+    if args.plot_zcosmos_subset:
+        df = read_zCOSMOS_catalog(args=args, filename=args.input_dir / 'COSMOS/zCOSMOS-DR3/zCOSMOS_within_COSMOS_WFC3+ACS_zsub.fits')
+        fig = plot_skycoord_from_df(df, fig.axes[0], color='red', alpha=1, size=10, fontsize=args.fontsize)
+        zCOSMOS_text += '_with_zCOSMOS_sub'
     if args.plot_cosmos2020_objects:
         df = read_COSMOS2020_catalog(args=args, filename=args.input_dir / 'COSMOS/COSMOS2020_CLASSIC_R1_v2.2_p3_subsetcolumns_nofluxes.fits')
         df = df[Par28_sky_region.contains(SkyCoord(df['ra'], df['dec'], unit='deg'), pywcs.WCS(bg_img_hdu[0].header))]
