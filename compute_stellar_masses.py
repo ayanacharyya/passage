@@ -780,7 +780,7 @@ if __name__ == "__main__":
         plot_conditions_text = plot_conditions_text.replace('SNR', f'SNR>{args.SNR_thresh}').replace('EW', f'EW>{args.EW_thresh}').replace('a_image', f'a>{args.a_thresh}')
         args.field_set_plot_conditions_text = f'allpar_{args.drv}_venn_{plot_conditions_text}'
         df_int_filename = args.output_dir / 'catalogs' / f'{args.field_set_plot_conditions_text}_df.txt'
-    elif args.plot_conditions == 'all_match':
+    elif args.plot_conditions == ['all_match']:
         args.field = f'Par{int(args.do_field.split("Par")[1]):03d}'
         args.field_set_plot_conditions_text = f'{args.field}_{args.drv}_allmatch'
         df_int_filename = args.output_dir / args.field / f'{args.field}_all_diag_results.csv'
@@ -827,7 +827,7 @@ if __name__ == "__main__":
         if args.use_only_bands is not None:
             print(f'\nSelecting only bands with {args.use_only_bands} in the filter name..')
             use_bands = args.use_only_bands.split(',')
-            useless_fluxcols = [col for col in fluxcols if np.array([band.lower() not in col.lower() for band in use_bands]).all()]
+            useless_fluxcols = [col for col in fluxcols if np.array([band.lower() not in col[:-4].lower() for band in use_bands]).all()]
             print(f'Therefore, dropping {useless_fluxcols} bands..\n\n..and keeping {list(set(fluxcols) - set(useless_fluxcols))} bands\n')
             useless_errcols = [item.replace('_sci', '_err') for item in useless_fluxcols]
             df_fluxes.drop(useless_fluxcols, axis=1, inplace=True)
@@ -879,7 +879,14 @@ if __name__ == "__main__":
     df_sed = pd.read_csv(photcat_filename_sed)
     df_sed = df_sed.sort_values(by='objid')
 
-    filter_list = [str(filter_dir) + '/' + item[:item.lower().find('_sci')] + '.txt' for item in df_sed.columns if '_sci' in item]
+    # -------getting the list of filters for which photometry exists AND also transmission files exist-----------
+    filter_list = []
+    for column in df_sed.columns:
+        if '_sci' in column:
+            filter_file = str(filter_dir) + '/' + column[:column.lower().find('_sci')] + '.txt'
+            if os.path.exists(filter_file): filter_list.append(filter_file)
+            #else: df_sed = df_sed.drop(column, axis=1)
+    #df_sed.to_csv(photcat_filename_sed, index=None)
     print(f'Resultant photcat has {len(filter_list)} filters')
 
     # ----------SED fitting: the following part of the code is heavily borrowed from P J Watson-----------------
@@ -897,6 +904,7 @@ if __name__ == "__main__":
             df_sed = df_sed[df_sed['objid'] == args.test_sed].reset_index(drop=True)
             print(f'Only runing on object {args.test_sed} as a test; for doing SED all objects, remove --test_sed and re-run')
 
+        show = len(df_sed) < 10
         for index, obj in df_sed.iterrows():
             print(f'\nLooping over object {index + 1} of {len(df_sed)}..')
             fit_params = generate_fit_params(obj_z=obj['redshift'], z_range=0.01, num_age_bins=5, min_age_bin=30) # Generate the fit parameters
@@ -906,20 +914,23 @@ if __name__ == "__main__":
             fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run=args.run) # Fit this galaxy
             fit.fit(verbose=True, sampler='nautilus', n_live=400,  pool=args.ncpus, n_eff=10000)
 
-            # --------converting everything to restframe----------------
-            if args.plot_restframe:
-                fit.posterior.get_advanced_quantities()
-                redshift = np.median(fit.posterior.samples['redshift'])
-                fit.galaxy.photometry[:, 0] = fit.galaxy.photometry[:, 0] / (1 + redshift)
-                if fit.galaxy.spectrum_exists: fit.galaxy.spectrum[:, 0] = fit.galaxy.spectrum[:, 0] / (1 + redshift)
-                fit.galaxy.filter_set.eff_wavs = fit.galaxy.filter_set.eff_wavs / (1 + redshift)
-                fit.posterior.model_galaxy.wavelengths = fit.posterior.model_galaxy.wavelengths / (1 + redshift)
+            # ---------Make plots---------
+            plot_name = pipes_dir / 'plots' / args.run / f'{obj["objid"]}_corner.pdf'
+            if not os.path.exists(plot_name):
+                # --------converting everything to restframe----------------
+                if args.plot_restframe:
+                    fit.posterior.get_advanced_quantities()
+                    redshift = np.median(fit.posterior.samples['redshift'])
+                    fit.galaxy.photometry[:, 0] = fit.galaxy.photometry[:, 0] / (1 + redshift)
+                    if fit.galaxy.spectrum_exists: fit.galaxy.spectrum[:, 0] = fit.galaxy.spectrum[:, 0] / (1 + redshift)
+                    fit.galaxy.filter_set.eff_wavs = fit.galaxy.filter_set.eff_wavs / (1 + redshift)
+                    fit.posterior.model_galaxy.wavelengths = fit.posterior.model_galaxy.wavelengths / (1 + redshift)
 
-            # ---------Make some plots---------
-            fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=True, xlim=[2.8, 4.5], ylim=[0, 4])
-            fig, ax = fit.plot_spectrum_posterior(save=True, show=True, log_x=False, xlim=[500, 30000], ylim=[0, 4])
-            fig = fit.plot_sfh_posterior(save=True, show=True, xlim=None, ylim=[0, 10])
-            fig = fit.plot_corner(save=True, show=True)
+                # ---------Make some plots---------
+                fig, ax = fit.plot_spectrum_posterior(save=True, show=show, log_x=True, xlim=[2.8, 4.5], ylim=[0, 4])
+                fig, ax = fit.plot_spectrum_posterior(save=True, show=show, log_x=False, xlim=[500, 30000], ylim=[0, 4])
+                fig = fit.plot_sfh_posterior(save=True, show=show, xlim=None, ylim=[0, 10])
+                fig = fit.plot_corner(save=True, show=show)
 
             # --------Save the stellar masses---------------
             index_in_df_int = df_int[df_int['objid'] == obj['objid']].index[0]

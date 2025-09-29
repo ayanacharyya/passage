@@ -1061,8 +1061,8 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     color_label_dict = {'logZ_logSFR_slope':r'$\log$ Z-$\log \Sigma_{\rm SFR}$ slope', 'SFR': r'SFR (M$_{\odot}$/yr)'}
     
     # ----------setting up the diagram----------
-    fig, ax = plt.subplots(1, figsize=(8, 6))
-    fig.subplots_adjust(left=0.14, right=0.99, bottom=0.1, top=0.95)
+    fig, ax = plt.subplots(1, figsize=(7.5, 6) if colorcol is None else (8, 6))
+    fig.subplots_adjust(left=0.14, right=0.95, bottom=0.15 if fontsize > 15 else 0.1, top=0.95)
 
     if mgas_method is None:
         mgas_methods = [item.split('_')[-1] for item in df.columns if 'log_mgas' in item]
@@ -3869,7 +3869,7 @@ if __name__ == "__main__":
     #plot_photoionisation_models('OIII/Hb', 'Z', args, fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
-    #plot_galaxy_example_fig(1321, 'Par028', args, fontsize=12, show_log_spectra=False, show_log_map=True)
+    plot_galaxy_example_fig(300, 'Par028', args, fontsize=12, show_log_spectra=False, show_log_map=True)
     
     # ---------single galaxy plot: AGN demarcation----------------------
     #args.AGN_colorby = 'distance'
@@ -3928,6 +3928,7 @@ if __name__ == "__main__":
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15), colorcol=None)
     #plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH_slope_mcmc_NB', fontsize=15)
     #plot_Mtmix(df, args, mass_col='lp_mass', ycol='log_t_mix', fontsize=15, colorcol='SFR', mgas_method='my')
+    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='log_t_mix', fontsize=20, colorcol=None, mgas_method='my')
     #plot_re_histogram(df, args, fontsize=15)
 
     # -----------line ratio histograms--------------
