@@ -221,7 +221,7 @@ if __name__ == "__main__":
     # ------the transmission curves should be in this directory------
     filter_directory = Path('/Users/acharyya/Work/astro/passage/passage_data/v0.5') / 'COSMOS' / 'transmission_curves'
     # -------this is supposed to have following columns: photometry fluxes (as FILTERNAME_sci), corresponding errors (FILTERNAME_err), redshift (redshift) and object id (idcol)------
-    photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/passage_data/v0.5/COSMOS') / 'zCOSMOS_WFC3+ACS_Web_2020.csv'
+    photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5/catalogs') / 'zCOSMOS_WFC3+ACS_Web_2020_for_bagpipe.csv'
     # -------this is where the outputs would be stored-------------
     output_dir = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5')
 
