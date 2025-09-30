@@ -37,7 +37,7 @@ if __name__ == "__main__":
     reg_filenames += list(reg_files_dir.glob('*%s*WFC3+ACS*.reg' %args.bg))
 
     candels_regfile = args.input_dir / 'footprints/region_files/CANDELS_COSMOS_WFC3+ACS.reg'
-    merged_filename =  args.input_dir / 'COSMOS' / 'COSMOS2020_Web_WFC3+ACS_zsub.fits'
+    merged_filename =  args.input_dir / 'COSMOS' / 'zCOSMOS_WFC3+ACS_Web_2020.csv'
 
     zcosmos_idcol, cweb_idcol, c2020_idcol = 'ID_zcosmos', 'ID_cweb', 'ID_c2020'
 
@@ -52,11 +52,14 @@ if __name__ == "__main__":
     else:
         print(f'Did not find {merged_filename}; so making new..')
         # -----reading zcosmos catalog and filtering---------
-        df = read_zCOSMOS_catalog(args=args)    
+        df = read_zCOSMOS_catalog(args=args)
         candels_regions = Regions.read(candels_regfile, format='ds9')
+        print(f'Cross-matching zCOSMOS catalog and WFC3+ACS region...')
         df_candels = df[candels_regions[1].contains(SkyCoord(df['ra'], df['dec'], unit='deg'), wcs_header)]
+        print(f'...found {len(df_candels)} objects in this region, now applying z-cut off..')
         df_candels_zsub = df_candels[df_candels['REDSHIFT'].between(1.0,1.7)]
-        df_candels_zsub.rename(columns={'REDSHIFT':'redshift_zcosmos', 'id':zcosmos_idcol}, inplace=True)
+        df_candels_zsub.rename(columns={'REDSHIFT':'redshift', 'id':zcosmos_idcol}, inplace=True)
+        print(f'...found {len(df_candels_zsub)} after the z-cut\n')
 
         # --------load COSMOS-Web catalog and crossmatch---------
         df_cweb = read_COSMOSWebb_catalog(args=args)
@@ -84,13 +87,36 @@ if __name__ == "__main__":
         df_c2020.rename(columns={'ra':'ra_c2020', 'dec':'dec_c2020'}, inplace=True)
         df_candels_cweb_c2020 = pd.merge(df_candels_cweb_c2020, df_c2020, on=c2020_idcol, how='inner')
   
+        # --------modifying columns for SED fitting-------------
+        df_candels_cweb_c2020.drop('ID', axis=1, inplace=True)
+        df_candels_cweb_c2020.drop(columns=df_candels_cweb_c2020.columns[df_candels_cweb_c2020.columns.str.contains('FLAG')], inplace=True)
+        df_candels_cweb_c2020.drop(columns=df_candels_cweb_c2020.columns[df_candels_cweb_c2020.columns.str.contains('SPLASH')], inplace=True)
+        
+        for thiscol in df_candels_cweb_c2020.columns:
+            if 'FLUX_APER_' in thiscol: df_candels_cweb_c2020.rename(columns={thiscol: thiscol[10:] + '_sci'}, inplace=True)
+            elif 'FLUX_ERR_APER_' in thiscol: df_candels_cweb_c2020.rename(columns={thiscol: thiscol[14:] + '_err'}, inplace=True)
+            elif '_FLUX_AUTO' in thiscol: df_candels_cweb_c2020.rename(columns={thiscol: thiscol[:-10] + '_sci'}, inplace=True)
+            elif '_FLUXERR_AUTO' in thiscol: df_candels_cweb_c2020.rename(columns={thiscol: thiscol[:-13] + '_err'}, inplace=True)
+            elif '_FLUXERR' in thiscol: df_candels_cweb_c2020.rename(columns={thiscol: thiscol[:-8] + '_err'}, inplace=True)
+            elif '_FLUX' in thiscol: df_candels_cweb_c2020.rename(columns={thiscol: thiscol[:-5] + '_sci'}, inplace=True)
+
+            if 'F115W' in thiscol: df_candels_cweb_c2020.rename(columns={thiscol: thiscol.replace('F115W', 'NIRCAM_F115W')}, inplace=True)
+            elif 'F150W' in thiscol: df_candels_cweb_c2020.rename(columns={thiscol: thiscol.replace('F150W', 'NIRCAM_F150W')}, inplace=True)
+            elif 'F277W' in thiscol: df_candels_cweb_c2020.rename(columns={thiscol: thiscol.replace('F277W', 'NIRCAM_F277W')}, inplace=True)
+            elif 'F444W' in thiscol: df_candels_cweb_c2020.rename(columns={thiscol: thiscol.replace('F444W', 'NIRCAM_F444W')}, inplace=True)
+            elif 'F770W' in thiscol: df_candels_cweb_c2020.rename(columns={thiscol: thiscol.replace('F770W', 'MIRI_F770W')}, inplace=True)
+            elif 'IA' in thiscol: df_candels_cweb_c2020.rename(columns={thiscol: thiscol.replace('IA', 'IB')}, inplace=True)
+
         # -----saving the final catalog--------
-        Table.from_pandas(df_candels_cweb_c2020).write(merged_filename)
+        df_candels_cweb_c2020.to_csv(merged_filename, index=None)
         print(f'Saved merged, z-filtered catalog as {merged_filename}')
 
     # ------plotting the targets on sky--------
-    df_targets = Table.read(merged_filename).to_pandas()
-    fig = plot_skycoord_from_df(df_targets, fig.axes[0], color='red', alpha=1, size=5, fontsize=args.fontsize)
+    df_targets = pd.read_csv(merged_filename)
+    ax = fig.gca()
+    for index, row in df_targets.iterrows():
+        circle = plt.Circle(xy=(row['ra'], row['dec']), radius=50/3600, color='g', alpha=1, fill=True, transform=ax.get_transform('fk5'))
+        ax.add_patch(circle)
 
     # --------saving the plot----------
     figname = args.input_dir / 'footprints' / f'{args.bg}_with_footprints_with_zCOSMOS_sub.png'

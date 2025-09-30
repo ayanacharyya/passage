@@ -214,14 +214,14 @@ def run_bagpipes(photcat_filename_sed, filter_dir, output_dir, run, idcol='PASSA
 if __name__ == "__main__":
     
     # --------global variables to change----------
-    idcol = 'ID_NIRISS' # column name of ID in the photometry catalog
-    run = 'for_paper_only_st' # string label with which the runs would be saved
+    idcol = 'ID_cweb' # column name of ID in the photometry catalog
+    run = 'for_cy5' # string label with which the runs would be saved
     ncpus = 1 # BAGPIPES can parallelise, it will use ncpus number of processors
 
     # ------the transmission curves should be in this directory------
     filter_directory = Path('/Users/acharyya/Work/astro/passage/passage_data/v0.5') / 'COSMOS' / 'transmission_curves'
     # -------this is supposed to have following columns: photometry fluxes (as FILTERNAME_sci), corresponding errors (FILTERNAME_err), redshift (redshift) and object id (idcol)------
-    photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage') / 'glass_data' / f'GLASS_UNCOVER_photometry_{run}.csv'
+    photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/passage_data/v0.5/COSMOS') / 'zCOSMOS_WFC3+ACS_Web_2020.csv'
     # -------this is where the outputs would be stored-------------
     output_dir = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5')
 
