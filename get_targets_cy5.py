@@ -107,13 +107,12 @@ if __name__ == "__main__":
 
     # --------modifying columns for SED fitting-------------
     df_sed = df_targets.copy()
-    df_sed.drop('ID', axis=1, inplace=True)
     df_sed.rename(columns={'redshift_zcosmos':'redshift'}, inplace=True)
 
     cols_to_retain = ['flux', 'id', 'redshift', 'ra', 'dec']
-    cols_to_drop = [item for item in df_sed.columns if not np.array([item2 in item.lower() for item2 in cols_to_retain]).any()]
-    df_sed = df_sed.drop(cols_to_drop, axis=1)
-    
+    cols_to_drop1 = ['ID', 'ID_c2020', 'ID_zcosmos', 'ID_COSMOS2015', 'ra_cweb', 'dec_cweb', 'ra_c2020', 'dec_c2020'] + [item for item in df_sed.columns if not np.array([item2 in item.lower() for item2 in cols_to_retain]).any()]
+    df_sed = df_sed.drop(columns=cols_to_drop1)
+
     for thiscol in df_sed.columns:
         if 'FLUX_APER_' in thiscol: df_sed.rename(columns={thiscol: thiscol[10:] + '_sci'}, inplace=True)
         elif 'FLUX_ERR_APER_' in thiscol: df_sed.rename(columns={thiscol: thiscol[14:] + '_err'}, inplace=True)
@@ -130,7 +129,17 @@ if __name__ == "__main__":
         elif 'F770W' in thiscol: df_sed.rename(columns={thiscol: thiscol.replace('F770W', 'MIRI_F770W')}, inplace=True)
         elif 'IA' in thiscol: df_sed.rename(columns={thiscol: thiscol.replace('IA', 'IB')}, inplace=True)
     
-    df_sed = df_sed.drop(columns=df_sed.columns[df_sed.columns.str.contains('SPLASH')]) # to remove SPLASH filters because those transmission files are absent
+    filter_to_omit = 'SPLASH'
+    cols_to_omit = df_sed.columns[df_sed.columns.str.contains(filter_to_omit)] # to remove SPLASH filters because those transmission files are absent
+    cols_with_nan = df_sed.columns[df_sed.isna().any()] # to remove filters with missing fluxes
+    cols_with_negative = df_sed.columns[(df_sed < 0).any()] # to remove filters with negative fluxes
+    cols_to_drop2 = np.hstack([cols_to_omit, cols_with_nan, cols_with_negative])
+    df_sed = df_sed.drop(columns=cols_to_drop2) 
+
+    print(f'\nRemoved {len(cols_to_omit)} columns ({cols_to_omit}) with {filter_to_omit}\n\
+          {len(cols_with_nan)} columns ({cols_with_nan}) with NaNs\n\
+          and {len(cols_with_negative)} columns ({cols_with_negative}) with negative\n\
+          total {len(cols_to_drop1) + len(cols_to_drop2)} columns removed, leaving {len(df_sed.columns)} columns\n')
 
     # -----saving the final catalog--------
     df_sed.to_csv(photcat_filename_sed, index=None)
