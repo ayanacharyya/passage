@@ -179,6 +179,7 @@ def run_bagpipes(photcat_filename_sed, filter_dir, output_dir, run, idcol='PASSA
     # ---------Loop over the objects-------------
     n_objects = len(df)
     df = df.iloc[start_id:]
+    show = len(df) < 10
         
     for index, obj in df.iterrows():
         print(f'\nLooping over object {index + 1} of {n_objects}..')
@@ -188,10 +189,12 @@ def run_bagpipes(photcat_filename_sed, filter_dir, output_dir, run, idcol='PASSA
         fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run=run) # Fit this galaxy
         fit.fit(verbose=True, sampler='nautilus', pool=ncpus)
 
-        # ---------Make some plots---------
-        fig, ax = fit.plot_spectrum_posterior(save=True, show=True)
-        fig = fit.plot_sfh_posterior(save=True, show=True)
-        fig = fit.plot_corner(save=True, show=True)
+        # ---------Make plots---------
+        plot_name = output_dir / 'pipes/plots' / run / f'{obj[idcol]}_corner.pdf'
+        if not os.path.exists(plot_name):
+            fig, ax = fit.plot_spectrum_posterior(save=True, show=show)
+            fig = fit.plot_sfh_posterior(save=True, show=show)
+            fig = fit.plot_corner(save=True, show=show)
 
         # --------Save the stellar masses---------------
         for thisquant in list(new_columns_dict.keys()):

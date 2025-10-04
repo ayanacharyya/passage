@@ -65,6 +65,14 @@ if __name__ == "__main__":
         # --------load COSMOS-Web catalog and crossmatch---------
         df_cweb = read_COSMOSWebb_catalog(args=args)
         df_cweb.rename(columns={'id':cweb_idcol}, inplace=True)
+
+        ergs_s_cm2_hz_to_ujy_factor = 1e29 # 1 ergs/s/cm^2/Hz = 10^29 uJy
+        web_fluxcols = [item for item in df_cweb.columns if 'FLUX_APER' in item]
+        web_errcols = [item for item in df_cweb.columns if 'FLUX_ERR_APER' in item]
+        for thiscol in web_fluxcols:
+            df_cweb[thiscol] = df_cweb[thiscol] * ergs_s_cm2_hz_to_ujy_factor # converting from ergs/s/cm^2/Hz to micro Jansky
+            df_cweb[thiscol.replace('FLUX', 'FLUX_ERR')] = df_cweb[thiscol.replace('FLUX', 'FLUX_ERR')] * ergs_s_cm2_hz_to_ujy_factor  # converting from ergs/s/cm^2/Hz to micro Jansky
+
         print(f'Cross-matching zCOSMOS-sub and COSMOS-Web catalogs; can take a while...')
         df_candels_cweb = get_crossmatch(df_candels_zsub, df_cweb, sep_threshold=0.1, df1_idcol=zcosmos_idcol, df2_idcol=cweb_idcol)
         print(f'...found {len(df_candels_cweb)} cross-matched objects\n')
@@ -95,8 +103,10 @@ if __name__ == "__main__":
     # ------plotting the targets on sky--------
     df_targets = Table.read(merged_filename).to_pandas()
     ax = fig.gca()
+    color = 'g'
     for index, row in df_targets.iterrows():
-        circle = plt.Circle(xy=(row['ra'], row['dec']), radius=50/3600, color='g', alpha=1, fill=True, transform=ax.get_transform('fk5'))
+        circle = plt.Circle(xy=(row['ra'], row['dec']), radius=5/3600, color=color, alpha=1, fill=True, transform=ax.get_transform('fk5'))
+        ax.text(row['ra'] + 0.01, row['dec'] + 0.01, row[cweb_idcol], color=color, fontsize=10, transform=ax.get_transform('fk5'), va='bottom', ha='left', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9))
         ax.add_patch(circle)
 
     # --------saving the plot----------
@@ -104,7 +114,7 @@ if __name__ == "__main__":
     fig.savefig(figname, transparent=args.fortalk)
     print(f'Saved plot to {figname}')
     plt.show(block=False)
-
+    '''
     # --------modifying columns for SED fitting-------------
     df_sed = df_targets.copy()
     df_sed.rename(columns={'redshift_zcosmos':'redshift'}, inplace=True)
@@ -144,5 +154,5 @@ if __name__ == "__main__":
     # -----saving the final catalog--------
     df_sed.to_csv(photcat_filename_sed, index=None)
     print(f'Saved just the flux catalog, for bagpipes, as {photcat_filename_sed}')
-
+    '''
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

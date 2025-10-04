@@ -911,8 +911,11 @@ if __name__ == "__main__":
             
             galaxy = bagpipes.galaxy(ID=obj['objid'], load_data=load_fn, filt_list=filter_list, spectrum_exists=False) # Load the data for this object
 
-            fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run=args.run) # Fit this galaxy
-            fit.fit(verbose=True, sampler='nautilus', n_live=400,  pool=args.ncpus, n_eff=10000)
+            try:
+                fit = bagpipes.fit(galaxy=galaxy, fit_instructions=fit_params, run=args.run) # Fit this galaxy
+                fit.fit(verbose=True, sampler='nautilus', n_live=400,  pool=args.ncpus, n_eff=10000)
+            except:
+                continue
 
             # ---------Make plots---------
             plot_name = pipes_dir / 'plots' / args.run / f'{obj["objid"]}_corner.pdf'
@@ -927,10 +930,14 @@ if __name__ == "__main__":
                     fit.posterior.model_galaxy.wavelengths = fit.posterior.model_galaxy.wavelengths / (1 + redshift)
 
                 # ---------Make some plots---------
-                fig, ax = fit.plot_spectrum_posterior(save=True, show=show, log_x=True, xlim=[2.8, 4.5], ylim=[0, 4])
-                fig, ax = fit.plot_spectrum_posterior(save=True, show=show, log_x=False, xlim=[500, 30000], ylim=[0, 4])
-                fig = fit.plot_sfh_posterior(save=True, show=show, xlim=None, ylim=[0, 10])
-                fig = fit.plot_corner(save=True, show=show)
+                try: fig, ax = fit.plot_spectrum_posterior(save=True, show=show, log_x=True, xlim=[2.8, 4.5], ylim=[0, 4])
+                except: pass
+                try: fig, ax = fit.plot_spectrum_posterior(save=True, show=show, log_x=False, xlim=[500, 30000], ylim=[0, 4])
+                except: pass
+                try: fig = fit.plot_sfh_posterior(save=True, show=show, xlim=None, ylim=[0, 10])
+                except: pass
+                try: fig = fit.plot_corner(save=True, show=show)
+                except: pass
 
             # --------Save the stellar masses---------------
             index_in_df_int = df_int[df_int['objid'] == obj['objid']].index[0]
