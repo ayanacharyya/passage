@@ -67,9 +67,12 @@ def load_photom_bagpipes(str_id, phot_cat, id_colname = 'bin_id', zeropoint = 28
     errs = []
 
     for c in phot_cat.colnames:
-        if '_sci' in c.lower(): fluxes.append(phot_cat[c][row_idx])
-        elif '_var' in c.lower(): errs.append(np.sqrt(phot_cat[c][row_idx]))
-        elif '_err' in c.lower(): errs.append(phot_cat[c][row_idx])
+        if '_sci' in c.lower():
+            fluxes.append(phot_cat[c][row_idx])
+            c_var = c.replace('_sci', '_var').replace('_SCI', '_VAR')
+            c_err = c.replace('_sci', '_err').replace('_SCI', '_ERR')
+            if c_var in phot_cat.columns: errs.append(np.sqrt(phot_cat[c_var][row_idx]))
+            elif c_err in phot_cat.columns: errs.append(phot_cat[c_err][row_idx])
 
     #if zeropoint == 28.9: flux_scale = 1e-2
     #else: flux_scale = 10 ** ((8.9 - zeropoint) / 2.5 + 6)
@@ -217,14 +220,18 @@ def run_bagpipes(photcat_filename_sed, filter_dir, output_dir, run, idcol='PASSA
 if __name__ == "__main__":
     
     # --------global variables to change----------
-    idcol = 'ID_cweb' # column name of ID in the photometry catalog
-    run = 'for_cy5' # string label with which the runs would be saved
+    idcol = 'ID_c2025' # column name of ID in the photometry catalog
+    run = 'for_cy5_c2025' # string label with which the runs would be saved
     ncpus = 1 # BAGPIPES can parallelise, it will use ncpus number of processors
 
     # ------the transmission curves should be in this directory------
     filter_directory = Path('/Users/acharyya/Work/astro/passage/passage_data/v0.5') / 'COSMOS' / 'transmission_curves'
+    
     # -------this is supposed to have following columns: photometry fluxes (as FILTERNAME_sci), corresponding errors (FILTERNAME_err), redshift (redshift) and object id (idcol)------
-    photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5/catalogs') / 'zCOSMOS_WFC3+ACS_Web_2020_for_bagpipe.csv'
+    photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5/catalogs') / 'zCOSMOS_2025_for_bagpipe.csv'
+    #photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5/catalogs') / 'zCOSMOS_2025_cy5_targets_for_bagpipe.csv'
+    #photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5/catalogs') / 'Par028_c2025_for_bagpipe.csv'
+    
     # -------this is where the outputs would be stored-------------
     output_dir = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5')
 

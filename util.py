@@ -252,6 +252,9 @@ def parse_args():
     # ------- args added for integrated_vs_summed.py ------------------------------
     parser.add_argument('--nocolorcoding', dest='nocolorcoding', action='store_true', default=False, help='No color-coding for scatter plots? Default is no.')
 
+    # ---- args added for get_bagpipes_for_etc.py ------------
+    parser.add_argument('--input_etc_dir', metavar='input_etc_dir', type=str, action='store', default=None, help='Where do the input ETC files reside?')
+    
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
@@ -537,6 +540,34 @@ def get_fluxcols(args):
         np.save(filepath, fluxcols)
 
     return fluxcols, df_cosmos
+
+# -------------------------------------------------------------------------------------------------------
+def read_COSMOS2025_catalog(args=None, filename=None, aperture=1.0):
+    '''
+    Reads in the zCOSMOS galaxy catalog
+    Returns as pandas dataframe
+    '''
+    aperture_dict = {0.2:0, 0.3:1, 0.5:2, 0.75:3, 1.0:4}
+    if filename is None:
+        if args is None: input_dir = '/Users/acharyya/Work/astro/passage/passage_data'
+        else: input_dir = args.input_dir
+        filename = Path(input_dir) / 'COSMOS' / 'COSMOSWeb_mastercatalog_v1_photom_primary.fits'
+
+    print(f'Reading in {filename}, might take a while..')
+    start_time2 = datetime.now()
+
+    data = fits.open(filename)
+    table = Table(data[1].data)
+
+    multi_index_columns = [item for item in table.colnames if len(table[item].shape) > 1]
+    single_index_columns = list(set(table.columns) - set(multi_index_columns))
+
+    df  = table[single_index_columns].to_pandas()
+    for thiscol in multi_index_columns: df[thiscol] = table[thiscol][:, aperture_dict[aperture]]
+
+    print(f'Completed reading COSMOS2025 catalog in {timedelta(seconds=(datetime.now() - start_time2).seconds)}')
+
+    return df
 
 # -------------------------------------------------------------------------------------------------------
 def read_COSMOSWebb_catalog(args=None, filename=None, aperture=1.0):
@@ -1369,3 +1400,29 @@ def extract_emission_line_map_from_full(line, args=None, field=None, id=None, ar
     data_err = fits.open(str(outfilename).replace('map.fits', 'map_u.fits'))[0].data
 
     return data_map, data_err
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------
+def plotline(id, path='/Users/acharyya/Work/astro/passage/passage_data/v0.5/Par028/Products/maps/', line='Ha', arc=1, cmin=None, cmax=None, savefig=False, hide=False):
+     hdul = fits.open(path + f'Par028_{id:05d}.maps.fits')
+     header = hdul[0].header
+     z = header['REDSHIFT']
+     line_hdu = hdul['LINE', line]
+     pix_size_arcsec = line_hdu.header['PIXASEC']
+     line_map = line_hdu.data * 1e-17
+     line_map = trim_image(line_map, arcsec_limit=arc, pix_size_arcsec=pix_size_arcsec)
+     fig, ax = plt.subplots(1)
+     im = ax.imshow(np.log10(line_map), cmap='plasma', extent = [-1, 1, -1, 1], vmin=cmin, vmax=cmax)
+     ax.set_title(f'#{id}; z={z:.1f}')
+     ax.set_xlabel('arcsec')
+     ax.set_ylabel('arcsec')
+     cbar = plt.colorbar(im)
+     cbar.set_label(f'Log {line} flux')
+     if savefig:
+         figdir = Path('/Users/acharyya/Downloads/linemaps')
+         figdir.mkdir(exist_ok=True, parents=True)
+         figname = figdir / f'Par028_{id:05d}_{line}_map.png'
+         fig.savefig(figname)
+         print(f'Saved as {figname}')
+     if hide: plt.close()
+     else: plt.show(block=False)
+     return fig
