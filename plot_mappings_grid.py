@@ -173,8 +173,8 @@ def plot_ratio_model(df_ratios, ax, args):
     style_arr = ['solid', 'dashed', 'dotted']
     thickness_arr = [1.2, 0.7, 0.3]  # len(style_arr) \times len(tickness_arr) = at least as many as "quantity2" values
     thickness_arr = np.tile(np.repeat(thickness_arr, len(thickness_arr)), 2)
-    if args.phot_models.lower() in ['mappings', 'map']: line_names_dict = smart_dict({'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31', 'NeIII':'[NeIII]3869'}) # to map between user input line labels and line labels used in ratio_list.txt file
-    elif args.phot_models.lower() in ['nebulabayes', 'nb']: line_names_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869'})
+    if args.phot_models.lower() in ['mappings', 'map']: line_names_dict = smart_dict({'OIII':'[OIII]5007', 'OII':'[OII]3727,9', 'Hb':'Hbeta', 'Ha':'Halpha', 'NII':'[NII]6584', 'SII':'[SII]6717,31', 'NeIII':'[NeIII]3869', 'NeIIi':'[NeII]128', 'NeIIIi': '[NeIII]155', 'Paa':'Pa-a'}) # to map between user input line labels and line labels used in ratio_list.txt file
+    elif args.phot_models.lower() in ['nebulabayes', 'nb']: line_names_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869', 'NeIIi':'NeII128', 'NeIIIi': 'NeIII155'})
 
     # ------------getting the line ratio names------------------
     num_labels = ','.join([line_names_dict[item] for item in args.ynum_line.split(',')])
@@ -207,7 +207,7 @@ def plot_ratio_model_fig(df_ratios, args):
     '''
     # ------declare the figure-----------------------
     fig, ax = plt.subplots(figsize=(8, 6))
-    fig.subplots_adjust(left=0.1, right=0.98, bottom=0.1, top=0.95, wspace=0.2)
+    fig.subplots_adjust(left=0.11, right=0.98, bottom=0.1, top=0.95, wspace=0.2)
 
     # --------plot the model ratios---------------
     ax, ratio_name = plot_ratio_model(df_ratios, ax, args)
