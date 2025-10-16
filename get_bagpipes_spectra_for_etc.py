@@ -20,15 +20,19 @@ def calc_total_snr(filename=None, dirname=None, z=1, wave_cen=6562.819, outdir=N
     if filename is None: filename = Path(dirname) / 'lineplot' / 'lineplot_sn.fits'
     else: filename = Path(filename)
 
-    df_sn = Table.read(filename).to_pandas()
-    df_sn.rename(columns={'WAVELENGTH':'obswave'}, inplace=True)
-    df_sn['restwave'] = df_sn['obswave'] * 1e4 / (1 + z) # Angstrom
+    df_f = Table.read(filename).to_pandas()
+    df_n = Table.read(str(filename).replace('flux', 'noise')).to_pandas()
+
+    df_spec = pd.merge(df_f, df_n, on='WAVELENGTH')
+    df_spec.rename(columns={'WAVELENGTH':'obswave'}, inplace=True)
+    df_spec['restwave'] = df_spec['obswave'] * 1e4 / (1 + z) # Angstrom
 
     # -----plotting SNR---------------
     fig, ax = plt.subplots(1)
-    ax.plot(df_sn['restwave'], df_sn['sn'])
+    ax.plot(df_spec['restwave'], df_spec['extracted_flux'], c='b')
+    ax.plot(df_spec['restwave'], df_spec['extracted_noise'], c='gray')
     ax.set_xlabel('restframe wavelength (A)')
-    ax.set_ylabel('SNR/pix')
+    ax.set_ylabel('Flux (el/sec)')
     ax.set_title(f'redshift={z:.1f}')
    
     ax2 = ax.twiny()
@@ -43,8 +47,8 @@ def calc_total_snr(filename=None, dirname=None, z=1, wave_cen=6562.819, outdir=N
     right_wave = wave_cen + lambda_fwhm
 
     ax.fill_betweenx([0, ax.get_ylim()[1]], left_wave, right_wave, color='green', alpha=0.2)
-    snrs = df_sn[df_sn['restwave'].between(left_wave, right_wave)]['sn']
-    total_snr = np.sqrt(np.sum(snrs **2))
+    df_chunk = df_spec[df_spec['restwave'].between(left_wave, right_wave)]
+    total_snr = np.sum(df_chunk['extracted_flux']) / np.sqrt(np.sum(df_chunk['extracted_noise'] **2))
     print(f'\nTotal SNR within the a {2*lambda_fwhm:.1f} A window around {wave_cen} A line is {total_snr:.1f}')
     ax.text(0.95, 0.95, f'Total SNR across {2*lambda_fwhm:.1f} A = {total_snr:.1f}', ha='right', va='top', transform=ax.transAxes)
 
@@ -55,7 +59,7 @@ def calc_total_snr(filename=None, dirname=None, z=1, wave_cen=6562.819, outdir=N
     print(f'Saved SNR plot at {figname} and .png')
     plt.show(block=False)
 
-    return total_snr
+    return df_spec
 
 # -------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -64,20 +68,27 @@ if __name__ == "__main__":
 
     # --------global variables to change----------
     idcol = 'ID_c2025' # column name of ID in the photometry catalog
+    #idcol = 'id' # column name of ID in the photometry catalog
     run = 'for_cy5_c2025' # string label with which the runs would be saved
     args.id = args.id[0]
+    #wave_cen = 6560 # corresponding to halpha
+    #wave_cen = 4850 # corresponding to hbeta
+    wave_cen = 6566 # corresponding to nii
 
     # ------directory paths------
     photcat_filename_sed = args.output_dir / 'catalogs/zCOSMOS_2025_cy5_targets_for_bagpipe.csv' # choose any *_for_bagpipe.csv file which lists the desired object
+    #photcat_filename_sed = args.output_dir / 'catalogs/vandels_uds_aftercuts_single_191447_for_bagpipe.csv' # choose any *_for_bagpipe.csv file which lists the desired object
     filter_dir = args.input_dir / 'COSMOS/transmission_curves' # the transmission curves should be in this directory
-    etc_dir = HOME / 'Documents/writings/proposals/JWSTCy5/ETC' # this is where the ETC related outputs would be stored
+    etc_dir = HOME / 'Documents/writings/telescope_proposals/JWSTCy5/ETC' # this is where the ETC related outputs would be stored
 
     if args.input_etc_dir is None:
         etc_result_path = Path('/Users/acharyya/Downloads')
-        etc_result_dict = {549577: 'c2', 432033: 'c4', 270854: 'c5'}
-        args.input_etc_dir = max(glob.glob(str(etc_result_path) + f'/wb264545*{etc_result_dict[args.id]}*'), key=os.path.getctime)
+        etc_result_dict = {549577: 'c2', 432033: 'c4', 270854: 'c5', 191447: 'c6'}
+        possible_folders = glob.glob(str(etc_result_path) + f'/wb264545*{etc_result_dict[args.id]}*')
+        if len(possible_folders) > 0: args.input_etc_dir = max(possible_folders, key=os.path.getctime)
+        else: args.input_etc_dir = etc_result_path / 'dummy'
         print(f'Reading {args.input_etc_dir}..')
-    etc_result_filename = Path(args.input_etc_dir) / 'lineplot/lineplot_sn.fits'
+    etc_result_filename = Path(args.input_etc_dir) / 'lineplot/lineplot_extracted_flux.fits'
 
     # ----------reading the photometric catalog for SED fitting-----------------
     df = pd.read_csv(photcat_filename_sed)
@@ -112,7 +123,7 @@ if __name__ == "__main__":
         df_etc = df_etc[['restwave_mu', 'flux_mjy']]
         
         # --------saving bagpipes spectra----------
-        filename = etc_dir / f'C2025_{obj[idcol]:.0f}_bagpipes_median_spectra_foretc.txt'
+        filename = etc_dir / f'C2025_{obj[idcol]:.0f}_bagpipes_median_spectra_foretc_highres.txt'
         df_etc.to_csv(filename, sep='\t', header=None, index=None)
 
         # ----------plot bagpipes spectra----------------------------
@@ -131,7 +142,7 @@ if __name__ == "__main__":
         fig.savefig(filename)
         print(f'Saved bagipes spectra at {filename} and .txt')
     else:
-        total_snr = calc_total_snr(filename=etc_result_filename, z=obj['redshift'], wave_cen=6530, outdir=etc_dir, id=args.id)
+        df_spec = calc_total_snr(filename=etc_result_filename, z=obj['redshift'], wave_cen=wave_cen, outdir=etc_dir, id=args.id)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
 

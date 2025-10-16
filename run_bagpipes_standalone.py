@@ -220,7 +220,8 @@ def run_bagpipes(photcat_filename_sed, filter_dir, output_dir, run, idcol='PASSA
 if __name__ == "__main__":
     
     # --------global variables to change----------
-    idcol = 'ID_c2025' # column name of ID in the photometry catalog
+    #idcol = 'ID_c2025' # column name of ID in the photometry catalog
+    idcol = 'id' # column name of ID in the photometry catalog
     run = 'for_cy5_c2025' # string label with which the runs would be saved
     ncpus = 1 # BAGPIPES can parallelise, it will use ncpus number of processors
 
@@ -228,9 +229,10 @@ if __name__ == "__main__":
     filter_directory = Path('/Users/acharyya/Work/astro/passage/passage_data/v0.5') / 'COSMOS' / 'transmission_curves'
     
     # -------this is supposed to have following columns: photometry fluxes (as FILTERNAME_sci), corresponding errors (FILTERNAME_err), redshift (redshift) and object id (idcol)------
-    photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5/catalogs') / 'zCOSMOS_2025_for_bagpipe.csv'
+    #photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5/catalogs') / 'zCOSMOS_2025_for_bagpipe.csv'
     #photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5/catalogs') / 'zCOSMOS_2025_cy5_targets_for_bagpipe.csv'
     #photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5/catalogs') / 'Par028_c2025_for_bagpipe.csv'
+    photcat_filename_sed = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5/catalogs') / 'vandels_uds_aftercuts_single_191447_for_bagpipe.csv'
     
     # -------this is where the outputs would be stored-------------
     output_dir = Path('/Users/acharyya/Work/astro/passage/passage_output/v0.5')
