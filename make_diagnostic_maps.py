@@ -183,7 +183,7 @@ def get_linelist(wave_lim=None, line_list_file=None):
     lines_df = lines_df[~lines_df['LineID'].str.contains('Fe')] # not interested in the numerous Fe lines
     if wave_lim is not None: lines_df = lines_df[lines_df['restwave'].between(wave_lim[0], wave_lim[1])]
 
-    print(f'Found {len(lines_df)} lines in this wavelength regime from {line_list_file}; over-plotting them now..')
+    print(f'\nFound {len(lines_df)} lines in this wavelength regime from {line_list_file}')
 
     return lines_df
 
@@ -194,6 +194,7 @@ def plot_linelist(ax, fontsize=10, line_list_file=None):
     Returns axis handle
     '''
     lines_df = get_linelist(wave_lim=ax.get_xlim(), line_list_file=line_list_file)
+    print(f'over-plotting lines now..')
 
     for index in range(len(lines_df)):
         ax.axvline(lines_df.iloc[index]['restwave'], c='cornflowerblue', lw=1)

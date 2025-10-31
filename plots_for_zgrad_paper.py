@@ -3869,7 +3869,7 @@ if __name__ == "__main__":
     #plot_photoionisation_models('OIII/Hb', 'Z', args, fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
-    plot_galaxy_example_fig(300, 'Par028', args, fontsize=12, show_log_spectra=False, show_log_map=True)
+    #plot_galaxy_example_fig(300, 'Par028', args, fontsize=12, show_log_spectra=False, show_log_map=True)
     
     # ---------single galaxy plot: AGN demarcation----------------------
     #args.AGN_colorby = 'distance'

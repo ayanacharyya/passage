@@ -26,7 +26,7 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, df=None):
     Plots the footprint/s for a given region file and existing figure and header of the background file plotted on the figure
     Returns fig handle
     '''
-    col_arr = ['cornflowerblue', 'lightsalmon', 'gold', 'cyan'] if args.fortalk else ['blue', 'green', 'yellow', 'cyan']
+    col_arr = ['gold', 'lightsalmon', 'cornflowerblue', 'cyan'] if args.fortalk else ['blue', 'green', 'yellow', 'cyan']
     pix_offset_forlabels = 20
 
     ax = fig.gca()
@@ -44,7 +44,7 @@ def plot_footprints(region_files, bg_img_hdu, fig, args, df=None):
         for index2, sky_region in enumerate(sky_regions):
             if type(sky_region) == regions.shapes.text.TextSkyRegion: # label if it is text
                 label = sky_region.text
-                ax.text(ax.get_xlim()[0] + 0.1 * np.diff(ax.get_xlim())[0], ax.get_ylim()[1] * 0.98 - (index + 1) * 0.05 * np.diff(ax.get_ylim())[0], label, c=color, ha='left', va='top', fontsize=args.fontsize, bbox=dict(facecolor='k', edgecolor='black', alpha=0.5) if args.fortalk else None)
+                ax.text(ax.get_xlim()[0] + 0.1 * np.diff(ax.get_xlim())[0], ax.get_ylim()[1] * 0.98 - (index + 1) * 0.05 * np.diff(ax.get_ylim())[0], label, c=color, ha='left', va='top', fontsize=args.fontsize/1.5, bbox=dict(facecolor='k', edgecolor='black', alpha=0.5) if args.fortalk else None)
             else: # otherwise plot it
                 # plotting the region
                 pixel_region = sky_region.to_pixel(wcs_header)
@@ -118,7 +118,7 @@ def plot_background(filename, args):
 
     fig = plt.figure(figsize=(8, 6))
     ax = fig.add_subplot(111, projection=pywcs.WCS(header))
-    fig.subplots_adjust(right=0.99, top=0.95, bottom=0.1, left=0.01)
+    fig.subplots_adjust(right=0.99, top=0.95, bottom=0.15, left=0.01)
 
     ax.imshow(data, origin='lower', cmap=cmap, vmin=-4, vmax=-3) # full, relevant range of data, for COSMOS field, is roughly (-6,-1)
 
@@ -198,11 +198,11 @@ if __name__ == "__main__":
     else:
         bg_filename = args.bg_image_dir / args.bg_file
 
-    if args.only_passage_regions: reg_filenames = []
-    elif args.fg_file is not None and 'miri' in args.fg_file: reg_filenames = list(reg_files_dir.glob('*%s*MIRI*.reg' %args.bg))
-    elif args.fg_file is not None and 'nircam' in args.fg_file: reg_filenames = list(reg_files_dir.glob('*%s*NIRCam*.reg' %args.bg))
-    else: reg_filenames = list(reg_files_dir.glob('*%s*.reg' %args.bg))
-    if not args.no_passage_regions: reg_filenames += list(reg_files_dir.glob('*PASSAGE*.reg'))
+    reg_filenames = [] if args.no_passage_regions else list(reg_files_dir.glob('*PASSAGE*.reg'))[:1]
+    if not args.only_passage_regions:
+        if args.fg_file is not None and 'miri' in args.fg_file: reg_filenames += list(reg_files_dir.glob('*%s*MIRI*.reg' %args.bg))
+        elif args.fg_file is not None and 'nircam' in args.fg_file: reg_filenames += list(reg_files_dir.glob('*%s*NIRCam*.reg' %args.bg))
+        else: reg_filenames += list(reg_files_dir.glob('*%s*.reg' %args.bg))
 
     if len(reg_filenames) == 0: sys.exit(f'No {args.bg} reg file in {reg_files_dir}')
 

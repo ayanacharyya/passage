@@ -50,15 +50,15 @@ def annotate_axes(ax, xlabel, ylabel, args, label='', clabel='', hide_xaxis=Fals
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_cutout(filename, pos, size):
+def get_cutout(filename, pos, size, ext=0):
     '''
     Return a cutout from a given filename of a fits image, around a given position within a given extent,
     Returns the 2D cutout as a 2D array
     '''
     data = fits.open(filename)
 
-    image = data[0].data
-    source_header = data[0].header
+    image = data[ext].data
+    source_header = data[ext].header
     wcs = pywcs.WCS(source_header)
 
     cutout = Cutout2D(image, pos, size, wcs=wcs)
@@ -67,7 +67,7 @@ def get_cutout(filename, pos, size):
     return cutout_data
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_direct_image(filename, ra, dec, cutout_width_arcsec):
+def get_direct_image(filename, ra, dec, cutout_width_arcsec, ext=0):
     '''
     Loads the direct image for a given filter for a given object
     Returns the image
@@ -75,7 +75,7 @@ def get_direct_image(filename, ra, dec, cutout_width_arcsec):
     #exptime = fits.open(filename)[0].header['EXPTIME']
     pos = SkyCoord(ra, dec, unit = 'deg')
     size = cutout_width_arcsec * u.arcsec
-    image = get_cutout(filename, pos, size)
+    image = get_cutout(filename, pos, size, ext=ext)
  
     return image
 
