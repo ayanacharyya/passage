@@ -254,7 +254,12 @@ def parse_args():
 
     # ---- args added for get_bagpipes_for_etc.py ------------
     parser.add_argument('--input_etc_dir', metavar='input_etc_dir', type=str, action='store', default=None, help='Where do the input ETC files reside?')
-    
+
+    # ---- args added for ifu_analysis.py ------------
+    parser.add_argument('--input_file', metavar='input_file', type=str, action='store', default='/Users/acharyya/Work/astro/jwst_uvit_cospar/project/science_ready_data/5001-GS/f170lp_g235h-f170lp_s3d.fits', help='Full path name of the input IFU datacube')
+    parser.add_argument('--wave_axis', metavar='wave_axis', type=int, action='store', default=3, help='Axis of the wavelength dimension in the IFU datacube. Default is 3')
+    parser.add_argument('--contmask_lambda', metavar='contmask_lambda', type=float, action='store', default=50, help='Velocity window half-width for masking the spectra before fitting continuum. Default is 200 km/s')
+
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
