@@ -100,14 +100,14 @@ def linefit_1dspec(df_spec, df_linelist, contmask_lambda_window=200, xpix=0, ypi
         if args is not None:
             norm_factor = 1
             df_spec['cont'] = 1
-            if args.fortalk: col_arr = ['salmon', 'gray', 'limegreen', 'cornflowerblue']
+            if args.fortalk: col_arr = ['salmon', 'peachpuff', 'lawngreen', 'cyan']
             else: col_arr = ['k', 'gray', 'crimson', 'cornflowerblue']
-            fig, ax = plt.subplots(figsize=(14, 4))
-            fig.subplots_adjust(left=0.07, right=0.98, top=0.9, bottom=0.1)
+            fig, ax = plt.subplots(figsize=(14, 6))
+            fig.subplots_adjust(left=0.07, right=0.98, top=0.9, bottom=0.13)
             
             # ----plotting the observed spectra in restframe------
             ax.step(df_spec['restwave'], (df_spec['flux'] * df_spec['cont']) / norm_factor, lw=2, c=col_arr[0], label='Data')
-            ax.step(df_spec['restwave'], df_spec['cont'] / norm_factor, lw=0.5, c=col_arr[1], label='Modeled cont.')
+            # ax.step(df_spec['restwave'], df_spec['cont'] / norm_factor, lw=0.5, c=col_arr[1], label='Modeled cont.')
             ax.fill_between(df_spec['restwave'], (df_spec['flux'] - df_spec['flux_u']/2) * df_spec['cont'] / norm_factor, (df_spec['flux'] + df_spec['flux_u']/2) * df_spec['cont'] / norm_factor, lw=0, color=col_arr[0], alpha=0.5, step='pre')#, drawstyle='steps')
             
             # -----plotting the fitted spectra---------
@@ -125,15 +125,17 @@ def linefit_1dspec(df_spec, df_linelist, contmask_lambda_window=200, xpix=0, ypi
             if args.xmax is None: args.xmax = np.max(df_spec['restwave'])
             ax.set_xlim(args.xmin, args.xmax)
             ax.legend(fontsize=args.fontsize, loc='upper left')
+            ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
             # -----plotting velocity windows for masking lines----------
-            for wavelength in wavelengths_to_fit:
-                left_window = wavelength - contmask_lambda_window
-                right_window = wavelength + contmask_lambda_window
-                df_spec = df_spec[(df_spec['restwave'] < left_window) | (df_spec['restwave'] > right_window)]
-                ax.fill_betweenx([ax.get_ylim()[0], ax.get_ylim()[1]], left_window, right_window, color=col_arr[1], lw=0, alpha=0.3)
-                #ax.axvline(wavelength, color=col_arr[3], lw=1, ls='dashed', alpha=0.8)
-            
+            if not args.fortalk:
+                for wavelength in wavelengths_to_fit:
+                    left_window = wavelength - contmask_lambda_window
+                    right_window = wavelength + contmask_lambda_window
+                    df_spec = df_spec[(df_spec['restwave'] < left_window) | (df_spec['restwave'] > right_window)]
+                    ax.fill_betweenx([ax.get_ylim()[0], ax.get_ylim()[1]], left_window, right_window, color=col_arr[1], lw=0, alpha=0.3)
+                    #ax.axvline(wavelength, color=col_arr[3], lw=1, ls='dashed', alpha=0.8)
+                
             # ---observed wavelength axis-------
             ax2 = ax.twiny()
             ax2.set_xlim(ax.get_xlim())
@@ -524,7 +526,7 @@ if __name__ == "__main__":
     # -------------------handling data cube------------------------------
 
     # ------reading in background subtracted input IFU data cube---------------
-    if not os.path.exists(ifu_cube_filename_bkg_sub) or args.clobber:
+    if not os.path.exists(ifu_cube_filename_bkg_sub):# or args.clobber:
         background_subtract(ifu_cube_filename, ifu_cube_filename_bkg_sub, args, bkg_region=bkg_region, smooth=True)
     ifu_cube, ifu_err_cube, wave_arr = read_datacube(ifu_cube_filename_bkg_sub, args)
     rest_wave_arr = wave_arr * 1e4 / (1 + redshift) # microns to Angstroms
@@ -539,23 +541,23 @@ if __name__ == "__main__":
 
         # -------saving the fitted line cube----------
         save_fitted_cube(flux_cube, vel_cube, vdisp_cube, df_linelist, line_cube_filename, args)
-    
+       
     # ------reading in the fitted line cube----------
     print(f'Reading existing fitted cube from {line_cube_filename}')
     line_cube = fits.open(line_cube_filename)
     df_linelist[df_linelist['LineID'].isin(line_cube[0].header['LINES'].split(','))]
     
     # -------plotting emission lines------------------
-    nrow, ncol = 2, 2
+    nrow, ncol = 2, 3
     fig, axes = plt.subplots(nrow, ncol, figsize=(8, 6), sharex=True, sharey=True)
     fig.subplots_adjust(left=0.07, right=0.95, top=0.95, bottom=0.07, wspace=0.1, hspace=0.1)
     
     args.EB_V = 0. #get_EB_V(line_cube)
-    line_label_arr = ['NII6584', 'H6562', 'SII6717', 'SII6730']
+    line_label_arr = ['OIII5007', 'HBeta', 'NII6584', 'H6562', 'SII6717', 'SII6730']
     vmin, vmax = -1, 3
     line_map_arr = get_emission_line_maps(line_cube, line_label_arr, EB_V=args.EB_V, silent=args.only_integrated)
     for index, line_map in enumerate(line_map_arr):
-        i, j = index % ncol, int(index / ncol)
+        i, j = int(index / ncol), index % ncol
         ax = axes[i][j]
         ax, _ = plot_2D_map(unp.nominal_values(line_map), ax, args, takelog=True, label=line_label_arr[index], cmap='summer', vmin=vmin, vmax=vmax, hide_xaxis=i != nrow - 1, hide_yaxis=j > 0, hide_cbar=False, image_err=unp.std_devs(line_map), fontsize=args.fontsize)
 
