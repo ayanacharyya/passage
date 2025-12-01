@@ -173,7 +173,8 @@ def compare_line_ratios(df, ratio_list, args, lim=[-2, 2]):
 
         for marker in pd.unique(df['marker']):
             df_sub = df[df['marker'] == marker]
-            ax.scatter(df_sub[ratio_name_int], df_sub[ratio_name_sum], c=df_sub['color'], marker=marker, s=50, edgecolor='k', lw=0.5, cmap=args.cmap, vmin=args.clim[0], vmax=args.clim[1])
+            for index, row in df_sub.iterrows():
+                ax.scatter(row[ratio_name_int], row[ratio_name_sum], c=row['color'], marker=marker, s=50, edgecolor='k', lw=0.5, cmap=args.cmap, vmin=args.clim[0], vmax=args.clim[1], label=row['objid'] if ratio == ratio_list[-1] else None)
         ax.errorbar(df[ratio_name_int], df[ratio_name_sum], xerr=df[ratio_name_int + '_u'], yerr=df[ratio_name_sum + '_u'], fmt='none', c='gray', lw=0.5, zorder=-2)
 
         # --------annotating the figure-----------
@@ -181,6 +182,7 @@ def compare_line_ratios(df, ratio_list, args, lim=[-2, 2]):
         ax.set_ylabel(f'Log {get_ratio_labels(ratio, omit_lambda=True)} (Sum)', fontsize=args.fontsize)
 
         ax.plot([lim[0], lim[1]], [lim[0], lim[1]], c='k', ls='dotted', lw=1, zorder=-5)
+        if ratio == ratio_list[-1]: ax.legend(loc='upper right', fontsize=args.fontsize / 1.2)
 
         # -------adding the model limits-----------
         ax.add_patch(plt.Rectangle((min_model_ratio, min_model_ratio), max_model_ratio - min_model_ratio, max_model_ratio - min_model_ratio, lw=0, fc=model_color, alpha=0.2, zorder=-5))
@@ -190,6 +192,11 @@ def compare_line_ratios(df, ratio_list, args, lim=[-2, 2]):
         ax.set_xlim(lim[0], lim[1])
         ax.set_ylim(lim[0], lim[1])
         ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+
+        # -------print color legend on last subplot---------
+        # if ratio == ratio_list[-1]:
+        #     for index, row in df.iterrows():
+
 
     # --------making colorbar if needed-------------
     if not args.nocolorcoding and args.colorcol != 'ez_z_phot':

@@ -81,7 +81,7 @@ def plot_venn(df, args, silent=False):
         if 'SNR' in args.plot_conditions or 'EW' in args.plot_conditions:
             try:
                 condition3 = df[f'{line}_SNR'] > args.SNR_thresh
-                set_arr, label_arr = make_set(df, condition1 & condition2 & condition3, f'{line} SNR > {args.SNR_thresh}', set_arr, label_arr, silent=silent)
+                set_arr, label_arr = make_set(df, condition1 & condition2 & condition3, f'{line} SNR > {args.SNR_thresh} (N={len(df[condition3])})', set_arr, label_arr, silent=silent)
             except:
                 if not silent: print(f'Could not apply the {line} SNR condition')
                 pass
@@ -143,7 +143,7 @@ def plot_venn(df, args, silent=False):
         if not silent: print('\n')
         condition = np.isfinite(df['lp_mass'])
         set_arr, label_arr = make_set(df, condition, 'Stellar mass available', set_arr, label_arr, silent=silent)
-        set_arr, label_arr = make_set(df, condition, 'COSMOS-Web\nphotometry available', set_arr, label_arr, silent=silent)
+        set_arr, label_arr = make_set(df, condition, f'COSMOS-Web photometry\navailable (N={len(df[condition])})', set_arr, label_arr, silent=silent)
 
     if 'lp_SFR' in df:
         condition = df['lp_SFR'] > args.log_SFR_thresh

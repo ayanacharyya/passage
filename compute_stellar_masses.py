@@ -895,7 +895,7 @@ if __name__ == "__main__":
         load_fn = partial(load_photom_bagpipes, phot_cat=photcat_filename_sed, id_colname='objid', zeropoint=28.9)
 
         # --------create columns to store stellar masses---------------
-        new_columns_dict = {'log_mass_bgp':('stellar_mass', False), 'z_bgp': ('redshift', False), 'log_sfr_bgp':('sfr', True)} # dict of new_label:(quantity_in_bagpipe, needs_to_be_log)
+        new_columns_dict = {'log_mass_bgp':('stellar_mass', False), 'z_bgp': ('redshift', False), 'log_sfr_bgp':('sfr', True), 'Av':('dust:Av', False)} # dict of new_label:(quantity_in_bagpipe, needs_to_be_log)
         new_columns = np.hstack([[item, item + '_u'] for item in list(new_columns_dict.keys())])
         for thiscol in new_columns: df_int[thiscol] = np.zeros(len(df_int))
 
