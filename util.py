@@ -292,8 +292,8 @@ def parse_args():
     elif 'Par' in args.field and 'v' not in args.drv:
         args.drv = 'v' + args.drv
 
-    args.input_dir = args.input_dir / args.drv
-    args.output_dir = args.output_dir / args.drv
+    args.input_dir = Path(args.input_dir) / args.drv
+    args.output_dir = Path(args.output_dir) / args.drv
     (args.output_dir / 'catalogs').mkdir(exist_ok=True, parents=True)
     (args.output_dir / 'plots').mkdir(exist_ok=True, parents=True)
 
@@ -1431,3 +1431,148 @@ def plotline(id, path='/Users/acharyya/Work/astro/passage/passage_data/v0.5/Par0
      if hide: plt.close()
      else: plt.show(block=False)
      return fig
+
+# --------------------------------------------------------------------------------------------------------------------
+def annotate_axes(ax, xlabel, ylabel, args=None, fontsize=10, fontfactor=1, label='', clabel='', hide_xaxis=False, hide_yaxis=False, hide_cbar=True, p=None, hide_cbar_ticks=False, cticks_integer=True):
+    '''
+    Annotates the axis of a given 2D image
+    Returns the axis handle
+    '''
+    if args is not None: fontsize, fontfactor = args.fontsize, args.fontfactor
+    ax.text(0.05, 0.9, label, c='k', fontsize=fontsize/fontfactor, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9), transform=ax.transAxes)
+
+    ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=3, prune='both'))
+    ax.xaxis.set_minor_locator(ticker.AutoMinorLocator(4))
+    if hide_xaxis:
+        ax.set_xticklabels([])
+    else:
+        ax.set_xlabel(xlabel, fontsize=fontsize)
+        ax.tick_params(axis='x', which='major', labelsize=fontsize)
+
+    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=3, prune='both'))
+    ax.yaxis.set_minor_locator(ticker.AutoMinorLocator(4))
+    if hide_yaxis:
+        ax.set_yticklabels([])
+    else:
+        ax.set_ylabel(ylabel, fontsize=fontsize)
+        ax.tick_params(axis='y', which='major', labelsize=fontsize)
+
+    if not hide_cbar and p is not None:
+        cax = inset_axes(ax, width="5%", height="100%", loc='right', bbox_to_anchor=(0.05, 0, 1, 1), bbox_transform=ax.transAxes, borderpad=0)
+        cbar = plt.colorbar(p, cax=cax, orientation='vertical')
+        cbar.set_label(clabel, fontsize=fontsize)
+
+        cbar.locator = ticker.MaxNLocator(integer=cticks_integer, nbins=4)#, prune='both')
+        cbar.update_ticks()
+        if hide_cbar_ticks:
+            cbar.ax.set_yticklabels([])
+        else:
+            cbar.ax.tick_params(labelsize=fontsize)
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def annotate_PAs(pa_arr, ax, fontsize=10, color='k'):
+    '''
+    Annotates a given plot with the PAs of all available filters in the given axis
+    Returns the axis handle
+    '''
+    x_cen = ax.get_xlim()[1] - 0.15 * np.diff(ax.get_xlim())[0]
+    y_cen = ax.get_ylim()[1] - 0.15 * np.diff(ax.get_ylim())[0]
+    len = np.diff(ax.get_xlim())[0] * 0.1
+
+    for pa in pa_arr:
+        x_comp = len * np.sin(pa * np.pi / 180)
+        y_comp = len * np.cos(pa * np.pi / 180)
+        ax.plot([x_cen, x_cen - x_comp], [y_cen, y_cen + y_comp], lw=1, c=color)
+        ax.text(x_cen - 1.2 * x_comp, y_cen + 1.2 * y_comp, r'%d$^\circ$' % pa, color=color, fontsize=fontsize, ha='center', va='center', rotation=pa)
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------
+def plot_rgb_image(objid, images_dir, filters=['F200W', 'F150W', 'F115W'], arcsec_limit=1, fontsize=15, hide_filter_names=False, hide_pa=False, offset=0, skip_annotate=False, make_transparent=False):
+    '''
+    Plots the RGB cutout of a given object ID (objid) by cutting out available filter images in the provided path (images_dir)
+    Returns figure
+    '''
+    PSF_FWHM_arcsec_dict = {'F115W': 0.094, 'F150W': 0.092, 'F200W': 0.106} # value of PSF FWHM derived from Table 1 of https://jwst-docs.stsci.edu/jwst-near-infrared-imager-and-slitless-spectrograph/niriss-performance/niriss-point-spread-functions#gsc.tab=0
+    col_arr = ['r', 'lightgreen', 'cornflowerblue']
+    hdu_filename = Path(glob.glob(f'{str(Path(images_dir))}/spec2D/*_{objid:05d}.spec2D.fits')[0])
+    print(f'Reading in {hdu_filename}..')
+
+    # ------object specific quantitites-------
+    field = hdu_filename.stem.split('_')[0]
+    hdul = fits.open(hdu_filename)
+    pos = SkyCoord(hdul[0].header['RA'], hdul[0].header['DEC'], unit = 'deg')
+    size = 2 * arcsec_limit * u.arcsec
+    filter_ind = 0
+    pa_arr = [hdul[0].header[f'{filters[filter_ind]}{item + 1:02d}'] for item in range(hdul[0].header[f'N{filters[filter_ind]}'])]
+    
+    print(f'Plotting the RGB images with filters {filters} and PAs {pa_arr}..')
+    fig, ax = plt.subplots(1, figsize=(6.5, 6))
+
+    # -------get image for each filter---------
+    image_arr, exptime_arr = [], []
+    for index, filter in enumerate(filters):
+       #filename = Path(images_dir) / f'{field}_{filter.lower()}-clear_drz_sci.fits'
+        filename = Path(images_dir) / f'{field}_{filter.lower()}_drz_sci.fits'
+        data = fits.open(filename)
+        exptime = data[0].header['EXPTIME']
+        exptime_arr.append(exptime)
+        
+        print(f'Reading {filter} image from {filename}, which has exptime={exptime} s..')
+
+        image = data[0].data
+        source_header = data[0].header
+        wcs = pywcs.WCS(source_header)
+
+        cutout = Cutout2D(image, pos, size, wcs=wcs)
+        cutout_data = cutout.data * source_header['PHOTFNU'] * 1e6
+        cutout_header = cutout.wcs.to_header()
+        if index:
+            reprojected_data, reprojected_header = reproject_interp((cutout_data, cutout_header), target_header, shape_out=image_arr[0].shape)
+            image_arr.append(reprojected_data)
+        else:
+            target_header = cutout_header
+            image_arr.append(cutout_data)
+
+        if not hide_filter_names:
+            ax.text(0.05, 0.95 - index * 0.1, f'{filter}', c=col_arr[index], fontsize=fontsize, ha='left', va='top', transform=ax.transAxes, zorder=10)
+            if filter == 'F150W': ax.add_patch(plt.Circle((0.35, 0.93 - index * 0.1), PSF_FWHM_arcsec_dict[filter]/2, color=col_arr[index], fill=True, lw=0.5, transform=ax.transAxes)) # for over-plotting PSF size
+
+    # -------normalising each image to exptime---------
+    for index in range(len(exptime_arr)):
+        image_arr[index] = image_arr[index] * exptime_arr[0] / exptime_arr[index]
+
+    # -------create RGB image---------
+    pctl, maximum = 99.9, 0.
+    for img in image_arr:
+        val = np.percentile(img, pctl)
+        if val > maximum: maximum = val
+
+    rgb_image = make_rgb(image_arr[0], image_arr[1], image_arr[2], interval=ManualInterval(vmin=0, vmax=maximum), stretch=SqrtStretch())
+
+    # -------plot RGB image---------
+    extent = (-arcsec_limit - offset, arcsec_limit - offset, -arcsec_limit - offset, arcsec_limit - offset)
+    p = ax.imshow(rgb_image, origin='lower', extent=extent, alpha=1)
+    ax.set_aspect('auto') 
+    ax.scatter(0, 0, marker='x', s=10, c='grey')
+
+    # ----------annotate axis---------------
+    if not hide_pa:
+        ax = annotate_PAs(pa_arr, ax, fontsize=fontsize, color='w')
+
+    ax.set_xlim(-arcsec_limit, arcsec_limit)  # arcsec
+    ax.set_ylim(-arcsec_limit, arcsec_limit)  # arcsec
+
+    if not skip_annotate: ax = annotate_axes(ax, 'arcsec', 'arcsec', fontsize=fontsize, hide_xaxis=False, hide_yaxis=False, hide_cbar=True)
+
+    plot_output_dir = Path(images_dir) / 'figs'
+    plot_output_dir.mkdir(exist_ok=True, parents=True)
+    figname = plot_output_dir / f'{field}_{objid:05d}_RGB.png'
+    fig.savefig(figname, transparent=make_transparent)
+    print(f'\nSaved figure as {figname}')
+    plt.show(block=False)
+
+    return fig
+

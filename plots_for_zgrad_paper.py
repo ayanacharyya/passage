@@ -1719,44 +1719,6 @@ def plot_1D_spectra(od_hdu, ax, args, show_log_flux=False):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def annotate_axes(ax, xlabel, ylabel, args, label='', clabel='', hide_xaxis=False, hide_yaxis=False, hide_cbar=True, p=None, hide_cbar_ticks=False, cticks_integer=True):
-    '''
-    Annotates the axis of a given 2D image
-    Returns the axis handle
-    '''
-    ax.text(0.05, 0.9, label, c='k', fontsize=args.fontsize/args.fontfactor, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9), transform=ax.transAxes)
-
-    ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=3, prune='both'))
-    ax.xaxis.set_minor_locator(ticker.AutoMinorLocator(4))
-    if hide_xaxis:
-        ax.set_xticklabels([])
-    else:
-        ax.set_xlabel(xlabel, fontsize=args.fontsize)
-        ax.tick_params(axis='x', which='major', labelsize=args.fontsize)
-
-    ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=3, prune='both'))
-    ax.yaxis.set_minor_locator(ticker.AutoMinorLocator(4))
-    if hide_yaxis:
-        ax.set_yticklabels([])
-    else:
-        ax.set_ylabel(ylabel, fontsize=args.fontsize)
-        ax.tick_params(axis='y', which='major', labelsize=args.fontsize)
-
-    if not hide_cbar and p is not None:
-        cax = inset_axes(ax, width="5%", height="100%", loc='right', bbox_to_anchor=(0.05, 0, 1, 1), bbox_transform=ax.transAxes, borderpad=0)
-        cbar = plt.colorbar(p, cax=cax, orientation='vertical')
-        cbar.set_label(clabel, fontsize=args.fontsize)
-
-        cbar.locator = ticker.MaxNLocator(integer=cticks_integer, nbins=4)#, prune='both')
-        cbar.update_ticks()
-        if hide_cbar_ticks:
-            cbar.ax.set_yticklabels([])
-        else:
-            cbar.ax.tick_params(labelsize=args.fontsize)
-
-    return ax
-
-# --------------------------------------------------------------------------------------------------------------------
 def annotate_kpc_scale_bar(kpc, ax, args, label=None, color='k', loc='lower left'):
     '''
     Annotate existing axis with a scale bar corresponding to a given kpc length
