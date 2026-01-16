@@ -260,6 +260,9 @@ def parse_args():
     parser.add_argument('--wave_axis', metavar='wave_axis', type=int, action='store', default=3, help='Axis of the wavelength dimension in the IFU datacube. Default is 3')
     parser.add_argument('--contmask_lambda', metavar='contmask_lambda', type=float, action='store', default=50, help='Velocity window half-width for masking the spectra before fitting continuum. Default is 200 km/s')
 
+    # ---- args added for stack_emission_maps.py ------------
+    parser.add_argument('--debug_align', dest='debug_align', action='store_true', default=False, help='Debug the alignment, deprojection, rotation of emission line maps? Default is no.')
+
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
@@ -584,13 +587,13 @@ def read_COSMOSWebb_catalog(args=None, filename=None, aperture=1.0):
     if filename is None:
         if args is None: input_dir = '/Users/acharyya/Work/astro/passage/passage_data'
         else: input_dir = args.input_dir
-        filename = Path(input_dir) / 'COSMOS' / 'COSMOS_Web_for_Ayan_Dec24.fits'
+        #filename = Path(input_dir) / 'COSMOS' / 'COSMOS_Web_for_Ayan_Dec24.fits'
+        filename = Path(input_dir) / 'COSMOS' / 'COSMOSWeb_mastercatalog_v1_lephare_plus.fits'
 
     print(f'Reading in {filename}, might take a while..')
     start_time2 = datetime.now()
 
-    data = fits.open(filename)
-    table = Table(data[1].data)
+    table = Table.read(filename)
 
     multi_index_columns = [item for item in table.colnames if len(table[item].shape) > 1]
     single_index_columns = list(set(table.columns) - set(multi_index_columns))
@@ -749,12 +752,13 @@ def split_COSMOSWebb_table_by_par(args, filename=None, old_dir_format=True, fiel
     Reads in the COSMOSWebb catalog and splits it into smaller tables with only objects that are overlapping with individual PASSAGE fields
     '''
     # -------reading in the COSMOS2020 (sub)catalog------
-    if filename is None: filename = Path(args.input_dir) / 'COSMOS' / 'COSMOS_Web_for_Ayan_Dec24.fits'
+    #if filename is None: filename = Path(args.input_dir) / 'COSMOS' / 'COSMOS_Web_for_Ayan_Dec24.fits'
+    if filename is None: filename = Path(args.input_dir) / 'COSMOS' / 'COSMOSWeb_mastercatalog_v1_lephare_plus.fits'
     data = fits.open(filename)
     table_cosmos = Table(data[1].data)
 
-    df_cosmos = table_cosmos[['ID_SE++', 'RA_DETEC', 'DEC_DETEC']].to_pandas() # using ID_SE++ instead of ID because it turns out that ID is not unique in the COSMOSWeb catalog
-    df_cosmos = df_cosmos.rename(columns={'RA_DETEC':'ra', 'DEC_DETEC':'dec'})
+    cosmos_idcol = 'id'
+    df_cosmos = table_cosmos[[cosmos_idcol, 'ra', 'dec']].to_pandas()
 
     if fields is None:
         field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / args.drv / 'Par*') + '/')]
@@ -780,12 +784,12 @@ def split_COSMOSWebb_table_by_par(args, filename=None, old_dir_format=True, fiel
             df['passage_id'] = thisfield + '-' + df['id'].astype(str)  # making a unique combination of field and object id
 
             # -------cross-matching RA/DEC of both catalogs------
-            df_crossmatch = get_crossmatch(df, df_cosmos, sep_threshold=0.1, df1_idcol='passage_id', df2_idcol='ID_SE++')
-            df_crossmatch = df_crossmatch.rename(columns={'df1_id': 'passage_id', 'df2_id': 'ID_SE++'})
+            df_crossmatch = get_crossmatch(df, df_cosmos, sep_threshold=0.1, df1_idcol='passage_id', df2_idcol=cosmos_idcol)
+            df_crossmatch = df_crossmatch.rename(columns={'df1_id': 'passage_id', 'df2_id': cosmos_idcol})
 
             if len(df_crossmatch) > 0:
                 table_crossmatch = Table.from_pandas(df_crossmatch)
-                table_cosmos_thisfield = join(table_cosmos, table_crossmatch, keys='ID_SE++')
+                table_cosmos_thisfield = join(table_cosmos, table_crossmatch, keys=cosmos_idcol)
                 
                 if old_dir_format: outfilepath = args.input_dir / 'COSMOS'
                 else: outfilepath = product_dir
@@ -842,7 +846,7 @@ def get_passage_filter_dict(args=None, filename=None):
 
     df = pd.read_csv(filename)
     df = df[['Par#', 'Obs Date', 'Filter']]
-    df = df.fillna(method='ffill')
+    df = df.ffill()
     df = df[~ df['Obs Date'].str.contains('SKIPPED')]
 
     dictionary = {item: np.unique(df[df['Par#'] == item]['Filter']).tolist() for item in np.unique(df['Par#'])}

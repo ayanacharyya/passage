@@ -3213,7 +3213,7 @@ def plot_DIG_figure(full_hdu, args):
     return fig, cdig_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def myimshow(data, ax, contour=None, re_pix=None, label='', cmap='viridis'):
+def myimshow(data, ax, contour=None, re_pix=None, label='', cmap='viridis', fontsize=10):
     '''
     Utility function to plot a 2D data array on to ax, and plot center and segmentation map
     Returns ax
@@ -3222,7 +3222,7 @@ def myimshow(data, ax, contour=None, re_pix=None, label='', cmap='viridis'):
     cen_x, cen_y = int(np.shape(data)[0] / 2), int(np.shape(data)[1] / 2)
     ax.scatter(cen_y, cen_x, marker='x', c='k')
     if contour is not None: ax.contour(contour, levels=0, colors='w', linewidths=0.5)
-    ax.text(0.9, 0.9, label, c='w', fontsize=args.fontsize, ha='right', va='top', transform=ax.transAxes)
+    ax.text(0.9, 0.9, label, c='w', fontsize=fontsize, ha='right', va='top', transform=ax.transAxes)
     if re_pix is not None: ax.add_patch(plt.Circle((cen_y, cen_x), re_pix, color='r', fill=False, lw=0.5))
 
     return ax
@@ -3244,16 +3244,17 @@ def myradprof(radius, flux, ax, args, re_kpc, label=''):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_re(full_hdu, args, filter='F200W'):
+def get_re(full_hdu, args, filter='F200W', psf=None):
     '''
     Computes the half-light radius in the direct image with the given filter
     Returns the radius
     '''
     # ----------getting the PSF--------------
-    niriss = webbpsf.NIRISS()
-    niriss.filter = filter
-    niriss.pixelscale = args.pix_size_arcsec
-    psf = niriss.calc_psf(fov_arcsec=1 if 'glass' in args.field else 0.5, oversample=1)
+    if psf is None:
+        niriss = webbpsf.NIRISS()
+        niriss.filter = filter
+        niriss.pixelscale = args.pix_size_arcsec
+        psf = niriss.calc_psf(fov_arcsec=1 if 'glass' in args.field else 0.5, oversample=1)
     psf_array = psf[0].data
     psf_array /= psf_array.sum()
 
