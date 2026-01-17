@@ -131,6 +131,7 @@ def rescale_line_map(line_map, args):
     target_re_px = npix_side / (2 * args.re_extent)
     current_re_px = args.re_arcsec / args.pix_size_arcsec
     zoom_factor = target_re_px / current_re_px
+    if args.debug_align: print(f'Deb133: id {args.id}: re_arcsec={args.re_arcsec}, pix_size_arcsec={args.pix_size_arcsec}, semi_major={args.semi_major}, semi_minor={args.semi_minor}, stretch_factor={stretch_factor}, target_re_px={target_re_px}, current_re_px={current_re_px}, zoom_factor={zoom_factor}') ##
 
     rescaled_map = ndimage.zoom(line_map, (zoom_factor * stretch_factor, zoom_factor), order=1)
     
@@ -302,6 +303,7 @@ if __name__ == "__main__":
         df_re = Table.read(args.output_dir / f'catalogs/{args.field}_re_list.fits').to_pandas()
         if 'redshift' in df_re: df_re.drop(columns=['redshift'], axis=1, inplace=True)
         df_re['id'] = df_re['id'].astype(int)
+        df_re = df_re[df_re['re_kpc'] > 0]
         df = pd.merge(df, df_re, on='id', how='inner')
 
         # ----------binning the dataframe by mass and SFR bins-------------------
