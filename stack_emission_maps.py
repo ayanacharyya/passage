@@ -260,6 +260,31 @@ def write_stacked_maps(stacked_maps, stacked_maps_err, nobj_arr, output_filename
     print(f'Saved {len(args.line_list)*2} extensions to {output_filename}')
 
 # --------------------------------------------------------------------------------------------------------------------
+def read_stacked_maps(output_filename, args):
+    '''
+    Reads the stacked emission line maps from one multi-extension fits file
+    Returns 3 lists: fluxes, uncertainties, and number of objects, with each element of each list corresponding to a particular emission line
+    '''
+    hdul = fits.open(output_filename)
+    stacked_maps, stacked_maps_err, nobj_arr = [], [], []
+    for index4, this_line in enumerate(args.line_list):
+        if f'{this_line.upper()}' not in hdul:
+            print(f'\t\tFor {this_line} extension is completely empty in the stack, hence putting in dummy map.')
+            stacked_maps.append(np.full((args.npix_side, args.npix_side), np.nan))
+            stacked_maps_err.append(np.full((args.npix_side, args.npix_side), np.nan))
+            nobj_arr.append(np.nan)
+        else:
+            stacked_map = hdul[f'{this_line.upper()}'].data
+            stacked_map_err = hdul[f'{this_line.upper()}_ERR'].data
+            stacked_maps.append(stacked_map)
+            stacked_maps_err.append(stacked_map_err)
+            
+            nobj = hdul[f'{this_line.upper()}'].header['NOBJ']
+            nobj_arr.append(nobj)
+    
+    return stacked_maps, stacked_maps_err, nobj_arr
+
+# --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
@@ -327,170 +352,172 @@ if __name__ == "__main__":
 
             output_filename = fits_dir / f'stacked_maps_logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}.fits'
             if output_filename.exists() and not args.clobber:
-                print(f'this fits file already exists, so skipping this bin. Re-run with --clobber to rewrite.')
-                continue
+                print(f'Reading existing fits file {output_filename}. Re-run with --clobber to rewrite.')
+                # -------reading previously saved stacked fits file------------
+                stacked_maps, stacked_maps_err, nobj_arr = read_stacked_maps(output_filename, args)               
 
-            # --------determine which objects fall in this bin----------
-            mask = df['bin_intervals'] == this_mass_sfr_bin
-            id_arr = df.loc[mask, 'id'].tolist()
-            if not args.do_all_obj:
-                id_arr = np.array(id_arr)[np.isin(id_arr, args.id_arr)] # subset of IDs of "good-looking" galaxies, just for testing, otherwise comment this line out
-
-            nobj_good = 0
-            if len(id_arr) > 0:
-                print(f'which has {len(id_arr)} objects.')
-                line_maps_array = [[] for _ in range(len(args.line_list))]
-                line_maps_err_array = [[] for _ in range(len(args.line_list))] # each array must be len(args.line_list) long and each element will become a stack of 2D images
-                
-                # ------------looping over the objects-----------------------
-                for index3, this_id in enumerate(id_arr):
-                    args.id = this_id
-                    print(f'\t\tCommencing ({index3 + 1}/{len(id_arr)}) ID {args.id}..')
-                    obj = df.loc[df['id']==this_id].iloc[0]
-
-                    # ------determining directories and filenames---------
-                    full_fits_file = product_dir / 'full' / f'{args.field}_{args.id:05d}.full.fits'
-                    maps_fits_file = product_dir / 'maps' / f'{args.field}_{args.id:05d}.maps.fits'
-                    od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.1D.fits'
-
-                    if os.path.exists(maps_fits_file): # if the fits files are in maps/
-                        full_filename = maps_fits_file
-                    elif os.path.exists(full_fits_file): # if the fits files are in full/
-                        full_filename = full_fits_file
-                    else:
-                        print(f'Could not find {full_fits_file} or {maps_fits_file}, so skipping it.')
-                        continue
-                    if not os.path.exists(od_filename):
-                        od_filename = Path(str(od_filename).replace('.1D.', '.spec1D.'))
-
-                    # ------------read in maps files--------------------------------
-                    full_hdu = fits.open(full_filename)
-                    od_hdu = fits.open(od_filename)
-
-                    # ----------determining object parameters------------
-                    args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
-                    args.available_lines = np.array(['OIII' if item == 'OIII-5007' else item for item in args.available_lines]) # replace 'OIII-5007' with 'OIII'
-                    args.z = full_hdu[0].header['REDSHIFT']
-                    args.distance = cosmo.luminosity_distance(args.z)
-                    args.pix_size_arcsec = full_hdu[5].header['PIXASEC']
-                    imsize_arcsec = full_hdu['DSCI'].data.shape[0] * args.pix_size_arcsec
-                    offset = args.pix_size_arcsec / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
-                    args.extent = (-args.arcsec_limit - offset, args.arcsec_limit - offset, -args.arcsec_limit - offset, args.arcsec_limit - offset)
-                    
-                    args.EB_V = 0. # until it gets over-written, if both H alpha and H beta lines are present
-                    args.semi_major = obj['a_image']
-                    args.semi_minor = obj['b_image']
-                    args.pa = obj['theta_image']
-                    args.re_kpc, args.re_arcsec = obj['re_kpc'], obj['re_arcsec']
-                    
-                    # --------determining true center of object rom direct image---------------------
-                    args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W', silent=True)
-
-                    # ---------------segmentation map---------------
-                    segmentation_map = full_hdu['SEG'].data
-                    segmentation_map = trim_image(segmentation_map, args)
-                    segmentation_map = ndimage.shift(segmentation_map, [args.ndelta_xpix, args.ndelta_ypix], cval=np.nan)
-                    args.segmentation_map = segmentation_map
-                    
-                    rotated_segmentation_map = rotate_line_map(segmentation_map, args)
-                    deprojected_segmentation_map = deproject_line_map(rotated_segmentation_map, args)
-                    rescaled_segmentation_map = rescale_line_map(deprojected_segmentation_map, args)
-
-                    # ---------looping over all emission lines------------------------------
-                    get_rescaled_recentering = True
-                    nlines_good = 0
-                    for index4, this_line in enumerate(args.line_list):
-                        if this_line not in args.available_lines:
-                            print(f'\t\t\tLine {this_line} not available for object {args.id}. So skipping this line..')
-                            continue
-                        try:
-                            # -----------extracting the emission line map----------------
-                            line_map, line_map_err = get_emission_line_map(this_line, full_hdu, args, dered=True, silent=True)
-
-                            # --------rotating the line map---------------------
-                            rotated_line_map = rotate_line_map(line_map, args)
-                            rotated_line_map_err = rotate_line_map(line_map_err, args)
-
-                            # --------deprojecting the line map---------------------
-                            deprojected_line_map = deproject_line_map(rotated_line_map, args)
-                            deprojected_line_map_err = deproject_line_map(rotated_line_map_err, args)
-
-                            # --------scaling the line map by effective radius---------------------
-                            rescaled_line_map = rescale_line_map(deprojected_line_map, args)
-                            rescaled_line_map_err = rescale_line_map(deprojected_line_map_err, args)
-
-                            # --------computing new recentering offsets, after rescaling---------------------
-                            if get_rescaled_recentering:
-                                args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled = get_center_offsets(rescaled_line_map, args, silent=True)
-                                recentered_segmentation_map = ndimage.shift(rescaled_segmentation_map, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], cval=np.nan)
-                                get_rescaled_recentering = False
-                            
-                            # --------recentering the line map---------------------
-                            recentered_line_map = ndimage.shift(rescaled_line_map, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], cval=np.nan)
-                            recentered_line_map_err = ndimage.shift(rescaled_line_map_err, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], cval=np.nan)
-
-                            # -------plotting the intermediate steps: for debugging--------------
-                            if args.debug_align:
-                                re_pix = args.re_arcsec / args.pix_size_arcsec
-                                print(f'Deb345: shapes: {this_line} map = {np.shape(line_map)}, rotated = {np.shape(rotated_line_map)}, deprojected = {np.shape(deprojected_line_map)}, recaled = {np.shape(rescaled_line_map)}, \
-    redshift={args.z:.1f}, log_mass={obj["log_mass"]:.1f}, log_sfr={obj["log_sfr"]:.1f}, a={args.semi_major:.1f}, b={args.semi_minor:.1f}, a/b={args.semi_major/args.semi_minor:.1f}, pa={args.pa:.1f}, re={re_pix:.1f} pixels') ##
-                                fig, axes = plt.subplots(1, 5, figsize=(12, 3))
-                                fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.3, hspace=0.1)
-                                cmap = 'viridis'
-                                fig.text(0.05, 0.98, f'{args.field}: ID {args.id}: {this_line} map: Alignment diagnostics', fontsize=args.fontsize, c='k', ha='left', va='top')
-                                
-                                axes[0] = myimshow(line_map, axes[0], contour=segmentation_map != args.id, re_pix=re_pix, label='Original', cmap=cmap, col='k')
-                                axes[1] = myimshow(rotated_line_map, axes[1], contour=rotated_segmentation_map != args.id, re_pix=re_pix, label='Rotated', cmap=cmap, col='w')
-                                axes[2] = myimshow(deprojected_line_map, axes[2], contour=deprojected_segmentation_map != args.id, re_pix=re_pix, label='Deprojected', cmap=cmap, col='w')
-                                axes[3] = myimshow(rescaled_line_map, axes[3], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_extent), label='Rescaled', cmap=cmap, col='w')
-                                axes[4] = myimshow(recentered_line_map, axes[4], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_extent), label='Recentered', cmap=cmap, col='w')
-
-                                plt.show(block=False)
-                                sys.exit(f'Exiting here because of --debug_re mode; if you want to run the full code as usual then remove the --debug_re option and re-run')
-
-                            # ---------------appending the line map-------------------------
-                            line_maps_array[index4].append(recentered_line_map)
-                            line_maps_err_array[index4].append(recentered_line_map_err)
-                            nlines_good += 1
-                        except Exception as e:
-                            print(f'Skipping {this_line} for obj {args.id} because it failed due to: {e}')
-                            continue
-                    print(f'\t\t\tFound {nlines_good} lines for {args.id}')
-                    if nlines_good > 0: nobj_good += 1                
-                
-                # -----stacking all line maps for all objects in this bin-----------
-                stacked_maps, stacked_maps_err, nobj_arr = [], [], []
-                for index4, this_line in enumerate(args.line_list):
-                    stacked_map, stacked_map_err = weighted_stack_line_maps(line_maps_array[index4], line_maps_err_array[index4])
-                    stacked_maps.append(stacked_map)
-                    stacked_maps_err.append(stacked_map_err)
-                    
-                    nobj = len(line_maps_array[index4])
-                    nobj_arr.append(nobj)
-
-                # -------writing out stacked line maps as fits files--------------
-                write_stacked_maps(stacked_maps, stacked_maps_err, nobj_arr, output_filename, args)
-
-                # -----------------plot emission line maps of this bin---------------
-                fig, axes = plt.subplots(1, len(args.line_list), figsize=(12, 3))
-                fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.3, hspace=0.1)
-                cmap = 'viridis'
-                fig.text(0.05, 0.95, f'{args.field}: stacking diagnostics: log_mass: {this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}, log_sfr: {this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}', fontsize=args.fontsize, c='k', ha='left', va='top')
-                for i, ax in enumerate(axes):
-                    if type(stacked_maps[i]) == np.ndarray: ax = myimshow(stacked_maps[i], ax, re_pix=args.npix_side / (2 * args.re_extent), label=f'Stacked {args.line_list[i]}: {nobj_arr[i]}', cmap=cmap, col='w')
-                
-                outfigname = fig_dir / f'stacked_maps_logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}.png'
-                fig.savefig(outfigname, transparent=args.fortalk, dpi=1000 if args.fontsize <= 5 else 200)
-                print(f'Saved figure at {outfigname}')
-                if args.hide: plt.close('all')
-                else: plt.show(block=False)
-
-                # -----------------plot emission line ratio maps of this bin---------------
-                
             else:
-                print(f'which has no object. Skipping this bin.')
-                continue
+                # --------determine which objects fall in this bin----------
+                mask = df['bin_intervals'] == this_mass_sfr_bin
+                id_arr = df.loc[mask, 'id'].tolist()
+                if not args.do_all_obj:
+                    id_arr = np.array(id_arr)[np.isin(id_arr, args.id_arr)] # subset of IDs of "good-looking" galaxies, just for testing, otherwise comment this line out
+
+                nobj_good = 0
+                if len(id_arr) > 0:
+                    print(f'which has {len(id_arr)} objects.')
+                    line_maps_array = [[] for _ in range(len(args.line_list))]
+                    line_maps_err_array = [[] for _ in range(len(args.line_list))] # each array must be len(args.line_list) long and each element will become a stack of 2D images
+                    
+                    # ------------looping over the objects-----------------------
+                    for index3, this_id in enumerate(id_arr):
+                        args.id = this_id
+                        print(f'\t\tCommencing ({index3 + 1}/{len(id_arr)}) ID {args.id}..')
+                        obj = df.loc[df['id']==this_id].iloc[0]
+
+                        # ------determining directories and filenames---------
+                        full_fits_file = product_dir / 'full' / f'{args.field}_{args.id:05d}.full.fits'
+                        maps_fits_file = product_dir / 'maps' / f'{args.field}_{args.id:05d}.maps.fits'
+                        od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.1D.fits'
+
+                        if os.path.exists(maps_fits_file): # if the fits files are in maps/
+                            full_filename = maps_fits_file
+                        elif os.path.exists(full_fits_file): # if the fits files are in full/
+                            full_filename = full_fits_file
+                        else:
+                            print(f'Could not find {full_fits_file} or {maps_fits_file}, so skipping it.')
+                            continue
+                        if not os.path.exists(od_filename):
+                            od_filename = Path(str(od_filename).replace('.1D.', '.spec1D.'))
+
+                        # ------------read in maps files--------------------------------
+                        full_hdu = fits.open(full_filename)
+                        od_hdu = fits.open(od_filename)
+
+                        # ----------determining object parameters------------
+                        args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
+                        args.available_lines = np.array(['OIII' if item == 'OIII-5007' else item for item in args.available_lines]) # replace 'OIII-5007' with 'OIII'
+                        args.z = full_hdu[0].header['REDSHIFT']
+                        args.distance = cosmo.luminosity_distance(args.z)
+                        args.pix_size_arcsec = full_hdu[5].header['PIXASEC']
+                        imsize_arcsec = full_hdu['DSCI'].data.shape[0] * args.pix_size_arcsec
+                        offset = args.pix_size_arcsec / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
+                        args.extent = (-args.arcsec_limit - offset, args.arcsec_limit - offset, -args.arcsec_limit - offset, args.arcsec_limit - offset)
+                        
+                        args.EB_V = 0. # until it gets over-written, if both H alpha and H beta lines are present
+                        args.semi_major = obj['a_image']
+                        args.semi_minor = obj['b_image']
+                        args.pa = obj['theta_image']
+                        args.re_kpc, args.re_arcsec = obj['re_kpc'], obj['re_arcsec']
+                        
+                        # --------determining true center of object rom direct image---------------------
+                        args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W', silent=True)
+
+                        # ---------------segmentation map---------------
+                        segmentation_map = full_hdu['SEG'].data
+                        segmentation_map = trim_image(segmentation_map, args)
+                        segmentation_map = ndimage.shift(segmentation_map, [args.ndelta_xpix, args.ndelta_ypix], cval=np.nan)
+                        args.segmentation_map = segmentation_map
+                        
+                        rotated_segmentation_map = rotate_line_map(segmentation_map, args)
+                        deprojected_segmentation_map = deproject_line_map(rotated_segmentation_map, args)
+                        rescaled_segmentation_map = rescale_line_map(deprojected_segmentation_map, args)
+
+                        # ---------looping over all emission lines------------------------------
+                        get_rescaled_recentering = True
+                        nlines_good = 0
+                        for index4, this_line in enumerate(args.line_list):
+                            if this_line not in args.available_lines:
+                                print(f'\t\t\tLine {this_line} not available for object {args.id}. So skipping this line..')
+                                continue
+                            try:
+                                # -----------extracting the emission line map----------------
+                                line_map, line_map_err = get_emission_line_map(this_line, full_hdu, args, dered=True, silent=True)
+
+                                # --------rotating the line map---------------------
+                                rotated_line_map = rotate_line_map(line_map, args)
+                                rotated_line_map_err = rotate_line_map(line_map_err, args)
+
+                                # --------deprojecting the line map---------------------
+                                deprojected_line_map = deproject_line_map(rotated_line_map, args)
+                                deprojected_line_map_err = deproject_line_map(rotated_line_map_err, args)
+
+                                # --------scaling the line map by effective radius---------------------
+                                rescaled_line_map = rescale_line_map(deprojected_line_map, args)
+                                rescaled_line_map_err = rescale_line_map(deprojected_line_map_err, args)
+
+                                # --------computing new recentering offsets, after rescaling---------------------
+                                if get_rescaled_recentering:
+                                    args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled = get_center_offsets(rescaled_line_map, args, silent=True)
+                                    recentered_segmentation_map = ndimage.shift(rescaled_segmentation_map, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], cval=np.nan)
+                                    get_rescaled_recentering = False
+                                
+                                # --------recentering the line map---------------------
+                                recentered_line_map = ndimage.shift(rescaled_line_map, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], cval=np.nan)
+                                recentered_line_map_err = ndimage.shift(rescaled_line_map_err, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], cval=np.nan)
+
+                                # -------plotting the intermediate steps: for debugging--------------
+                                if args.debug_align:
+                                    re_pix = args.re_arcsec / args.pix_size_arcsec
+                                    print(f'Deb345: shapes: {this_line} map = {np.shape(line_map)}, rotated = {np.shape(rotated_line_map)}, deprojected = {np.shape(deprojected_line_map)}, recaled = {np.shape(rescaled_line_map)}, \
+        redshift={args.z:.1f}, log_mass={obj["log_mass"]:.1f}, log_sfr={obj["log_sfr"]:.1f}, a={args.semi_major:.1f}, b={args.semi_minor:.1f}, a/b={args.semi_major/args.semi_minor:.1f}, pa={args.pa:.1f}, re={re_pix:.1f} pixels') ##
+                                    fig, axes = plt.subplots(1, 5, figsize=(12, 3))
+                                    fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.3, hspace=0.1)
+                                    cmap = 'viridis'
+                                    fig.text(0.05, 0.98, f'{args.field}: ID {args.id}: {this_line} map: Alignment diagnostics', fontsize=args.fontsize, c='k', ha='left', va='top')
+                                    
+                                    axes[0] = myimshow(line_map, axes[0], contour=segmentation_map != args.id, re_pix=re_pix, label='Original', cmap=cmap, col='k')
+                                    axes[1] = myimshow(rotated_line_map, axes[1], contour=rotated_segmentation_map != args.id, re_pix=re_pix, label='Rotated', cmap=cmap, col='w')
+                                    axes[2] = myimshow(deprojected_line_map, axes[2], contour=deprojected_segmentation_map != args.id, re_pix=re_pix, label='Deprojected', cmap=cmap, col='w')
+                                    axes[3] = myimshow(rescaled_line_map, axes[3], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_extent), label='Rescaled', cmap=cmap, col='w')
+                                    axes[4] = myimshow(recentered_line_map, axes[4], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_extent), label='Recentered', cmap=cmap, col='w')
+
+                                    plt.show(block=False)
+                                    sys.exit(f'Exiting here because of --debug_re mode; if you want to run the full code as usual then remove the --debug_re option and re-run')
+
+                                # ---------------appending the line map-------------------------
+                                line_maps_array[index4].append(recentered_line_map)
+                                line_maps_err_array[index4].append(recentered_line_map_err)
+                                nlines_good += 1
+                            except Exception as e:
+                                print(f'Skipping {this_line} for obj {args.id} because it failed due to: {e}')
+                                continue
+                        print(f'\t\t\tFound {nlines_good} lines for {args.id}')
+                        if nlines_good > 0: nobj_good += 1                
+                    
+                    # -----stacking all line maps for all objects in this bin-----------
+                    stacked_maps, stacked_maps_err, nobj_arr = [], [], []
+                    for index4, this_line in enumerate(args.line_list):
+                        stacked_map, stacked_map_err = weighted_stack_line_maps(line_maps_array[index4], line_maps_err_array[index4])
+                        stacked_maps.append(stacked_map)
+                        stacked_maps_err.append(stacked_map_err)
+                        
+                        nobj = len(line_maps_array[index4])
+                        nobj_arr.append(nobj)
+
+                    # -------writing out stacked line maps as fits files--------------
+                    write_stacked_maps(stacked_maps, stacked_maps_err, nobj_arr, output_filename, args)
+                else:
+                    print(f'which has no object. Skipping this bin.')
+                    continue
+
+            # -----------------plot emission line maps of this bin---------------
+            fig, axes = plt.subplots(1, len(args.line_list), figsize=(12, 3))
+            fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.3, hspace=0.1)
+            cmap = 'viridis'
+            fig.text(0.05, 0.95, f'{args.field}: stacking diagnostics: log_mass: {this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}, log_sfr: {this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}', fontsize=args.fontsize, c='k', ha='left', va='top')
+            for i, ax in enumerate(axes):
+                if type(stacked_maps[i]) == np.ndarray: ax = myimshow(stacked_maps[i], ax, re_pix=args.npix_side / (2 * args.re_extent), label=f'Stacked {args.line_list[i]}: {nobj_arr[i]}', cmap=cmap, col='w')
             
+            outfigname = fig_dir / f'stacked_maps_logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}.png'
+            fig.savefig(outfigname, transparent=args.fortalk, dpi=1000 if args.fontsize <= 5 else 200)
+            print(f'Saved figure at {outfigname}')
+            if args.hide: plt.close('all')
+            else: plt.show(block=False)
+
+            # -----------------plot emission line ratio maps of this bin---------------
+                    
+
             print(f'\nCompleted bin mass={this_mass_sfr_bin[0]}, sfr={this_mass_sfr_bin[1]} ({nobj_good} / {len(id_arr)} objects) in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
             if nobj_good > 1: nbin_good += 1
 
