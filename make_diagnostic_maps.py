@@ -3213,7 +3213,7 @@ def plot_DIG_figure(full_hdu, args):
     return fig, cdig_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def myimshow(data, ax, contour=None, re_pix=None, label='', cmap='viridis', fontsize=10):
+def myimshow(data, ax, contour=None, re_pix=None, label='', cmap='viridis', fontsize=10, col='w'):
     '''
     Utility function to plot a 2D data array on to ax, and plot center and segmentation map
     Returns ax
@@ -3221,8 +3221,8 @@ def myimshow(data, ax, contour=None, re_pix=None, label='', cmap='viridis', font
     ax.imshow(data, origin='lower', cmap=cmap)
     cen_x, cen_y = int(np.shape(data)[0] / 2), int(np.shape(data)[1] / 2)
     ax.scatter(cen_y, cen_x, marker='x', c='k')
-    if contour is not None: ax.contour(contour, levels=0, colors='w', linewidths=0.5)
-    ax.text(0.9, 0.9, label, c='w', fontsize=fontsize, ha='right', va='top', transform=ax.transAxes)
+    if contour is not None: ax.contour(contour, levels=0, colors=col, linewidths=0.5)
+    ax.text(0.9, 0.9, label, c=col, fontsize=fontsize, ha='right', va='top', transform=ax.transAxes)
     if re_pix is not None: ax.add_patch(plt.Circle((cen_y, cen_x), re_pix, color='r', fill=False, lw=0.5))
 
     return ax
@@ -3286,7 +3286,7 @@ def get_re(full_hdu, args, filter='F200W', psf=None):
 
         re_kpc_shifted = radius[np.where(np.cumsum(flux_shifted) >= 0.5 * np.sum(flux_shifted))[0][0]]
         re_kpc_deconvolved = radius[np.where(np.cumsum(flux_deconvolved) >= 0.5 * np.sum(flux_deconvolved))[0][0]]
-        re_kpc = re_kpc_deconvolved
+        re_kpc = re_kpc_deconvolved if re_kpc_deconvolved > 0.1 else re_kpc_shifted
         
         re_arcsec = re_kpc * cosmo.arcsec_per_kpc_proper(args.z).value # arcsec
         re_pix = re_arcsec / args.pix_size_arcsec
@@ -3340,7 +3340,7 @@ def read_direct_image(full_hdu, filter='F150W'):
     return dir_img, filter
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_offsets_from_center(full_hdu, args, filter='F200W'):
+def get_offsets_from_center(full_hdu, args, filter='F200W', silent=False):
     '''
     Computes the offset from the original center of image to the brightest pixel in the direct image with the given filter
     Returns two integers (offset in x and y axes)
@@ -3354,13 +3354,16 @@ def get_offsets_from_center(full_hdu, args, filter='F200W'):
 
         smoothing_kernel = Box2DKernel(5, mode=args.kernel_mode)
         dir_img_smoothed = convolve(dir_img, smoothing_kernel)
-        brightest_coords = np.where(dir_img_smoothed == dir_img_smoothed.max())
+        smooth_shape = dir_img_smoothed.shape
+        ncells = 5 # only searches within +/- 5 cells of the original center
+        dir_img_smoothed_subarea = dir_img_smoothed[smooth_shape[0] // 2 - ncells: smooth_shape[0] // 2 + ncells, smooth_shape[1] // 2 - ncells: smooth_shape[1] // 2 + ncells] # only searching for brightest pixel in the vicinity of the original center, otherwise might pick up neighbouring galaxies
+        brightest_coords = np.where(dir_img_smoothed == dir_img_smoothed_subarea.max())
         brightest_x, brightest_y = brightest_coords[0][0], brightest_coords[1][0]
         cen_x, cen_y = int(np.shape(dir_img)[0] / 2), int(np.shape(dir_img)[1] / 2)
         ndelta_xpix = cen_x - brightest_x
-        ndelta_ypix = cen_x - brightest_y
+        ndelta_ypix = cen_y - brightest_y
         #ndelta_xpix, ndelta_ypix = 0, 0 ##
-        print(f'For {args.field}:{args.id}: Determined x and y offsets from {filter} direct image = {ndelta_xpix}, {ndelta_ypix}')
+        if not silent: print(f'For {args.field}:{args.id}: Determined x and y offsets from {filter} direct image = {ndelta_xpix}, {ndelta_ypix}')
 
         if args.debug_offset:
             print(f'Deb2934: original shape = {np.shape(dir_img)}') ##

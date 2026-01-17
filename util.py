@@ -43,7 +43,7 @@ def parse_args():
     parser.add_argument('--forpaper', dest='forpaper', action='store_true', default=False, help='Format plots to paper quality? Default is no.')
     parser.add_argument('--fortalk', dest='fortalk', action='store_true', default=False, help='Format plots suitable for putting in talks? Default is no.')
     parser.add_argument('--drv', metavar='drv', type=str, action='store', default='v0.5', help='Which data reduction version? Default v0.1')
-    parser.add_argument('--fontsize', metavar='fontsize', type=int, action='store', default=10, help='fontsize of plot labels, etc.; default is 15')
+    parser.add_argument('--fontsize', metavar='fontsize', type=int, action='store', default=15, help='fontsize of plot labels, etc.; default is 15')
 
     parser.add_argument('--field', metavar='field', type=str, action='store', default='Par3', help='Which passage field? Default is Par50')
     parser.add_argument('--do_only_fields', metavar='do_only_fields', type=str, action='store', default=None, help='Which passage field? Default is Par50')
@@ -262,6 +262,8 @@ def parse_args():
 
     # ---- args added for stack_emission_maps.py ------------
     parser.add_argument('--debug_align', dest='debug_align', action='store_true', default=False, help='Debug the alignment, deprojection, rotation of emission line maps? Default is no.')
+    parser.add_argument('--re_extent', metavar='re_extent', type=float, action='store', default=2., help='Half-extent, in R_e units, of the stacked emission line maps; default is 2 i.e., +/- 2 Re on either side of the center')
+    parser.add_argument('--npix_side', metavar='npix_side', type=int, action='store', default=20, help='Size of the stacked emission maps in pixels? Default is 20')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()

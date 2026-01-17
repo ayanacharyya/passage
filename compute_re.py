@@ -3,8 +3,9 @@
     Notes: Computes effective radius for all objects in a given PASSAGE field/s, and stores the result as a FITS table
     Author : Ayan
     Created: 16-01-26
-    Example: run compute_re.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28
-             run compute_re.py --field Par28
+    Example: run compute_re.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28 --write_file
+             run compute_re.py --field Par28 --id 2822 --clobber
+             run compute_re.py --field Par28 --do_all_obj --clobber --write_file
 '''
 
 from header import *
@@ -58,8 +59,11 @@ if __name__ == "__main__":
         df_re = pd.DataFrame(columns=['id', 'redshift', 're_kpc', 're_arcsec'])
 
         # ---------read the photometric catalog file--------------------
-        df = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
-        id_arr = df['id'].values
+        if args.do_all_obj:
+            df = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
+            id_arr = df['id'].values
+        else:
+            id_arr = args.id
                 
         # ------------looping over the objects-----------------------
         get_psf = True
@@ -104,8 +108,10 @@ if __name__ == "__main__":
             df_re.loc[len(df_re)] = [args.id, args.z, re_kpc, re_arcsec]
         
         # ----------write out the dataframe--------------
-        Table.from_pandas(df_re).write(outfilename, format='fits', overwrite=True)
+        if args.write_file:
+            Table.from_pandas(df_re).write(outfilename, format='fits', overwrite=True)
+            print(f'Written {outfilename}')
 
-        print(f'Written {outfilename}, completing field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
+        print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
