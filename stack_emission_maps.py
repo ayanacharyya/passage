@@ -371,13 +371,8 @@ if __name__ == "__main__":
                     args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
                     args.available_lines = np.array(['OIII' if item == 'OIII-5007' else item for item in args.available_lines]) # replace 'OIII-5007' with 'OIII'
                     args.z = full_hdu[0].header['REDSHIFT']
-                    args.nlines = full_hdu[0].header['NUMLINES']
                     args.distance = cosmo.luminosity_distance(args.z)
-                    args.pix_arcsec = full_hdu[5].header['PIXASEC']
-                    args.mag = obj['mag_auto']
-
-                    line_wcs = pywcs.WCS(full_hdu['DSCI'].header)
-                    args.pix_size_arcsec = utils.get_wcs_pscale(line_wcs)
+                    args.pix_size_arcsec = full_hdu[5].header['PIXASEC']
                     imsize_arcsec = full_hdu['DSCI'].data.shape[0] * args.pix_size_arcsec
                     offset = args.pix_size_arcsec / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
                     args.extent = (-args.arcsec_limit - offset, args.arcsec_limit - offset, -args.arcsec_limit - offset, args.arcsec_limit - offset)
@@ -408,9 +403,7 @@ if __name__ == "__main__":
                         if this_line not in args.available_lines:
                             print(f'\t\t\tLine {this_line} not available for object {args.id}. So skipping this line..')
                             continue
-
                         try:
-
                             # -----------extracting the emission line map----------------
                             line_map, line_map_err = get_emission_line_map(this_line, full_hdu, args, dered=True, silent=True)
 
@@ -458,7 +451,7 @@ if __name__ == "__main__":
                             # ---------------appending the line map-------------------------
                             line_maps_array[index4].append(recentered_line_map)
                             line_maps_err_array[index4].append(recentered_line_map_err)
-                            nlines += 1
+                            nlines_good += 1
                         except Exception as e:
                             print(f'Skipping {this_line} for obj {args.id} because it failed due to: {e}')
                             continue
