@@ -247,6 +247,9 @@ def write_stacked_maps(stacked_maps, stacked_maps_err, nobj_arr, output_filename
     hdu_list = [primary_hdu]
 
     for index, this_line in enumerate(args.line_list):
+        if type(stacked_maps[index]) != np.ndarray:
+            print(f'\t{this_line} extension is completely empty in the stack, hence not writing it in the file.')
+            continue
         flux_hdu = fits.ImageHDU(stacked_maps[index], header=create_re_wcs(args), name=this_line.upper())
         err_hdu = fits.ImageHDU(stacked_maps_err[index], header=create_re_wcs(args), name=f'{this_line.upper()}_ERR')
         flux_hdu.header['NOBJ'] = (nobj_arr[index], '#galaxies that went into this stack')
@@ -317,6 +320,7 @@ if __name__ == "__main__":
         bin_list = list(itertools.product(all_mass_intervals, all_sfr_intervals))
                 
         # ------------looping over each bin-----------------------
+        nbin_good = 0
         for index2, this_mass_sfr_bin in enumerate(bin_list):
             start_time3 = datetime.now()
             print(f'\tStarting bin ({index2 + 1}/{len(bin_list)}) mass={this_mass_sfr_bin[0]}, sfr={this_mass_sfr_bin[1]}..', end=' ')
@@ -332,6 +336,7 @@ if __name__ == "__main__":
             if not args.do_all_obj:
                 id_arr = np.array(id_arr)[np.isin(id_arr, args.id_arr)] # subset of IDs of "good-looking" galaxies, just for testing, otherwise comment this line out
 
+            nobj_good = 0
             if len(id_arr) > 0:
                 print(f'which has {len(id_arr)} objects.')
                 line_maps_array = [[] for _ in range(len(args.line_list))]
@@ -398,7 +403,7 @@ if __name__ == "__main__":
 
                     # ---------looping over all emission lines------------------------------
                     get_rescaled_recentering = True
-                    nlines = 0
+                    nlines_good = 0
                     for index4, this_line in enumerate(args.line_list):
                         if this_line not in args.available_lines:
                             print(f'\t\t\tLine {this_line} not available for object {args.id}. So skipping this line..')
@@ -457,7 +462,8 @@ if __name__ == "__main__":
                         except Exception as e:
                             print(f'Skipping {this_line} for obj {args.id} because it failed due to: {e}')
                             continue
-                    print(f'\t\t\tFound {nlines} lines for {args.id}')
+                    print(f'\t\t\tFound {nlines_good} lines for {args.id}')
+                    if nlines_good > 0: nobj_good += 1                
                 
                 # -----stacking all line maps for all objects in this bin-----------
                 stacked_maps, stacked_maps_err, nobj_arr = [], [], []
@@ -476,8 +482,9 @@ if __name__ == "__main__":
                 fig, axes = plt.subplots(1, len(args.line_list), figsize=(12, 3))
                 fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.3, hspace=0.1)
                 cmap = 'viridis'
-                fig.text(0.05, 0.98, f'{args.field}: stacking diagnostics: log_mass: {this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}, log_sfr: {this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}', fontsize=args.fontsize, c='k', ha='left', va='top')
-                for i, ax in enumerate(axes): ax = myimshow(stacked_maps[i], ax, re_pix=args.npix_side / (2 * args.re_extent), label=f'Stacked {args.line_list[i]}: {nobj_arr[i]}', cmap=cmap, col='w')
+                fig.text(0.05, 0.95, f'{args.field}: stacking diagnostics: log_mass: {this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}, log_sfr: {this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}', fontsize=args.fontsize, c='k', ha='left', va='top')
+                for i, ax in enumerate(axes):
+                    if type(stacked_maps[i]) == np.ndarray: ax = myimshow(stacked_maps[i], ax, re_pix=args.npix_side / (2 * args.re_extent), label=f'Stacked {args.line_list[i]}: {nobj_arr[i]}', cmap=cmap, col='w')
                 
                 outfigname = fig_dir / f'stacked_maps_logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}.png'
                 fig.savefig(outfigname, transparent=args.fortalk, dpi=1000 if args.fontsize <= 5 else 200)
@@ -491,8 +498,9 @@ if __name__ == "__main__":
                 print(f'which has no object. Skipping this bin.')
                 continue
             
-            print(f'\nCompleted bin mass={this_mass_sfr_bin[0]}, sfr={this_mass_sfr_bin[1]} in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
+            print(f'\nCompleted bin mass={this_mass_sfr_bin[0]}, sfr={this_mass_sfr_bin[1]} ({nobj_good} / {len(id_arr)} objects) in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
+            if nobj_good > 1: nbin_good += 1
 
-        print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
+        print(f'Completed field {field} ({nbin_good} / {len(bin_list)} bins) in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
