@@ -163,7 +163,7 @@ def make_heatmap(ax, pivot_color, pivot_annot, args, cmap='viridis', clabel='', 
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize / args.fontfactor, labelbottom=True)
 
     # -----drawing hatches on the missing cells-------------
-    ax.set_facecolor('whitesmoke')
+    ax.set_facecolor('k' if args.fortalk else 'whitesmoke')
     # matplotlib.rcParams['hatch.linewidth'] = 0.1
     # missing_data_mask = pivot_color.isnull()
     # ax.pcolor(np.where(missing_data_mask, 0, np.nan), hatch='///', alpha=0.) # 'hatch' options: '/', '\\', '|', '-', '+', 'x', 'o', 'O', '.', '*'
@@ -224,9 +224,7 @@ def plot_SFMS_heatmap(df, args, quant='logOH'):
     col, edgecol = 'w', 'sienna'
     for ax in axes:
         ax.scatter(log_mass, log_sfr, s=5, c=col, lw=1, edgecolors=edgecol, label=f'{args.field}')
-        ax.legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
-        #ax.set_aspect((log_sfr_intervals[0].right - log_sfr_intervals[-1].left) / (log_mass_intervals[-1].right - log_mass_intervals[0].left))
-        #ax.set_aspect(0.2)
+        ax.legend(fontsize=args.fontsize / args.fontfactor, loc='upper left')
 
     plt.show(block=False)
 
