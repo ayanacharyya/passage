@@ -37,6 +37,7 @@ def get_passage_masses_from_cosmos(df, args, id_col='objid', field_col='field', 
     df = df.drop('passage_id', axis=1)
     df = df.rename(columns={'mass_med': 'log_mass', 'sfr_med': 'log_sfr', 'ssfr_med': 'log_ssfr'})
     df = df[(df['log_mass'] > 0) & (df['log_sfr'] > 0)]
+    df = df.dropna(subset=['log_mass', 'log_sfr'], axis=0)
 
     return df
 
@@ -74,8 +75,8 @@ def get_emission_line_map(line, full_hdu, args, dered=True, silent=True):
     line_map_err = line_map_err * factor
 
     # ----------getting a smaller cutout around the object center-----------
-    line_map = trim_image(line_map, args)
-    line_map_err = trim_image(line_map_err, args)
+    line_map = trim_image(line_map, args, skip_re_trim=True)
+    line_map_err = trim_image(line_map_err, args, skip_re_trim=True)
 
     # ----------re-center line map-----------
     line_map = ndimage.shift(line_map, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
@@ -131,7 +132,7 @@ def rescale_line_map(line_map, args):
     target_re_px = npix_side / (2 * args.re_limit)
     current_re_px = args.re_arcsec / args.pix_size_arcsec
     zoom_factor = target_re_px / current_re_px
-    if args.debug_align: print(f'Deb133: id {args.id}: re_arcsec={args.re_arcsec}, pix_size_arcsec={args.pix_size_arcsec}, semi_major={args.semi_major}, semi_minor={args.semi_minor}, stretch_factor={stretch_factor}, target_re_px={target_re_px}, current_re_px={current_re_px}, zoom_factor={zoom_factor}') ##
+    #if args.debug_align: print(f'Deb133: id {args.id}: re_arcsec={args.re_arcsec}, pix_size_arcsec={args.pix_size_arcsec}, semi_major={args.semi_major}, semi_minor={args.semi_minor}, stretch_factor={stretch_factor}, target_re_px={target_re_px}, current_re_px={current_re_px}, zoom_factor={zoom_factor}') ##
 
     rescaled_map = ndimage.zoom(line_map, (zoom_factor * stretch_factor, zoom_factor), order=1)
     
@@ -429,7 +430,7 @@ if __name__ == "__main__":
 
                         # ---------------segmentation map---------------
                         segmentation_map = full_hdu['SEG'].data
-                        segmentation_map = trim_image(segmentation_map, args)
+                        segmentation_map = trim_image(segmentation_map, args, skip_re_trim=True)
                         segmentation_map = ndimage.shift(segmentation_map, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
                         args.segmentation_map = segmentation_map
                         
@@ -448,9 +449,16 @@ if __name__ == "__main__":
                                 # -----------extracting the emission line map----------------
                                 line_map, line_map_err = get_emission_line_map(this_line, full_hdu, args, dered=True, silent=True)
 
+                                # ------smoothing the map before rotating--------
+                                smoothing_kernel = Box2DKernel(args.kernel_size, mode=args.kernel_mode)
+                                smoothed_line_map = convolve(line_map, smoothing_kernel)
+                                smoothed_line_map_err = convolve(line_map_err, smoothing_kernel)
+
                                 # --------rotating the line map---------------------
-                                rotated_line_map = rotate_line_map(line_map, args)
-                                rotated_line_map_err = rotate_line_map(line_map_err, args)
+                                #rotated_line_map = rotate_line_map(line_map, args)
+                                #rotated_line_map_err = rotate_line_map(line_map_err, args)
+                                rotated_line_map = rotate_line_map(smoothed_line_map, args)
+                                rotated_line_map_err = rotate_line_map(smoothed_line_map_err, args)
 
                                 # --------deprojecting the line map---------------------
                                 deprojected_line_map = deproject_line_map(rotated_line_map, args)
@@ -475,16 +483,17 @@ if __name__ == "__main__":
                                     re_pix = args.re_arcsec / args.pix_size_arcsec
                                     print(f'Deb345: shapes: {this_line} map = {np.shape(line_map)}, rotated = {np.shape(rotated_line_map)}, deprojected = {np.shape(deprojected_line_map)}, recaled = {np.shape(rescaled_line_map)}, \
         redshift={args.z:.1f}, log_mass={obj["log_mass"]:.1f}, log_sfr={obj["log_sfr"]:.1f}, a={args.semi_major:.1f}, b={args.semi_minor:.1f}, a/b={args.semi_major/args.semi_minor:.1f}, pa={args.pa:.1f}, re={re_pix:.1f} pixels') ##
-                                    fig, axes = plt.subplots(1, 5, figsize=(12, 3))
+                                    fig, axes = plt.subplots(1, 6, figsize=(13, 3))
                                     fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.3, hspace=0.1)
                                     cmap = 'viridis'
                                     fig.text(0.05, 0.98, f'{args.field}: ID {args.id}: {this_line} map: Alignment diagnostics', fontsize=args.fontsize, c='k', ha='left', va='top')
                                     
                                     axes[0] = myimshow(line_map, axes[0], contour=segmentation_map != args.id, re_pix=re_pix, label='Original', cmap=cmap, col='k')
-                                    axes[1] = myimshow(rotated_line_map, axes[1], contour=rotated_segmentation_map != args.id, re_pix=re_pix, label='Rotated', cmap=cmap, col='k')
-                                    axes[2] = myimshow(deprojected_line_map, axes[2], contour=deprojected_segmentation_map != args.id, re_pix=re_pix, label='Deprojected', cmap=cmap, col='k')
-                                    axes[3] = myimshow(rescaled_line_map, axes[3], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Rescaled', cmap=cmap, col='k')
-                                    axes[4] = myimshow(recentered_line_map, axes[4], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=cmap, col='k')
+                                    axes[1] = myimshow(smoothed_line_map, axes[1], contour=segmentation_map != args.id, re_pix=re_pix, label='Smoothed', cmap=cmap, col='k')
+                                    axes[2] = myimshow(rotated_line_map, axes[2], contour=rotated_segmentation_map != args.id, re_pix=re_pix, label='Rotated', cmap=cmap, col='k')
+                                    axes[3] = myimshow(deprojected_line_map, axes[3], contour=deprojected_segmentation_map != args.id, re_pix=re_pix, label='Deprojected', cmap=cmap, col='k')
+                                    axes[4] = myimshow(rescaled_line_map, axes[4], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Rescaled', cmap=cmap, col='k')
+                                    axes[5] = myimshow(recentered_line_map, axes[5], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=cmap, col='k')
 
                                     plt.show(block=False)
                                     sys.exit(f'Exiting here because of --debug_re mode; if you want to run the full code as usual then remove the --debug_re option and re-run')

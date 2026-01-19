@@ -35,9 +35,9 @@ def rescale_for_seaborn(xarr, yarr, nx, ny, xmin=7, xmax=11, ymin=0, ymax=1):
     Returns rescaled x and y arrays (which can then be overplotted directly)
     '''
     # -----transformating to seaborn phase space---
-    x_plot = ((xarr - xmin) / (xmax - xmin)) * nx - 0.5
-    y_plot = ((yarr - ymin) / (ymax - ymin)) * ny - 0.5
-    y_plot_reversed = ny - 1 - y_plot # to reverse the SFR axis, as it is in the heatmap
+    x_plot = ((xarr - xmin) / (xmax - xmin)) * nx #- 0.5
+    y_plot = ((yarr - ymin) / (ymax - ymin)) * ny #- 0.5
+    y_plot_reversed = ny - y_plot #- 1 # to reverse the SFR axis, as it is in the heatmap
 
     return x_plot, y_plot_reversed
 
@@ -204,7 +204,7 @@ def plot_SFMS_heatmap(df, args, quant='logOH'):
     pivot_nobj = pivot_nobj.reindex(index=log_sfr_intervals, columns=log_mass_intervals)
 
     # -----------------setup the figure---------------
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4))
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
     fig.subplots_adjust(left=0.07, right=0.92, top=0.95, bottom=0.13, wspace=0.3, hspace=0.)
     
     # -----------------plot integrated metallicity heatmap---------------
@@ -217,7 +217,6 @@ def plot_SFMS_heatmap(df, args, quant='logOH'):
     df_photcat = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas() # read the photometric catalog file
     df_photcat['field'] = args.field
     df_photcat = get_passage_masses_from_cosmos(df_photcat, args, id_col='id') # crossmatch with cosmos-web to get stellar mass and SFR
-    df_photcat = df_photcat.dropna(subset=['log_mass', 'log_sfr'], axis=0)
 
     log_mass, log_sfr = df_photcat['log_mass'], df_photcat['log_sfr']
     log_mass, log_sfr = rescale_for_seaborn(log_mass, log_sfr, len(log_mass_intervals), len(log_sfr_intervals), xmin=log_mass_intervals[0].left, xmax=log_mass_intervals[-1].right, ymin=log_sfr_intervals[-1].left, ymax=log_sfr_intervals[0].right)
@@ -225,7 +224,7 @@ def plot_SFMS_heatmap(df, args, quant='logOH'):
     col, edgecol = 'w', 'sienna'
     for ax in axes:
         ax.scatter(log_mass, log_sfr, s=5, c=col, lw=1, edgecolors=edgecol, label=f'{args.field}')
-        ax.legend(fontsize=args.fontsize / args.fontfactor, loc='best')
+        ax.legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
         #ax.set_aspect((log_sfr_intervals[0].right - log_sfr_intervals[-1].left) / (log_mass_intervals[-1].right - log_mass_intervals[0].left))
         #ax.set_aspect(0.2)
 
