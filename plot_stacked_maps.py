@@ -5,6 +5,7 @@
     Created: 18-01-26
     Example: run plot_stacked_maps.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_line_maps --plot_metallicity --plot_radial_profiles
+             run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_radial_profiles --adaptive_bins
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_radial_profiles
 '''
 
@@ -424,6 +425,27 @@ def plot_metallicity_map(logOH_map, args, bin_text='', Zmin=None, Zmax=None):
     return fig         
 
 # --------------------------------------------------------------------------------------------------------------------
+def get_interval_from_filename(filename):
+    '''
+    Accepts a filename of the pattern stacked_maps_logmassbin_X-Y_logsfrbin_A-B.fits and extracts the mass and SFR interval from the filename
+    Returns object: pair of Intervals
+    '''
+    filename = Path(filename).stem
+    pattern = r'logmassbin_([-?\d.]+)-([-?\d.]+)_logsfrbin_([-?\d.]+)-([-?\d.]+)'
+    match = re.search(pattern, filename)
+
+    if match:
+        m_low, m_high, s_low, s_high = map(float, match.groups())        
+        mass_int = pd.Interval(m_low, m_high, closed='left')
+        sfr_int = pd.Interval(s_low, s_high, closed='left')
+        
+        combined_interval = (mass_int, sfr_int)
+    else:
+        raise ValueError(f'This file {filename} does not have the expected pattern. So could not extract intervals from it.')
+    
+    return combined_interval
+
+# --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
@@ -453,6 +475,7 @@ if __name__ == "__main__":
         # ------determining field-specific paths, etc-----------
         product_dir = args.input_dir / args.field / 'Products'
         output_dir = args.output_dir / args.field / 'stacking'
+        if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
         output_dir.mkdir(parents=True, exist_ok=True)
         fig_dir = output_dir / 'plots'
         fig_dir.mkdir(parents=True, exist_ok=True)
@@ -462,10 +485,14 @@ if __name__ == "__main__":
         C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
         output_filename = fits_dir / f'stacked_fits_allbins_Zdiag_{args.Zdiag}{C25_text}.fits'
 
-        # ----------binning the dataframe by mass and SFR bins-------------------
-        log_mass_intervals = [pd.Interval(log_mass_bins[i], log_mass_bins[i+1], closed='left') for i in range(len(log_mass_bins)-1)]
-        log_sfr_intervals = [pd.Interval(log_sfr_bins[i], log_sfr_bins[i+1], closed='left') for i in range(len(log_sfr_bins)-1)]
-        bin_list = list(itertools.product(log_mass_intervals, log_sfr_intervals))
+        # # ----------binning the dataframe by mass and SFR bins-------------------
+        # log_mass_intervals = [pd.Interval(log_mass_bins[i], log_mass_bins[i+1], closed='left') for i in range(len(log_mass_bins)-1)]
+        # log_sfr_intervals = [pd.Interval(log_sfr_bins[i], log_sfr_bins[i+1], closed='left') for i in range(len(log_sfr_bins)-1)]
+        # bin_list = list(itertools.product(log_mass_intervals, log_sfr_intervals))
+
+        # --------getting the list of bins from available fits files---------------
+        stacked_files = glob.glob(str(fits_dir) + '/stacked_maps_*.fits')
+        bin_list = [get_interval_from_filename(item) for item in stacked_files]
 
         # ------------setting up master dataframe-----------------------
         df_grad = pd.DataFrame(columns=['log_mass_bin', 'log_sfr_bin', 'nobj', 'logOH_int', 'logOH_int_u', 'logOH_grad', 'logOH_grad_u'])

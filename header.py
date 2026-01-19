@@ -123,6 +123,7 @@ import mplcyberpunk
 import matplotlib.gridspec as gridspec
 import matplotlib.ticker as ticker
 from matplotlib.patches import ConnectionPatch
+import matplotlib.patches as patches
 
 import webbpsf
 from statsmodels.regression.linear_model import WLS
