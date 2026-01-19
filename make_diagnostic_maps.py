@@ -1831,13 +1831,13 @@ def get_Z_NB(full_hdu, args):
     return logOH_map, logOH_int, logOH_sum, line_label_array
 
 # --------------------------------------------------------------------------------------------------------------------
-def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
+def compute_Z_C19(ratio, coeff, ax=None, branch='high', use_C25=False, silent=False):
     '''
     Calculates and returns the metallicity given observed line fluxes ratio and coefficient, according to Curti+2019
     '''
     # -----handling turnover situations, where measured ratio is beyond model peak ratio---------
-    metallicity_offset = 0 if args.use_C25 else 8.69
-    reasonable_Z_limit = [7.0, 8.4] if args.use_C25 else [7.6, 8.9] # Z limits within which each calibration is valid
+    metallicity_offset = 0 if use_C25 else 8.69
+    reasonable_Z_limit = [7.0, 8.4] if use_C25 else [7.6, 8.9] # Z limits within which each calibration is valid
     #reasonable_Z_limit = [6.5, 9.1]
     model = np.poly1d(coeff)
     model_diff = np.polyder(model, m=1)
@@ -1857,9 +1857,10 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high'):
             #ax1.fill_betweenx([-5, 5], reasonable_Z_limit[0], reasonable_Z_limit[1], color='cyan', alpha=0.1, lw=0)
 
     # ---------getting the line ratio limits of this diagnostics-----------
-    print(f'\nDeb1691: ratio at turnover = {ratio_turnover}') ##
-    print(f'Ratio at min valid metallicity = {model(reasonable_Z_limit[0] - metallicity_offset)}')
-    print(f'Ratio at max valid metallicity = {model(reasonable_Z_limit[1] - metallicity_offset)}')
+    if not silent:
+        print(f'\nRatio at turnover = {ratio_turnover}')
+        print(f'Ratio at min valid metallicity = {model(reasonable_Z_limit[0] - metallicity_offset)}')
+        print(f'Ratio at max valid metallicity = {model(reasonable_Z_limit[1] - metallicity_offset)}')
 
      # --------determining data and masks------------
     if np.ma.isMaskedArray(ratio):
@@ -2076,10 +2077,10 @@ def get_Z_C19(full_hdu, args):
         ax = None
 
     # -------estimating the metallicities---------------
-    logOH_map = compute_Z_C19(ratio_map, coeff, ax=ax, branch=args.Zbranch) if not args.only_integrated else None
-    logOH_int = compute_Z_C19(ratio_int, coeff, branch=args.Zbranch)
+    logOH_map = compute_Z_C19(ratio_map, coeff, ax=ax, branch=args.Zbranch, use_C25=args.use_C25) if not args.only_integrated else None
+    logOH_int = compute_Z_C19(ratio_int, coeff, branch=args.Zbranch, use_C25=args.use_C25)
     logOH_int = ufloat(unp.nominal_values(np.atleast_1d(logOH_int))[0], unp.std_devs(np.atleast_1d(logOH_int))[0])
-    logOH_sum = compute_Z_C19(ratio_sum, coeff, branch=args.Zbranch)
+    logOH_sum = compute_Z_C19(ratio_sum, coeff, branch=args.Zbranch, use_C25=args.use_C25)
     logOH_sum = ufloat(unp.nominal_values(np.atleast_1d(logOH_sum))[0], unp.std_devs(np.atleast_1d(logOH_sum))[0])
 
     # -------saving the debugging plots---------------
@@ -2146,7 +2147,7 @@ def get_Z(full_hdu, args):
                 bin_IDs_map = np.arange(np.shape(logOH_map_val)[0] * np.shape(logOH_map_val)[1]).reshape(np.shape(logOH_map_val))
             print(f'\nDeb1935: id {args.id}, Zdiag={args.Zdiag}, logOH_map shape={np.shape(logOH_map)}, logOH_map_val shape={np.shape(logOH_map_val)} distance_map shape={np.shape(distance_map)}, args.re_limit={args.re_limit}, args.arcsec_limit={args.arcsec_limit}, re={args.re_arcsec} arcsec\n') ##
 
-        # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
+            # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
             df = pd.DataFrame({'distance': distance_map.flatten(), 'log_OH': logOH_map_val.flatten(),'log_OH_u': logOH_map_err.flatten(), 'bin_ID': bin_IDs_map.flatten()})
             
             if 'distance_from_AGN_line_map' in args and args.distance_from_AGN_line_map is not None: df['agn_dist'] = args.distance_from_AGN_line_map.data.flatten()
@@ -3213,12 +3214,13 @@ def plot_DIG_figure(full_hdu, args):
     return fig, cdig_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def myimshow(data, ax, contour=None, re_pix=None, label='', cmap='viridis', fontsize=10, col='w'):
+def myimshow(data, ax, contour=None, re_pix=None, label='', cmap='viridis', fontsize=10, col='w', cmin=None, cmax=None):
     '''
     Utility function to plot a 2D data array on to ax, and plot center and segmentation map
     Returns ax
     '''
-    ax.imshow(data, origin='lower', cmap=cmap)
+    p = ax.imshow(data, origin='lower', cmap=cmap, vmin=cmin, vmax=cmax)
+    plt.colorbar(p)
     cen_x, cen_y = int(np.shape(data)[0] / 2), int(np.shape(data)[1] / 2)
     ax.scatter(cen_y, cen_x, marker='x', c='k')
     if contour is not None: ax.contour(contour, levels=0, colors=col, linewidths=0.5)

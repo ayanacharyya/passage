@@ -262,8 +262,8 @@ def parse_args():
 
     # ---- args added for stack_emission_maps.py ------------
     parser.add_argument('--debug_align', dest='debug_align', action='store_true', default=False, help='Debug the alignment, deprojection, rotation of emission line maps? Default is no.')
-    parser.add_argument('--re_extent', metavar='re_extent', type=float, action='store', default=2., help='Half-extent, in R_e units, of the stacked emission line maps; default is 2 i.e., +/- 2 Re on either side of the center')
     parser.add_argument('--npix_side', metavar='npix_side', type=int, action='store', default=20, help='Size of the stacked emission maps in pixels? Default is 20')
+    parser.add_argument('--plot_line_maps', dest='plot_line_maps', action='store_true', default=False, help='Plot the stacked emission line maps? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
@@ -1450,18 +1450,18 @@ def annotate_axes(ax, xlabel, ylabel, args=None, fontsize=10, fontfactor=1, labe
     ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=3, prune='both'))
     ax.xaxis.set_minor_locator(ticker.AutoMinorLocator(4))
     if hide_xaxis:
-        ax.set_xticklabels([])
+        ax.tick_params(axis='x', which='major', labelsize=fontsize, labelbottom=False)
     else:
         ax.set_xlabel(xlabel, fontsize=fontsize)
-        ax.tick_params(axis='x', which='major', labelsize=fontsize)
+        ax.tick_params(axis='x', which='major', labelsize=fontsize, labelbottom=True)
 
     ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=3, prune='both'))
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator(4))
     if hide_yaxis:
-        ax.set_yticklabels([])
+        ax.tick_params(axis='y', which='major', labelsize=fontsize, labelbottom=False)
     else:
         ax.set_ylabel(ylabel, fontsize=fontsize)
-        ax.tick_params(axis='y', which='major', labelsize=fontsize)
+        ax.tick_params(axis='y', which='major', labelsize=fontsize, labelbottom=True)
 
     if not hide_cbar and p is not None:
         cax = inset_axes(ax, width="5%", height="100%", loc='right', bbox_to_anchor=(0.05, 0, 1, 1), bbox_transform=ax.transAxes, borderpad=0)

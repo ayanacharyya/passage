@@ -1575,14 +1575,14 @@ def plot_fitted_line(ax, linefit, xarr, fit_color, args, quant='log_OH', short_l
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, short_label=False, quant='log_OH', Zdiag='NB', do_mcmc=False):
+def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, short_label=False, quant='log_OH', Zdiag='NB', do_mcmc=False, already_in_re=False):
     '''
     Plots and fits the radial profile from a given 2D image in a given axis
     Returns the axis handle and the linefit
     '''
     label_dict = smart_dict({'SFR': r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', 'logOH': r'$\log$ (O/H) + 12', 'Z': r'$\log$ (O/H) + 12', 'log_OH': r'$\log$ (O/H) + 12'})
 
-    if args.re_limit is not None: df['distance'] /= args.re_kpc # converting from kpc to Re
+    if args.re_limit is not None and not already_in_re: df['distance'] /= args.re_kpc # converting from kpc to Re
     if args.radius_max is not None: df = df[df['distance'] <= args.radius_max]
     df = df.sort_values(by='distance').reset_index(drop=True)
 
@@ -1600,9 +1600,10 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
         params_llim, params_median, params_ulim = mcmc_vorbin_fit(df, args, filter='F150W', quant_x=quant_x, quant_y=quant, plot_corner=False, Zdiag=Zdiag)
         
         # convert the unit of best fit slope in order to plot/save
-        params_median = convert_slope_unit(params_median, args, quant_x=quant_x) # convert from dex/arcsecond to something else
-        params_llim = convert_slope_unit(params_llim, args, quant_x=quant_x) # convert from dex/arcsecond to something else
-        params_ulim = convert_slope_unit(params_ulim, args, quant_x=quant_x) # convert from dex/arcsecond to something else
+        if not already_in_re:
+            params_median = convert_slope_unit(params_median, args, quant_x=quant_x) # convert from dex/arcsecond to something else
+            params_llim = convert_slope_unit(params_llim, args, quant_x=quant_x) # convert from dex/arcsecond to something else
+            params_ulim = convert_slope_unit(params_ulim, args, quant_x=quant_x) # convert from dex/arcsecond to something else
     else:
         linefit_lenstronomy = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
         nparams = 4

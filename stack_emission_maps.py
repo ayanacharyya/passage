@@ -5,17 +5,17 @@
     Created: 15-01-26
     Example: run stack_emission_maps.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28 --do_all_obj
              run stack_emission_maps.py --field Par28 --debug_align --id 2822,2698,2583,2171,672
-             run stack_emission_maps.py --field Par28 --do_all_obj
+             run stack_emission_maps.py --field Par28 --do_all_obj --re_limit 2
 '''
 
 from header import *
 from util import *
-from make_diagnostic_maps import read_direct_image, trim_image, get_dereddened_flux, myimshow, get_offsets_from_center
+from make_diagnostic_maps import trim_image, get_dereddened_flux, myimshow, get_offsets_from_center
 
 start_time = datetime.now()
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_passage_masses_from_cosmos(df, id_col='objid', field_col='field', cosmos_idcol='id'):
+def get_passage_masses_from_cosmos(df, args, id_col='objid', field_col='field', cosmos_idcol='id'):
     '''
     Derives stellar masses of PASSAGE galaxies present in the given dataframe from COSMOS-Web catalog
     Returns dataframe
@@ -78,8 +78,8 @@ def get_emission_line_map(line, full_hdu, args, dered=True, silent=True):
     line_map_err = trim_image(line_map_err, args)
 
     # ----------re-center line map-----------
-    line_map = ndimage.shift(line_map, [args.ndelta_xpix, args.ndelta_ypix], cval=np.nan)
-    line_map_err = ndimage.shift(line_map_err, [args.ndelta_xpix, args.ndelta_ypix], cval=np.nan)
+    line_map = ndimage.shift(line_map, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
+    line_map_err = ndimage.shift(line_map_err, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
 
     # -------masking outside segmentation map---------
     line_map = np.ma.masked_where(args.segmentation_map != args.id, line_map)
@@ -128,7 +128,7 @@ def rescale_line_map(line_map, args):
     '''
     npix_side = args.npix_side
     stretch_factor = args.semi_major / args.semi_minor
-    target_re_px = npix_side / (2 * args.re_extent)
+    target_re_px = npix_side / (2 * args.re_limit)
     current_re_px = args.re_arcsec / args.pix_size_arcsec
     zoom_factor = target_re_px / current_re_px
     if args.debug_align: print(f'Deb133: id {args.id}: re_arcsec={args.re_arcsec}, pix_size_arcsec={args.pix_size_arcsec}, semi_major={args.semi_major}, semi_minor={args.semi_minor}, stretch_factor={stretch_factor}, target_re_px={target_re_px}, current_re_px={current_re_px}, zoom_factor={zoom_factor}') ##
@@ -179,13 +179,14 @@ def weighted_stack_line_maps(line_maps_array, line_maps_err_array):
     line_maps_err_array = np.array(line_maps_err_array)
 
     weights_array = 1.0 / (line_maps_err_array ** 2)
+    weights_array /= 1e37 # dividing out this typical large factor, otherwise upon summing across many objects it becomes inf
     stacked_line_map = np.nansum(line_maps_array * weights_array, axis=0) / np.nansum(weights_array, axis=0)
     stacked_line_map_err = np.sqrt(1.0 / np.nansum(weights_array, axis=0))    
     
     return stacked_line_map, stacked_line_map_err
 
 # --------------------------------------------------------------------------------------------------------------------
-def quickplot_line_map(objid, field='Par028', line='OIII', arcsec_limit=1, no_plot=False):
+def quickplot_raw_line_map(objid, field='Par028', line='OIII', arcsec_limit=1, no_plot=False, cmin=None, cmax=None, takelog=False, col='w'):
     '''
     For quick and dirty displaying of a specific line map extension from the maps/full file of a specific object
     '''
@@ -206,13 +207,14 @@ def quickplot_line_map(objid, field='Par028', line='OIII', arcsec_limit=1, no_pl
             return objid
         else:
             fig, ax = plt.subplots(1)
-            ax = myimshow(line_map, ax, label=f'{field} {objid}: {line}', contour=segmentation_map != objid, cmap='viridis', fontsize=15)
+            if takelog: line_map = np.log10(line_map)
+            ax = myimshow(line_map, ax, label=f'{field} {objid}: {line}', contour=segmentation_map != objid, cmap='viridis', fontsize=15, cmin=cmin, cmax=cmax, col=col)
             
             plt.show(block=False)
             return fig
     else:
         if no_plot: print(f'{line} is not available among {available_lines}')
-        else: print(f'{objid} will not work')
+        else: print(f'{objid} will not work as {line} is not available for this object')
 
         return -99
 
@@ -224,7 +226,7 @@ def create_re_wcs(args):
     Borrowed from Gemini
     '''
     cen_pix = args.npix_side // 2 + 0.5
-    re_per_pix = (2 * args.re_extent) / args.npix_side
+    re_per_pix = (2 * args.re_limit) / args.npix_side
 
     w = pywcs.WCS(naxis=2)
     w.wcs.crpix = [cen_pix, cen_pix] 
@@ -234,14 +236,14 @@ def create_re_wcs(args):
     return w.to_header()
 
 # --------------------------------------------------------------------------------------------------------------------
-def write_stacked_maps(stacked_maps, stacked_maps_err, nobj_arr, output_filename, args):
+def write_stacked_maps(stacked_maps, stacked_maps_err, ids_arr, output_filename, args):
     '''
     Accept a list of stacked emission line maps (and corresponding uncertainties) and writes them out into one multi-extension fits file
     '''
     primary_hdu = fits.PrimaryHDU()
     primary_hdu.header['CONTENT'] = 'Stacked Galaxy Emission Line Maps'
     primary_hdu.header['NPIX'] = (args.npix_side, 'Pixels per side')
-    pix_per_re = args.npix_side / (2 * args.re_extent)
+    pix_per_re = args.npix_side / (2 * args.re_limit)
     primary_hdu.header['RE_PX'] = (pix_per_re, f'Scale: 1 Re = {pix_per_re} pixels')
     
     hdu_list = [primary_hdu]
@@ -252,8 +254,10 @@ def write_stacked_maps(stacked_maps, stacked_maps_err, nobj_arr, output_filename
             continue
         flux_hdu = fits.ImageHDU(stacked_maps[index], header=create_re_wcs(args), name=this_line.upper())
         err_hdu = fits.ImageHDU(stacked_maps_err[index], header=create_re_wcs(args), name=f'{this_line.upper()}_ERR')
-        flux_hdu.header['NOBJ'] = (nobj_arr[index], '#galaxies that went into this stack')
-        hdu_list.extend([flux_hdu, err_hdu])
+        col = fits.Column(name='OBJID', format='20A', array=np.array(ids_arr[index]))
+        table_hdu = fits.BinTableHDU.from_columns([col], name=f'{this_line.upper()}_IDS')
+        flux_hdu.header['NOBJ'] = (len(ids_arr[index]), '#galaxies that went into this stack')
+        hdu_list.extend([flux_hdu, err_hdu, table_hdu])
 
     hdul = fits.HDUList(hdu_list)
     hdul.writeto(output_filename, overwrite=True)
@@ -266,37 +270,30 @@ def read_stacked_maps(output_filename, args):
     Returns 3 lists: fluxes, uncertainties, and number of objects, with each element of each list corresponding to a particular emission line
     '''
     hdul = fits.open(output_filename)
-    stacked_maps, stacked_maps_err, nobj_arr = [], [], []
-    for index4, this_line in enumerate(args.line_list):
-        if f'{this_line.upper()}' not in hdul:
-            print(f'\t\tFor {this_line} extension is completely empty in the stack, hence putting in dummy map.')
-            stacked_maps.append(np.full((args.npix_side, args.npix_side), np.nan))
-            stacked_maps_err.append(np.full((args.npix_side, args.npix_side), np.nan))
-            nobj_arr.append(np.nan)
-        else:
-            stacked_map = hdul[f'{this_line.upper()}'].data
-            stacked_map_err = hdul[f'{this_line.upper()}_ERR'].data
-            stacked_maps.append(stacked_map)
-            stacked_maps_err.append(stacked_map_err)
-            
-            nobj = hdul[f'{this_line.upper()}'].header['NOBJ']
-            nobj_arr.append(nobj)
-    
-    return stacked_maps, stacked_maps_err, nobj_arr
+    line_names = [hdu.name for hdu in hdul if hdu.name != 'PRIMARY' and '_ERR' not in hdu.name and not '_ID' in hdu.name]
+    line_dict = {}
+    for this_line in line_names:
+        stacked_map = hdul[f'{this_line.upper()}'].data
+        stacked_map_err = hdul[f'{this_line.upper()}_ERR'].data
+        ids = Table(hdul[f'{this_line.upper()}_IDS'].data)['OBJID'].value
+        nobj = hdul[f'{this_line.upper()}'].header['NOBJ']
 
+        line_dict.update({this_line: np.ma.masked_where(False, unp.uarray(stacked_map, stacked_map_err)), f'{this_line}_ids': ids, f'{this_line}_nobj': nobj})
+    
+    return line_dict
+
+# ----------declaring mass and SFR bins-------------------
+delta_log_mass, delta_log_sfr = 1, 0.5
+log_mass_bins = np.arange(7.5, 11.5 + delta_log_mass/2, delta_log_mass)
+log_sfr_bins = np.arange(-0.5, 2.5 + delta_log_sfr/2, delta_log_sfr)
+    
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
+    if args.re_limit is None: args.re_limit = 2.
     args.line_list = ['OIII', 'OII', 'NeIII-3867', 'Hb', 'OIII-4363', 'Ha', 'SII']
     args.id_arr = args.id
-
-    # ----------declaring mass and SFR bins-------------------
-    delta_log_mass, delta_log_sfr = 1, 0.5
-    log_mass_bins = np.arange(7.5, 11.5 + delta_log_mass/2, delta_log_mass)
-    log_sfr_bins = np.arange(-2, 2 + delta_log_sfr/2, delta_log_sfr)
-    
-    # ---------determining filename suffixes-------------------------------
 
     # ---------determining list of fields----------------
     if args.do_all_fields:
@@ -325,7 +322,7 @@ if __name__ == "__main__":
         df['field'] = args.field
 
         # ---------crossmatch with cosmos-web to get stellar mass and SFR--------------------
-        df = get_passage_masses_from_cosmos(df, id_col='id')
+        df = get_passage_masses_from_cosmos(df, args, id_col='id')
 
         # ---------merge with effective radius catalog--------------------
         df_re = Table.read(args.output_dir / f'catalogs/{args.field}_re_list.fits').to_pandas()
@@ -354,21 +351,38 @@ if __name__ == "__main__":
             if output_filename.exists() and not args.clobber:
                 print(f'Reading existing fits file {output_filename}. Re-run with --clobber to rewrite.')
                 # -------reading previously saved stacked fits file------------
-                stacked_maps, stacked_maps_err, nobj_arr = read_stacked_maps(output_filename, args)               
-
+                line_dict = read_stacked_maps(output_filename, args)
+                stacked_maps, stacked_maps_err, nobj_arr, constituent_ids_array = [], [], [], []
+                for index4, this_line in enumerate(args.line_list):
+                    if this_line.upper() in line_dict:
+                        this_map = line_dict[this_line.upper()]
+                        nobj = line_dict[f'{this_line.upper()}_nobj']
+                        ids = line_dict[f'{this_line.upper()}_ids']
+                        stacked_map, stacked_map_err = unp.nominal_values(this_map.data), unp.std_devs(this_map.data)
+                    else:
+                        stacked_map, stacked_map_err, nobj, ids = np.nan, np.nan, np.nan, 0
+                    
+                    stacked_maps.append(stacked_map)
+                    stacked_maps_err.append(stacked_map_err)
+                    nobj_arr.append(nobj)
+                    constituent_ids_array.append(ids)                 
+                
+                nbin_good += 1
+                nobj_good = 0
             else:
                 # --------determine which objects fall in this bin----------
                 mask = df['bin_intervals'] == this_mass_sfr_bin
                 id_arr = df.loc[mask, 'id'].tolist()
                 if not args.do_all_obj:
-                    id_arr = np.array(id_arr)[np.isin(id_arr, args.id_arr)] # subset of IDs of "good-looking" galaxies, just for testing, otherwise comment this line out
+                    id_arr = np.array(id_arr)[np.isin(id_arr, args.id_arr)] # subset of IDs of "good-looking" galaxies, just for testing
 
                 nobj_good = 0
                 if len(id_arr) > 0:
                     print(f'which has {len(id_arr)} objects.')
                     line_maps_array = [[] for _ in range(len(args.line_list))]
                     line_maps_err_array = [[] for _ in range(len(args.line_list))] # each array must be len(args.line_list) long and each element will become a stack of 2D images
-                    
+                    constituent_ids_array = [[] for _ in range(len(args.line_list))] # each array must be len(args.line_list) long and each element will become a stack of 2D images
+
                     # ------------looping over the objects-----------------------
                     for index3, this_id in enumerate(id_arr):
                         args.id = this_id
@@ -411,12 +425,12 @@ if __name__ == "__main__":
                         args.re_kpc, args.re_arcsec = obj['re_kpc'], obj['re_arcsec']
                         
                         # --------determining true center of object rom direct image---------------------
-                        args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W', silent=True)
+                        args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W', silent=not args.debug_align)
 
                         # ---------------segmentation map---------------
                         segmentation_map = full_hdu['SEG'].data
                         segmentation_map = trim_image(segmentation_map, args)
-                        segmentation_map = ndimage.shift(segmentation_map, [args.ndelta_xpix, args.ndelta_ypix], cval=np.nan)
+                        segmentation_map = ndimage.shift(segmentation_map, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
                         args.segmentation_map = segmentation_map
                         
                         rotated_segmentation_map = rotate_line_map(segmentation_map, args)
@@ -448,13 +462,13 @@ if __name__ == "__main__":
 
                                 # --------computing new recentering offsets, after rescaling---------------------
                                 if get_rescaled_recentering:
-                                    args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled = get_center_offsets(rescaled_line_map, args, silent=True)
-                                    recentered_segmentation_map = ndimage.shift(rescaled_segmentation_map, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], cval=np.nan)
+                                    args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled = get_center_offsets(rescaled_line_map, args, silent=not args.debug_align)
+                                    recentered_segmentation_map = ndimage.shift(rescaled_segmentation_map, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], order=0, cval=np.nan)
                                     get_rescaled_recentering = False
                                 
                                 # --------recentering the line map---------------------
-                                recentered_line_map = ndimage.shift(rescaled_line_map, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], cval=np.nan)
-                                recentered_line_map_err = ndimage.shift(rescaled_line_map_err, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], cval=np.nan)
+                                recentered_line_map = ndimage.shift(rescaled_line_map, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], order=0, cval=np.nan)
+                                recentered_line_map_err = ndimage.shift(rescaled_line_map_err, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], order=0, cval=np.nan)
 
                                 # -------plotting the intermediate steps: for debugging--------------
                                 if args.debug_align:
@@ -467,10 +481,10 @@ if __name__ == "__main__":
                                     fig.text(0.05, 0.98, f'{args.field}: ID {args.id}: {this_line} map: Alignment diagnostics', fontsize=args.fontsize, c='k', ha='left', va='top')
                                     
                                     axes[0] = myimshow(line_map, axes[0], contour=segmentation_map != args.id, re_pix=re_pix, label='Original', cmap=cmap, col='k')
-                                    axes[1] = myimshow(rotated_line_map, axes[1], contour=rotated_segmentation_map != args.id, re_pix=re_pix, label='Rotated', cmap=cmap, col='w')
-                                    axes[2] = myimshow(deprojected_line_map, axes[2], contour=deprojected_segmentation_map != args.id, re_pix=re_pix, label='Deprojected', cmap=cmap, col='w')
-                                    axes[3] = myimshow(rescaled_line_map, axes[3], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_extent), label='Rescaled', cmap=cmap, col='w')
-                                    axes[4] = myimshow(recentered_line_map, axes[4], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_extent), label='Recentered', cmap=cmap, col='w')
+                                    axes[1] = myimshow(rotated_line_map, axes[1], contour=rotated_segmentation_map != args.id, re_pix=re_pix, label='Rotated', cmap=cmap, col='k')
+                                    axes[2] = myimshow(deprojected_line_map, axes[2], contour=deprojected_segmentation_map != args.id, re_pix=re_pix, label='Deprojected', cmap=cmap, col='k')
+                                    axes[3] = myimshow(rescaled_line_map, axes[3], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Rescaled', cmap=cmap, col='k')
+                                    axes[4] = myimshow(recentered_line_map, axes[4], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=cmap, col='k')
 
                                     plt.show(block=False)
                                     sys.exit(f'Exiting here because of --debug_re mode; if you want to run the full code as usual then remove the --debug_re option and re-run')
@@ -478,6 +492,7 @@ if __name__ == "__main__":
                                 # ---------------appending the line map-------------------------
                                 line_maps_array[index4].append(recentered_line_map)
                                 line_maps_err_array[index4].append(recentered_line_map_err)
+                                constituent_ids_array[index4].append(f'{args.field}-{this_id}')
                                 nlines_good += 1
                             except Exception as e:
                                 print(f'Skipping {this_line} for obj {args.id} because it failed due to: {e}')
@@ -491,12 +506,10 @@ if __name__ == "__main__":
                         stacked_map, stacked_map_err = weighted_stack_line_maps(line_maps_array[index4], line_maps_err_array[index4])
                         stacked_maps.append(stacked_map)
                         stacked_maps_err.append(stacked_map_err)
+                        nobj_arr.append(len(constituent_ids_array[index4]))
                         
-                        nobj = len(line_maps_array[index4])
-                        nobj_arr.append(nobj)
-
                     # -------writing out stacked line maps as fits files--------------
-                    write_stacked_maps(stacked_maps, stacked_maps_err, nobj_arr, output_filename, args)
+                    if args.do_all_obj: write_stacked_maps(stacked_maps, stacked_maps_err, constituent_ids_array, output_filename, args)
                 else:
                     print(f'which has no object. Skipping this bin.')
                     continue
@@ -507,16 +520,13 @@ if __name__ == "__main__":
             cmap = 'viridis'
             fig.text(0.05, 0.95, f'{args.field}: stacking diagnostics: log_mass: {this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}, log_sfr: {this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}', fontsize=args.fontsize, c='k', ha='left', va='top')
             for i, ax in enumerate(axes):
-                if type(stacked_maps[i]) == np.ndarray: ax = myimshow(stacked_maps[i], ax, re_pix=args.npix_side / (2 * args.re_extent), label=f'Stacked {args.line_list[i]}: {nobj_arr[i]}', cmap=cmap, col='w')
+                if type(stacked_maps[i]) == np.ndarray: ax = myimshow(stacked_maps[i], ax, re_pix=args.npix_side / (2 * args.re_limit), label=f'Stacked {args.line_list[i]}: {nobj_arr[i]}', cmap=cmap, col='w')
             
             outfigname = fig_dir / f'stacked_maps_logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}.png'
             fig.savefig(outfigname, transparent=args.fortalk, dpi=1000 if args.fontsize <= 5 else 200)
             print(f'Saved figure at {outfigname}')
             if args.hide: plt.close('all')
-            else: plt.show(block=False)
-
-            # -----------------plot emission line ratio maps of this bin---------------
-                    
+            else: plt.show(block=False)             
 
             print(f'\nCompleted bin mass={this_mass_sfr_bin[0]}, sfr={this_mass_sfr_bin[1]} ({nobj_good} / {len(id_arr)} objects) in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
             if nobj_good > 1: nbin_good += 1
