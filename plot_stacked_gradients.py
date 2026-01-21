@@ -5,7 +5,8 @@
     Created: 18-01-26
     Example: run plot_stacked_gradients.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28
              run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --adaptive_bins --overplot_literature --overplot_passage
-             run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25
+             run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --adaptive_bins --fold_maps --overplot_literature --overplot_passage
+             run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --fold_maps
 '''
 
 from header import *
@@ -340,6 +341,7 @@ if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
     args.fontfactor = 1.2
+    fold_text = '_folded' if args.fold_maps else ''
 
     # ---------determining list of fields----------------
     if args.do_all_fields:
@@ -365,7 +367,7 @@ if __name__ == "__main__":
         fits_dir.mkdir(parents=True, exist_ok=True)
 
         C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
-        grad_filename = fits_dir / f'stacked_fits_allbins_Zdiag_{args.Zdiag}{C25_text}.fits'
+        grad_filename = fits_dir / f'stacked{fold_text}_fits_allbins_Zdiag_{args.Zdiag}{C25_text}.fits'
 
         # -------------reading in stacked gradient dataframe-----------------------
         df_grad = read_stacked_df(grad_filename)
@@ -373,7 +375,7 @@ if __name__ == "__main__":
         # ------------plotting stacked gradients on SFMS--------------------------
         #fig = plot_SFMS_heatmap_sns(df_grad, args)
         fig = plot_SFMS_heatmap_patches(df_grad, args)
-        save_fig(fig, fig_dir, f'stacked_SFMS_heatmap.png', args) # saving the figure
+        save_fig(fig, fig_dir, f'stacked{fold_text}_SFMS_heatmap.png', args) # saving the figure
 
         print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
 

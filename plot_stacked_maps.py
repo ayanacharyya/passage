@@ -4,15 +4,17 @@
     Author : Ayan
     Created: 18-01-26
     Example: run plot_stacked_maps.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28
-             run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_line_maps --plot_metallicity --plot_radial_profiles
-             run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_radial_profiles --adaptive_bins
+             run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_line_maps --plot_metallicity --plot_radial_profiles --debug_bin
+             run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_metallicity --debug_bin
+             run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_radial_profiles --debug_bin
+             run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --adaptive_bins --fold_maps --plot_radial_profiles --debug_bin
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_radial_profiles
 '''
 
 from header import *
 from util import *
-from make_diagnostic_maps import compute_Z_C19, compute_Z_KD02_R23, compute_Z_P25, compute_Z_Te, compute_Te, take_safe_log_ratio, take_safe_log_sum
-from stack_emission_maps import read_stacked_maps, log_mass_bins, log_sfr_bins
+from make_diagnostic_maps import compute_Z_C19, compute_Z_KD02_R23, compute_Z_P25, compute_Z_Te, compute_Te, take_safe_log_ratio, take_safe_log_sum, myimshow
+from stack_emission_maps import read_stacked_maps
 from plots_for_zgrad_paper import plot_2D_map, plot_radial_profile
 
 start_time = datetime.now()
@@ -446,6 +448,60 @@ def get_interval_from_filename(filename):
     return combined_interval
 
 # --------------------------------------------------------------------------------------------------------------------
+def fold_line_map(line_map, args, line=''):
+    '''
+    Fold a given emission line map along vertical and horizontal axis (along with the uncertainty map), by calling fold_image_to_quadrant()
+    Returns folded 2D array (along with uncertainties) which is a 'quarter' map
+    '''
+    folded_data = fold_image_to_quadrant(unp.nominal_values(line_map.data), args, line=f'{line}')
+    folded_err = fold_image_to_quadrant(unp.std_devs(line_map.data), args, line=f'{line}_err')
+    if np.ndim(line_map.mask) > 0:
+        folded_mask = fold_image_to_quadrant(line_map.mask, args, line=f'{line}_mask')
+    else:
+        folded_mask = line_map.mask
+    
+    folded_line_map = np.ma.masked_where(folded_mask, unp.uarray(folded_data, folded_err))
+
+    return folded_line_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def fold_image_to_quadrant(data_map, args, line=''):
+    '''
+    Fold a given image along vertical and horizontal axis (this assumes that the major and minor axes align with the vertical and horizontal axes, respectively)
+    Returns 2D array which is a 'quarter' map
+    '''
+    mid_x, mid_y = data_map.shape[0] // 2, data_map.shape[1] // 2
+    
+    # ----extract the four quadrants: Top-Right (TR), Top-Left (TL), Bottom-Left (BL), Bottom-Right (BR)---
+    tr = data_map[mid_y:, mid_x:]            # Already oriented correctly
+    tl = np.fliplr(data_map[mid_y:, :mid_x]) # Flip horizontally
+    bl = np.flipud(np.fliplr(data_map[:mid_y, :mid_x])) # Flip both
+    br = np.flipud(data_map[:mid_y, mid_x:]) # Flip vertically
+    
+    # ---------taking their median-----------
+    folded_quadrant = np.median([tr, tl, bl, br], axis=0)
+
+    # ----------for diagnostics------------
+    if args.debug_folding:
+        print(f'Deb467: shapes: {line} map = {np.shape(data_map)}, tr = {np.shape(tr)}, tl = {np.shape(tl)}, bl = {np.shape(bl)}, br = {np.shape(br)}, folded = {np.shape(folded_quadrant)}') ##
+        fig, axes = plt.subplots(1, 6, figsize=(13, 3))
+        fig.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.3, hspace=0.1)
+        cmap = 'viridis'
+        fig.text(0.05, 0.98, f'{args.field}: ID {args.id}: {line} map: Folding diagnostics', fontsize=args.fontsize, c='k', ha='left', va='top')
+        
+        axes[0] = myimshow(data_map, axes[0], label='Original', cmap=cmap, col='k')
+        axes[1] = myimshow(tr, axes[1], label='TR', cmap=cmap, col='k')
+        axes[2] = myimshow(tl, axes[2], label='TL', cmap=cmap, col='k')
+        axes[3] = myimshow(br, axes[3], label='BR', cmap=cmap, col='k')
+        axes[4] = myimshow(bl, axes[4], label='BL', cmap=cmap, col='k')
+        axes[5] = myimshow(folded_quadrant, axes[5], label='Folded', cmap=cmap, col='k')
+
+        plt.show(block=False)
+        sys.exit(f'Exiting here because of --debug_folding mode; if you want to run the full code as usual then remove the --debug_folding option and re-run')
+    
+    return folded_quadrant
+
+# --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
@@ -458,6 +514,7 @@ if __name__ == "__main__":
     args.pix_size_re = (2 * args.re_limit) / args.npix_side
     offset = args.pix_size_re / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
     args.extent = (-args.re_limit - offset, args.re_limit - offset, -args.re_limit - offset, args.re_limit - offset)
+    fold_text = '_folded' if args.fold_maps else ''
 
     # ---------determining list of fields----------------
     if args.do_all_fields:
@@ -483,16 +540,12 @@ if __name__ == "__main__":
         fits_dir.mkdir(parents=True, exist_ok=True)
 
         C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
-        output_filename = fits_dir / f'stacked_fits_allbins_Zdiag_{args.Zdiag}{C25_text}.fits'
-
-        # # ----------binning the dataframe by mass and SFR bins-------------------
-        # log_mass_intervals = [pd.Interval(log_mass_bins[i], log_mass_bins[i+1], closed='left') for i in range(len(log_mass_bins)-1)]
-        # log_sfr_intervals = [pd.Interval(log_sfr_bins[i], log_sfr_bins[i+1], closed='left') for i in range(len(log_sfr_bins)-1)]
-        # bin_list = list(itertools.product(log_mass_intervals, log_sfr_intervals))
+        output_filename = fits_dir / f'stacked{fold_text}_fits_allbins_Zdiag_{args.Zdiag}{C25_text}.fits'
 
         # --------getting the list of bins from available fits files---------------
         stacked_files = glob.glob(str(fits_dir) + '/stacked_maps_*.fits')
         bin_list = [get_interval_from_filename(item) for item in stacked_files]
+        bin_list.sort(key=lambda x: (x[0].left, x[1].left))
 
         # ------------setting up master dataframe-----------------------
         df_grad = pd.DataFrame(columns=['log_mass_bin', 'log_sfr_bin', 'nobj', 'logOH_int', 'logOH_int_u', 'logOH_grad', 'logOH_grad_u'])
@@ -500,7 +553,7 @@ if __name__ == "__main__":
         
         # ------------looping over each bin-----------------------
         for index2, this_mass_sfr_bin in enumerate(bin_list):
-            #if nbin_good > 0: continue
+            if args.debug_bin and nbin_good > 0: continue
             start_time3 = datetime.now()
             bin_text = f'logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}'
             print(f'\tStarting ({index2 + 1}/{len(bin_list)}) {bin_text}..', end=' ')
@@ -513,13 +566,20 @@ if __name__ == "__main__":
             line_dict = read_stacked_maps(stacked_filename, args)
             nbin_good += 1
 
+            # ---------fold stacked maps along major and minor axis--------------------
+            if args.fold_maps:
+                line_list = [item for item in list(line_dict.keys()) if '_nobj' not in item and '_id' not in item]
+                print(f'Folding {len(line_list)} stacked emission maps for this mass-sfr bin..')
+                for line in line_list:
+                    line_dict[line] = fold_line_map(line_dict[line], args, line=line)
+
             # ---------------plot emission line maps of this bin---------------------
             if args.plot_line_maps:
                 fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-20.5, cmax=-17.8)
                 if len(line_list) == 0:
                     print(f'No lines found for {bin_text}. So Skipping.')
                     continue
-                save_fig(fig_em, fig_dir, f'stacked_line_maps_{bin_text}.png', args) # saving the figure
+                save_fig(fig_em, fig_dir, f'stacked{fold_text}_line_maps_{bin_text}.png', args) # saving the figure
 
             # -----------------computing metallicity maps of this bin---------------
             logOH_map, logOH_int, nobj = get_metallicity_map(line_dict, args)
@@ -527,26 +587,30 @@ if __name__ == "__main__":
                 print(f'Unable to compute {args.Zdiag} metallicity for {bin_text}. So Skipping.')
                 continue
             else:
-                write_metallicity_map(logOH_map, logOH_int, fits_dir / f'stacked_metallicity_map_{bin_text}.fits', args) # saving the metallicity maps as fits files
+                write_metallicity_map(logOH_map, logOH_int, fits_dir / f'stacked{fold_text}_metallicity_map_{bin_text}.fits', args) # saving the metallicity maps as fits files
             
             # -----------------plot metallicity maps of this bin---------------
             if args.plot_metallicity:
                 fig_met = plot_metallicity_map(logOH_map, args, bin_text=bin_text, Zmin=None, Zmax=None)
-                save_fig(fig_met, fig_dir, f'stacked_metallicity_map_{bin_text}.png', args) # saving the figure
+                save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map_{bin_text}.png', args) # saving the figure
 
             # -----------------computing metallicity gradient of this bin---------------
             if args.plot_radial_profiles:
                 ax = fig_met.axes[1]
                 quant = 'log_OH'
                 shape = np.shape(logOH_map)
-                center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
 
+                if args.fold_maps:
+                    center_xpix, center_ypix = (args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5 # this yields 0.5 (instead of 0) pixel offset for even-sized stacked maps, because the center of the map is in the center (and not the edge) of the first pixel
+                else:
+                    center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
                 distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size_re # Re
+                
                 logOH_df = pd.DataFrame({'distance': distance_map.flatten(), f'{quant}': unp.nominal_values(logOH_map).flatten(), f'{quant}_u': unp.std_devs(logOH_map).flatten()})
                 logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
 
                 ax, [linefit_original, linefit_odr, linefit_lenstronomy, params_llim, params_median, params_ulim] = plot_radial_profile(logOH_df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, short_label=False, quant=quant, Zdiag=args.Zdiag, do_mcmc=False, already_in_re=True)
-                save_fig(fig_met, fig_dir, f'stacked_metallicity_map_{bin_text}.png', args) # saving the figure
+                save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map_{bin_text}.png', args) # saving the figure
 
                 # -------------save fit results to dataframe-----------------------
                 thisrow = [this_mass_sfr_bin[0], this_mass_sfr_bin[1], nobj, logOH_int.n, logOH_int.s, linefit_odr[0].n, linefit_odr[0].s]

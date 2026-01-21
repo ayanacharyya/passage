@@ -397,8 +397,11 @@ if __name__ == "__main__":
             bin_list = list(itertools.product(all_mass_intervals, all_sfr_intervals))
 
         # ------------looping over each bin-----------------------
+        bin_list.sort(key=lambda x: (x[0].left, x[1].left))
         nbin_good = 0
+        
         for index2, this_mass_sfr_bin in enumerate(bin_list):
+            if args.debug_bin and nbin_good > 0: continue
             start_time3 = datetime.now()
             print(f'\tStarting bin ({index2 + 1}/{len(bin_list)}) mass={this_mass_sfr_bin[0]}, sfr={this_mass_sfr_bin[1]}..', end=' ')
 
@@ -550,7 +553,7 @@ if __name__ == "__main__":
                                     axes[5] = myimshow(recentered_line_map, axes[5], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=cmap, col='k')
 
                                     plt.show(block=False)
-                                    sys.exit(f'Exiting here because of --debug_re mode; if you want to run the full code as usual then remove the --debug_re option and re-run')
+                                    sys.exit(f'Exiting here because of --debug_align mode; if you want to run the full code as usual then remove the --debug_align option and re-run')
 
                                 # ---------------appending the line map-------------------------
                                 line_maps_array[index4].append(recentered_line_map)

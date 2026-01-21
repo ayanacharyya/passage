@@ -268,6 +268,9 @@ def parse_args():
     parser.add_argument('--max_gal_per_bin', metavar='max_gal_per_bin', type=int, action='store', default=20, help='Maximum galaxies allowed in one bin, if binning adaptively; Default is 20')
     parser.add_argument('--overplot_literature', dest='overplot_literature', action='store_true', default=False, help='Overplot the SFMS relations from the literature? Default is no.')
     parser.add_argument('--overplot_passage', dest='overplot_passage', action='store_true', default=False, help='Overplot the PASSAGE data points on the SFMS relation? Default is no.')
+    parser.add_argument('--fold_maps', dest='fold_maps', action='store_true', default=False, help='Fold the stacked emission line maps along major and minor axis first, before computing metallicity? Default is no.')
+    parser.add_argument('--debug_folding', dest='debug_folding', action='store_true', default=False, help='Debug the folding of emission line maps? Default is no.')
+    parser.add_argument('--debug_bin', dest='debug_bin', action='store_true', default=False, help='Debug just one bin (instead of going through all the bins? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
