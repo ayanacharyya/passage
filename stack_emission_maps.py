@@ -682,7 +682,7 @@ if __name__ == "__main__":
                         nobj_arr.append(len(constituent_ids_array[index4]))
 
                         # --------displaying stacked maps at the bottom of the mammoth figure---------
-                        curr_row = index3 + 1
+                        curr_row = (nrows_total % args.max_gal_per_page) - 1
                         axes_orig[curr_row, index4] = plot_2D_map(stacked_map, axes_orig[curr_row, index4], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0)
                         axes_flux[curr_row, index4] = plot_2D_map(stacked_map, axes_flux[curr_row, index4], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0)
                         axes_err[curr_row, index4] = plot_2D_map(stacked_map_err, axes_err[curr_row, index4], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0)
