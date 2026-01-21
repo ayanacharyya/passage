@@ -15,7 +15,7 @@ from header import *
 from util import *
 from make_diagnostic_maps import compute_Z_C19, compute_Z_KD02_R23, compute_Z_P25, compute_Z_Te, compute_Te, take_safe_log_ratio, take_safe_log_sum, myimshow
 from stack_emission_maps import read_stacked_maps
-from plots_for_zgrad_paper import plot_2D_map, plot_radial_profile
+from plots_for_zgrad_paper import plot_radial_profile
 
 start_time = datetime.now()
 
@@ -411,6 +411,27 @@ def write_metallicity_map(logOH_map, logOH_int, outfilename, args):
     print(f'Saved metallicity maps in {outfilename}')
 
 # --------------------------------------------------------------------------------------------------------------------
+def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True):
+    '''
+    Plots a given 2D image in a given axis
+    Returns the axis handle
+    '''
+    image = np.ma.masked_where(image.mask, unp.nominal_values(image.data))
+
+    if takelog:
+        new_mask = image <= 0
+        image[new_mask] = 1e-9 # arbitrary fill value to bypass unumpy's inability to handle math domain errors
+        image = np.ma.masked_where(image.mask | new_mask, np.log10(image.data))
+
+    p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
+    ax.scatter(0, 0, marker='x', s=10, c='grey')
+    ax.set_aspect('auto') 
+    
+    ax = annotate_axes(ax, r'Offset (R$_e$)', r'Offset (R$_e$)', args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_metallicity_map(logOH_map, args, bin_text='', Zmin=None, Zmax=None):
     '''
     Makes a nice plot of a given metallicity map
@@ -418,7 +439,7 @@ def plot_metallicity_map(logOH_map, args, bin_text='', Zmin=None, Zmax=None):
     '''
     # -----------------setup the figure---------------
     fig, axes = plt.subplots(1, 2 if args.plot_radial_profiles else 1, figsize=(10, 4) if args.plot_radial_profiles else (8, 6))
-    fig.subplots_adjust(left=0.12, right=0.95 if args.plot_radial_profiles else 0.85, top=0.9, bottom=0.13, wspace=0.6, hspace=0.)
+    fig.subplots_adjust(left=0.1, right=0.98 if args.plot_radial_profiles else 0.85, top=0.98, bottom=0.14, wspace=0.6, hspace=0.)
     axes = np.atleast_1d(axes)
     
     # -----------------plot metallicity maps of this bin---------------
@@ -512,9 +533,13 @@ if __name__ == "__main__":
     max_ncols = 4
     args.fontfactor = 1.5
     args.pix_size_re = (2 * args.re_limit) / args.npix_side
-    offset = args.pix_size_re / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
-    args.extent = (-args.re_limit - offset, args.re_limit - offset, -args.re_limit - offset, args.re_limit - offset)
-    fold_text = '_folded' if args.fold_maps else ''
+    if args.fold_maps:
+        args.extent = (0, args.re_limit, 0, args.re_limit)
+        fold_text = '_folded'
+    else: 
+        offset = args.pix_size_re / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
+        args.extent = (-args.re_limit - offset, args.re_limit - offset, -args.re_limit - offset, args.re_limit - offset)
+        fold_text = ''
 
     # ---------determining list of fields----------------
     if args.do_all_fields:

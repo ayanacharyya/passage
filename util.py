@@ -266,6 +266,7 @@ def parse_args():
     parser.add_argument('--plot_line_maps', dest='plot_line_maps', action='store_true', default=False, help='Plot the stacked emission line maps? Default is no.')
     parser.add_argument('--adaptive_bins', dest='adaptive_bins', action='store_true', default=False, help='Compute the stellar mass-SFR bins in an adaptive way? Default is no.')
     parser.add_argument('--max_gal_per_bin', metavar='max_gal_per_bin', type=int, action='store', default=20, help='Maximum galaxies allowed in one bin, if binning adaptively; Default is 20')
+    parser.add_argument('--max_gal_per_page', metavar='max_gal_per_page', type=int, action='store', default=10, help='Maximum galaxies allowed on one page of the PDF; Default is 10')
     parser.add_argument('--overplot_literature', dest='overplot_literature', action='store_true', default=False, help='Overplot the SFMS relations from the literature? Default is no.')
     parser.add_argument('--overplot_passage', dest='overplot_passage', action='store_true', default=False, help='Overplot the PASSAGE data points on the SFMS relation? Default is no.')
     parser.add_argument('--fold_maps', dest='fold_maps', action='store_true', default=False, help='Fold the stacked emission line maps along major and minor axis first, before computing metallicity? Default is no.')
@@ -1465,10 +1466,10 @@ def annotate_axes(ax, xlabel, ylabel, args=None, fontsize=10, fontfactor=1, labe
     ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=3, prune='both'))
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator(4))
     if hide_yaxis:
-        ax.tick_params(axis='y', which='major', labelsize=fontsize, labelbottom=False)
+        ax.tick_params(axis='y', which='major', labelsize=fontsize, labelleft=False)
     else:
         ax.set_ylabel(ylabel, fontsize=fontsize)
-        ax.tick_params(axis='y', which='major', labelsize=fontsize, labelbottom=True)
+        ax.tick_params(axis='y', which='major', labelsize=fontsize, labelleft=True)
 
     if not hide_cbar and p is not None:
         cax = inset_axes(ax, width="5%", height="100%", loc='right', bbox_to_anchor=(0.05, 0, 1, 1), bbox_transform=ax.transAxes, borderpad=0)
