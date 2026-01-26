@@ -5,6 +5,7 @@
     Created: 18-01-26
     Example: run plot_stacked_maps.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_line_maps --plot_metallicity --plot_radial_profiles --debug_bin
+             run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_line_and_metallicity --debug_bin
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_metallicity --debug_bin
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_radial_profiles --debug_bin
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --adaptive_bins --fold_maps --plot_radial_profiles --debug_bin
@@ -41,7 +42,7 @@ def save_fig(fig, fig_dir, figname, args):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_stacked_line_maps(line_dict, args, bin_text='', cmin=None, cmax=None, takelog=True):
+def plot_stacked_line_maps(line_dict, args, bin_text='', cmin=None, cmax=None, takelog=True, max_ncols=6):
     '''
     Makes a nice plot of all emission lines present in a given list of stacked line maps
     Returns figure handle and the list of lines plotted
@@ -56,8 +57,8 @@ def plot_stacked_line_maps(line_dict, args, bin_text='', cmin=None, cmax=None, t
         ncols = min(n_lines, max_ncols)
         nrows = int(np.ceil(n_lines / ncols))
         
-        fig, axes2d = plt.subplots(nrows, ncols, figsize=(3 * ncols, 3 * nrows), sharex=True, sharey=True)
-        fig.subplots_adjust(left=0.1, right=0.93, top=0.9, bottom=0.1, wspace=0., hspace=0.)
+        fig, axes2d = plt.subplots(nrows, ncols, figsize=(3 * ncols, 3.5 * nrows), sharex=True, sharey=True)
+        fig.subplots_adjust(left=0.07, right=0.94, top=0.9, bottom=0.17, wspace=0., hspace=0.)
         fig.text(0.05, 0.95, f'{bin_text}', fontsize=args.fontsize, c='k', ha='left', va='top')
         
         if nrows == 1: axes2d = axes2d[np.newaxis, :]
@@ -73,7 +74,7 @@ def plot_stacked_line_maps(line_dict, args, bin_text='', cmin=None, cmax=None, t
             this_map, _ , _= get_emission_line_map(this_line, line_dict, args)
             nobj = line_dict[f'{this_line}_nobj']
             if type(unp.nominal_values(this_map.data)) == np.ndarray:
-                ax = plot_2D_map(this_map, ax, f'Stacked {this_line}: {nobj}', args, cmap='cividis', clabel='', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=row < nrows - 1, hide_yaxis=col, hide_cbar=col < ncols - 1, skip_annotate=False, hide_cbar_ticks=False, cticks_integer=True)
+                ax = plot_2D_map(this_map, ax, f'Stacked {this_line}: {nobj}', args, cmap='cividis', clabel='', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=row < nrows - 1, hide_yaxis=col, hide_cbar=col < ncols - 1, hide_cbar_ticks=False, cticks_integer=True)
 
         for j in range(index3 + 1, len(axes)): axes[j].axis('off') # hide unused subplots
 
@@ -523,6 +524,37 @@ def fold_image_to_quadrant(data_map, args, line=''):
     return folded_quadrant
 
 # --------------------------------------------------------------------------------------------------------------------
+def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin=None, cmax=None, Zmin=None, Zmax=None, takelog=True):
+    '''
+    Makes a nice plot of all emission lines present in a given list of stacked line maps along with the metallicity map
+    Returns figure handle and the list of lines plotted
+    '''
+    # ----------getting line list from fits file-------------
+    line_list = [item for item in list(line_dict.keys()) if '_nobj' not in item and '_id' not in item]
+    n_lines = len(line_list)
+    if n_lines == 0:
+        fig = None
+    else:
+        # -----------------setup the figure---------------
+        ncols = n_lines + 1
+        
+        fig, axes = plt.subplots(1, ncols, figsize=(2.5 * ncols, 3.5), sharex=True, sharey=True)
+        fig.subplots_adjust(left=0.07, right=0.94, top=0.9, bottom=0.17, wspace=0., hspace=0.)
+        fig.text(0.05, 0.95, f'{bin_text}', fontsize=args.fontsize, c='k', ha='left', va='top')
+        
+        # -----------------plot emission line maps of this bin---------------
+        for index, this_line in enumerate(line_list):
+            this_map, _ , _= get_emission_line_map(this_line, line_dict, args)
+            nobj = line_dict[f'{this_line}_nobj']
+            if type(unp.nominal_values(this_map.data)) == np.ndarray:
+                axes[index] = plot_2D_map(this_map, axes[index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True)
+
+        # -----------------plot metallicity maps of this bin---------------
+        axes[-1] = plot_2D_map(logOH_map, axes[-1], f'logOH {args.Zdiag}', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', takelog=False, vmin=Zmin, vmax=Zmax, hide_yaxis=True, hide_cbar=False, cticks_integer=True)
+
+    return fig, line_list         
+
+# --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
@@ -571,6 +603,7 @@ if __name__ == "__main__":
         stacked_files = glob.glob(str(fits_dir) + '/stacked_maps_*.fits')
         bin_list = [get_interval_from_filename(item) for item in stacked_files]
         bin_list.sort(key=lambda x: (x[0].left, x[1].left))
+        if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 8.5) & (item[0].right == 9.5) & (item[1].left == 1.0) & (item[1].right == 1.5)] # to choose the mass=8.5-9.5, sfr=1-1.5 bin for debugging purposes
 
         # ------------setting up master dataframe-----------------------
         df_grad = pd.DataFrame(columns=['log_mass_bin', 'log_sfr_bin', 'nobj', 'logOH_int', 'logOH_int_u', 'logOH_grad', 'logOH_grad_u'])
@@ -600,7 +633,7 @@ if __name__ == "__main__":
 
             # ---------------plot emission line maps of this bin---------------------
             if args.plot_line_maps:
-                fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-20.5, cmax=-17.8)
+                fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-19.5, cmax=-17.8)
                 if len(line_list) == 0:
                     print(f'No lines found for {bin_text}. So Skipping.')
                     continue
@@ -618,6 +651,11 @@ if __name__ == "__main__":
             if args.plot_metallicity:
                 fig_met = plot_metallicity_map(logOH_map, args, bin_text=bin_text, Zmin=None, Zmax=None)
                 save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map_{bin_text}.png', args) # saving the figure
+
+            # -----------------plot line maps and metallicity maps of this bin---------------
+            if args.plot_line_and_metallicity:
+                fig_met, line_list = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-19.5, cmax=-17.8, Zmin=None, Zmax=None)
+                save_fig(fig_met, fig_dir, f'stacked{fold_text}_line_and_metallicity_map_{bin_text}.png', args) # saving the figure
 
             # -----------------computing metallicity gradient of this bin---------------
             if args.plot_radial_profiles:

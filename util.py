@@ -263,15 +263,20 @@ def parse_args():
     # ---- args added for stack_emission_maps.py ------------
     parser.add_argument('--debug_align', dest='debug_align', action='store_true', default=False, help='Debug the alignment, deprojection, rotation of emission line maps? Default is no.')
     parser.add_argument('--npix_side', metavar='npix_side', type=int, action='store', default=20, help='Size of the stacked emission maps in pixels? Default is 20')
-    parser.add_argument('--plot_line_maps', dest='plot_line_maps', action='store_true', default=False, help='Plot the stacked emission line maps? Default is no.')
     parser.add_argument('--adaptive_bins', dest='adaptive_bins', action='store_true', default=False, help='Compute the stellar mass-SFR bins in an adaptive way? Default is no.')
     parser.add_argument('--max_gal_per_bin', metavar='max_gal_per_bin', type=int, action='store', default=20, help='Maximum galaxies allowed in one bin, if binning adaptively; Default is 20')
     parser.add_argument('--max_gal_per_page', metavar='max_gal_per_page', type=int, action='store', default=10, help='Maximum galaxies allowed on one page of the PDF; Default is 10')
-    parser.add_argument('--overplot_literature', dest='overplot_literature', action='store_true', default=False, help='Overplot the SFMS relations from the literature? Default is no.')
-    parser.add_argument('--overplot_passage', dest='overplot_passage', action='store_true', default=False, help='Overplot the PASSAGE data points on the SFMS relation? Default is no.')
+    parser.add_argument('--debug_bin', dest='debug_bin', action='store_true', default=False, help='Debug just one bin (instead of going through all the bins? Default is no.')
+
+    # ---- args added for plot_stacked_maps.py ------------
     parser.add_argument('--fold_maps', dest='fold_maps', action='store_true', default=False, help='Fold the stacked emission line maps along major and minor axis first, before computing metallicity? Default is no.')
     parser.add_argument('--debug_folding', dest='debug_folding', action='store_true', default=False, help='Debug the folding of emission line maps? Default is no.')
-    parser.add_argument('--debug_bin', dest='debug_bin', action='store_true', default=False, help='Debug just one bin (instead of going through all the bins? Default is no.')
+    parser.add_argument('--plot_line_maps', dest='plot_line_maps', action='store_true', default=False, help='Plot the stacked emission line maps? Default is no.')
+    parser.add_argument('--plot_line_and_metallicity', dest='plot_line_and_metallicity', action='store_true', default=False, help='Plot the stacked emission line maps side by side to metallicity map? Default is no.')
+
+    # ---- args added for plot_stacked_gradients.py ------------
+    parser.add_argument('--overplot_literature', dest='overplot_literature', action='store_true', default=False, help='Overplot the SFMS relations from the literature? Default is no.')
+    parser.add_argument('--overplot_passage', dest='overplot_passage', action='store_true', default=False, help='Overplot the PASSAGE data points on the SFMS relation? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()

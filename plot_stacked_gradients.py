@@ -342,6 +342,7 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
     args.fontfactor = 1.2
     fold_text = '_folded' if args.fold_maps else ''
+    adapt_text = '_adaptivebins' if args.adaptive_bins else ''
 
     # ---------determining list of fields----------------
     if args.do_all_fields:
@@ -375,7 +376,7 @@ if __name__ == "__main__":
         # ------------plotting stacked gradients on SFMS--------------------------
         #fig = plot_SFMS_heatmap_sns(df_grad, args)
         fig = plot_SFMS_heatmap_patches(df_grad, args)
-        save_fig(fig, fig_dir, f'stacked{fold_text}_SFMS_heatmap.png', args) # saving the figure
+        save_fig(fig, fig_dir, f'stacked{adapt_text}{fold_text}_SFMS_heatmap.png', args) # saving the figure
 
         print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
 
