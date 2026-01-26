@@ -3220,12 +3220,15 @@ def myimshow(data, ax, contour=None, re_pix=None, label='', cmap='viridis', font
     Returns ax
     '''
     p = ax.imshow(data, origin='lower', cmap=cmap, vmin=cmin, vmax=cmax)
-    plt.colorbar(p)
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes('right', size='5%', pad=0.0)
+    plt.colorbar(p, cax=cax)
     cen_x, cen_y = int(np.shape(data)[0] / 2), int(np.shape(data)[1] / 2)
     ax.scatter(cen_y, cen_x, marker='x', c='k')
     if contour is not None: ax.contour(contour, levels=0, colors=col, linewidths=0.5)
     ax.text(0.9, 0.9, label, c=col, fontsize=fontsize, ha='right', va='top', transform=ax.transAxes)
-    if re_pix is not None: ax.add_patch(plt.Circle((cen_y, cen_x), re_pix, color='r', fill=False, lw=0.5))
+    #if re_pix is not None: ax.add_patch(plt.Circle((cen_y, cen_x), re_pix, color='r', fill=False, lw=0.5))
+    if re_pix is not None: ax.add_patch(plt.Rectangle((-re_pix + cen_y, -re_pix + cen_x), 2 * re_pix, 2 * re_pix, lw=0.5, color='r', fill=False))
 
     return ax
 
