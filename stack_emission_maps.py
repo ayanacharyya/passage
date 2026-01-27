@@ -5,6 +5,7 @@
     Created: 15-01-26
     Example: run stack_emission_maps.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28 --do_all_obj
              run stack_emission_maps.py --field Par28 --debug_align --id 2822,2698,2583,2171,672
+             run stack_emission_maps.py --field Par28 --do_all_obj --clobber --debug_bin --skip_deproject --skip_re_scaling
              run stack_emission_maps.py --field Par28 --do_all_obj --re_limit 2
              run stack_emission_maps.py --field Par28 --do_all_obj --adaptive_bins --max_gal_per_bin 20
 '''
@@ -168,10 +169,16 @@ def rescale_line_map(line_map, args):
     Returns rescaled 2D map
     '''
     npix_side = args.npix_side
-    stretch_factor = args.semi_major / args.semi_minor
-    target_re_px = npix_side / (2 * args.re_limit)
-    current_re_px = args.re_arcsec / args.pix_size_arcsec
-    zoom_factor = target_re_px / current_re_px
+    stretch_factor = 1 # args.semi_major / args.semi_minor # stretch factor = 1 assumes the image has already been deprojected
+
+    if args.skip_re_scaling:
+        target_kpc_px = npix_side / (2 * args.kpc_limit)
+        current_kpc_px = 1 / args.pix_size_kpc
+        zoom_factor = target_kpc_px / current_kpc_px
+    else:
+        target_re_px = npix_side / (2 * args.re_limit)
+        current_re_px = args.re_arcsec / args.pix_size_arcsec
+        zoom_factor = target_re_px / current_re_px
     #if args.debug_align: print(f'Deb133: id {args.id}: re_arcsec={args.re_arcsec}, pix_size_arcsec={args.pix_size_arcsec}, semi_major={args.semi_major}, semi_minor={args.semi_minor}, stretch_factor={stretch_factor}, target_re_px={target_re_px}, current_re_px={current_re_px}, zoom_factor={zoom_factor}') ##
 
     rescaled_map = ndimage.zoom(line_map, (zoom_factor * stretch_factor, zoom_factor), order=1)
@@ -211,18 +218,20 @@ def get_center_offsets(dir_img, args, silent=False):
     return ndelta_xpix, ndelta_ypix
 
 # --------------------------------------------------------------------------------------------------------------------
-def weighted_stack_line_maps(line_maps_array, line_maps_err_array):
+def weighted_stack_line_maps(line_maps_array, line_maps_err_array, additional_weights=None):
     '''
     Accepts 2 x N array (and its corresponding uncertainties) of N emission line maps from N objects and sums them, weighting by the uncertainties
     Returns stacked 2D line map and 2D uncertainty map
     '''
     line_maps_array = np.array(line_maps_array)
     line_maps_err_array = np.array(line_maps_err_array)
+    if additional_weights is None: additional_weights = np.zeros(np.shape(line_maps_array)[0])
+    additional_weights = additional_weights[:, np.newaxis, np.newaxis]
 
     weights_array = 1.0 / (line_maps_err_array ** 2)
     stacked_line_map_err = np.sqrt(1.0 / np.nansum(weights_array, axis=0))    
 
-    weights_array /= 1e37 # dividing out this typical large factor, otherwise upon summing across many objects it becomes inf
+    weights_array = np.sqrt((weights_array/1e37) ** 2 + additional_weights ** 2) # dividing out this typical large factor, otherwise upon summing across many objects it becomes inf
     stacked_line_map = np.nansum(line_maps_array * weights_array, axis=0) / np.nansum(weights_array, axis=0)
     
     return stacked_line_map, stacked_line_map_err
@@ -357,7 +366,7 @@ def get_adaptive_bins(df_subset, m_range, s_range, max_n=20):
     return results
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True, segmentation_map=None, in_re_units=True, seg_col='k'):
+def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True, segmentation_map=None, in_re_units=True, in_kpc_units=False, seg_col='k'):
     '''
     Plots a given 2D image in a given axis
     Returns the axis handle
@@ -365,7 +374,10 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True,
 
     if takelog: image =  np.log10(image.data)
 
-    if in_re_units:
+    if in_kpc_units:
+        offset = args.pix_size_kpc / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
+        args.extent = (-args.kpc_limit - offset, args.kpc_limit - offset, -args.kpc_limit - offset, args.kpc_limit - offset)
+    elif in_re_units:
         offset = args.pix_size_re / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
         args.extent = (-args.re_limit - offset, args.re_limit - offset, -args.re_limit - offset, args.re_limit - offset)
     else:
@@ -386,7 +398,7 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True,
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def setup_fullpage_figure(n_page, n_total_pages, n_lines, cmin, cmax, cmap, args, in_re_units=True):
+def setup_fullpage_figure(n_page, n_total_pages, n_lines, cmin, cmax, cmap, args, in_re_units=True, in_kpc_units=False):
     '''
     Initialises a full page figure for plotting all the emission line maps of individual galaxies along with the stacked maps
     Returns figure and axes handle
@@ -404,7 +416,8 @@ def setup_fullpage_figure(n_page, n_total_pages, n_lines, cmin, cmax, cmap, args
     cbar.ax.tick_params(labelsize=args.fontsize / args.fontfactor)
 
     # ------------adding axis labels and page numbers for the whole page---------------
-    label = r'Offset (R$_e$)' if in_re_units else r'Offset (arcseconds)'
+    units = 'kpc' if in_kpc_units else r'R$_e$' if in_re_units else r'arcseconds'
+    label = f'Offset ({units})'
     fig.supxlabel(label, fontsize=args.fontsize)
     fig.supylabel(label, fontsize=args.fontsize)
 
@@ -429,6 +442,9 @@ if __name__ == "__main__":
     args.ids_in_thisbin = args.id
     args.fontfactor = 1.5
 
+    deproject_text = '_nodeproject' if args.skip_deproject else ''
+    rescale_text = '_norescale' if args.skip_re_scaling else ''
+
     # -----------define colorbar properties-----------
     cmin, cmax, cmap = -19.5, -16.5, 'cividis'
     
@@ -450,9 +466,9 @@ if __name__ == "__main__":
         output_dir = args.output_dir / args.field / 'stacking'
         if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
         output_dir.mkdir(parents=True, exist_ok=True)
-        fig_dir = output_dir / 'plots'
-        fig_dir.mkdir(parents=True, exist_ok=True)
-        fits_dir = output_dir / 'maps'
+        fig_dir = output_dir / f'plots{deproject_text}{rescale_text}'
+        Path(fig_dir / 'binmembers').mkdir(parents=True, exist_ok=True)
+        fits_dir = output_dir / f'maps{deproject_text}{rescale_text}'
         fits_dir.mkdir(parents=True, exist_ok=True)
 
         # ---------read the photometric catalog file--------------------
@@ -499,6 +515,7 @@ if __name__ == "__main__":
             all_sfr_intervals = df['sfr_interval'].cat.categories
             bin_list = list(itertools.product(all_mass_intervals, all_sfr_intervals))
             if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 8.5) & (item[0].right == 9.5) & (item[1].left == 1.0) & (item[1].right == 1.5)] # to choose the mass=8.5-9.5, sfr=1-1.5 bin for debugging purposes
+            #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.5) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
 
         # ------------looping over each bin-----------------------
         list(bin_list).sort(key=lambda x: (x[0].left, x[1].left))
@@ -510,7 +527,7 @@ if __name__ == "__main__":
             bin_text = f'logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}'
             print(f'\tStarting bin ({index2 + 1}/{len(bin_list)}) {bin_text}..', end=' ')
 
-            output_filename = fits_dir / f'stacked_maps_{bin_text}.fits'
+            output_filename = fits_dir / f'stacked_maps{deproject_text}{rescale_text}_{bin_text}.fits'
             if output_filename.exists() and not args.clobber:
                 print(f'Reading existing fits file {output_filename}. Re-run with --clobber to rewrite.')
                 # -------reading previously saved stacked fits file------------
@@ -545,14 +562,15 @@ if __name__ == "__main__":
                 
                 if ngal_this_bin > 0:
                     print(f'which has {ngal_this_bin} objects.')
-                    line_maps_array = [[] for _ in range(len(args.line_list))]
+                    line_maps_array = [[] for _ in range(len(args.line_list))] # each array must be len(args.line_list) long and each element will become a stack of 2D images
                     line_maps_err_array = [[] for _ in range(len(args.line_list))] # each array must be len(args.line_list) long and each element will become a stack of 2D images
-                    constituent_ids_array = [[] for _ in range(len(args.line_list))] # each array must be len(args.line_list) long and each element will become a stack of 2D images
+                    constituent_ids_array = [[] for _ in range(len(args.line_list))]
+                    total_brightness_array = [[] for _ in range(len(args.line_list))]
 
                     # --------setup PDF for mammoth figures for all emission line map plots----------
                     if not args.debug_align:
-                        fullplot_filename_orig = fig_dir / f'binmembers/binmembers_orig_maps_{bin_text}.pdf'
-                        fullplot_filename_flux = fig_dir / f'binmembers/binmembers_flux_maps_{bin_text}.pdf'
+                        fullplot_filename_orig = fig_dir / f'binmembers/binmembers_orig_maps{deproject_text}{rescale_text}_{bin_text}.pdf'
+                        fullplot_filename_flux = fig_dir / f'binmembers/binmembers_flux_maps{deproject_text}{rescale_text}_{bin_text}.pdf'
                         fullplot_filename_err = Path(str(fullplot_filename_flux).replace('flux', 'err'))
                         
                         pdf_orig = PdfPages(fullplot_filename_orig)
@@ -570,8 +588,8 @@ if __name__ == "__main__":
                             n_useful_rows_in_page = len(chunk) + (1 if n_page == n_total_pages else 0) # +1 for stack on last page
 
                             fig_orig, axes_orig = setup_fullpage_figure(n_page, n_total_pages, n_lines,  cmin, cmax, cmap, args, in_re_units=False)
-                            fig_flux, axes_flux = setup_fullpage_figure(n_page, n_total_pages, n_lines,  cmin, cmax, cmap, args)
-                            fig_err, axes_err = setup_fullpage_figure(n_page, n_total_pages, n_lines,  cmin, cmax, cmap, args)
+                            fig_flux, axes_flux = setup_fullpage_figure(n_page, n_total_pages, n_lines,  cmin, cmax, cmap, args, in_kpc_units=args.skip_re_scaling)
+                            fig_err, axes_err = setup_fullpage_figure(n_page, n_total_pages, n_lines,  cmin, cmax, cmap, args, in_kpc_units=args.skip_re_scaling)
                         
                         # ----------------looping over the objects in this chunk-------------
                         for index3, this_galaxy in enumerate(chunk):
@@ -604,7 +622,7 @@ if __name__ == "__main__":
                             args.z = full_hdu[0].header['REDSHIFT']
                             args.distance = cosmo.luminosity_distance(args.z)
                             args.pix_size_arcsec = full_hdu[5].header['PIXASEC']
-                            imsize_arcsec = full_hdu['DSCI'].data.shape[0] * args.pix_size_arcsec
+                            args.pix_size_kpc = args.pix_size_arcsec / cosmo.arcsec_per_kpc_proper(args.z).value
                             args.pix_size_re = (2 * args.re_limit) / args.npix_side
                             
                             args.EB_V = 0. # until it gets over-written, if both H alpha and H beta lines are present
@@ -623,22 +641,24 @@ if __name__ == "__main__":
                             args.segmentation_map = segmentation_map
                             
                             rotated_segmentation_map = rotate_line_map(segmentation_map, args)
-                            deprojected_segmentation_map = deproject_line_map(rotated_segmentation_map, args)
+                            deprojected_segmentation_map = rotated_segmentation_map if args.skip_deproject else deproject_line_map(rotated_segmentation_map, args)
                             rescaled_segmentation_map = rescale_line_map(deprojected_segmentation_map, args)
 
                             # ---------------direct image---------------
                             filter = 'F150W'                    
                             direct_image, exptime = get_direct_image(full_hdu, filter, args) # this is already offset corrected and trimmed
                             rotated_direct_image = rotate_line_map(direct_image, args)
-                            deprojected_direct_image = deproject_line_map(rotated_direct_image, args)
+                            deprojected_direct_image = rotated_direct_image if args.skip_deproject else deproject_line_map(rotated_direct_image, args)
                             rescaled_direct_image = rescale_line_map(deprojected_direct_image, args)
+
+                            total_brightness = np.nansum(direct_image)
 
                             # ---------plotting direct image and the rescaled direct image------------------------------
                             direct_image_cmap, direct_image_cmin, direct_image_cmax = 'Greys_r', None, None
                             if not args.debug_align:
                                 axes_orig[index3, 0] = plot_2D_map(direct_image, axes_orig[index3, 0], f'{filter} OG: {args.id}', args, cmap=direct_image_cmap, takelog=False, vmin=direct_image_cmin, vmax=direct_image_cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=False, segmentation_map=segmentation_map, in_re_units=False, seg_col='w')
-                                axes_flux[index3, 0] = plot_2D_map(rescaled_direct_image, axes_flux[index3, 0], f'{filter}_rs: {args.id}', args, cmap=direct_image_cmap, takelog=False, vmin=direct_image_cmin, vmax=direct_image_cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=False)
-                                axes_err[index3, 0] = plot_2D_map(rescaled_direct_image, axes_err[index3, 0], f'{filter}: {args.id}', args, cmap=direct_image_cmap, takelog=False, vmin=direct_image_cmin, vmax=direct_image_cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=False)
+                                axes_flux[index3, 0] = plot_2D_map(rescaled_direct_image, axes_flux[index3, 0], f'{filter}_rs: {args.id}', args, cmap=direct_image_cmap, takelog=False, vmin=direct_image_cmin, vmax=direct_image_cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=False, in_kpc_units=args.skip_re_scaling)
+                                axes_err[index3, 0] = plot_2D_map(rescaled_direct_image, axes_err[index3, 0], f'{filter}: {args.id}', args, cmap=direct_image_cmap, takelog=False, vmin=direct_image_cmin, vmax=direct_image_cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=False, in_kpc_units=args.skip_re_scaling)
 
                             # ----------plotting the direct image: for debugging--------------
                             if args.debug_align:
@@ -679,8 +699,8 @@ if __name__ == "__main__":
                                     rotated_line_map_err = rotate_line_map(smoothed_line_map_err, args)
 
                                     # --------deprojecting the line map---------------------
-                                    deprojected_line_map = deproject_line_map(rotated_line_map, args)
-                                    deprojected_line_map_err = deproject_line_map(rotated_line_map_err, args)
+                                    deprojected_line_map = rotated_line_map if args.skip_deproject else deproject_line_map(rotated_line_map, args)
+                                    deprojected_line_map_err = rotated_line_map_err if args.skip_deproject else deproject_line_map(rotated_line_map_err, args)
 
                                     # --------scaling the line map by effective radius---------------------
                                     rescaled_line_map = rescale_line_map(deprojected_line_map, args)
@@ -713,7 +733,7 @@ if __name__ == "__main__":
                                         axes[4] = myimshow(rescaled_line_map, axes[4], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Rescaled', cmap=cmap, col='k')
                                         axes[5] = myimshow(recentered_line_map, axes[5], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=cmap, col='k')
 
-                                        figname = fig_dir / f'debug_align_{args.id}.png'
+                                        figname = fig_dir / f'debug_align_{args.id}{deproject_text}{rescale_text}.png'
                                         fig_debug.savefig(figname, transparent=args.fortalk)
                                         print(f'\nSaved figure as {figname}')
 
@@ -724,12 +744,14 @@ if __name__ == "__main__":
                                     line_maps_array[index4].append(recentered_line_map)
                                     line_maps_err_array[index4].append(recentered_line_map_err)
                                     constituent_ids_array[index4].append(f'{args.field}-{args.id}')
+                                    total_brightness_array[index4].append(total_brightness)
+
                                     nlines_good += 1
 
                                     # -------------plotting this line map of this galaxy-------------------
                                     axes_orig[index3, index4 + 1] = plot_2D_map(line_map, axes_orig[index3, index4 + 1], f'{this_line}: {args.id} OG', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=True, segmentation_map=segmentation_map, in_re_units=False)
-                                    axes_flux[index3, index4 + 1] = plot_2D_map(recentered_line_map, axes_flux[index3, index4 + 1], f'{this_line}: {args.id}', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=True)
-                                    axes_err[index3, index4 + 1] = plot_2D_map(recentered_line_map_err, axes_err[index3, index4 + 1], f'{this_line}: {args.id}', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=True)
+                                    axes_flux[index3, index4 + 1] = plot_2D_map(recentered_line_map, axes_flux[index3, index4 + 1], f'{this_line}: {args.id}', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=True, in_kpc_units=args.skip_re_scaling)
+                                    axes_err[index3, index4 + 1] = plot_2D_map(recentered_line_map_err, axes_err[index3, index4 + 1], f'{this_line}: {args.id}', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=True, in_kpc_units=args.skip_re_scaling)
                                 
                                 except Exception as e:
                                     print(f'Skipping {this_line} for obj {args.id} because it failed due to: {e}')
@@ -754,7 +776,7 @@ if __name__ == "__main__":
                     # -----stacking all line maps for all objects in this bin-----------
                     stacked_maps, stacked_maps_err, nobj_arr = [], [], []
                     for index4, this_line in enumerate(args.line_list):
-                        stacked_map, stacked_map_err = weighted_stack_line_maps(line_maps_array[index4], line_maps_err_array[index4])
+                        stacked_map, stacked_map_err = weighted_stack_line_maps(line_maps_array[index4], line_maps_err_array[index4])#, additional_weights= 1 / np.array(total_brightness_array[index4]) ** 2)
                         stacked_maps.append(stacked_map)
                         stacked_maps_err.append(stacked_map_err)
                         nobj_arr.append(len(constituent_ids_array[index4]))
@@ -762,9 +784,14 @@ if __name__ == "__main__":
                         # --------displaying stacked maps at the bottom of the mammoth figure---------
                         curr_row = (nrows_total % args.max_gal_per_page) - 1
                         if np.ndim(stacked_map) == 2:
-                            axes_orig[curr_row, index4 + 1] = plot_2D_map(stacked_map, axes_orig[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0)
-                            axes_flux[curr_row, index4 + 1] = plot_2D_map(stacked_map, axes_flux[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0)
-                            axes_err[curr_row, index4 + 1] = plot_2D_map(stacked_map_err, axes_err[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0)
+                            axes_orig[curr_row, index4 + 1] = plot_2D_map(stacked_map, axes_orig[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0, in_kpc_units=args.skip_re_scaling)
+                            axes_flux[curr_row, index4 + 1] = plot_2D_map(stacked_map, axes_flux[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0, in_kpc_units=args.skip_re_scaling)
+                            axes_err[curr_row, index4 + 1] = plot_2D_map(stacked_map_err, axes_err[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0, in_kpc_units=args.skip_re_scaling)
+                        
+                        # --------removing the first subplot (corresponding to direct image) at the bottom of the mammoth figure---------
+                        axes_orig[curr_row, 0].set_visible(False)
+                        axes_flux[curr_row, 0].set_visible(False)
+                        axes_err[curr_row, 0].set_visible(False)
 
                     # -------writing out stacked line maps as fits files--------------
                     if args.do_all_obj: write_stacked_maps(stacked_maps, stacked_maps_err, constituent_ids_array, output_filename, args)

@@ -343,6 +343,8 @@ if __name__ == "__main__":
     args.fontfactor = 1.2
     fold_text = '_folded' if args.fold_maps else ''
     adapt_text = '_adaptivebins' if args.adaptive_bins else ''
+    deproject_text = '_nodeproject' if args.skip_deproject else ''
+    rescale_text = '_norescale' if args.skip_re_scaling else ''
 
     # ---------determining list of fields----------------
     if args.do_all_fields:
@@ -362,13 +364,13 @@ if __name__ == "__main__":
         output_dir = args.output_dir / args.field / 'stacking'
         if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
         output_dir.mkdir(parents=True, exist_ok=True)
-        fig_dir = output_dir / 'plots'
+        fig_dir = output_dir / f'plots{deproject_text}{rescale_text}'
         fig_dir.mkdir(parents=True, exist_ok=True)
-        fits_dir = output_dir / 'maps'
+        fits_dir = output_dir / f'maps{deproject_text}{rescale_text}'
         fits_dir.mkdir(parents=True, exist_ok=True)
 
         C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
-        grad_filename = fits_dir / f'stacked{fold_text}_fits_allbins_Zdiag_{args.Zdiag}{C25_text}.fits'
+        grad_filename = fits_dir / f'stacked{fold_text}_fits_allbins_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}.fits'
 
         # -------------reading in stacked gradient dataframe-----------------------
         df_grad = read_stacked_df(grad_filename)

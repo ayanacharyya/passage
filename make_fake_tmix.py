@@ -48,13 +48,13 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(1, figsize=(7, 7))
     fig.subplots_adjust(left=0.15, right=0.98, bottom=0.15, top=0.98)
                         
-    ax.plot(logZ_logSFR_slope, log_t_dyn, color=color1, lw=2, ls='--', label=r'$t_{\mathrm{dyn}}$ calibration')
+    #ax.plot(logZ_logSFR_slope, log_t_dyn, color=color1, lw=2, ls='--', label=r'$t_{\mathrm{dyn}}$ calibration')
     ax.plot(logZ_logSFR_slope, log_t_turb, color=color2, lw=2,  ls='--', label=r'$t_{\mathrm{turb}}$ calibration')
     #ax.fill_between(logZ_logSFR_slope, log_t_dyn - log_t_dyn_u, log_t_dyn + log_t_dyn_u, color=color1, alpha=0.3)   
 
     #ax.set_xlabel(r'Slope of $\log$ (O/H) + 12 vs $\log$ $\Sigma_{\rm SFR}$', fontsize=fontsize, fontdict={'color':'royalblue'})
     ax.set_xlabel(r'$\log$ $t_{Z-SFR}$ (from Z-SFR slope)', fontsize=fontsize, fontdict={'color':'royalblue'})
-    ax.set_ylabel(r'$\log$ $t_{dyn}$ & $t_{turb}$ (from H$\alpha$ kinematics)', fontsize=fontsize/1.2)
+    ax.set_ylabel(r'Timescale from H$\alpha$ v$_{\rm disp}$', fontsize=fontsize/1.2)
     ax.tick_params(axis='both', which='major', labelsize=fontsize)
     ax.legend(fontsize=fontsize, loc='upper left')
 

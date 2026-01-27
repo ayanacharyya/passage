@@ -6,6 +6,7 @@
     Example: run plot_stacked_maps.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_line_maps --plot_metallicity --plot_radial_profiles --debug_bin
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_line_and_metallicity --debug_bin
+             run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_line_and_metallicity --debug_bin --skip_deproject --skip_re_scaling
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_metallicity --debug_bin
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_radial_profiles --debug_bin
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --adaptive_bins --fold_maps --plot_radial_profiles --debug_bin
@@ -428,7 +429,8 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True,
     ax.scatter(0, 0, marker='x', s=10, c='grey')
     ax.set_aspect('auto') 
     
-    ax = annotate_axes(ax, r'Offset (R$_e$)', r'Offset (R$_e$)', args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
+    units = 'kpc' if args.skip_re_scaling else r'R$_e$' 
+    ax = annotate_axes(ax, f'Offset ({units})', f'Offset ({units})', args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
 
     return ax
 
@@ -561,16 +563,21 @@ if __name__ == "__main__":
     if args.re_limit is None: args.re_limit = 2.
     if args.plot_radial_profiles: args.plot_metallicity = True
 
+    deproject_text = '_nodeproject' if args.skip_deproject else ''
+    rescale_text = '_norescale' if args.skip_re_scaling else ''
+
     # -------------for figure annotations--------------------
     max_ncols = 4
     args.fontfactor = 1.5
-    args.pix_size_re = (2 * args.re_limit) / args.npix_side
+    if args.skip_re_scaling: args.pix_size = (2 * args.kpc_limit) / args.npix_side # kpc
+    else: args.pix_size = (2 * args.re_limit) / args.npix_side # Re
     if args.fold_maps:
-        args.extent = (0, args.re_limit, 0, args.re_limit)
+        args.extent = (0, args.re_limit, 0, args.re_limit) if args.skip_re_scaling else (0, args.re_limit, 0, args.re_limit)
         fold_text = '_folded'
     else: 
-        offset = args.pix_size_re / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
-        args.extent = (-args.re_limit - offset, args.re_limit - offset, -args.re_limit - offset, args.re_limit - offset)
+        offset = args.pix_size / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
+        if args.skip_re_scaling: args.extent = (-args.kpc_limit - offset, args.kpc_limit - offset, -args.kpc_limit - offset, args.kpc_limit - offset)
+        else: args.extent = (-args.re_limit - offset, args.re_limit - offset, -args.re_limit - offset, args.re_limit - offset)
         fold_text = ''
 
     # ---------determining list of fields----------------
@@ -591,19 +598,20 @@ if __name__ == "__main__":
         output_dir = args.output_dir / args.field / 'stacking'
         if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
         output_dir.mkdir(parents=True, exist_ok=True)
-        fig_dir = output_dir / 'plots'
+        fig_dir = output_dir / f'plots{deproject_text}{rescale_text}'
         fig_dir.mkdir(parents=True, exist_ok=True)
-        fits_dir = output_dir / 'maps'
+        fits_dir = output_dir / f'maps{deproject_text}{rescale_text}'
         fits_dir.mkdir(parents=True, exist_ok=True)
 
         C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
-        output_filename = fits_dir / f'stacked{fold_text}_fits_allbins_Zdiag_{args.Zdiag}{C25_text}.fits'
+        output_filename = fits_dir / f'stacked{fold_text}_fits_allbins_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}.fits'
 
         # --------getting the list of bins from available fits files---------------
         stacked_files = glob.glob(str(fits_dir) + '/stacked_maps_*.fits')
         bin_list = [get_interval_from_filename(item) for item in stacked_files]
         bin_list.sort(key=lambda x: (x[0].left, x[1].left))
-        if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 8.5) & (item[0].right == 9.5) & (item[1].left == 1.0) & (item[1].right == 1.5)] # to choose the mass=8.5-9.5, sfr=1-1.5 bin for debugging purposes
+        # if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 8.5) & (item[0].right == 9.5) & (item[1].left == 1.0) & (item[1].right == 1.5)] # to choose the mass=8.5-9.5, sfr=1-1.5 bin for debugging purposes
+        if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.5) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
 
         # ------------setting up master dataframe-----------------------
         df_grad = pd.DataFrame(columns=['log_mass_bin', 'log_sfr_bin', 'nobj', 'logOH_int', 'logOH_int_u', 'logOH_grad', 'logOH_grad_u'])
@@ -617,7 +625,7 @@ if __name__ == "__main__":
             print(f'\tStarting ({index2 + 1}/{len(bin_list)}) {bin_text}..', end=' ')
             
             # -------reading previously saved stacked fits file------------
-            stacked_filename = fits_dir / f'stacked_maps_{bin_text}.fits'
+            stacked_filename = fits_dir / f'stacked_maps{deproject_text}{rescale_text}_{bin_text}.fits'
             if not stacked_filename.exists():
                 print(f'No stacked fits file found for {bin_text}, so skipping this bin.')
                 continue
@@ -637,7 +645,7 @@ if __name__ == "__main__":
                 if len(line_list) == 0:
                     print(f'No lines found for {bin_text}. So Skipping.')
                     continue
-                save_fig(fig_em, fig_dir, f'stacked{fold_text}_line_maps_{bin_text}.png', args) # saving the figure
+                save_fig(fig_em, fig_dir, f'stacked{fold_text}_line_maps{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
 
             # -----------------computing metallicity maps of this bin---------------
             logOH_map, logOH_int, nobj = get_metallicity_map(line_dict, args)
@@ -645,17 +653,17 @@ if __name__ == "__main__":
                 print(f'Unable to compute {args.Zdiag} metallicity for {bin_text}. So Skipping.')
                 continue
             else:
-                write_metallicity_map(logOH_map, logOH_int, fits_dir / f'stacked{fold_text}_metallicity_map_{bin_text}.fits', args) # saving the metallicity maps as fits files
+                write_metallicity_map(logOH_map, logOH_int, fits_dir / f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.fits', args) # saving the metallicity maps as fits files
             
             # -----------------plot metallicity maps of this bin---------------
             if args.plot_metallicity:
                 fig_met = plot_metallicity_map(logOH_map, args, bin_text=bin_text, Zmin=None, Zmax=None)
-                save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map_{bin_text}.png', args) # saving the figure
+                save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
 
             # -----------------plot line maps and metallicity maps of this bin---------------
             if args.plot_line_and_metallicity:
                 fig_met, line_list = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-19.5, cmax=-17.8, Zmin=None, Zmax=None)
-                save_fig(fig_met, fig_dir, f'stacked{fold_text}_line_and_metallicity_map_{bin_text}.png', args) # saving the figure
+                save_fig(fig_met, fig_dir, f'stacked{fold_text}_line_and_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
 
             # -----------------computing metallicity gradient of this bin---------------
             if args.plot_radial_profiles:
@@ -667,13 +675,13 @@ if __name__ == "__main__":
                     center_xpix, center_ypix = (args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5 # this yields 0.5 (instead of 0) pixel offset for even-sized stacked maps, because the center of the map is in the center (and not the edge) of the first pixel
                 else:
                     center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
-                distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size_re # Re
+                distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
                 
                 logOH_df = pd.DataFrame({'distance': distance_map.flatten(), f'{quant}': unp.nominal_values(logOH_map).flatten(), f'{quant}_u': unp.std_devs(logOH_map).flatten()})
                 logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
 
                 ax, [linefit_original, linefit_odr, linefit_lenstronomy, params_llim, params_median, params_ulim] = plot_radial_profile(logOH_df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, short_label=False, quant=quant, Zdiag=args.Zdiag, do_mcmc=False, already_in_re=True)
-                save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map_{bin_text}.png', args) # saving the figure
+                save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
 
                 # -------------save fit results to dataframe-----------------------
                 thisrow = [this_mass_sfr_bin[0], this_mass_sfr_bin[1], nobj, logOH_int.n, logOH_int.s, linefit_odr[0].n, linefit_odr[0].s]

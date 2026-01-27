@@ -107,7 +107,7 @@ def parse_args():
     # ------- args added for make_diagnostic_maps.py ------------------------------
     parser.add_argument('--plot_target_frame', dest='plot_target_frame', action='store_true', default=False, help='Annotate plot axes in the object/target frame of reference? Default is no.')
     parser.add_argument('--arcsec_limit', metavar='arcsec_limit', type=float, action='store', default=1.0, help='Half box size (in arcsec) of the thumbnails to plot; default is 1.5')
-    parser.add_argument('--re_limit', metavar='arcsec_limit', type=float, action='store', default=None, help='Effective radius to limit all analysis to; default is None (uses arcsec_limit)')
+    parser.add_argument('--re_limit', metavar='re_limit', type=float, action='store', default=None, help='Effective radius to limit all analysis to; default is None (uses arcsec_limit)')
     parser.add_argument('--radbin', dest='radbin', action='store_true', default=False, help='Radially bin the 2D emission line maps? Default is no.')
     parser.add_argument('--vorbin', dest='vorbin', action='store_true', default=False, help='Voronoi bin the 2D emission line maps? Default is no.')
     parser.add_argument('--voronoi_snr', metavar='voronoi_snr', type=float, action='store', default=3, help='Target SNR to Voronoi bin the emission line maps to; default is 3')
@@ -267,6 +267,9 @@ def parse_args():
     parser.add_argument('--max_gal_per_bin', metavar='max_gal_per_bin', type=int, action='store', default=20, help='Maximum galaxies allowed in one bin, if binning adaptively; Default is 20')
     parser.add_argument('--max_gal_per_page', metavar='max_gal_per_page', type=int, action='store', default=10, help='Maximum galaxies allowed on one page of the PDF; Default is 10')
     parser.add_argument('--debug_bin', dest='debug_bin', action='store_true', default=False, help='Debug just one bin (instead of going through all the bins? Default is no.')
+    parser.add_argument('--skip_deproject', dest='skip_deproject', action='store_true', default=False, help='Skip the step of deprojecting each galaxy based on the inclination? Default is no.')
+    parser.add_argument('--skip_re_scaling', dest='skip_re_scaling', action='store_true', default=False, help='Skip the step of rescaling each galaxy based on its effective radius, and rescale based on kpc instead? Default is no.')
+    parser.add_argument('--kpc_limit', metavar='kpc_limit', type=float, action='store', default=5, help='Physical kpc radius to limit all analysis to, only if skip_re_rescale is True; default is 5 kpc')
 
     # ---- args added for plot_stacked_maps.py ------------
     parser.add_argument('--fold_maps', dest='fold_maps', action='store_true', default=False, help='Fold the stacked emission line maps along major and minor axis first, before computing metallicity? Default is no.')
