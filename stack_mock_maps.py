@@ -68,7 +68,8 @@ def generate_mock_galaxy_fits(params, output_filename, line_name='X', filter_nam
     bg_noise = np.random.normal(0, sigma_bg, size=img_noiseless.shape)
     
     # --------computing Poisson noise-----------
-    gain = 1e5 #params['gain']
+    gain = params['gain']
+    #gain = 1e5
     img_electrons = img_noiseless * gain
     poisson_noise_electrons = np.random.poisson(np.maximum(img_electrons, 0)) - img_electrons # Use max(0) to ensure no negative lambdas for Poisson
     poisson_noise_flux = poisson_noise_electrons / gain
@@ -120,9 +121,9 @@ if __name__ == "__main__":
     rescale_text = '_norescale' if args.skip_re_scaling else ''
 
     # -----------define colorbar properties-----------
-    #cmin, cmax, cmap = -19.5, -16.5, 'cividis'
-    cmin, cmax, cmap = None, None, 'cividis'
-    direct_image_cmap, direct_image_cmin, direct_image_cmax = 'Greys_r', None, None
+    cmin, cmax, cmap = -18.5, -15.5, 'cividis'
+    stacked_cmap = 'viridis'
+    direct_image_cmap, direct_image_cmin, direct_image_cmax = 'Greys_r', 0, 1
 
     # -----------define global properties-----------
     line_name = 'XX'
@@ -136,26 +137,27 @@ if __name__ == "__main__":
     # -----------define object properties-----------
     data = {
         'id': [99901, 99902, 99903, 99904, 99905, 99906, 99907, 99908, 99909, 99910], # IDs
-        'redshift': [1.8, 1.8, 1.8, 1.7, 1.9, 1.9, 2.6, 2.8, 2.9, 1.8], # Redshift
+        'redshift': [2.0, 3.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0], # Redshift
         'pix_size_arcsec': [pix_size_arcsec] * 10, # fixed pixel scale
-        'a_image':        [5.0, 5.0, 5.0, 5.0, 5.0, 6.0, 4.0, 5.0, 5.0, 5.0], # Major axis
-        'b_image':        [4.5, 1.5, 5.0, 4.5, 4.5, 3.0, 2.0, 4.5, 4.5, 4.5], # Minor axis
-        'theta_image':    [0,  0,   90,  10,  15,  -10, -20,  10,  0,  0], # Position Angle
-        're_kpc':         [3.1, 5.0, 3.1, 3.1, 3.1, 4.0, 2.5, 3.1, 3.1, 3.1], # Effective radii in kpc
-        'offset_xpix':    [0,   0,   0,   0,   0,   5,   -4,  0,   0,   0 ], # Centering tests
-        'offset_ypix':    [0,   0,   0,   0,   0,   -3,   2,  0,   0,   0 ], # Centering tests
-        'tot_bright':     [100, 100, 100, 800, 20,  100, 100, 100, 100, 100], # Brightness weighting
-        'snr':            [10,  15,  10,  20,  2,   10,  10,  10,  10,  10], # Noise weighting
-        'gain':           [2.0, 2.0, 2.0, 2.0, 0.5, 2.0, 2.0, 2.0, 2.0, 10.0], # Gain parameter for making Poisson noise more/less agressive
-        'sersic':         [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 0.5, 1.0], # Concentration
-        'field':          [args.field] * 10 # fixed field name
+        'a_image':        [5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0], # Major axis
+        'b_image':        [5.0, 5.0, 2.5, 1.5, 5.0, 5.0, 5.0, 5.0, 5.0, 1.5], # Minor axis
+        'theta_image':    [0,   0,   0,   40,   0,   0,   0,   0,   0,   40], # Position Angle
+        're_kpc':         [3.0, 3.0, 3.0, 3.0, 1.0, 3.0, 3.0, 3.0, 3.0, 3.0], # Effective radii in kpc
+        'offset_xpix':    [0,   0,   0,   0,   0,   -1,   0,  0,   0,    0 ], # Centering tests
+        'offset_ypix':    [0,   0,   0,   0,   0,   2,   0,  0,   0,    0 ], # Centering tests
+        'tot_bright':     [100, 100, 100, 100, 100,  100, 800, 100, 100, 100], # Brightness weighting
+        'snr':            [10,  10,  10,  20,  10,   10,  10,  2,  10,  2], # Noise weighting
+        'sersic':         [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 1.0], # Concentration
+        'gain':           [20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0], # Gain parameter for making Poisson noise more/less agressive
+        'field':          [args.field] * 10, # fixed field name
+        'notes':          ['fiducial', 'high-z', 'ellipse', 'ell. + incl.', 'small', 'off-center', 'bright', 'high bkg noise', 'bulgy', 'ell. + incl. + noisy'] # to keep track of the purpose of each model
         }
     df_object = pd.DataFrame(data)
     if args.id is not None: df_object = df_object[df_object['id'].isin(args.id)].reset_index(drop=True)
     nrows_total = len(df_object) + 1
     
     # ----------define different iterations------------------
-    skip_ids = [0, 99902, 99904, 99905, 99906] # each id here is skipped in each iteration; in the first iteration, no id is skipped
+    skip_ids = [[0], [99902], [99903], [99904], [99905], [99906], [99907], [99908], [99909], [99910], [99908, 99904], [99910, 99909], [99910, 99903], [99901, 99902, 99905, 99906, 99907, 99908, 99909]] # each id here is skipped in each iteration; in the first iteration, no id is skipped
     n_iterations = len(skip_ids)
 
     # -------------for determining plot limits--------------------
@@ -197,8 +199,8 @@ if __name__ == "__main__":
         fig_err, axes_err = setup_fullpage_figure(1, 1, n_iterations + 1,  cmin, cmax, cmap, args, in_kpc_units=args.skip_re_scaling)
 
     # --------looping over varios test iterations-------------
-    for index, object_to_skip in enumerate(skip_ids):
-        print(f'Commencing iteration ({index + 1}/{len(skip_ids)}) to skip ID {object_to_skip}..')
+    for index, objects_to_skip in enumerate(skip_ids):
+        print(f'Commencing iteration ({index + 1}/{len(skip_ids)}) to skip ID {objects_to_skip}..')
 
         line_maps_array = [[] for _ in range(len(args.line_list))] # each array must be len(args.line_list) long and each element will become a stack of 2D images
         line_maps_err_array = [[] for _ in range(len(args.line_list))] # each array must be len(args.line_list) long and each element will become a stack of 2D images
@@ -208,19 +210,20 @@ if __name__ == "__main__":
         # ------------looping over objects for this iteration---------------
         for index2, obj in df_object.iterrows():
             args.id = obj['id']
-            print(f'\tCommencing ({index2 + 1}/{len(df_object)}) ID {args.id}..')
+            print(f'\tCommencing ({index2 + 1}/{len(df_object)}) IDs: {args.id}..')
 
             # ------skipping object based on the conditions of this iteration----------
-            if args.do_all_obj and args.id == object_to_skip:
+            if args.do_all_obj and args.id in objects_to_skip:
                 print(f'\t\tSkipping object {args.id}..')
                 if not args.debug_align:
+                    axes_orig[index2, index + 1].set_visible(False)
                     axes_flux[index2, index + 1].set_visible(False)
                     axes_err[index2, index + 1].set_visible(False)
                 continue
                 
             # ----------generating the mock object------------
             full_filename = product_dir / f'{obj["field"]}_{obj["id"]:05d}_maps.fits'
-            if not os.path.exists(full_filename) or args.clobber_mock:
+            if not os.path.exists(full_filename) or (args.clobber_mock and index == 0): # only clobber if this is the first iteration
                 if not kernel_loaded:
                     psf_kernel = get_niriss_psf(filter_name=filter_name, fov_pixels=mock_box_size)
                     kernel_loaded = True
@@ -278,9 +281,9 @@ if __name__ == "__main__":
             
             # ---------plotting direct image and the rescaled direct image------------------------------
             else:
-                axes_orig[index2, 0] = plot_2D_map(direct_image, axes_orig[index2, 0], f'{filter_name} OG: {args.id}', args, cmap=direct_image_cmap, takelog=False, vmin=direct_image_cmin, vmax=direct_image_cmax, hide_xaxis=index2 < nrows_total - 1, hide_yaxis=False, segmentation_map=segmentation_map, in_re_units=False, seg_col='w')
-                axes_flux[index2, 0] = plot_2D_map(rescaled_direct_image, axes_flux[index2, 0], f'{filter_name}_rs: {args.id}', args, cmap=direct_image_cmap, takelog=False, vmin=direct_image_cmin, vmax=direct_image_cmax, hide_xaxis=index2 < nrows_total - 1, hide_yaxis=False, in_kpc_units=args.skip_re_scaling)
-                axes_err[index2, 0] = plot_2D_map(rescaled_direct_image, axes_err[index2, 0], f'{filter_name}: {args.id}', args, cmap=direct_image_cmap, takelog=False, vmin=direct_image_cmin, vmax=direct_image_cmax, hide_xaxis=index2 < nrows_total - 1, hide_yaxis=False, in_kpc_units=args.skip_re_scaling)
+                axes_orig[index2, 0] = plot_2D_map(direct_image, axes_orig[index2, 0], f'{obj["notes"]}', args, cmap=direct_image_cmap, takelog=False, vmin=direct_image_cmin, vmax=direct_image_cmax, hide_xaxis=index2 < nrows_total - 1, hide_yaxis=False, segmentation_map=segmentation_map, in_re_units=False, seg_col='w')
+                axes_flux[index2, 0] = plot_2D_map(rescaled_direct_image, axes_flux[index2, 0], f'{obj["notes"]}', args, cmap=direct_image_cmap, takelog=False, vmin=direct_image_cmin, vmax=direct_image_cmax, hide_xaxis=index2 < nrows_total - 1, hide_yaxis=False, in_kpc_units=args.skip_re_scaling)
+                axes_err[index2, 0] = plot_2D_map(rescaled_direct_image, axes_err[index2, 0], f'{obj["notes"]}', args, cmap=direct_image_cmap, takelog=False, vmin=direct_image_cmin, vmax=direct_image_cmax, hide_xaxis=index2 < nrows_total - 1, hide_yaxis=False, in_kpc_units=args.skip_re_scaling)
 
             # -----------extracting the emission line map----------------
             for index3, this_line in enumerate(args.line_list):
@@ -362,10 +365,15 @@ if __name__ == "__main__":
             # --------displaying stacked maps at the bottom of the mammoth figure---------
             if not args.debug_align:
                 curr_row = - 1
+
+                axes_orig[curr_row, 0].set_visible(False)
+                axes_flux[curr_row, 0].set_visible(False)
+                axes_err[curr_row, 0].set_visible(False)
+
                 if np.ndim(stacked_map) == 2:
-                    axes_orig[curr_row, index + 1] = plot_2D_map(stacked_map, axes_orig[curr_row, index + 1], f'{line_name}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index > 0, in_kpc_units=args.skip_re_scaling)
-                    axes_flux[curr_row, index + 1] = plot_2D_map(stacked_map, axes_flux[curr_row, index + 1], f'{line_name}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index > 0, in_kpc_units=args.skip_re_scaling)
-                    axes_err[curr_row, index + 1] = plot_2D_map(stacked_map_err, axes_err[curr_row, index + 1], f'{line_name}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index > 0, in_kpc_units=args.skip_re_scaling)
+                    axes_orig[curr_row, index + 1] = plot_2D_map(stacked_map, axes_orig[curr_row, index + 1], f'{line_name}: Stacked', args, cmap=stacked_cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index > 0, in_kpc_units=args.skip_re_scaling)
+                    axes_flux[curr_row, index + 1] = plot_2D_map(stacked_map, axes_flux[curr_row, index + 1], f'{line_name}: Stacked', args, cmap=stacked_cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index > 0, in_kpc_units=args.skip_re_scaling)
+                    axes_err[curr_row, index + 1] = plot_2D_map(stacked_map_err, axes_err[curr_row, index + 1], f'{line_name}: Stacked', args, cmap=stacked_cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index > 0, in_kpc_units=args.skip_re_scaling)
 
         # -------writing out stacked line maps as fits files--------------
         if args.do_all_obj: write_stacked_maps(stacked_maps, stacked_maps_err, constituent_ids_array, output_filename, args)

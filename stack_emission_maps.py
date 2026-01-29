@@ -158,7 +158,7 @@ def deproject_line_map(line_map, args):
     Returns deprojected 2D map
     '''
     stretch_factor = args.semi_major / args.semi_minor
-    deprojected_map = ndimage.zoom(line_map, (stretch_factor, 1.0), order=1) # zoom axis 0 (y/minor) by stretch_factor and axis 1 (x/major) by 1.0
+    deprojected_map = ndimage.zoom(line_map, (1.0, stretch_factor), order=1) # zoom axis 0 (y/minor) by stretch_factor and axis 1 (x/major) by 1.0
     
     return deprojected_map
 
