@@ -270,6 +270,7 @@ def parse_args():
     parser.add_argument('--skip_deproject', dest='skip_deproject', action='store_true', default=False, help='Skip the step of deprojecting each galaxy based on the inclination? Default is no.')
     parser.add_argument('--skip_re_scaling', dest='skip_re_scaling', action='store_true', default=False, help='Skip the step of rescaling each galaxy based on its effective radius, and rescale based on kpc instead? Default is no.')
     parser.add_argument('--kpc_limit', metavar='kpc_limit', type=float, action='store', default=5, help='Physical kpc radius to limit all analysis to, only if skip_re_rescale is True; default is 5 kpc')
+    parser.add_argument('--clobber_mock', dest='clobber_mock', action='store_true', default=False, help='Overwrite the already saved mock galaxy maps? Default is no.')
 
     # ---- args added for plot_stacked_maps.py ------------
     parser.add_argument('--fold_maps', dest='fold_maps', action='store_true', default=False, help='Fold the stacked emission line maps along major and minor axis first, before computing metallicity? Default is no.')
@@ -868,7 +869,8 @@ def get_passage_filter_dict(args=None, filename=None):
     df = df[~ df['Obs Date'].str.contains('SKIPPED')]
 
     dictionary = {item: np.unique(df[df['Par#'] == item]['Filter']).tolist() for item in np.unique(df['Par#'])}
-    dictionary.update({'glass-a2744':['F115W', 'F150W', 'F120W']})
+    dictionary.update({'glass-a2744':['F115W', 'F150W', 'F120W'],
+                        'Par999':['F115W', 'F150W', 'F120W']}) # for testing with mock data (Par999)
 
     return dictionary
 

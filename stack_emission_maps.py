@@ -169,33 +169,33 @@ def rescale_line_map(line_map, args):
     Returns rescaled 2D map
     '''
     npix_side = args.npix_side
-    stretch_factor = 1 # args.semi_major / args.semi_minor # stretch factor = 1 assumes the image has already been deprojected
+    stretch_factor = 1. #/(args.semi_major / args.semi_minor) # stretch factor = 1 assumes the image has already been deprojected
 
     if args.skip_re_scaling:
         target_kpc_px = npix_side / (2 * args.kpc_limit)
         current_kpc_px = 1 / args.pix_size_kpc
         zoom_factor = target_kpc_px / current_kpc_px
+        if args.debug_align: print(f'Deb182: id {args.id}: kpc_limit={args.kpc_limit}, pix_size_kpc={args.pix_size_kpc}, semi_major={args.semi_major}, semi_minor={args.semi_minor}, stretch_factor={stretch_factor}, target_kpc_px={target_kpc_px}, current_kpc_px={current_kpc_px}, zoom_factor={zoom_factor}') ##
     else:
         target_re_px = npix_side / (2 * args.re_limit)
         current_re_px = args.re_arcsec / args.pix_size_arcsec
         zoom_factor = target_re_px / current_re_px
-    #if args.debug_align: print(f'Deb133: id {args.id}: re_arcsec={args.re_arcsec}, pix_size_arcsec={args.pix_size_arcsec}, semi_major={args.semi_major}, semi_minor={args.semi_minor}, stretch_factor={stretch_factor}, target_re_px={target_re_px}, current_re_px={current_re_px}, zoom_factor={zoom_factor}') ##
+        if args.debug_align: print(f'Deb182: id {args.id}: re_arcsec={args.re_arcsec}, pix_size_arcsec={args.pix_size_arcsec}, semi_major={args.semi_major}, semi_minor={args.semi_minor}, stretch_factor={stretch_factor}, target_re_px={target_re_px}, current_re_px={current_re_px}, zoom_factor={zoom_factor}') ##
 
     rescaled_map = ndimage.zoom(line_map, (zoom_factor * stretch_factor, zoom_factor), order=1)
     
     center_y, center_x = np.array(rescaled_map.shape) // 2
-    rescaled_map = rescaled_map[center_y - npix_side // 2 : center_y + npix_side // 2, 
-                         center_x - npix_side // 2 : center_x + npix_side // 2]
+    resampled_map = rescaled_map[max(center_y - npix_side // 2, 0) : min(center_y + npix_side // 2, np.array(rescaled_map.shape)[0]), max(center_x - npix_side // 2, 0) : min(center_x + npix_side // 2, np.array(rescaled_map.shape[1]))]
     
-    if rescaled_map.shape != (npix_side, npix_side):
+    if resampled_map.shape != (npix_side, npix_side):
         canvas = np.full((npix_side, npix_side), np.nan)
-        h, w = rescaled_map.shape
+        h, w = resampled_map.shape
         start_y = (npix_side - h) // 2
         start_x = (npix_side - w) // 2
-        canvas[start_y : start_y + h, start_x : start_x + w] = rescaled_map # This handles cases where the galaxy is at the edge of the original frame
+        canvas[start_y : start_y + h, start_x : start_x + w] = resampled_map # This handles cases where the galaxy is at the edge of the original frame
         return canvas
 
-    return rescaled_map
+    return resampled_map
 
 # --------------------------------------------------------------------------------------------------------------------
 def get_center_offsets(dir_img, args, silent=False):
@@ -208,7 +208,7 @@ def get_center_offsets(dir_img, args, silent=False):
     smooth_shape = dir_img_smoothed.shape
     ncells = 5 # only searches within +/- 5 cells of the original center
     dir_img_smoothed_subarea = dir_img_smoothed[smooth_shape[0] // 2 - ncells: smooth_shape[0] // 2 + ncells, smooth_shape[1] // 2 - ncells: smooth_shape[1] // 2 + ncells] # only searching for brightest pixel in the vicinity of the original center, otherwise might pick up neighbouring galaxies
-    brightest_coords = np.where(dir_img_smoothed == dir_img_smoothed_subarea.max())
+    brightest_coords = np.where(dir_img_smoothed == np.nanmax(dir_img_smoothed_subarea))
     brightest_x, brightest_y = brightest_coords[0][0], brightest_coords[1][0]
     cen_x, cen_y = int(np.shape(dir_img)[0] / 2), int(np.shape(dir_img)[1] / 2)
     ndelta_xpix = cen_x - brightest_x
@@ -404,7 +404,7 @@ def setup_fullpage_figure(n_page, n_total_pages, n_lines, cmin, cmax, cmap, args
     Returns figure and axes handle
     '''
     fig, axes = plt.subplots(args.max_gal_per_page, n_lines, figsize=(1.5 * n_lines, 1.5 * args.max_gal_per_page))#, sharex=True, sharey=True)
-    fig.subplots_adjust(left=0.08, right=0.98, top=0.98, bottom=0.08, wspace=0., hspace=0.)
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.995, bottom=0.08, wspace=0., hspace=0.)
 
     # ------------adding colorbars at top of the page---------------
     norm = mplcolors.Normalize(vmin=cmin, vmax=cmax)
@@ -663,7 +663,7 @@ if __name__ == "__main__":
                             # ----------plotting the direct image: for debugging--------------
                             if args.debug_align:
                                 re_pix = args.re_arcsec / args.pix_size_arcsec
-                                fig_debug, axes_debug_2d = plt.subplots(2, len(args.line_list) + 1, figsize=(13, 6))
+                                fig_debug, axes_debug_2d = plt.subplots(2, 6, figsize=(13, 6))
                                 fig_debug.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.3, hspace=0.1)
 
                                 axes = axes_debug_2d[0]
@@ -776,37 +776,39 @@ if __name__ == "__main__":
                     # -----stacking all line maps for all objects in this bin-----------
                     stacked_maps, stacked_maps_err, nobj_arr = [], [], []
                     for index4, this_line in enumerate(args.line_list):
-                        stacked_map, stacked_map_err = weighted_stack_line_maps(line_maps_array[index4], line_maps_err_array[index4])#, additional_weights= 1 / np.array(total_brightness_array[index4]) ** 2)
+                        stacked_map, stacked_map_err = weighted_stack_line_maps(line_maps_array[index4], line_maps_err_array[index4], additional_weights= 1 / np.array(total_brightness_array[index4]) ** 2)
                         stacked_maps.append(stacked_map)
                         stacked_maps_err.append(stacked_map_err)
                         nobj_arr.append(len(constituent_ids_array[index4]))
 
                         # --------displaying stacked maps at the bottom of the mammoth figure---------
-                        curr_row = (nrows_total % args.max_gal_per_page) - 1
-                        if np.ndim(stacked_map) == 2:
-                            axes_orig[curr_row, index4 + 1] = plot_2D_map(stacked_map, axes_orig[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0, in_kpc_units=args.skip_re_scaling)
-                            axes_flux[curr_row, index4 + 1] = plot_2D_map(stacked_map, axes_flux[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0, in_kpc_units=args.skip_re_scaling)
-                            axes_err[curr_row, index4 + 1] = plot_2D_map(stacked_map_err, axes_err[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0, in_kpc_units=args.skip_re_scaling)
-                        
-                        # --------removing the first subplot (corresponding to direct image) at the bottom of the mammoth figure---------
-                        axes_orig[curr_row, 0].set_visible(False)
-                        axes_flux[curr_row, 0].set_visible(False)
-                        axes_err[curr_row, 0].set_visible(False)
+                        if not args.debug_align:
+                            curr_row = (nrows_total % args.max_gal_per_page) - 1
+                            if np.ndim(stacked_map) == 2:
+                                axes_orig[curr_row, index4 + 1] = plot_2D_map(stacked_map, axes_orig[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0, in_kpc_units=args.skip_re_scaling)
+                                axes_flux[curr_row, index4 + 1] = plot_2D_map(stacked_map, axes_flux[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0, in_kpc_units=args.skip_re_scaling)
+                                axes_err[curr_row, index4 + 1] = plot_2D_map(stacked_map_err, axes_err[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0, in_kpc_units=args.skip_re_scaling)
+                            
+                            # --------removing the first subplot (corresponding to direct image) at the bottom of the mammoth figure---------
+                            axes_orig[curr_row, 0].set_visible(False)
+                            axes_flux[curr_row, 0].set_visible(False)
+                            axes_err[curr_row, 0].set_visible(False)
 
                     # -------writing out stacked line maps as fits files--------------
                     if args.do_all_obj: write_stacked_maps(stacked_maps, stacked_maps_err, constituent_ids_array, output_filename, args)
                     
                     # ------------finalising the mammoth PDFs------------
-                    pdf_orig.savefig(fig_orig)
-                    pdf_flux.savefig(fig_flux)
-                    pdf_err.savefig(fig_err)
+                    if not args.debug_align:
+                        pdf_orig.savefig(fig_orig)
+                        pdf_flux.savefig(fig_flux)
+                        pdf_err.savefig(fig_err)
 
-                    pdf_orig.close()
-                    pdf_flux.close()
-                    pdf_err.close()
+                        pdf_orig.close()
+                        pdf_flux.close()
+                        pdf_err.close()
 
-                    if not args.debug_align: plt.close('all')                   
-                    print(f'Saved {fullplot_filename_flux}')
+                        if not args.debug_align: plt.close('all')                   
+                        print(f'Saved {fullplot_filename_flux}')
 
                 else:
                     print(f'which has no object. Skipping this bin.')

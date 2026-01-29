@@ -3362,7 +3362,7 @@ def get_offsets_from_center(full_hdu, args, filter='F200W', silent=False):
         smooth_shape = dir_img_smoothed.shape
         ncells = 5 # only searches within +/- 5 cells of the original center
         dir_img_smoothed_subarea = dir_img_smoothed[smooth_shape[0] // 2 - ncells: smooth_shape[0] // 2 + ncells, smooth_shape[1] // 2 - ncells: smooth_shape[1] // 2 + ncells] # only searching for brightest pixel in the vicinity of the original center, otherwise might pick up neighbouring galaxies
-        brightest_coords = np.where(dir_img_smoothed == dir_img_smoothed_subarea.max())
+        brightest_coords = np.where(dir_img_smoothed == np.nanmax(dir_img_smoothed_subarea))
         brightest_x, brightest_y = brightest_coords[0][0], brightest_coords[1][0]
         cen_x, cen_y = int(np.shape(dir_img)[0] / 2), int(np.shape(dir_img)[1] / 2)
         ndelta_xpix = cen_x - brightest_x
