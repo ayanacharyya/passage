@@ -157,7 +157,7 @@ if __name__ == "__main__":
     nrows_total = len(df_object) + 1
     
     # ----------define different iterations------------------
-    skip_ids = [[0], [99902], [99903], [99904], [99905], [99906], [99907], [99908], [99909], [99910], [99908, 99904], [99910, 99909], [99910, 99903], [99901, 99902, 99905, 99906, 99907, 99908, 99909]] # each id here is skipped in each iteration; in the first iteration, no id is skipped
+    skip_ids = [[0], [99902], [99903], [99904], [99905], [99906], [99905, 99907], [99908], [99909], [99910], [99908, 99904], [99910, 99909], [99910, 99903], [99901, 99902, 99905, 99906, 99907, 99908, 99909]] # each id here is skipped in each iteration; in the first iteration, no id is skipped
     n_iterations = len(skip_ids)
 
     # -------------for determining plot limits--------------------

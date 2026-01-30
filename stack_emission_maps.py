@@ -13,6 +13,7 @@
 from header import *
 from util import *
 from make_diagnostic_maps import trim_image, get_dereddened_flux, myimshow, get_offsets_from_center, get_cutout
+from make_sfms_bins import bin_SFMS_linear, bin_SFMS_adaptive
 
 start_time = datetime.now()
 
@@ -334,38 +335,6 @@ def read_stacked_maps(output_filename, args):
     return line_dict
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_adaptive_bins(df_subset, m_range, s_range, max_n=20):
-    '''
-    m_range: (min, max) of log_mass for this specific tile
-    s_range: (min, max) of log_sfr for this specific tile
-    Courtesy of this function: Gemini
-    '''
-    # Count how many galaxies are in this specific rectangular area
-    mask = (df_subset['log_mass'] >= m_range[0]) & (df_subset['log_mass'] < m_range[1]) & \
-           (df_subset['log_sfr'] >= s_range[0]) & (df_subset['log_sfr'] < s_range[1])
-    
-    subset = df_subset[mask]
-    n_count = len(subset)
-
-    # Base case: if count is small OR area is already very tiny, stop splitting
-    if n_count <= max_n or (m_range[1] - m_range[0]) < 0.1:
-        if n_count == 0: return []
-        # Return the coordinates and the mean value for this leaf node
-        return [{'m_min': m_range[0], 'm_max': m_range[1], 's_min': s_range[0], 's_max': s_range[1], 'n_count': n_count}]
-    
-    # Recursive step: Split into 4 quadrants
-    m_mid = (m_range[0] + m_range[1]) / 2
-    s_mid = (s_range[0] + s_range[1]) / 2
-    
-    results = []
-    results.extend(get_adaptive_bins(subset, (m_range[0], m_mid), (s_range[0], s_mid))) # Bottom-Left
-    results.extend(get_adaptive_bins(subset, (m_mid, m_range[1]), (s_range[0], s_mid))) # Bottom-Right
-    results.extend(get_adaptive_bins(subset, (m_range[0], m_mid), (s_mid, s_range[1]))) # Top-Left
-    results.extend(get_adaptive_bins(subset, (m_mid, m_range[1]), (s_mid, s_range[1]))) # Top-Right
-    
-    return results
-
-# --------------------------------------------------------------------------------------------------------------------
 def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True, segmentation_map=None, in_re_units=True, in_kpc_units=False, seg_col='k'):
     '''
     Plots a given 2D image in a given axis
@@ -426,11 +395,6 @@ def setup_fullpage_figure(n_page, n_total_pages, n_lines, cmin, cmax, cmap, args
 
     return fig, axes
 
-# ----------declaring mass and SFR bins-------------------
-delta_log_mass, delta_log_sfr = 1, 0.5
-log_mass_bins = np.arange(7.5, 11.5 + delta_log_mass/2, delta_log_mass)
-log_sfr_bins = np.arange(-0.5, 2.5 + delta_log_sfr/2, delta_log_sfr)
-    
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
@@ -485,37 +449,12 @@ if __name__ == "__main__":
         df_re = df_re[df_re['re_kpc'] > 0]
         df = pd.merge(df, df_re, on='id', how='inner')
 
-        # ----------binning the dataframe in an adaptive way----------------
-        if args.adaptive_bins:
-            final_bins = get_adaptive_bins(df, (log_mass_bins[0],log_mass_bins[-1]), (log_sfr_bins[0],log_sfr_bins[-1]), max_n=args.max_gal_per_bin)
-
-            df['adaptive_bin_id'] = -1
-            df['mass_interval'] = None
-            df['sfr_interval'] = None
-            
-            for i, b in enumerate(final_bins):
-                mask = (df['log_mass'] >= b['m_min']) & (df['log_mass'] < b['m_max']) & (df['log_sfr'] >= b['s_min']) & (df['log_sfr'] < b['s_max'])
-                df.loc[mask, 'adaptive_bin_id'] = i
-                
-                df.loc[mask, 'mass_interval'] = pd.Interval(left=b['m_min'], right=b['m_max'], closed='left')
-                df.loc[mask, 'sfr_interval'] = pd.Interval(left=b['s_min'], right=b['s_max'], closed='left')
-                df['bin_intervals'] = list(zip(df['mass_interval'], df['sfr_interval']))
-
-            df = df[df['adaptive_bin_id'] != -1].copy()
-            bin_list = pd.unique(df['bin_intervals'])
+        # -------------binning the mass-SFR plane-------------
+        if args.adaptive_bins: df, bin_list = bin_SFMS_adaptive(df, method_text='') # binning the dataframe in an adaptive way
+        else: df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
         
-        # ----------binning the dataframe uniformly by mass and SFR bins-------------------
-        else:
-            df['mass_interval'] = pd.cut(df['log_mass'], bins=log_mass_bins)
-            df['sfr_interval'] = pd.cut(df['log_sfr'], bins=log_sfr_bins)
-            df = df.dropna(subset=['mass_interval', 'sfr_interval'])
-            df['bin_intervals'] = list(zip(df['mass_interval'], df['sfr_interval']))
-
-            all_mass_intervals = df['mass_interval'].cat.categories
-            all_sfr_intervals = df['sfr_interval'].cat.categories
-            bin_list = list(itertools.product(all_mass_intervals, all_sfr_intervals))
-            if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 8.5) & (item[0].right == 9.5) & (item[1].left == 1.0) & (item[1].right == 1.5)] # to choose the mass=8.5-9.5, sfr=1-1.5 bin for debugging purposes
-            #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.5) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
+        if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 8.5) & (item[0].right == 9.5) & (item[1].left == 1.0) & (item[1].right == 1.5)] # to choose the mass=8.5-9.5, sfr=1-1.5 bin for debugging purposes
+        #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.5) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
 
         # ------------looping over each bin-----------------------
         list(bin_list).sort(key=lambda x: (x[0].left, x[1].left))

@@ -123,8 +123,9 @@ from matplotlib.backends.backend_pdf import PdfPages
 import mplcyberpunk
 import matplotlib.gridspec as gridspec
 import matplotlib.ticker as ticker
-from matplotlib.patches import ConnectionPatch
+from matplotlib.patches import ConnectionPatch, Polygon
 import matplotlib.patches as patches
+from matplotlib.collections import PatchCollection
 
 import webbpsf
 from statsmodels.regression.linear_model import WLS
