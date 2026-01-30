@@ -300,7 +300,7 @@ def write_stacked_maps(stacked_maps, stacked_maps_err, ids_arr, output_filename,
     hdu_list = [primary_hdu]
 
     for index, this_line in enumerate(args.line_list):
-        if type(stacked_maps[index]) != np.ndarray:
+        if type(stacked_maps[index]) != np.ndarray or type(stacked_maps_err[index]) != np.ndarray:
             print(f'\t{this_line} extension is completely empty in the stack, hence not writing it in the file.')
             continue
         flux_hdu = fits.ImageHDU(stacked_maps[index], header=create_re_wcs(args), name=this_line.upper())
@@ -784,7 +784,7 @@ if __name__ == "__main__":
                         # --------displaying stacked maps at the bottom of the mammoth figure---------
                         if not args.debug_align:
                             curr_row = (nrows_total % args.max_gal_per_page) - 1
-                            if np.ndim(stacked_map) == 2:
+                            if np.ndim(stacked_map) == 2 and np.ndim(stacked_map_err) == 2:
                                 axes_orig[curr_row, index4 + 1] = plot_2D_map(stacked_map, axes_orig[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0, in_kpc_units=args.skip_re_scaling)
                                 axes_flux[curr_row, index4 + 1] = plot_2D_map(stacked_map, axes_flux[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0, in_kpc_units=args.skip_re_scaling)
                                 axes_err[curr_row, index4 + 1] = plot_2D_map(stacked_map_err, axes_err[curr_row, index4 + 1], f'{this_line}: Stacked', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index4 > 0, in_kpc_units=args.skip_re_scaling)
@@ -814,7 +814,7 @@ if __name__ == "__main__":
                     print(f'which has no object. Skipping this bin.')
                     continue
 
-            print(f'\nCompleted bin mass={this_mass_sfr_bin[0]}, sfr={this_mass_sfr_bin[1]} ({nobj_good} / {len(nobj_arr)} objects) in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
+            print(f'\nCompleted bin mass={this_mass_sfr_bin[0]}, sfr={this_mass_sfr_bin[1]} ({nobj_good} / {ngal_this_bin} objects) in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
             if nobj_good > 1: nbin_good += 1
 
         print(f'Completed field {field} ({nbin_good} / {len(bin_list)} bins) in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
