@@ -277,6 +277,7 @@ def parse_args():
     parser.add_argument('--debug_folding', dest='debug_folding', action='store_true', default=False, help='Debug the folding of emission line maps? Default is no.')
     parser.add_argument('--plot_line_maps', dest='plot_line_maps', action='store_true', default=False, help='Plot the stacked emission line maps? Default is no.')
     parser.add_argument('--plot_line_and_metallicity', dest='plot_line_and_metallicity', action='store_true', default=False, help='Plot the stacked emission line maps side by side to metallicity map? Default is no.')
+    parser.add_argument('--plot_minor_major_profile', dest='plot_minor_major_profile', action='store_true', default=False, help='Plot the minor axis and major axis radial profiles separately? Default is no.')
 
     # ---- args added for plot_stacked_gradients.py ------------
     parser.add_argument('--overplot_literature', dest='overplot_literature', action='store_true', default=False, help='Overplot the SFMS relations from the literature? Default is no.')

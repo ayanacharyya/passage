@@ -6,6 +6,7 @@
     Example: run plot_stacked_gradients.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28
              run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --adaptive_bins --overplot_literature --overplot_passage
              run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --adaptive_bins --fold_maps --overplot_literature --overplot_passage
+             run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_minor_major_profile
              run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --fold_maps
 '''
 
@@ -309,17 +310,19 @@ def plot_SFMS_heatmap_patches(df, args, quant='logOH'):
     Makes a nice heatmap (with patches) of stacked integrated metallicities and metallicity gradients
     Returns figure handle
     '''
-    if quant == 'logOH': df = df[df[f'{quant}_grad'] > -2] # removing spurious values that are clearly bogus
+    if quant == 'logOH': df = df[df[f'radial_{quant}_grad'] > -2] # removing spurious values that are clearly bogus
     
     # -----------------setup the figure---------------
     fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
     fig.subplots_adjust(left=0.07, right=0.97, top=0.95, bottom=0.13, wspace=0.2, hspace=0.)
     
-    # -----------------plot integrated metallicity heatmap---------------
-    axes[0] = make_heatmap_patches(axes[0], df, f'{quant}_int', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', cmin=7.0, cmax=7.5, ncbins=5)
-
-    # -----------------plot metallicity gradient heatmap---------------
-    axes[1] = make_heatmap_patches(axes[1], df, f'{quant}_grad', args, cmap='coolwarm', clabel=r'$\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4)
+    # ---------plot the heatmaps-------------------
+    if args.plot_minor_major_profile:
+        axes[0] = make_heatmap_patches(axes[0], df, f'minor_{quant}_grad', args, cmap='coolwarm', clabel=r'Minor $\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot minor metallicity gradient heatmap
+        axes[1] = make_heatmap_patches(axes[1], df, f'major_{quant}_grad', args, cmap='coolwarm', clabel=r'Major $\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot major metallicity gradient heatmap
+    else:
+        axes[0] = make_heatmap_patches(axes[0], df, f'{quant}_int', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', cmin=7.0, cmax=7.5, ncbins=5) # plot integrated metallicity heatmap
+        axes[1] = make_heatmap_patches(axes[1], df, f'radial_{quant}_grad', args, cmap='coolwarm', clabel=r'$\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot metallicity gradient heatmap
 
     # ---------overplot PASSAGE galaxies (integrated stellar mass-SFR)--------------------
     if args.overplot_passage:

@@ -10,6 +10,7 @@
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_metallicity --debug_bin
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_radial_profiles --debug_bin
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --adaptive_bins --fold_maps --plot_radial_profiles --debug_bin
+             run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_radial_profiles --plot_minor_major_profile
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_radial_profiles
 '''
 
@@ -17,7 +18,7 @@ from header import *
 from util import *
 from make_diagnostic_maps import compute_Z_C19, compute_Z_KD02_R23, compute_Z_P25, compute_Z_Te, compute_Te, take_safe_log_ratio, take_safe_log_sum, myimshow
 from stack_emission_maps import read_stacked_maps
-from plots_for_zgrad_paper import plot_radial_profile
+from plots_for_zgrad_paper import plot_fitted_line, odr_fit
 
 start_time = datetime.now()
 
@@ -413,6 +414,56 @@ def write_metallicity_map(logOH_map, logOH_int, outfilename, args):
     print(f'Saved metallicity maps in {outfilename}')
 
 # --------------------------------------------------------------------------------------------------------------------
+def plot_profile(df, ax, linefit_odr, quant_x, quant_y, col='grey', index=0):
+    '''
+    Plots the radial profile from a given dataframe in a given axis
+    Returns the axis handle
+    '''
+    # -------plotting the data and the fits--------
+    ax.scatter(df[quant_x], df[quant_y], c=col, s=20, lw=1, edgecolor='k', alpha=1)
+    if quant_y + '_u' in df: ax.errorbar(df[quant_x], df[quant_y], yerr=df[quant_y + '_u'], c=col, fmt='none', lw=0.5, alpha=0.2)
+
+    xarr = df[quant_x]
+    ax = plot_fitted_line(ax, linefit_odr, xarr, col, args, quant=quant, short_label=False, index=index)
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant='log_OH'):
+    '''
+    Plots and fits the radial profile from a given dataframe in a given axis
+    Returns the axis handle and the linefit
+    '''
+    label_dict = smart_dict({'SFR': r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', 'logOH': r'$\log$ (O/H) + 12', 'Z': r'$\log$ (O/H) + 12', 'log_OH': r'$\log$ (O/H) + 12'})
+
+    df = df.sort_values(by='distance').reset_index(drop=True)
+
+    # -------fitting by various methods--------------
+    width = 1 if args.re_limit is None else 0.2 # 1 kpc or 0.2 Re
+    df_minor = df[df['major_distance'] <= width]
+    minor_linefit_odr = odr_fit(df_minor, quant_x='minor_distance', quant_y=quant)
+    
+    df_major = df[df['minor_distance'] <= width]
+    major_linefit_odr = odr_fit(df_major, quant_x='major_distance', quant_y=quant)
+    
+    radial_linefit_odr = odr_fit(df, quant_x='distance', quant_y=quant)
+
+    if args.plot_minor_major_profile:
+        ax = plot_profile(df_minor, ax, minor_linefit_odr, 'minor_distance', quant, col='salmon', index=0)
+        ax = plot_profile(df_major, ax, major_linefit_odr, 'major_distance', quant, col='cornflowerblue', index=1)
+    else:
+        ax = plot_profile(df, ax, radial_linefit_odr, 'distance', quant, col='grey')
+
+    ax.set_aspect('auto') 
+
+    # --------annotating axis--------------
+    if xlim is not None: ax.set_xlim(xlim[0], xlim[1]) # kpc
+    if ylim is not None: ax.set_ylim(ylim[0], ylim[1])
+    if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)' if args.re_limit is None else r'Radius (R$_e$)', label_dict[quant], args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+    
+    return ax, minor_linefit_odr, major_linefit_odr, radial_linefit_odr
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True):
     '''
     Plots a given 2D image in a given axis
@@ -431,6 +482,15 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True,
     
     units = 'kpc' if args.skip_re_scaling else r'R$_e$' 
     ax = annotate_axes(ax, f'Offset ({units})', f'Offset ({units})', args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
+
+    if args.plot_radial_profiles and args.plot_minor_major_profile:
+        width = 1 if args.re_limit is None else 0.2 # 1 kpc or 0.2 Re
+        if args.fold_maps:
+            ax.add_patch(plt.Rectangle((0, 0), args.extent[1], width, lw=2, color='salmon', fill=False))
+            ax.add_patch(plt.Rectangle((0, 0), width, args.extent[3], lw=2, color='cornflowerblue', fill=False))
+        else:
+            ax.add_patch(plt.Rectangle((args.extent[0], -width/2), args.extent[1] - args.extent[0], width, lw=2, color='salmon', fill=False))
+            ax.add_patch(plt.Rectangle((-width/2, args.extent[2]), width, args.extent[3] - args.extent[2], lw=2, color='cornflowerblue', fill=False))
 
     return ax
 
@@ -572,7 +632,8 @@ if __name__ == "__main__":
     if args.skip_re_scaling: args.pix_size = (2 * args.kpc_limit) / args.npix_side # kpc
     else: args.pix_size = (2 * args.re_limit) / args.npix_side # Re
     if args.fold_maps:
-        args.extent = (0, args.re_limit, 0, args.re_limit) if args.skip_re_scaling else (0, args.re_limit, 0, args.re_limit)
+        if args.skip_re_scaling: args.extent = (0, args.re_limit, 0, args.re_limit)
+        else: args.extent = (0, args.re_limit, 0, args.re_limit)
         fold_text = '_folded'
     else: 
         offset = args.pix_size / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
@@ -610,11 +671,11 @@ if __name__ == "__main__":
         stacked_files = glob.glob(str(fits_dir) + '/stacked_maps_*.fits')
         bin_list = [get_interval_from_filename(item) for item in stacked_files]
         bin_list.sort(key=lambda x: (x[0].left, x[1].left))
-        # if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 8.5) & (item[0].right == 9.5) & (item[1].left == 1.0) & (item[1].right == 1.5)] # to choose the mass=8.5-9.5, sfr=1-1.5 bin for debugging purposes
-        if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.5) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
+        if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 7.5) & (item[0].right == 8.5) & (item[1].left == 0.0) & (item[1].right == 0.5)] # to choose the mass=7.5-8.5, sfr=0-0.5 bin for debugging purposes
+        #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.5) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
 
         # ------------setting up master dataframe-----------------------
-        df_grad = pd.DataFrame(columns=['log_mass_bin', 'log_sfr_bin', 'nobj', 'logOH_int', 'logOH_int_u', 'logOH_grad', 'logOH_grad_u'])
+        df_grad = pd.DataFrame(columns=['log_mass_bin', 'log_sfr_bin', 'nobj', 'logOH_int', 'logOH_int_u', 'minor_logOH_grad', 'minor_logOH_grad_u', 'major_logOH_grad', 'major_logOH_grad_u', 'radial_logOH_grad', 'radial_logOH_grad_u'])
         nbin_good = 0
         
         # ------------looping over each bin-----------------------
@@ -658,7 +719,7 @@ if __name__ == "__main__":
             # -----------------plot metallicity maps of this bin---------------
             if args.plot_metallicity:
                 fig_met = plot_metallicity_map(logOH_map, args, bin_text=bin_text, Zmin=None, Zmax=None)
-                save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
+                if not args.plot_radial_profiles: save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
 
             # -----------------plot line maps and metallicity maps of this bin---------------
             if args.plot_line_and_metallicity:
@@ -676,15 +737,17 @@ if __name__ == "__main__":
                 else:
                     center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
                 distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
-                
-                logOH_df = pd.DataFrame({'distance': distance_map.flatten(), f'{quant}': unp.nominal_values(logOH_map).flatten(), f'{quant}_u': unp.std_devs(logOH_map).flatten()})
+                minor_distance_map = np.array([[np.abs(j - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+                major_distance_map = np.array([[np.abs(i - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+
+                logOH_df = pd.DataFrame({'distance': distance_map.flatten(), 'minor_distance': minor_distance_map.flatten(), 'major_distance': major_distance_map.flatten(), f'{quant}': unp.nominal_values(logOH_map).flatten(), f'{quant}_u': unp.std_devs(logOH_map).flatten()})
                 logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
 
-                ax, [linefit_original, linefit_odr, linefit_lenstronomy, params_llim, params_median, params_ulim] = plot_radial_profile(logOH_df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, short_label=False, quant=quant, Zdiag=args.Zdiag, do_mcmc=False, already_in_re=True)
+                ax, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(logOH_df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant)
                 save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
 
                 # -------------save fit results to dataframe-----------------------
-                thisrow = [this_mass_sfr_bin[0], this_mass_sfr_bin[1], nobj, logOH_int.n, logOH_int.s, linefit_odr[0].n, linefit_odr[0].s]
+                thisrow = [this_mass_sfr_bin[0], this_mass_sfr_bin[1], nobj, logOH_int.n, logOH_int.s, minor_linefit_odr[0].n, minor_linefit_odr[0].s, major_linefit_odr[0].n, major_linefit_odr[0].s, radial_linefit_odr[0].n, radial_linefit_odr[0].s]
                 df_grad.loc[len(df_grad)] = thisrow
 
             print(f'\nCompleted bin mass={this_mass_sfr_bin[0]}, sfr={this_mass_sfr_bin[1]} in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
