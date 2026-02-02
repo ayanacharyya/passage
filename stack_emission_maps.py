@@ -450,7 +450,7 @@ if __name__ == "__main__":
         df = pd.merge(df, df_re, on='id', how='inner')
 
         # -------------binning the mass-SFR plane-------------
-        if args.adaptive_bins: df, bin_list = bin_SFMS_adaptive(df, method_text='') # binning the dataframe in an adaptive way
+        if args.adaptive_bins: df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
         else: df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
         
         if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 8.5) & (item[0].right == 9.5) & (item[1].left == 1.0) & (item[1].right == 1.5)] # to choose the mass=8.5-9.5, sfr=1-1.5 bin for debugging purposes

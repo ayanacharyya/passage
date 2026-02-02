@@ -132,7 +132,7 @@ def plot_SFMS_bins(df, methods, args):
     return fig
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_adaptive_bins(df_subset, m_range, s_range, max_n=20):
+def get_adaptive_bins_nmax(df_subset, m_range, s_range, max_n=20):
     '''
     m_range: (min, max) of log_mass for this specific tile
     s_range: (min, max) of log_sfr for this specific tile
@@ -156,20 +156,64 @@ def get_adaptive_bins(df_subset, m_range, s_range, max_n=20):
     s_mid = (s_range[0] + s_range[1]) / 2
     
     results = []
-    results.extend(get_adaptive_bins(subset, (m_range[0], m_mid), (s_range[0], s_mid))) # Bottom-Left
-    results.extend(get_adaptive_bins(subset, (m_mid, m_range[1]), (s_range[0], s_mid))) # Bottom-Right
-    results.extend(get_adaptive_bins(subset, (m_range[0], m_mid), (s_mid, s_range[1]))) # Top-Left
-    results.extend(get_adaptive_bins(subset, (m_mid, m_range[1]), (s_mid, s_range[1]))) # Top-Right
+    results.extend(get_adaptive_bins_nmax(subset, (m_range[0], m_mid), (s_range[0], s_mid))) # Bottom-Left
+    results.extend(get_adaptive_bins_nmax(subset, (m_mid, m_range[1]), (s_range[0], s_mid))) # Bottom-Right
+    results.extend(get_adaptive_bins_nmax(subset, (m_range[0], m_mid), (s_mid, s_range[1]))) # Top-Left
+    results.extend(get_adaptive_bins_nmax(subset, (m_mid, m_range[1]), (s_mid, s_range[1]))) # Top-Right
     
     return results
 
 # --------------------------------------------------------------------------------------------------------------------
-def bin_SFMS_adaptive(df, method_text = '_adaptive'):
+def get_adaptive_bins_nmin(df, m_range, s_range, min_n=20):
+    '''
+    Recursively bins the Mass-SFR plane ensuring each bin has at least min_n galaxies.
+    Courtesy of this function: Gemini
+    '''    
+    m_min, m_max = m_range
+    s_min, s_max = s_range
+    
+    # Filter galaxies within this current rectangle
+    mask = (df['log_mass'] >= m_min) & (df['log_mass'] < m_max) & (df['log_sfr'] >= s_min) & (df['log_sfr'] < s_max)
+    subset = df[mask]
+    count = len(subset)
+    
+    # If we are already below min_n, this is a terminal bin
+    if count < min_n:
+        return []
+
+    # Calculate midpoints for a potential 2x2 split
+    m_mid = (m_min + m_max) / 2
+    s_mid = (s_min + s_max) / 2
+    
+    # Define the 4 potential quadrants
+    quads = [((m_min, m_mid), (s_min, s_mid)), ((m_mid, m_max), (s_min, s_mid)), ((m_min, m_mid), (s_mid, s_max)), ((m_mid, m_max), (s_mid, s_max))]
+    
+    # Check if EVERY quadrant in the potential split would have >= min_n
+    can_split = True
+    for (mq, sq) in quads:
+        q_count = df[(df['log_mass'] >= mq[0]) & (df['log_mass'] < mq[1]) & (df['log_sfr'] >= sq[0]) & (df['log_sfr'] < sq[1])].shape[0]
+        if q_count < min_n:
+            can_split = False
+            break
+            
+    # If we can split, recurse into children
+    if can_split:
+        bins = []
+        for (mq, sq) in quads:
+            bins.extend(get_adaptive_bins_nmin(df, mq, sq, min_n))
+        return bins
+    else:
+        # Cannot split further without violating min_n, return current bin
+        return [{'m_min': m_min, 'm_max': m_max, 's_min': s_min, 's_max': s_max, 'n_galaxies': count, 'galaxy_ids': subset['id'].tolist()}]
+    
+# --------------------------------------------------------------------------------------------------------------------
+def bin_SFMS_adaptive(df, method_text = '_adaptive', max_n=None, min_n=None):
     '''
     Bins in SFMS plane in an adaptive but regular-binned way
     Returns dataframe with additional columns containing '_linear', and list of unique bins
     '''
-    final_bins = get_adaptive_bins(df, (log_mass_bins[0],log_mass_bins[-1]), (log_sfr_bins[0],log_sfr_bins[-1]), max_n=args.max_gal_per_bin)
+    if max_n is not None: final_bins = get_adaptive_bins_nmax(df, (log_mass_bins[0],log_mass_bins[-1]), (log_sfr_bins[0],log_sfr_bins[-1]), max_n=max_n)
+    elif min_n is not None: final_bins = get_adaptive_bins_nmin(df, (log_mass_bins[0],log_mass_bins[-1]), (log_sfr_bins[0],log_sfr_bins[-1]), min_n=min_n)
 
     df[f'bin_id{method_text}'] = -1
     df[f'mass_interval{method_text}'] = None
@@ -212,7 +256,8 @@ def bin_by_method(df, method):
     Returns dataframe with additional columns containing '_{method}', and list of unique bins
     '''
     if method == 'linear': df, _ = bin_SFMS_linear(df, method_text=f'_{method}')
-    elif method == 'adaptive': df, _ = bin_SFMS_adaptive(df, method_text=f'_{method}')
+    elif method == 'adaptive_nmax': df, _ = bin_SFMS_adaptive(df, method_text=f'_{method}', max_n=20)
+    elif method == 'adaptive_nmin': df, _ = bin_SFMS_adaptive(df, method_text=f'_{method}', min_n=20)
 
     return df
 
@@ -227,7 +272,7 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
     args.fontfactor = 1.5
 
-    methods = ['linear', 'adaptive']
+    methods = ['linear', 'adaptive_nmax', 'adaptive_nmin']
 
     # ---------determining list of fields----------------
     if args.do_all_fields:
