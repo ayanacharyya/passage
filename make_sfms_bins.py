@@ -9,7 +9,6 @@
 
 from header import *
 from util import *
-from stack_emission_maps import log_mass_bins, log_sfr_bins, get_passage_masses_from_cosmos
 from plot_stacked_maps import save_fig
 from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
 

@@ -12,9 +12,8 @@
 
 from header import *
 from util import *
-from stack_emission_maps import log_mass_bins, log_sfr_bins, get_passage_masses_from_cosmos
-from plot_stacked_maps import save_fig, get_interval_from_filename
-from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_MZR_literature
+from make_sfms_bins import log_mass_bins, log_sfr_bins
+from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
 
 start_time = datetime.now()
 
