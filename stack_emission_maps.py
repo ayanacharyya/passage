@@ -57,33 +57,6 @@ def get_direct_image(full_hdu, filter, args):
     return image, exptime
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_passage_masses_from_cosmos(df, args, id_col='objid', field_col='field', cosmos_idcol='id'):
-    '''
-    Derives stellar masses of PASSAGE galaxies present in the given dataframe from COSMOS-Web catalog
-    Returns dataframe
-    '''
-    passage_fields = [item for item in np.unique(df[field_col]) if 'Par' in item]
-    
-    df_cosmos = pd.DataFrame()
-    for index, thisfield in enumerate(passage_fields):
-        cosmosfilename = args.input_dir / 'COSMOS' /  f'cosmoswebb_objects_in_{thisfield}.fits'
-        df_cosmos_thisfield = Table.read(cosmosfilename).to_pandas()
-        sed_cols_to_extract = ['passage_id', cosmos_idcol, 'ra', 'dec', 'mass_med', 'sfr_med', 'ssfr_med']
-        df_cosmos = pd.concat([df_cosmos, df_cosmos_thisfield[sed_cols_to_extract]])
-    
-    df_cosmos = df_cosmos.rename(columns={cosmos_idcol: 'cosmos_id'})
-    df_cosmos['passage_id'] = df_cosmos['passage_id'].astype(str)
-
-    df['passage_id'] = df[field_col].astype(str) + '-' + df[id_col].astype(str)  # making a unique combination of field and object id
-    df = pd.merge(df, df_cosmos, on=['passage_id'], how='right')
-    df = df.drop('passage_id', axis=1)
-    df = df.rename(columns={'mass_med': 'log_mass', 'sfr_med': 'log_sfr', 'ssfr_med': 'log_ssfr'})
-    df = df[(df['log_mass'] > 0) & (df['log_sfr'] > 0)]
-    df = df.dropna(subset=['log_mass', 'log_sfr'], axis=0)
-
-    return df
-
-# --------------------------------------------------------------------------------------------------------------------
 def get_emission_line_map(line, full_hdu, args, dered=True, silent=True):
     '''
     Retrieve the emission map for a given line from the HDU

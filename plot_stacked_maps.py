@@ -23,27 +23,6 @@ from plots_for_zgrad_paper import plot_fitted_line, odr_fit
 start_time = datetime.now()
 
 # --------------------------------------------------------------------------------------------------------------------
-def save_fig(fig, fig_dir, figname, args):
-    '''
-    Saves a given figure handle as a given output filename
-    '''
-
-    if args.fortalk:
-        #mplcyberpunk.add_glow_effects()
-        #try: mplcyberpunk.make_lines_glow()
-        #except: pass
-        try: mplcyberpunk.make_scatter_glow()
-        except: pass
-
-    fig_dir.mkdir(exist_ok=True, parents=True)
-    figname = fig_dir / figname
-    fig.savefig(figname, transparent=args.fortalk)
-    print(f'\nSaved figure as {figname}')
-    plt.show(block=False)
-
-    return
-
-# --------------------------------------------------------------------------------------------------------------------
 def plot_stacked_line_maps(line_dict, args, bin_text='', cmin=None, cmax=None, takelog=True, max_ncols=6):
     '''
     Makes a nice plot of all emission lines present in a given list of stacked line maps

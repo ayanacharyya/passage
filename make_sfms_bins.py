@@ -9,7 +9,6 @@
 
 from header import *
 from util import *
-from plot_stacked_maps import save_fig
 from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
 
 start_time = datetime.now()

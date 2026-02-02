@@ -1628,3 +1628,24 @@ def get_passage_masses_from_cosmos(df, args, id_col='objid', field_col='field', 
 
     return df
 
+# --------------------------------------------------------------------------------------------------------------------
+def save_fig(fig, fig_dir, figname, args):
+    '''
+    Saves a given figure handle as a given output filename
+    '''
+
+    if args.fortalk:
+        #mplcyberpunk.add_glow_effects()
+        #try: mplcyberpunk.make_lines_glow()
+        #except: pass
+        try: mplcyberpunk.make_scatter_glow()
+        except: pass
+
+    fig_dir.mkdir(exist_ok=True, parents=True)
+    figname = fig_dir / figname
+    fig.savefig(figname, transparent=args.fortalk)
+    print(f'\nSaved figure as {figname}')
+    plt.show(block=False)
+
+    return
+
