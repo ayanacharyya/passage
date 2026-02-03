@@ -44,7 +44,7 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
         if row[quant] > 0:
             cx = (row['m_min'] + row['m_max']) / 2
             cy = (row['s_min'] + row['s_max']) / 2
-            ax.text(cx, cy, int(row[quant]), color='black', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold')
+            ax.text(cx, cy, int(row[quant]), color='k' if int(row[quant]) > 30 else 'w', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold')
     
     # --------annotating axis borders-----------------
     ax.set_xlim(df['m_min'].min() -0.2, df['m_max'].max() + 0.2)
@@ -94,7 +94,7 @@ def make_heatmap_vorbin(ax, df, bin_summary, centers_scaled, scaling, quant, arg
     mean, std = scaling
     centers = (centers_scaled * std) + mean
     vor = Voronoi(centers)
-    voronoi_plot_2d(vor, ax=ax, show_vertices=False, show_points=False, line_colors='k', line_width=1)
+    #voronoi_plot_2d(vor, ax=ax, show_vertices=False, show_points=False, line_colors='k', line_width=1)
 
     # -----------defining vertices, for annotating and color-coding the bins-------------
     patches, values = [], []
@@ -108,14 +108,12 @@ def make_heatmap_vorbin(ax, df, bin_summary, centers_scaled, scaling, quant, arg
         #verts_phys = (verts * std) + mean
         patches.append(Polygon(verts, closed=True))
         values.append(row[quant])
-        print(f'Deb110: index={index}, patch={Polygon(verts, closed=True)}, value={row[quant]}') ##
         
-        ax.text(row['m_center'], row['s_center'], int(row[quant]), color='k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold') # Annotate: Place text at the physical center of the bin
+        ax.text(row['m_center'], row['s_center'], int(row[quant]), color='k' if int(row[quant]) > 30 else 'w', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold') # Annotate: Place text at the physical center of the bin
 
-    p = PatchCollection(patches, cmap=cmap, edgecolors='w', alpha=0.3, linewidths=1)
+    p = PatchCollection(patches, cmap=cmap, edgecolors='w', alpha=0.9, linewidths=1)
     p.set_array(np.array(values))
     p.set_clim(vmin=cmin, vmax=cmax)
-    print(f'Deb117: len={len(patches)}, patches={p}, values={values}') ##
     ax.add_collection(p)
  
     # --------annotating axis borders-----------------
@@ -171,8 +169,7 @@ def plot_SFMS_bins(df, methods, args, scaling=None, centers_scaled=None, bin_sum
             df_sub = df.groupby(f'bin_intervals_{method}').size().reset_index(name='n_galaxies')
             df_sub[['log_mass_bin', 'log_sfr_bin']] = pd.DataFrame(df_sub[f'bin_intervals_{method}'].tolist(), index=df_sub.index)
             axes[index] = make_heatmap_patches(axes[index], df_sub, 'n_galaxies', args, xcolname=f'log_mass_bin', ycolname=f'log_sfr_bin', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
-            axes[index].text(0.05, 0.95, f'{method}', ha='left', va='top', c='k', fontsize=args.fontsize, transform=axes[index].transAxes)
-
+        axes[index].text(0.05, 0.95, f'{method}', ha='left', va='top', c='k', fontsize=args.fontsize, transform=axes[index].transAxes)
         axes[index].set_aspect('equal')
 
         # ----------over-plotting data and theoretical diagrams----------
@@ -351,8 +348,8 @@ def bin_by_method(df, method):
     Returns dataframe with additional columns containing '_{method}', and list of unique bins
     '''
     if method == 'linear': output = bin_SFMS_linear(df, method_text=f'_{method}')
-    elif method == 'adaptive_nmax': output= bin_SFMS_adaptive(df, method_text=f'_{method}', max_n=40)
-    elif method == 'adaptive_nmin': output = bin_SFMS_adaptive(df, method_text=f'_{method}', min_n=20)
+    elif method == 'adaptive_nmax': output= bin_SFMS_adaptive(df, method_text=f'_{method}', max_n=50)
+    elif method == 'adaptive_nmin': output = bin_SFMS_adaptive(df, method_text=f'_{method}', min_n=10)
     elif 'vor' in method: output = bin_SFMS_voronoi(df, method_text=f'_{method}', target_n=30)
 
     return output
@@ -376,9 +373,9 @@ def read_passage_sed_catalog(filename):
     return df
 
 # ----------declaring mass and SFR bins-------------------
-delta_log_mass, delta_log_sfr = 1, 0.5
-log_mass_bins = np.arange(7.5, 11.5 + delta_log_mass/2, delta_log_mass)
-log_sfr_bins = np.arange(-0.5, 2.5 + delta_log_sfr/2, delta_log_sfr)
+delta_log_mass, delta_log_sfr = 0.5, 0.5
+log_mass_bins = np.arange(6.5, 11.5 + delta_log_mass/2, delta_log_mass)
+log_sfr_bins = np.arange(-2.5, 2.5 + delta_log_sfr/2, delta_log_sfr)
     
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -386,7 +383,7 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
     args.fontfactor = 1.5
 
-    methods = ['linear', 'adaptive_nmin', 'voronoi']# 'adaptive_nmin']
+    methods = ['linear', 'voronoi']#, 'adaptive_nmin', 'adaptive_nmax']
 
     # ---------reading in the master SED catalog----------------
     if args.do_all_fields:

@@ -12,7 +12,7 @@
 
 from header import *
 from util import *
-from make_sfms_bins import log_mass_bins, log_sfr_bins
+from make_sfms_bins import log_mass_bins, log_sfr_bins, read_passage_sed_catalog
 from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
 
 start_time = datetime.now()
@@ -325,10 +325,18 @@ def plot_SFMS_heatmap_patches(df, args, quant='logOH'):
 
     # ---------overplot PASSAGE galaxies (integrated stellar mass-SFR)--------------------
     if args.overplot_passage:
-        df_photcat = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas() # read the photometric catalog file
-        df_photcat['field'] = args.field
-        df_photcat = get_passage_masses_from_cosmos(df_photcat, args, id_col='id') # crossmatch with cosmos-web to get stellar mass and SFR
+    # ---------reading in the master SED catalog----------------
+        if args.do_all_fields:
+            passage_catalog_filename = args.output_dir / 'catalogs' / 'passagepipe_v0.5_SED_fits_cosmosweb_v1.0.0-alpha.fits'
+            df_photcat = read_passage_sed_catalog(passage_catalog_filename)
         
+        # ---------reading in the single-field phot catalog----------------
+        else:
+            product_dir = args.input_dir / args.field / 'Products'
+            df_photcat = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
+            df_photcat['field'] = args.field
+            df_photcat = get_passage_masses_from_cosmos(df_photcat, args, id_col='id') # crossmatch with cosmos-web to get stellar mass and SFR
+            
         col, edgecol = 'w', 'sienna'
         for ax in axes:
             ax.scatter(df_photcat['log_mass'], df_photcat['log_sfr'], s=5, c=col, lw=1, edgecolors=edgecol, label=f'{args.field}')
