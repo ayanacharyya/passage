@@ -5,6 +5,7 @@
     Created: 30-01-26
     Example: run make_sfms_bins.py --field Par028 --overplot_literature --overplot_passage
              run make_sfms_bins.py --field Par028
+             run make_sfms_bins.py --do_all_fields
 '''
 
 from header import *
@@ -19,8 +20,6 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
     Makes heatmap from a dataframe, using patches, and annotates based on another pivot table, onto a given axis handle
     Returns axis handle
     '''
-    cmap = mplcolormaps[cmap]
-
     if 'm_min' not in df:
         df['m_min'] = df[xcolname].array.left
         df['m_max'] = df[xcolname].array.right
@@ -37,6 +36,7 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
 
     p = PatchCollection(patches, cmap=cmap, edgecolors='w', alpha=0.8)
     p.set_array(np.array(values))
+    p.set_clim(vmin=cmin, vmax=cmax)
     ax.add_collection(p)
 
     # --------annotate at the center of each patch------------
@@ -44,7 +44,7 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
         if row[quant] > 0:
             cx = (row['m_min'] + row['m_max']) / 2
             cy = (row['s_min'] + row['s_max']) / 2
-            ax.text(cx, cy, int(row[quant]), color='black', ha='center', va='center', fontsize=9, fontweight='bold')
+            ax.text(cx, cy, int(row[quant]), color='black', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold')
     
     # --------annotating axis borders-----------------
     ax.set_xlim(df['m_min'].min() -0.2, df['m_max'].max() + 0.2)
@@ -82,38 +82,110 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
             spine.set_linewidth(1.)
             spine.set_edgecolor('black')
 
-    # ----------over-plotting theoretical diagrams----------
-    if args.overplot_literature:
-        #ax = plot_SFMS_Whitaker14(ax,2,  color='yellowgreen')
-        ax = plot_SFMS_Shivaei15(ax, color='darkgreen')
-        ax = plot_SFMS_Popesso23(ax, 2, color='darkgoldenrod')
-        #ax = plot_SFMS_Popesso23(ax, 3, color='royalblue')
-        ax.legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
-
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_SFMS_bins(df, methods, args):
+def make_heatmap_vorbin(ax, df, bin_summary, centers_scaled, scaling, quant, args, method_text='_voronoi', cmap='viridis', hide_xaxis=False, hide_yaxis=False, hide_cbar=False, cmin=None, cmax=None, clabel='', ncbins=4):
+    '''
+    Makes heatmap from a dataframe that has been Voronoi binned, using patches, and annotates based on another pivot table, onto a given axis handle
+    Returns axis handle
+    '''    
+    # ---------obtaining voronoi bin properties---------
+    mean, std = scaling
+    centers = (centers_scaled * std) + mean
+    vor = Voronoi(centers)
+    voronoi_plot_2d(vor, ax=ax, show_vertices=False, show_points=False, line_colors='k', line_width=1)
+
+    # -----------defining vertices, for annotating and color-coding the bins-------------
+    patches, values = [], []
+        
+    for index, row in bin_summary.iterrows():
+        bin_id = int(row[f'bin_id{method_text}'])
+        region_idx = vor.point_region[bin_id] # vor.point_region maps the index of the generator point to the index of the region
+        region_vertices_indices = vor.regions[region_idx]
+        verts = vor.vertices[region_vertices_indices] # Get the actual coordinates of the vertices
+        
+        #verts_phys = (verts * std) + mean
+        patches.append(Polygon(verts, closed=True))
+        values.append(row[quant])
+        print(f'Deb110: index={index}, patch={Polygon(verts, closed=True)}, value={row[quant]}') ##
+        
+        ax.text(row['m_center'], row['s_center'], int(row[quant]), color='k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold') # Annotate: Place text at the physical center of the bin
+
+    p = PatchCollection(patches, cmap=cmap, edgecolors='w', alpha=0.3, linewidths=1)
+    p.set_array(np.array(values))
+    p.set_clim(vmin=cmin, vmax=cmax)
+    print(f'Deb117: len={len(patches)}, patches={p}, values={values}') ##
+    ax.add_collection(p)
+ 
+    # --------annotating axis borders-----------------
+    ax.set_xlim(log_mass_bins.min() -0.2, log_mass_bins.max() + 0.2)
+    ax.set_ylim(log_sfr_bins.min() -0.2, log_sfr_bins.max()+ 0.2)
+
+    if hide_xaxis:
+        ax.tick_params(axis='x', which='major', labelsize=args.fontsize, labelbottom=False)
+    else:
+        ax.set_xlabel(r'$\log$ Stellar Mass [M$_\odot$]', fontsize=args.fontsize)
+        ax.tick_params(axis='x', which='major', labelsize=args.fontsize, labelbottom=True)
+
+    if hide_yaxis:
+        ax.tick_params(axis='y', which='major', labelsize=args.fontsize, labelleft=False)
+    else:
+        ax.set_ylabel(r'$\log$ SFR [M$_\odot$/yr]', fontsize=args.fontsize)
+        ax.tick_params(axis='y', which='major', labelsize=args.fontsize, labelleft=True)
+
+    # ---------annotating colorbar------------
+    if not hide_cbar:
+        if cmin is None: cmin = df[quant].min()
+        if cmax is None: cmax = df[quant].max()
+        norm = mplcolors.Normalize(vmin=cmin, vmax=cmax)
+
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        cbar = plt.colorbar(sm, ax=ax, label=clabel)
+        cbar.set_label(clabel, fontsize=args.fontsize)
+        cbar.ax.tick_params(labelsize=args.fontsize)
+        cbar.locator = ticker.MaxNLocator(integer=False, nbins=ncbins)#, prune='both')
+        cbar.update_ticks()
+    
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_SFMS_bins(df, methods, args, scaling=None, centers_scaled=None, bin_summary=None):
     '''
     Makes a nice heatmap (with patches) of stacked integrated metallicities and metallicity gradients
     Returns figure handle
     '''
-    cmap, cmin, cmax, ncbins, clabel ='viridis', 0, 100, 5, 'Number of galaxies'
+    cmap, cmin, cmax, ncbins, clabel ='viridis', 10, 50, 4, 'Number of galaxies'
     ncol = len(methods)
     
     # -----------------setup the figure---------------
     fig, axes = plt.subplots(1, ncol, figsize=(5.2 * ncol, 5.), sharex=True, sharey=True)
+    axes = np.atleast_1d(axes)
     fig.subplots_adjust(left=0.1, right=0.97, top=0.95, bottom=0.13, wspace=0., hspace=0.)
     
     # ---------plot the heatmaps-------------------
     for index, method in enumerate(methods):
-        df_sub = df.groupby(f'bin_intervals_{method}').size().reset_index(name='n_galaxies')
-        df_sub[['log_mass_bin', 'log_sfr_bin']] = pd.DataFrame(df_sub[f'bin_intervals_{method}'].tolist(), index=df_sub.index)
-        axes[index] = make_heatmap_patches(axes[index], df_sub, 'n_galaxies', args, xcolname=f'log_mass_bin', ycolname=f'log_sfr_bin', cmap=cmap, hide_cbar=True, hide_yaxis=index)
-        axes[index].text(0.05, 0.95, f'{method}', ha='left', va='top', c='k', fontsize=args.fontsize, transform=axes[index].transAxes)
+        if 'vor' in method:
+            axes[index] = make_heatmap_vorbin(axes[index], df, bin_summary, centers_scaled, scaling, 'n_galaxies', args, method_text='_voronoi', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
+        else:
+            df_sub = df.groupby(f'bin_intervals_{method}').size().reset_index(name='n_galaxies')
+            df_sub[['log_mass_bin', 'log_sfr_bin']] = pd.DataFrame(df_sub[f'bin_intervals_{method}'].tolist(), index=df_sub.index)
+            axes[index] = make_heatmap_patches(axes[index], df_sub, 'n_galaxies', args, xcolname=f'log_mass_bin', ycolname=f'log_sfr_bin', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
+            axes[index].text(0.05, 0.95, f'{method}', ha='left', va='top', c='k', fontsize=args.fontsize, transform=axes[index].transAxes)
+
         axes[index].set_aspect('equal')
 
-        if args.overplot_passage: axes[index].scatter(df['log_mass'], df['log_sfr'], s=5, c='w', lw=1, edgecolors='sienna', label=f'{args.field}') # overplot PASSAGE galaxies (integrated stellar mass-SFR)
+        # ----------over-plotting data and theoretical diagrams----------
+        if args.overplot_passage:
+            axes[index].scatter(df['log_mass'], df['log_sfr'], s=5, c='w', lw=1, edgecolors='sienna', label=f'{args.field}') # overplot PASSAGE galaxies (integrated stellar mass-SFR)
+            if index == 0: axes[index].legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
+
+        if args.overplot_literature:
+            #axes[index] = plot_SFMS_Whitaker14(axes[index], 2, color='yellowgreen')
+            axes[index] = plot_SFMS_Shivaei15(axes[index], color='darkgreen')
+            axes[index] = plot_SFMS_Popesso23(axes[index], 2, color='darkgoldenrod')
+            #axes[index] = plot_SFMS_Popesso23(axes[index], 3, color='royalblue')
+            if index == 0: axes[index].legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
 
     # ---------annotating colorbar------------
     norm = mplcolors.Normalize(vmin=cmin, vmax=cmax)
@@ -248,14 +320,58 @@ def bin_SFMS_linear(df, method_text = '_linear'):
     return df, bin_list
 
 # --------------------------------------------------------------------------------------------------------------------
+def bin_SFMS_voronoi(df, method_text='_voronoi', target_n=20):
+    '''
+    Bins the Mass-SFR plane ensuring each bin has approximately target_n galaxies.
+    Courtesy of this function: Gemini
+    '''    
+    n_bins = len(df) // target_n
+    coords = df[['log_mass', 'log_sfr']].values
+    coords_mean = coords.mean(axis=0)
+    coords_std = coords.std(axis=0)
+    coords_scaled = (coords - coords_mean) / coords_std # we should normalize so one doesn't dominate the distance calculation
+
+    os.environ['OMP_NUM_THREADS'] = '1'
+    os.environ['MKL_NUM_THREADS'] = '1'
+    os.environ['OPENBLAS_NUM_THREADS'] = '1'
+    os.environ['VECLIB_MAXIMUM_THREADS'] = '1'
+    os.environ['NUMEXPR_NUM_THREADS'] = '1'
+    #kmeans = KMeans(n_clusters=n_bins, n_init=10, random_state=42) # This finds centers that partition the space into target_n chunks
+    kmeans = KMeans(n_clusters=n_bins, n_init='auto', random_state=42)
+    df[f'bin_id{method_text}'] = kmeans.fit_predict(coords_scaled)
+    
+    bin_summary = df.groupby(f'bin_id{method_text}').agg(n_galaxies=('id', 'count'), m_center=('log_mass', 'mean'), s_center=('log_sfr', 'mean'), galaxy_ids=('id', list)).reset_index()
+    
+    return df, bin_summary, kmeans.cluster_centers_, (coords_mean, coords_std)
+
+# --------------------------------------------------------------------------------------------------------------------
 def bin_by_method(df, method):
     '''
     Decides which function to call for the binning in SFMS plane, based on the input method
     Returns dataframe with additional columns containing '_{method}', and list of unique bins
     '''
-    if method == 'linear': df, _ = bin_SFMS_linear(df, method_text=f'_{method}')
-    elif method == 'adaptive_nmax': df, _ = bin_SFMS_adaptive(df, method_text=f'_{method}', max_n=20)
-    elif method == 'adaptive_nmin': df, _ = bin_SFMS_adaptive(df, method_text=f'_{method}', min_n=20)
+    if method == 'linear': output = bin_SFMS_linear(df, method_text=f'_{method}')
+    elif method == 'adaptive_nmax': output= bin_SFMS_adaptive(df, method_text=f'_{method}', max_n=40)
+    elif method == 'adaptive_nmin': output = bin_SFMS_adaptive(df, method_text=f'_{method}', min_n=20)
+    elif 'vor' in method: output = bin_SFMS_voronoi(df, method_text=f'_{method}', target_n=30)
+
+    return output
+
+# --------------------------------------------------------------------------------------------------------------------
+def read_passage_sed_catalog(filename):
+    '''
+    Read the combined master catalog from PASSAGE SED fits, rename a few columns, and only keep the mass and SFR columns
+    Return pandas dataframe
+    '''
+    print(f'Reading master PASSAGE SED catalog from {filename}..')
+    full_df = Table.read(filename).to_pandas()
+    full_df.rename(columns={'Par':'field', 'passage_id':'id', 'stellar_mass_50':'log_mass', 'ssfr_50':'log_ssfr', 'sfr_50':'sfr', 'ra_obj':'ra', 'dec_obj':'dec', }, inplace=True)
+
+    full_df['log_sfr'] = np.log10(full_df['sfr'])
+    columns_to_extract = ['field', 'id', 'zbest', 'log_mass', 'log_sfr', 'log_ssfr', 'cosmosid']
+    df = full_df[columns_to_extract]
+    df['field'] = df['field'].astype(str)
+    df.rename(columns={'zbest':'redshift'}, inplace=True)
 
     return df
 
@@ -270,49 +386,37 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
     args.fontfactor = 1.5
 
-    methods = ['linear', 'adaptive_nmax', 'adaptive_nmin']
+    methods = ['linear', 'adaptive_nmin', 'voronoi']# 'adaptive_nmin']
 
-    # ---------determining list of fields----------------
+    # ---------reading in the master SED catalog----------------
     if args.do_all_fields:
-        field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par*') + '/')]
-        field_list.sort(key=natural_keys)
-    else:
-        field_list = args.field_arr
-
-    # --------loop over all fields------------------
-    for index, field in enumerate(field_list):
-        start_time2 = datetime.now()
-        args.field = f'Par{int(field[3:]):03}' if len(field) < 6 else field
-        print(f'\nStarting field {args.field} which is {index + 1} of {len(field_list)}..')
-
-        # ------determining field-specific paths, etc-----------
-        product_dir = args.input_dir / args.field / 'Products'
-        output_dir = args.output_dir / args.field / 'stacking'
-        if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
-        output_dir.mkdir(parents=True, exist_ok=True)
-        fig_dir = output_dir / f'plots'
+        passage_catalog_filename = args.output_dir / 'catalogs' / 'passagepipe_v0.5_SED_fits_cosmosweb_v1.0.0-alpha.fits'
+        df = read_passage_sed_catalog(passage_catalog_filename)
+        output_dir = args.output_dir / 'stacking'
     
-        # ---------read the photometric catalog file--------------------
+    # ---------reading in the single-field phot catalog----------------
+    else:
+        product_dir = args.input_dir / args.field / 'Products'
         df = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
         df['field'] = args.field
+        df = get_passage_masses_from_cosmos(df, args, id_col='id') # crossmatch with cosmos-web to get stellar mass and SFR
+        output_dir = args.output_dir / args.field / 'stacking'
 
-        # ---------crossmatch with cosmos-web to get stellar mass and SFR--------------------
-        df = get_passage_masses_from_cosmos(df, args, id_col='id')
+    # ------determining field-specific paths, etc-----------
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fig_dir = output_dir / f'plots'
 
-        # ---------merge with effective radius catalog--------------------
-        df_re = Table.read(args.output_dir / f'catalogs/{args.field}_re_list.fits').to_pandas()
-        if 'redshift' in df_re: df_re.drop(columns=['redshift'], axis=1, inplace=True)
-        df_re['id'] = df_re['id'].astype(int)
-        df_re = df_re[df_re['re_kpc'] > 0]
-        df = pd.merge(df, df_re, on='id', how='inner')
+    # -----------making bins in various ways---------------------
+    for method in methods:
+        output = bin_by_method(df, method)
+        if 'vor' in method:
+            df, bin_summary, centers_scaled, scaling = output
+        else:
+            df, bin_list = output
+            bin_summary, centers_scaled, scaling = None, None, None
 
-        # -----------making bins in various ways---------------------
-        for method in methods: df = bin_by_method(df, method)
-
-        # ------------plotting stacked gradients on SFMS--------------------------
-        fig = plot_SFMS_bins(df, methods, args)
-        save_fig(fig, fig_dir, f'{args.field}_SFMS_binned.png', args) # saving the figure
-
-        print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
+    # ------------plotting stacked gradients on SFMS--------------------------
+    fig = plot_SFMS_bins(df, methods, args, centers_scaled=centers_scaled, scaling=scaling, bin_summary=bin_summary)
+    save_fig(fig, fig_dir, f'SFMS_binned.png', args) # saving the figure
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

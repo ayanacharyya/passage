@@ -46,6 +46,9 @@ from scipy.optimize import curve_fit, brentq
 from scipy import ndimage
 from scipy.optimize import minimize
 from scipy.odr import ODR, Model, RealData
+from scipy.spatial import Voronoi, voronoi_plot_2d
+
+from sklearn.cluster import KMeans
 
 import regions
 from regions import Regions, PixCoord
