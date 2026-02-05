@@ -45,11 +45,11 @@ from make_diagnostic_maps import compute_EB_V, get_dereddened_flux
 start_time = datetime.now()
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_SFMS_Whitaker14(ax, redshift, color='olivegreen'):
+def get_SFMS_Whitaker14(log_mass_min, log_mass_max, redshift, nbins=40):
     '''
     Overplots fitted SFMS based on Whitaker+14 (https://iopscience.iop.org/article/10.1088/0004-637X/795/2/104/pdf) Table 1, eq 2
-    Then overplots this on a given existing axis handle
-    Returns axis handle
+    Then returns a two-part log SFR array based on an input minimum and maximum log mass; the two part are based on the lower limit of this empirical relation and any extrapolation below it
+    Returns three tuples: (log_mass1, log_SFR1) and (log_mass2, log_SFR2) and (z1, z2)
     '''
     log_mass_low_lim = 9.2 # lower limit of mass they fitted up to
     if redshift >= 0.5 and redshift < 1.0:
@@ -64,16 +64,50 @@ def plot_SFMS_Whitaker14(ax, redshift, color='olivegreen'):
         print(f'Provided redshift {redshift} should be between 0.5 and 2.5, otherwise cannot plot')
         return ax
 
-    log_mass1 = np.linspace(ax.get_xlim()[0], log_mass_low_lim, 20)
+    log_mass1 = np.linspace(log_mass_min, log_mass_low_lim, nbins//2)
     log_SFR1 = np.poly1d([c, b, a])(log_mass1)
 
-    log_mass2 = np.linspace(log_mass_low_lim, ax.get_xlim()[1], 20)
+    log_mass2 = np.linspace(log_mass_low_lim, log_mass_max, nbins//2)
     log_SFR2 = np.poly1d([c, b, a])(log_mass2)
+
+    return (log_mass1, log_SFR1), (log_mass2, log_SFR2), (z1, z2)
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_SFMS_Whitaker14(ax, redshift, color='olivegreen'):
+    '''
+    Overplots fitted SFMS based on Whitaker+14 (https://iopscience.iop.org/article/10.1088/0004-637X/795/2/104/pdf) Table 1, eq 2
+    Then overplots this on a given existing axis handle
+    Returns axis handle
+    '''
+
+    (log_mass1, log_SFR1), (log_mass2, log_SFR2), (z1, z2) = get_SFMS_Whitaker14(ax.get_xlim()[0], ax.get_xlim()[1], redshift)
 
     ax.plot(log_mass1, log_SFR1, ls='dashed', c=color, lw=2)
     ax.plot(log_mass2, log_SFR2, ls='solid', c=color, lw=2, label=f'Whitaker+14: {z1}<z<{z2}')
 
     return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_SFMS_Shivaei15(log_mass_min, log_mass_max, nbins=40):
+    '''
+    Overplots fitted SFMS based on Shivaei+15 (https://iopscience.iop.org/article/10.1088/0004-637X/815/2/98/pdf) Table 1
+    Then returns a two-part log SFR array based on an input minimum and maximum log mass; the two part are based on the lower limit of this empirical relation and any extrapolation below it
+    Returns two tuples and a float which is the scatter in the relation: (log_mass1, log_SFR1) and (log_mass2, log_SFR2), c
+    '''
+    a1, b1, c1 = 0.65, -5.40, 0.40 # slope, intercept, scatter from Table 1, values for SFR(H alpha), z range 1.37-2.61
+    a2, b2, c2 = 0.58, -4.65, 0.36 # slope, intercept, scatter from Table 1, values for SFR(H alpha), z range 2.09-2.61
+    log_mass_low_lim = 9.5 # lower limit of mass they fitted up to
+
+    a, b, c = a1, b1, c1 # choosing the first set of coefficients
+    #a, b, c = a2, b2, c2 # choosing the second set of coefficients
+
+    log_mass1 = np.linspace(log_mass_min, log_mass_low_lim, nbins//2)
+    log_SFR1 = a * log_mass1 + b
+
+    log_mass2 = np.linspace(log_mass_low_lim, log_mass_max, nbins//2)
+    log_SFR2 = a * log_mass2 + b
+
+    return (log_mass1, log_SFR1), (log_mass2, log_SFR2), c
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_SFMS_Shivaei15(ax, color='salmon'):
@@ -82,23 +116,37 @@ def plot_SFMS_Shivaei15(ax, color='salmon'):
     Then overplots this on a given existing axis handle
     Returns axis handle
     '''
-    a1, b1, c1 = 0.65, -5.40, 0.40 # slope, intercept, scatter from Table 1, values for SFR(H alpha), z range 1.37-2.61
-    a2, b2, c2 = 0.58, -4.65, 0.36 # slope, intercept, scatter from Table 1, values for SFR(H alpha), z range 2.09-2.61
-    log_mass_low_lim = 9.5 # lower limit of mass they fitted up to
 
-    log_mass1 = np.linspace(ax.get_xlim()[0], log_mass_low_lim, 20)
-    log_SFR1 = a1 * log_mass1 + b1
-
-    log_mass2 = np.linspace(log_mass_low_lim, ax.get_xlim()[1], 20)
-    log_SFR2 = a1 * log_mass2 + b1
+    (log_mass1, log_SFR1), (log_mass2, log_SFR2), scatter = get_SFMS_Shivaei15(ax.get_xlim()[0], ax.get_xlim()[1])
 
     ax.plot(log_mass1, log_SFR1, ls='dashed', c=color, lw=2)
-    ax.fill_between(log_mass1, log_SFR1 - c1/2, log_SFR1 + c1/2, alpha=0.3, facecolor=color)
+    ax.fill_between(log_mass1, log_SFR1 - scatter/2, log_SFR1 + scatter/2, alpha=0.3, facecolor=color)
+    
     ax.plot(log_mass2, log_SFR2, ls='solid', c=color, lw=2, label=f'Shivaei+15: z~2')
-    ax.fill_between(log_mass2, log_SFR2 - c1/2, log_SFR2 + c1/2, alpha=0.3, facecolor=color)
+    ax.fill_between(log_mass2, log_SFR2 - scatter/2, log_SFR2 + scatter/2, alpha=0.3, facecolor=color)
 
     return ax
 
+# --------------------------------------------------------------------------------------------------------------------
+def get_SFMS_Popesso23(log_mass_min, log_mass_max, redshift, nbins=40):
+    '''
+    Computes an empirical SFMS based on Popesso+23 (https://arxiv.org/abs/2203.10487) Eq 10, for given redshift
+    Then returns a two-part log SFR array based on an input minimum and maximum log mass; the two part are based on the lower limit of this empirical relation and any extrapolation below it
+    Returns two tuples: (log_mass1, log_SFR1) and (log_mass2, log_SFR2)
+    '''
+    a0, a1, b0, b1, b2 = ufloat(0.2,0.02), ufloat(-0.034, 0.002), ufloat(-26.134,0.015), ufloat(4.722, 0.012), ufloat(-0.1925, 0.0011)  # Table 2, Eq 10
+    log_mass_low_lim = 8.7 # lower limit of mass they fitted up to
+
+    age_at_z = cosmo.age(redshift).value # Gyr
+
+    log_mass1 = np.linspace(log_mass_min, log_mass_low_lim, nbins//2)
+    log_SFR1 = (a1 * age_at_z + b1) * log_mass1 + b2 * (log_mass1) ** 2 + b0 + a0 * age_at_z
+
+    log_mass2 = np.linspace(log_mass_low_lim, log_mass_max, nbins//2)
+    log_SFR2 = (a1 * age_at_z + b1) * log_mass2 + b2 * (log_mass2) ** 2 + b0 + a0 * age_at_z
+
+    return (log_mass1, log_SFR1), (log_mass2, log_SFR2)
+   
 # --------------------------------------------------------------------------------------------------------------------
 def plot_SFMS_Popesso23(ax, redshift, color='cornflowerblue'):
     '''
@@ -106,16 +154,7 @@ def plot_SFMS_Popesso23(ax, redshift, color='cornflowerblue'):
     Then overplots this on a given existing axis handle
     Returns axis handle
     '''
-    a0, a1, b0, b1, b2 = ufloat(0.2,0.02), ufloat(-0.034, 0.002), ufloat(-26.134,0.015), ufloat(4.722, 0.012), ufloat(-0.1925, 0.0011)  # Table 2, Eq 10
-    log_mass_low_lim = 8.7 # lower limit of mass they fitted up to
-
-    age_at_z = cosmo.age(redshift).value # Gyr
-
-    log_mass1 = np.linspace(ax.get_xlim()[0], log_mass_low_lim, 20)
-    log_SFR1 = (a1 * age_at_z + b1) * log_mass1 + b2 * (log_mass1) ** 2 + b0 + a0 * age_at_z
-
-    log_mass2 = np.linspace(log_mass_low_lim, ax.get_xlim()[1], 20)
-    log_SFR2 = (a1 * age_at_z + b1) * log_mass2 + b2 * (log_mass2) ** 2 + b0 + a0 * age_at_z
+    (log_mass1, log_SFR1), (log_mass2, log_SFR2) = get_SFMS_Popesso23(ax.get_xlim()[0], ax.get_xlim()[1], redshift)
 
     ax.plot(log_mass1, unp.nominal_values(log_SFR1), ls='dashed', c=color, lw=2)
     ax.fill_between(log_mass1, unp.nominal_values(log_SFR1) - unp.std_devs(log_SFR1)/2, unp.nominal_values(log_SFR1) + unp.std_devs(log_SFR1)/2, alpha=0.3, facecolor=color)
