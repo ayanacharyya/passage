@@ -220,9 +220,8 @@ def plot_SFMS_bins(df, methods, args, scaling=None, centers_scaled=None, bin_sum
     ncol = len(methods)
     
     # -----------------setup the figure---------------
-    fig, axes = plt.subplots(1, ncol, figsize=(5.2 * ncol, 5.), sharex=True, sharey=True)
+    fig, axes = plt.subplots(1, ncol, figsize=(5.2 * ncol, 5.), sharex=True, sharey=True, layout='constrained')
     axes = np.atleast_1d(axes)
-    fig.subplots_adjust(left=0.1, right=0.97, top=0.95, bottom=0.13, wspace=0., hspace=0.)
     
     # ---------plot the heatmaps-------------------
     for index, method in enumerate(methods):
@@ -495,7 +494,13 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
     args.fontfactor = 1.5
 
-    methods = ['linear', 'adaptive_nmin', 'voronoi', 'distance']#, 'adaptive_nmax']
+    # ---------------choose which binning methods to try---------------
+    methods = ['linear', \
+                'adaptive_nmin', \
+                #'adaptive_nmax', \
+                'voronoi', \
+                'distance', \
+               ]
     min_n = 10 # for adaptive_nmin binning
     max_n = 50 # for adaptive_nmax binning
     target_n = 30 # for voronoi binning
