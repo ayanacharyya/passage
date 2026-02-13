@@ -6,6 +6,7 @@
     Example: run compute_re.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28 --write_file
              run compute_re.py --field Par28 --id 2822 --clobber
              run compute_re.py --field Par28 --do_all_obj --clobber --write_file
+             run compute_re.py --system ssd --do_all_fields --do_all_obj --clobber --write_file
 '''
 
 from header import *
@@ -35,13 +36,18 @@ if __name__ == "__main__":
     filter_for_re = 'F150W'
 
     # ---------determining list of fields----------------
+    output_dir = args.output_dir / 'catalogs'
     if args.do_all_fields:
-        field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par*') + '/')]
+        field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par[0-9][0-9][0-9]') + '/')]
         field_list.sort(key=natural_keys)
+        outfilename = output_dir / f'all_fields_re_list.fits'
     else:
         field_list = args.field_arr
+        outfilename = output_dir / f'{",".join(args.field_arr)}_re_list.fits'
 
     # --------loop over all fields------------------
+    df_re = pd.DataFrame(columns=['field', 'id', 'redshift', 're_kpc', 're_arcsec'])
+
     for index, field in enumerate(field_list):
         start_time2 = datetime.now()
         args.field = f'Par{int(field[3:]):03}' if len(field) < 6 else field
@@ -49,14 +55,10 @@ if __name__ == "__main__":
 
         # ------determining field-specific paths, etc-----------
         product_dir = args.input_dir / args.field / 'Products'
-        output_dir = args.output_dir / 'catalogs'
-        outfilename = output_dir / f'{args.field}_re_list.fits'
 
         if os.path.exists(outfilename) and not args.clobber:
             print(f'Result file for {args.field} already exists as {outfilename}, so skipping this field.')
             continue
-
-        df_re = pd.DataFrame(columns=['id', 'redshift', 're_kpc', 're_arcsec'])
 
         # ---------read the photometric catalog file--------------------
         if args.do_all_obj:
@@ -91,27 +93,29 @@ if __name__ == "__main__":
             args.z = full_hdu[0].header['REDSHIFT']
 
             # --------determining true center of object---------------------
-            args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W')
+            args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter=filter_for_re)
 
             # --------determining effective radius of object---------------------
             if get_psf:
                 psf = get_niriss_psf(args.pix_size_arcsec, filter_for_re) # computing the PSF once (assuming the pixel scale is same for the full sample)
                 get_psf = False
             
-            try:
-                re_kpc, re_arcsec = get_re(full_hdu, args, filter=filter_for_re, psf=psf)
+            #try:
+            re_kpc, re_arcsec = get_re(full_hdu, args, filter=filter_for_re, psf=psf)
+            '''
             except:
                 print(f'Could not compute R_e for object {args.id}. Skipping this object.')
                 continue
-        
+            '''
             # -------appending to dataframe--------------
-            df_re.loc[len(df_re)] = [args.id, args.z, re_kpc, re_arcsec]
+            df_re.loc[len(df_re)] = [args.field, args.id, args.z, re_kpc, re_arcsec]
         
-        # ----------write out the dataframe--------------
-        if args.write_file:
-            Table.from_pandas(df_re).write(outfilename, format='fits', overwrite=True)
-            print(f'Written {outfilename}')
 
         print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
 
+    # ----------write out the dataframe--------------
+    if args.write_file:
+        Table.from_pandas(df_re).write(outfilename, format='fits', overwrite=True)
+        print(f'Written {outfilename}')
+    
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

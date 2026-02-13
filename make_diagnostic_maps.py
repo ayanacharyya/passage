@@ -3249,6 +3249,55 @@ def myradprof(radius, flux, ax, args, re_kpc, label=''):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
+def read_direct_image(full_hdu, args, filter='F150W', for_offset=False):
+    '''
+    Reads in the direct image of an object in the given filter, by trying out a few combinations of how the filter name might be in the header
+    Returns direct image and the final filter name it found in the header
+    '''
+    dummy_filter = 'F140W'
+    try:
+        dir_img = full_hdu['DSCI', f'{filter}-{filter}-CLEAR'].data
+        dir_img = trim_image(dir_img, args, skip_re_trim=True)  # 50 x 50 pixels
+    except:
+        try:
+            dir_img = full_hdu['DSCI', f'{filter}-CLEAR'].data
+            dir_img = trim_image(dir_img, args, skip_re_trim=True)  # 50 x 50 pixels
+        except:
+            try: 
+                dir_img = full_hdu['DSCI', filter].data
+                dir_img = trim_image(dir_img, args, skip_re_trim=True)  # 50 x 50 pixels
+            except:
+                try:
+                    dir_img = full_hdu['DSCI', dummy_filter].data
+                    dir_img = trim_image(dir_img, args, skip_re_trim=True)  # 50 x 50 pixels
+                    filter = dummy_filter
+                except:
+                    try:
+                        dir_img = full_hdu['DSCI', 'CLEAR'].data
+                        dir_img = trim_image(dir_img, args, skip_re_trim=True)
+                        filter = 'CLEAR'
+                    except:
+                        try:
+                            full_field_filename = args.input_dir / f'{args.field}' / 'Products' / f'{args.field}_{filter.lower()}-clear_drz_sci.fits'
+                        
+                            pos = SkyCoord(full_hdu[0].header['RA'], full_hdu[0].header['DEC'], unit = 'deg')
+                            size = 2 * args.arcsec_limit * u.arcsec
+                            target_header = full_hdu['DSCI', 'CLEAR'].header
+                            
+                            temp1, temp2 = args.only_seg, args.vorbin
+                            args.only_seg, args.vorbin = False, False
+                            dir_img = get_cutout(full_field_filename, pos, size, target_header, args, plot_test_axes=None, skip_re_trim=True)
+                            print(f'{filter.upper()} not found in full_hdu extension. Therefore trying to get cutout from full field image {full_field_filename}')
+                            args.only_seg, args.vorbin = temp1, temp2
+                        except:
+                            dir_img = None
+
+    #if dir_img is not None and not for_offset:
+    #    dir_img = ndimage.shift(dir_img, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
+
+    return dir_img, filter
+
+# --------------------------------------------------------------------------------------------------------------------
 def get_re(full_hdu, args, filter='F200W', psf=None):
     '''
     Computes the half-light radius in the direct image with the given filter
@@ -3264,18 +3313,15 @@ def get_re(full_hdu, args, filter='F200W', psf=None):
     psf_array /= psf_array.sum()
 
     # -------reading in direct image----------
-    dir_img, filter = read_direct_image(full_hdu, filter=filter)
+    dir_img, filter = read_direct_image(full_hdu, args, filter=filter)
 
     # -------compute re----------
     if dir_img is not None:
-        dir_img = trim_image(dir_img, args=args, skip_re_trim=True)
         segmentation_map = full_hdu['SEG'].data
         segmentation_map = trim_image(segmentation_map, args, skip_re_trim=True)
-        
-        dir_img_shifted = np.roll(dir_img, args.ndelta_xpix, axis=0)
-        dir_img_shifted = np.roll(dir_img_shifted, args.ndelta_ypix, axis=1)
-        segmentation_map_shifted = np.roll(segmentation_map, args.ndelta_xpix, axis=0)
-        segmentation_map_shifted = np.roll(segmentation_map_shifted, args.ndelta_ypix, axis=1)
+
+        dir_img_shifted = ndimage.shift(dir_img, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
+        segmentation_map_shifted = ndimage.shift(segmentation_map, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
 
         dir_img_deconvolved = richardson_lucy(dir_img_shifted, psf_array, num_iter=20)
 
@@ -3316,33 +3362,9 @@ def get_re(full_hdu, args, filter='F200W', psf=None):
 
     else:
         re_kpc, re_arcsec = np.nan, np.nan
-        print(f'Could not find image for filter {filter} in {args.field}:{args.id}, so forcing reto be {re}')
+        print(f'Could not find image for filter {filter} in {args.field}:{args.id}, so forcing R_e to be {re_kpc}')
 
     return re_kpc, re_arcsec
-
-# --------------------------------------------------------------------------------------------------------------------
-def read_direct_image(full_hdu, filter='F150W'):
-    '''
-    Reads in the direct image of an object in the given filter, by trying out a few combinations of how the filter name might be in the header
-    Returns direct image and the final filter name it found in the header
-    '''
-    dummy_filter = 'F140W'
-    try:
-        dir_img = full_hdu['DSCI', f'{filter}-{filter}-CLEAR'].data
-    except:
-        try:
-            dir_img = full_hdu['DSCI', f'{filter}-CLEAR'].data
-        except:
-            try: 
-                dir_img = full_hdu['DSCI', filter].data
-            except:
-                try:
-                    dir_img = full_hdu['DSCI', dummy_filter].data
-                    filter = dummy_filter
-                except:
-                    dir_img = None
-
-    return dir_img, filter
 
 # --------------------------------------------------------------------------------------------------------------------
 def get_offsets_from_center(full_hdu, args, filter='F200W', silent=False):
@@ -3350,10 +3372,9 @@ def get_offsets_from_center(full_hdu, args, filter='F200W', silent=False):
     Computes the offset from the original center of image to the brightest pixel in the direct image with the given filter
     Returns two integers (offset in x and y axes)
     '''
-    dir_img, filter = read_direct_image(full_hdu, filter=filter)
+    dir_img, filter = read_direct_image(full_hdu, args, filter=filter, for_offset=True)
 
     if dir_img is not None:
-        dir_img = trim_image(dir_img, args=args, skip_re_trim=True)
         segmentation_map = full_hdu['SEG'].data
         segmentation_map = trim_image(segmentation_map, args, skip_re_trim=True)
 

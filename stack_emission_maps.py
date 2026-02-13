@@ -8,13 +8,13 @@
              run stack_emission_maps.py --field Par28 --do_all_obj --clobber --debug_bin --skip_deproject --skip_re_scaling
              run stack_emission_maps.py --field Par28 --do_all_obj --re_limit 2
              run stack_emission_maps.py --field Par28 --do_all_obj --adaptive_bins --max_gal_per_bin 20
-             run stack_emission_maps.py --do_all_fields --do_all_obj --adaptive_bins --max_gal_per_bin 20
+             run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --adaptive_bins --bin_by_distance
 '''
 
 from header import *
 from util import *
 from make_diagnostic_maps import trim_image, get_dereddened_flux, myimshow, get_offsets_from_center, get_cutout
-from make_sfms_bins import bin_SFMS_linear, bin_SFMS_adaptive, read_passage_sed_catalog
+from make_sfms_bins import bin_SFMS_linear, bin_SFMS_adaptive, read_passage_sed_catalog, bin_SFMS_distance
 
 start_time = datetime.now()
 
@@ -27,34 +27,44 @@ def get_direct_image(full_hdu, filter, args):
     try:
         hdu = full_hdu['DSCI', filter.upper()]
         image = hdu.data
+        image = trim_image(image, args, skip_re_trim=True)
         exptime = 1
     except:
         try:
             hdu = full_hdu['DSCI', f'{filter}-CLEAR']
             image = hdu.data
+            image = trim_image(image, args, skip_re_trim=True)
             exptime = full_hdu[0].header[f'T_{filter.upper()}']
         except:
             try:
                 hdu = full_hdu['DSCI', f'{filter.upper()}-{filter.upper()}-CLEAR']
                 image = hdu.data
+                image = trim_image(image, args, skip_re_trim=True)
                 exptime = full_hdu[0].header[f'T_{filter.upper()}']
             except:
-                full_field_filename = args.root_dir / f'passage_data/' / f'{args.drv}' / f'{args.field}' / 'Products' / f'{args.field}_{filter.lower()}-clear_drz_sci.fits'
-                print(f'{filter.upper()} not found in full_hdu extension. Therefore trying to get cutout from full field image {full_field_filename}')
-            
-                exptime = fits.open(full_field_filename)[0].header['EXPTIME']
-                pos = SkyCoord(full_hdu[0].header['RA'], full_hdu[0].header['DEC'], unit = 'deg')
-                size = 2 * args.arcsec_limit * u.arcsec
-                target_header = full_hdu['DSCI', 'F140W'].header
+                try:
+                    image = full_hdu['DSCI', 'CLEAR'].data
+                    image = trim_image(image, args, skip_re_trim=True)
+                    filter = 'CLEAR'
+                    exptime = 1
+                except:
+                    full_field_filename = args.input_dir / f'{args.field}' / 'Products' / f'{args.field}_{filter.lower()}-clear_drz_sci.fits'
                 
-                temp1, temp2 = args.only_seg, args.vorbin
-                args.only_seg, args.vorbin = False, False
-                image = get_cutout(full_field_filename, pos, size, target_header, args, plot_test_axes=None, skip_re_trim=True)
-                args.only_seg, args.vorbin = temp1, temp2
+                    exptime = fits.open(full_field_filename)[0].header['EXPTIME']
+                    print(f'{filter.upper()} not found in full_hdu extension. Therefore trying to get cutout from full field image {full_field_filename}')
+                    pos = SkyCoord(full_hdu[0].header['RA'], full_hdu[0].header['DEC'], unit = 'deg')
+                    size = 2 * args.arcsec_limit * u.arcsec
+                    try: target_header = full_hdu['DSCI', 'F140W'].header
+                    except: target_header = full_hdu['DSCI', 'CLEAR'].header
+                    
+                    temp1, temp2 = args.only_seg, args.vorbin
+                    args.only_seg, args.vorbin = False, False
+                    image = get_cutout(full_field_filename, pos, size, target_header, args, plot_test_axes=None, skip_re_trim=True)
+                    args.only_seg, args.vorbin = temp1, temp2
 
-    image = ndimage.shift(image, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
-    image = trim_image(image, args, skip_re_trim=True)
- 
+    if image is not None:
+        image = ndimage.shift(image, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
+    
     return image, exptime
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -391,7 +401,8 @@ if __name__ == "__main__":
         passage_catalog_filename = args.output_dir / 'catalogs' / 'passagepipe_v0.5_SED_fits_cosmosweb_v1.0.0-alpha.fits'
         df = read_passage_sed_catalog(passage_catalog_filename)
         
-        re_catalog_filename = args.output_dir / f'catalogs/all_fields_re_list.fits'
+        #re_catalog_filename = args.output_dir / f'catalogs/all_fields_re_list.fits'
+        re_catalog_filename = args.output_dir / f'catalogs/all_fields_re_list_with_CLEAR.fits'
         output_dir = args.output_dir / 'stacking'
     
     # ---------reading in the single-field phot catalog----------------
@@ -409,10 +420,24 @@ if __name__ == "__main__":
         df_re = Table.read(re_catalog_filename).to_pandas()
         if 'redshift' in df_re: df_re.drop(columns=['redshift'], axis=1, inplace=True)
         df_re['id'] = df_re['id'].astype(int)
+        df_re['field'] = df_re['field'].astype(str)
         df_re = df_re[df_re['re_kpc'] > 0]
-        df = pd.merge(df, df_re, on='id', how='inner')
+        df = pd.merge(df, df_re, on=['field', 'id'], how='inner')
     else:
         raise FileNotFoundError(f're catalog not found at {re_catalog_filename}; please create this file first by running compute_re.py. Exiting.')
+
+    # -------merge with all photcats by looping over fields--------------
+    if args.do_all_fields:
+        print(f'Combining all photcats to one file before merging to df, might take a few seconds..')
+        fields = pd.unique(df['field'])
+        df_master_photcat = pd.DataFrame()
+        cols_to_extract = ['field', 'id', 'a_image', 'b_image', 'theta_image']
+        for this_field in fields:
+            df_phot_this_field = GTable.read(args.input_dir / this_field / 'Products' / f'{this_field}_photcat.fits').to_pandas()
+            df_phot_this_field['field'] = this_field
+            df_master_photcat = pd.concat([df_master_photcat, df_phot_this_field[cols_to_extract]])
+        
+        df = pd.merge(df, df_master_photcat, on=['field', 'id'], how='inner')
 
     # ------determining field-specific paths, etc-----------
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -422,20 +447,25 @@ if __name__ == "__main__":
     fits_dir.mkdir(parents=True, exist_ok=True)
 
     # -------------binning the mass-SFR plane-------------
-    if args.adaptive_bins: df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
-    else: df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
+    if args.adaptive_bins:
+        if args.bin_by_distance: df, bin_list = bin_SFMS_distance(df, method_text='', n_adaptive_bins=25, sfms='Popesso23')
+        else: df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
+    else:
+        df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
     
     if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 8.5) & (item[0].right == 9.5) & (item[1].left == 1.0) & (item[1].right == 1.5)] # to choose the mass=8.5-9.5, sfr=1-1.5 bin for debugging purposes
     #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.5) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
 
     # ------------looping over each bin-----------------------
-    list(bin_list).sort(key=lambda x: (x[0].left, x[1].left))
+    if args.bin_by_distance: bin_list = np.sort(list(bin_list))
+    else: bin_list = list(bin_list).sort(key=lambda x: (x[0].left, x[1].left))
     nbin_good = 0
 
     for index2, this_mass_sfr_bin in enumerate(bin_list):
         if args.debug_bin and nbin_good > 0: break
         start_time3 = datetime.now()
-        bin_text = f'logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}'
+        if args.bin_by_distance: bin_text = f'delta_sfms_bin_{this_mass_sfr_bin.left}-{this_mass_sfr_bin.right}'
+        else: bin_text = f'logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}'
         print(f'\tStarting bin ({index2 + 1}/{len(bin_list)}) {bin_text}..', end=' ')
 
         output_filename = fits_dir / f'stacked_maps{deproject_text}{rescale_text}_{bin_text}.fits'
@@ -460,6 +490,7 @@ if __name__ == "__main__":
             
             nbin_good += 1
             nobj_good = 0
+            ngal_this_bin = len(ids)
         else:
             # --------determine which objects fall in this bin----------
             mask = df['bin_intervals'] == this_mass_sfr_bin
@@ -510,6 +541,7 @@ if __name__ == "__main__":
                         args.id = obj['id']
 
                         # ------determining directories and filenames---------
+                        product_dir = args.input_dir / args.field / 'Products'
                         full_fits_file = product_dir / 'full' / f'{args.field}_{args.id:05d}.full.fits'
                         maps_fits_file = product_dir / 'maps' / f'{args.field}_{args.id:05d}.maps.fits'
                         od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.1D.fits'
@@ -726,7 +758,7 @@ if __name__ == "__main__":
                 print(f'which has no object. Skipping this bin.')
                 continue
 
-        print(f'\nCompleted bin mass={this_mass_sfr_bin[0]}, sfr={this_mass_sfr_bin[1]} ({nobj_good} / {ngal_this_bin} objects) in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
+        print(f'\nCompleted bin {bin_text} ({nobj_good} / {ngal_this_bin} objects) in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
         if nobj_good > 1: nbin_good += 1
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

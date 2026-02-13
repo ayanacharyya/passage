@@ -5,7 +5,7 @@
     Created: 30-01-26
     Example: run make_sfms_bins.py --field Par028 --overplot_literature --overplot_passage
              run make_sfms_bins.py --field Par028
-             run make_sfms_bins.py --do_all_fields
+             run make_sfms_bins.py --system ssd --do_all_fields
 '''
 
 from header import *
@@ -449,7 +449,9 @@ def bin_SFMS_distance(df, method_text = '_distance', delta_bin=0.2, n_adaptive_b
     else: # make n_adaptive_bins of non-uniform width
         df[f'bin_intervals{method_text}'], bin_edges = pd.qcut(df['delta_sfms'], q=n_adaptive_bins, retbins=True)
 
-    return df, bin_edges
+    bin_list = pd.unique(df[f'bin_intervals{method_text}'])
+
+    return df, bin_list
 
 # --------------------------------------------------------------------------------------------------------------------
 def bin_by_method(df, method, sfms='Popesso23', n_adaptive_bins=20, target_n=30, min_n=10, max_n=50):

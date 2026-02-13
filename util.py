@@ -263,6 +263,7 @@ def parse_args():
     # ---- args added for stack_emission_maps.py ------------
     parser.add_argument('--debug_align', dest='debug_align', action='store_true', default=False, help='Debug the alignment, deprojection, rotation of emission line maps? Default is no.')
     parser.add_argument('--npix_side', metavar='npix_side', type=int, action='store', default=20, help='Size of the stacked emission maps in pixels? Default is 20')
+    parser.add_argument('--bin_by_distance', dest='bin_by_distance', action='store_true', default=False, help='Compute the stellar mass-SFR bins based on the distance from the SFMS? Default is no.')
     parser.add_argument('--adaptive_bins', dest='adaptive_bins', action='store_true', default=False, help='Compute the stellar mass-SFR bins in an adaptive way? Default is no.')
     parser.add_argument('--max_gal_per_bin', metavar='max_gal_per_bin', type=int, action='store', default=20, help='Maximum galaxies allowed in one bin, if binning adaptively; Default is 20')
     parser.add_argument('--max_gal_per_page', metavar='max_gal_per_page', type=int, action='store', default=10, help='Maximum galaxies allowed on one page of the PDF; Default is 10')
@@ -298,9 +299,14 @@ def parse_args():
     if args.slice_at_quantity3 is not None: args.slice_at_quantity3 = [float(item) for item in args.slice_at_quantity3.split(',')]
 
     if args.system == 'hd' and not os.path.exists('/Volumes/Elements/'): args.system = 'local'
+    if args.system == 'ssd' and not os.path.exists('/Volumes/Ayan_SSD/'): args.system = 'local'
     if args.line_list == 'all': args.line_list = ['Lya', 'OII', 'NeIII-3867', 'Hb', 'OIII-4363', 'OIII', 'Ha', 'NII','Ha+NII', 'SII', 'ArIII-7138', 'SIII', 'PaD','PaG','PaB','HeI-1083','PaA']
 
-    root_dir = '/Users/acharyya/Work/astro/passage' if 'local' in args.system else '/Volumes/Elements/acharyya_backup/Work/astro/passage' if 'hd' in args.system else '/Users/acharyya/Library/CloudStorage/GoogleDrive-ayan.acharyya@inaf.it/My Drive/passage' if 'gdrive' in args.system else ''
+    if 'local' in args.system: root_dir =  '/Users/acharyya/Work/astro/passage'
+    elif 'hd' in args.system: root_dir = '/Volumes/Elements/acharyya_backup/Work/astro/passage'
+    elif 'ssd' in args.system: root_dir = '/Volumes/Ayan_SSD/Ayan_macbook/Users/aacharyya/Work/astro/passage'
+    elif 'gdrive' in args.system: root_dir = '/Users/acharyya/Library/CloudStorage/GoogleDrive-ayan.acharyya@inaf.it/My Drive/passage'
+    else: root_dir = ''
     args.root_dir = Path(root_dir)
 
     if 'glass' in args.field: survey_name = 'glass'
@@ -1154,22 +1160,24 @@ def get_combined_cmap(breaks, cmaps, new_name='my_colormap'):
     return new_cmap
 
 # --------------------------------------------------------------------------------------------------------------------
-def unzip_and_delete(zip_file, destination_path):
+def unzip_and_delete(zip_file, destination_path=None):
     '''
     Unzips given zip file to given destination path and removes the zip file
     '''
     zip_file = Path(zip_file)
+    if destination_path is None: destination_path = zip_file.parent
+
     print(f'Unpacking {zip_file} in to {destination_path}..')
-    if zip_file.suffix == '.gz':
-        with gzip.open(zip_file, 'rb') as gz_file:
-            with open(zip_file.parent / zip_file.stem, 'wb') as out_file:
-                shutil.copyfileobj(gz_file, out_file)
-    else:
+    try:
         shutil.unpack_archive(zip_file, destination_path)
+    except:
+        with gzip.open(zip_file, 'rb') as gz_file:
+            with open(zip_file.parent / zip_file.stem.replace('.tar',''), 'wb') as out_file:
+                shutil.copyfileobj(gz_file, out_file)
     os.remove(zip_file)  # remove zipped files after unzipping
 
 # --------------------------------------------------------------------------------------------------------------------
-def move_field_after_download(field_arr, args=None):
+def move_field_after_download_for_linefinding(field_arr, args=None):
     '''
     Unzips and moves the reduced data from Box from Downloads folder to appropriate location by making the right dorectories
     '''
@@ -1190,8 +1198,8 @@ def move_field_after_download(field_arr, args=None):
             unzip_and_delete(origin_dir / f'{field}.zip', destination_dir)
 
             Path(destination_dir / field / 'DATA/DIRECT_GRISM').mkdir(exist_ok=True, parents=True)
-            unzip_and_delete(destination_dir / field / f'{field}_spec1D.tar.gz', destination_dir / field)
-            unzip_and_delete(destination_dir / field / f'{field}_spec2D.tar.gz', destination_dir / field)
+            unzip_and_delete(destination_dir / field / f'{field}_spec1D.tar.gz')
+            unzip_and_delete(destination_dir / field / f'{field}_spec2D.tar.gz')
 
             cat_files = glob.glob(str(destination_dir / field / '*cat.fits'))
             for this_cat_file in cat_files:
@@ -1208,6 +1216,54 @@ def move_field_after_download(field_arr, args=None):
             shutil.move(destination_dir / field / filename, destination_dir / 'linelist')
         except Exception as e:
             print(f'Probably skipping {field} due to following error: {e}')
+            continue
+
+        print(f'Completed moving {field} in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
+
+# --------------------------------------------------------------------------------------------------------------------
+def move_field_after_download(field_arr, args=None):
+    '''
+    Unzips and moves the reduced data from Box from Downloads folder to appropriate location by making the right dorectories
+    '''
+    origin_dir = HOME / 'Downloads'
+    field_arr = np.atleast_1d(field_arr)
+
+    for index, field in enumerate(field_arr):
+        start_time = datetime.now()
+        if 'Par' in str(field): field = f'Par{int(field.split("Par")[1]):03d}'
+        else: field = f'Par{field:03d}'
+        print(f'Starting field {field} which is {index + 1} out of {len(field_arr)}..')
+
+        try:
+            if args is None: destination_dir = Path('/Volumes/Ayan_SSD/Ayan_macbook/Users/aacharyya/Work/astro/passage/passage_data/v0.5')
+            else: destination_dir = args.input_dir / 'v0.5'
+            unzip_and_delete(origin_dir / f'{field}.zip', destination_dir)
+            
+            product_dir = destination_dir / field / 'Products'
+            product_dir.mkdir(exist_ok=True, parents=True)
+
+            unzip_and_delete(destination_dir / field / f'{field}_spec1D_fixz.tar.gz', product_dir)
+            unzip_and_delete(destination_dir / field / f'{field}_spec2D_fixz.tar.gz', product_dir)
+            unzip_and_delete(destination_dir / field / f'{field}_plots.tar.gz', product_dir)
+            unzip_and_delete(destination_dir / field / f'{field}_maps.tar.gz', product_dir)
+
+            for foldername in ['spec1D_fixz', 'spec2D_fixz']:
+                if os.path.exists(product_dir / foldername):
+                    print(f'Renaming {foldername}..')
+                    os.rename(product_dir / foldername, product_dir / foldername.replace('_fixz', ''))
+            
+            for filename in [f'{field}_spec1D.tar.gz', f'{field}_spec2D.tar.gz']:
+                if os.path.exists(destination_dir / field / filename):
+                    print(f'Deleting {filename}..')
+                    os.remove(destination_dir / field / filename)
+
+            for fits_file in  glob.glob(str(destination_dir / field / '*.fits')):
+                if os.path.exists(destination_dir / field / fits_file):
+                    print(f'Moving {fits_file}..')
+                    shutil.move(destination_dir / field / fits_file, product_dir)
+
+        except Exception as e:
+            print(f'Skipping {field} due to following error: {e}')
             continue
 
         print(f'Completed moving {field} in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
