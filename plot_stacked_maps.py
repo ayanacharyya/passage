@@ -12,7 +12,7 @@
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --adaptive_bins --fold_maps --plot_radial_profiles --debug_bin
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_radial_profiles --plot_minor_major_profile
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_radial_profiles
-             run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --plot_radial_profiles
+             run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --plot_radial_profiles --adaptive_bins --bin_by_distance --fold_maps
 '''
 
 from header import *
@@ -497,17 +497,24 @@ def get_interval_from_filename(filename):
     Returns object: pair of Intervals
     '''
     filename = Path(filename).stem
-    pattern = r'logmassbin_([-?\d.]+)-([-?\d.]+)_logsfrbin_([-?\d.]+)-([-?\d.]+)'
-    match = re.search(pattern, filename)
+    pattern1 = r'logmassbin_([-?\d.]+)-([-?\d.]+)_logsfrbin_([-?\d.]+)-([-?\d.]+)'
+    match1 = re.search(pattern1, filename)
+    pattern2 = r'delta_sfms_bin_([-]?\d+(?:\.\d+)?)-([-]?\d+(?:\.\d+)?)'
+    match2 = re.search(pattern2, filename)
 
-    if match:
-        m_low, m_high, s_low, s_high = map(float, match.groups())        
+    if match1:
+        m_low, m_high, s_low, s_high = map(float, match1.groups())        
         mass_int = pd.Interval(m_low, m_high, closed='left')
         sfr_int = pd.Interval(s_low, s_high, closed='left')
         
         combined_interval = (mass_int, sfr_int)
+    elif match2:
+        delta_sfms_low, delta_sfms_high = map(float, match2.groups())
+        delta_sfms_interval = pd.Interval(delta_sfms_low, delta_sfms_high, closed='left')
+        
+        combined_interval = delta_sfms_interval
     else:
-        raise ValueError(f'This file {filename} does not have the expected pattern. So could not extract intervals from it.')
+        raise ValueError(f'The file {filename} does not have the expected pattern. So could not extract intervals from it.')
     
     return combined_interval
 
@@ -605,7 +612,9 @@ if __name__ == "__main__":
 
     deproject_text = '_nodeproject' if args.skip_deproject else ''
     rescale_text = '_norescale' if args.skip_re_scaling else ''
-
+    C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
+    binby_text = '_binby_distance' if args.bin_by_distance else ''
+    
     # -------------for figure annotations--------------------
     max_ncols = 4
     args.fontfactor = 1.5
@@ -620,126 +629,122 @@ if __name__ == "__main__":
         if args.skip_re_scaling: args.extent = (-args.kpc_limit - offset, args.kpc_limit - offset, -args.kpc_limit - offset, args.kpc_limit - offset)
         else: args.extent = (-args.re_limit - offset, args.re_limit - offset, -args.re_limit - offset, args.re_limit - offset)
         fold_text = ''
-
+    
     # ---------determining list of fields----------------
     if args.do_all_fields:
         field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par[0-9][0-9][0-9]') + '/')]
         field_list.sort(key=natural_keys)
+        output_dir = args.output_dir / 'stacking'
     else:
         field_list = args.field_arr
-    
-    # --------loop over all fields------------------
-    for index, field in enumerate(field_list):
-        start_time2 = datetime.now()
-        args.field = f'Par{int(field[3:]):03}' if len(field) < 6 else field
-        print(f'\nStarting field {args.field} which is {index + 1} of {len(field_list)}..')
-
-        # ------determining field-specific paths, etc-----------
-        product_dir = args.input_dir / args.field / 'Products'
         output_dir = args.output_dir / args.field / 'stacking'
-        if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
-        output_dir.mkdir(parents=True, exist_ok=True)
-        fig_dir = output_dir / f'plots{deproject_text}{rescale_text}'
-        fig_dir.mkdir(parents=True, exist_ok=True)
-        fits_dir = output_dir / f'maps{deproject_text}{rescale_text}'
-        fits_dir.mkdir(parents=True, exist_ok=True)
+    
+    # ----------getting directory structure----------
+    if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fig_dir = output_dir / f'plots{deproject_text}{rescale_text}'
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    fits_dir = output_dir / f'maps{deproject_text}{rescale_text}'
+    fits_dir.mkdir(parents=True, exist_ok=True)
 
-        C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
-        output_filename = fits_dir / f'stacked{fold_text}_fits_allbins_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}.fits'
+    output_filename = fits_dir / f'stacked{binby_text}{fold_text}_fits_allbins_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}.fits'
 
-        # --------getting the list of bins from available fits files---------------
-        stacked_files = glob.glob(str(fits_dir) + '/stacked_maps_*.fits')
-        bin_list = [get_interval_from_filename(item) for item in stacked_files]
-        bin_list.sort(key=lambda x: (x[0].left, x[1].left))
-        if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 7.5) & (item[0].right == 8.5) & (item[1].left == 0.0) & (item[1].right == 0.5)] # to choose the mass=7.5-8.5, sfr=0-0.5 bin for debugging purposes
-        #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.5) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
+    # --------getting the list of bins from available fits files---------------
+    stacked_files = glob.glob(str(fits_dir) + '/stacked_maps_*.fits')
+    bin_list = [get_interval_from_filename(item) for item in stacked_files]
+    if args.bin_by_distance: bin_list = np.sort(bin_list)
+    else: bin_list.sort(key=lambda x: (x[0].left, x[1].left))
+    #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 7.5) & (item[0].right == 8.5) & (item[1].left == 0.0) & (item[1].right == 0.5)] # to choose the mass=7.5-8.5, sfr=0-0.5 bin for debugging purposes
 
-        # ------------setting up master dataframe-----------------------
-        df_grad = pd.DataFrame(columns=['log_mass_bin', 'log_sfr_bin', 'nobj', 'logOH_int', 'logOH_int_u', 'minor_logOH_grad', 'minor_logOH_grad_u', 'major_logOH_grad', 'major_logOH_grad_u', 'radial_logOH_grad', 'radial_logOH_grad_u'])
-        nbin_good = 0
+    # ------------setting up master dataframe----------------------
+    if args.bin_by_distance: df_grad = pd.DataFrame(columns=['bin_intervals', 'nobj', 'logOH_int', 'logOH_int_u', 'minor_logOH_grad', 'minor_logOH_grad_u', 'major_logOH_grad', 'major_logOH_grad_u', 'radial_logOH_grad', 'radial_logOH_grad_u'])
+    else: df_grad = pd.DataFrame(columns=['log_mass_bin', 'log_sfr_bin', 'nobj', 'logOH_int', 'logOH_int_u', 'minor_logOH_grad', 'minor_logOH_grad_u', 'major_logOH_grad', 'major_logOH_grad_u', 'radial_logOH_grad', 'radial_logOH_grad_u'])
+    nbin_good = 0
+    
+    # ------------looping over each bin-----------------------
+    for index2, this_mass_sfr_bin in enumerate(bin_list):
+        if args.debug_bin and nbin_good > 0: continue
+        start_time3 = datetime.now()
+        if args.bin_by_distance: bin_text = f'delta_sfms_bin_{this_mass_sfr_bin.left}-{this_mass_sfr_bin.right}'
+        else: bin_text = f'logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}'
+        print(f'\tStarting ({index2 + 1}/{len(bin_list)}) {bin_text}..', end=' ')
         
-        # ------------looping over each bin-----------------------
-        for index2, this_mass_sfr_bin in enumerate(bin_list):
-            if args.debug_bin and nbin_good > 0: continue
-            start_time3 = datetime.now()
-            bin_text = f'logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}'
-            print(f'\tStarting ({index2 + 1}/{len(bin_list)}) {bin_text}..', end=' ')
-            
-            # -------reading previously saved stacked fits file------------
-            stacked_filename = fits_dir / f'stacked_maps{deproject_text}{rescale_text}_{bin_text}.fits'
-            if not stacked_filename.exists():
-                print(f'No stacked fits file found for {bin_text}, so skipping this bin.')
-                continue
-            line_dict = read_stacked_maps(stacked_filename, args)
-            nbin_good += 1
+        # -------reading previously saved stacked fits file------------
+        stacked_filename = fits_dir / f'stacked_maps{deproject_text}{rescale_text}_{bin_text}.fits'
+        if not stacked_filename.exists():
+            print(f'No stacked fits file found for {bin_text}, so skipping this bin.')
+            continue
+        line_dict = read_stacked_maps(stacked_filename, args)
+        nbin_good += 1
 
-            # ---------fold stacked maps along major and minor axis--------------------
+        # ---------fold stacked maps along major and minor axis--------------------
+        if args.fold_maps:
+            line_list = [item for item in list(line_dict.keys()) if '_nobj' not in item and '_id' not in item]
+            print(f'Folding {len(line_list)} stacked emission maps for this mass-sfr bin..')
+            for line in line_list:
+                line_dict[line] = fold_line_map(line_dict[line], args, line=line)
+
+        # ---------------plot emission line maps of this bin---------------------
+        if args.plot_line_maps:
+            fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-19.5, cmax=-17.8)
+            if len(line_list) == 0:
+                print(f'No lines found for {bin_text}. So Skipping.')
+                continue
+            save_fig(fig_em, fig_dir, f'stacked{fold_text}_line_maps{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
+
+        # -----------------computing metallicity maps of this bin---------------
+        logOH_map, logOH_int, nobj = get_metallicity_map(line_dict, args)
+        if logOH_map is None:
+            print(f'Unable to compute {args.Zdiag} metallicity for {bin_text}. So Skipping.')
+            continue
+        else:
+            write_metallicity_map(logOH_map, logOH_int, fits_dir / f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.fits', args) # saving the metallicity maps as fits files
+        
+        # -----------------plot metallicity maps of this bin---------------
+        if args.plot_metallicity:
+            fig_met = plot_metallicity_map(logOH_map, args, bin_text=bin_text, Zmin=None, Zmax=None)
+            if not args.plot_radial_profiles: save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
+
+        # -----------------plot line maps and metallicity maps of this bin---------------
+        if args.plot_line_and_metallicity:
+            fig_met, line_list = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-19.5, cmax=-17.8, Zmin=None, Zmax=None)
+            save_fig(fig_met, fig_dir, f'stacked{fold_text}_line_and_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
+
+        # -----------------computing metallicity gradient of this bin---------------
+        if args.plot_radial_profiles:
+            ax = fig_met.axes[1]
+            quant = 'log_OH'
+            shape = np.shape(logOH_map)
+
             if args.fold_maps:
-                line_list = [item for item in list(line_dict.keys()) if '_nobj' not in item and '_id' not in item]
-                print(f'Folding {len(line_list)} stacked emission maps for this mass-sfr bin..')
-                for line in line_list:
-                    line_dict[line] = fold_line_map(line_dict[line], args, line=line)
-
-            # ---------------plot emission line maps of this bin---------------------
-            if args.plot_line_maps:
-                fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-19.5, cmax=-17.8)
-                if len(line_list) == 0:
-                    print(f'No lines found for {bin_text}. So Skipping.')
-                    continue
-                save_fig(fig_em, fig_dir, f'stacked{fold_text}_line_maps{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
-
-            # -----------------computing metallicity maps of this bin---------------
-            logOH_map, logOH_int, nobj = get_metallicity_map(line_dict, args)
-            if logOH_map is None:
-                print(f'Unable to compute {args.Zdiag} metallicity for {bin_text}. So Skipping.')
-                continue
+                center_xpix, center_ypix = (args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5 # this yields 0.5 (instead of 0) pixel offset for even-sized stacked maps, because the center of the map is in the center (and not the edge) of the first pixel
             else:
-                write_metallicity_map(logOH_map, logOH_int, fits_dir / f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.fits', args) # saving the metallicity maps as fits files
-            
-            # -----------------plot metallicity maps of this bin---------------
-            if args.plot_metallicity:
-                fig_met = plot_metallicity_map(logOH_map, args, bin_text=bin_text, Zmin=None, Zmax=None)
-                if not args.plot_radial_profiles: save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
+                center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
+            distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+            minor_distance_map = np.array([[np.abs(j - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+            major_distance_map = np.array([[np.abs(i - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
 
-            # -----------------plot line maps and metallicity maps of this bin---------------
-            if args.plot_line_and_metallicity:
-                fig_met, line_list = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-19.5, cmax=-17.8, Zmin=None, Zmax=None)
-                save_fig(fig_met, fig_dir, f'stacked{fold_text}_line_and_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
+            logOH_df = pd.DataFrame({'distance': distance_map.flatten(), 'minor_distance': minor_distance_map.flatten(), 'major_distance': major_distance_map.flatten(), f'{quant}': unp.nominal_values(logOH_map).flatten(), f'{quant}_u': unp.std_devs(logOH_map).flatten()})
+            logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
 
-            # -----------------computing metallicity gradient of this bin---------------
-            if args.plot_radial_profiles:
-                ax = fig_met.axes[1]
-                quant = 'log_OH'
-                shape = np.shape(logOH_map)
+            ax, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(logOH_df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant)
+            save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
 
-                if args.fold_maps:
-                    center_xpix, center_ypix = (args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5 # this yields 0.5 (instead of 0) pixel offset for even-sized stacked maps, because the center of the map is in the center (and not the edge) of the first pixel
-                else:
-                    center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
-                distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
-                minor_distance_map = np.array([[np.abs(j - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
-                major_distance_map = np.array([[np.abs(i - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+            # -------------save fit results to dataframe-----------------------
+            if args.bin_by_distance: thisrow = [this_mass_sfr_bin, nobj, logOH_int.n, logOH_int.s, minor_linefit_odr[0].n, minor_linefit_odr[0].s, major_linefit_odr[0].n, major_linefit_odr[0].s, radial_linefit_odr[0].n, radial_linefit_odr[0].s]
+            else: thisrow = [this_mass_sfr_bin[0], this_mass_sfr_bin[1], nobj, logOH_int.n, logOH_int.s, minor_linefit_odr[0].n, minor_linefit_odr[0].s, major_linefit_odr[0].n, major_linefit_odr[0].s, radial_linefit_odr[0].n, radial_linefit_odr[0].s]
+            df_grad.loc[len(df_grad)] = thisrow
 
-                logOH_df = pd.DataFrame({'distance': distance_map.flatten(), 'minor_distance': minor_distance_map.flatten(), 'major_distance': major_distance_map.flatten(), f'{quant}': unp.nominal_values(logOH_map).flatten(), f'{quant}_u': unp.std_devs(logOH_map).flatten()})
-                logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
+        print(f'\nCompleted bin {bin_text} in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
+    
+    # --------------------save master dataframe-----------------------------------
+    if nbin_good > 1 and args.plot_radial_profiles:
+        for thiscol in ['log_mass_bin', 'log_sfr_bin', 'bin_intervals']:
+            if thiscol in df_grad: df_grad[thiscol] = df_grad[thiscol].astype(str) # otherwise FITS cannot save 'Interval' datatype
 
-                ax, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(logOH_df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant)
-                save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
-
-                # -------------save fit results to dataframe-----------------------
-                thisrow = [this_mass_sfr_bin[0], this_mass_sfr_bin[1], nobj, logOH_int.n, logOH_int.s, minor_linefit_odr[0].n, minor_linefit_odr[0].s, major_linefit_odr[0].n, major_linefit_odr[0].s, radial_linefit_odr[0].n, radial_linefit_odr[0].s]
-                df_grad.loc[len(df_grad)] = thisrow
-
-            print(f'\nCompleted bin mass={this_mass_sfr_bin[0]}, sfr={this_mass_sfr_bin[1]} in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
+        Table.from_pandas(df_grad).write(output_filename, format='fits', overwrite=True)
+        print(f'Saved fitting data from all bins in {output_filename}')
         
-        # --------------------save master dataframe-----------------------------------
-        if nbin_good > 1 and args.plot_radial_profiles:
-            for thiscol in ['log_mass_bin', 'log_sfr_bin']: df_grad[thiscol] = df_grad[thiscol].astype(str) # otherwise FITS cannot save 'Interval' datatype
-
-            Table.from_pandas(df_grad).write(output_filename, format='fits', overwrite=True)
-            print(f'Saved fitting data from all bins in {output_filename}')
-        
-        print(f'Completed field {field} ({nbin_good} / {len(bin_list)} bins) in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
 

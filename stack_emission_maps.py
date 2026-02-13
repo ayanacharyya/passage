@@ -14,7 +14,7 @@
 from header import *
 from util import *
 from make_diagnostic_maps import trim_image, get_dereddened_flux, myimshow, get_offsets_from_center, get_cutout
-from make_sfms_bins import bin_SFMS_linear, bin_SFMS_adaptive, read_passage_sed_catalog, bin_SFMS_distance
+from make_sfms_bins import bin_SFMS_linear, bin_SFMS_adaptive, read_passage_sed_catalog, bin_SFMS_distance, n_adaptive_bins, sfms
 
 start_time = datetime.now()
 
@@ -415,6 +415,17 @@ if __name__ == "__main__":
         re_catalog_filename = args.output_dir / f'catalogs/{args.field}_re_list.fits'
         output_dir = args.output_dir / args.field / 'stacking'
 
+    # -------------binning the mass-SFR plane-------------
+    if args.adaptive_bins:
+        if args.bin_by_distance: df, bin_list = bin_SFMS_distance(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
+        else: df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
+    else:
+        if args.bin_by_distance: df, bin_list = bin_SFMS_distance(df, method_text='', delta_bin=0.2, sfms=sfms)
+        df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
+    
+    if args.bin_by_distance: bin_list = np.sort(bin_list)
+    else: bin_list.sort(key=lambda x: (x[0].left, x[1].left))
+
     # ---------merge with effective radius catalog--------------------
     if os.path.exists(re_catalog_filename):
         df_re = Table.read(re_catalog_filename).to_pandas()
@@ -440,25 +451,17 @@ if __name__ == "__main__":
         df = pd.merge(df, df_master_photcat, on=['field', 'id'], how='inner')
 
     # ------determining field-specific paths, etc-----------
+    if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
     output_dir.mkdir(parents=True, exist_ok=True)
     fig_dir = output_dir / f'plots{deproject_text}{rescale_text}'
     Path(fig_dir / 'binmembers').mkdir(parents=True, exist_ok=True)
     fits_dir = output_dir / f'maps{deproject_text}{rescale_text}'
     fits_dir.mkdir(parents=True, exist_ok=True)
 
-    # -------------binning the mass-SFR plane-------------
-    if args.adaptive_bins:
-        if args.bin_by_distance: df, bin_list = bin_SFMS_distance(df, method_text='', n_adaptive_bins=25, sfms='Popesso23')
-        else: df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
-    else:
-        df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
-    
     if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 8.5) & (item[0].right == 9.5) & (item[1].left == 1.0) & (item[1].right == 1.5)] # to choose the mass=8.5-9.5, sfr=1-1.5 bin for debugging purposes
     #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.5) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
 
     # ------------looping over each bin-----------------------
-    if args.bin_by_distance: bin_list = np.sort(list(bin_list))
-    else: bin_list = list(bin_list).sort(key=lambda x: (x[0].left, x[1].left))
     nbin_good = 0
 
     for index2, this_mass_sfr_bin in enumerate(bin_list):

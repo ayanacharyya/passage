@@ -8,12 +8,12 @@
              run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --adaptive_bins --fold_maps --overplot_literature --overplot_passage
              run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_minor_major_profile
              run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --fold_maps
-             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --fold_maps
+             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance --overplot_literature --overplot_passage --fold_maps
 '''
 
 from header import *
 from util import *
-from make_sfms_bins import log_mass_bins, log_sfr_bins, read_passage_sed_catalog
+from make_sfms_bins import log_mass_bins, log_sfr_bins, read_passage_sed_catalog, bin_SFMS_linear, bin_SFMS_adaptive, read_passage_sed_catalog, bin_SFMS_distance, get_sfms_func, n_adaptive_bins, sfms
 from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
 
 start_time = datetime.now()
@@ -26,9 +26,10 @@ def read_stacked_df(filename):
     '''
     df = Table.read(filename).to_pandas()
     print(f'Reading in {filename}..')
-    for thiscol in ['log_mass_bin', 'log_sfr_bin']:
-        df[thiscol] = df[thiscol].str.decode('utf-8')
-        df[thiscol] = pd.IntervalIndex.from_tuples(df[thiscol].apply(lambda x: pd.to_numeric(x.strip('()[]').split(', '))).map(tuple), closed='left')
+    for thiscol in ['log_mass_bin', 'log_sfr_bin', 'bin_intervals']:
+        if thiscol in df:
+            df[thiscol] = df[thiscol].str.decode('utf-8')
+            df[thiscol] = pd.IntervalIndex.from_tuples(df[thiscol].apply(lambda x: pd.to_numeric(x.strip('()[]').split(', '))).map(tuple), closed='right')
 
     return df
 
@@ -294,14 +295,60 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
             spine.set_linewidth(1.)
             spine.set_edgecolor('black')
 
-    # ----------over-plotting theoretical diagrams----------
-    if args.overplot_literature:
-        #ax = plot_SFMS_Whitaker14(ax,2,  color='yellowgreen')
-        ax = plot_SFMS_Shivaei15(ax, color='darkgreen')
-        ax = plot_SFMS_Popesso23(ax, 2, color='darkgoldenrod')
-        #ax = plot_SFMS_Popesso23(ax, 3, color='royalblue')
-        ax.legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
+    return ax
 
+# --------------------------------------------------------------------------------------------------------------------
+def make_heatmap_distance(ax, df, sfms, quant, args, method_text='', cmap='viridis', hide_xaxis=False, hide_yaxis=False, hide_cbar=False, cmin=None, cmax=None, clabel='', ncbins=4):
+    '''
+    Makes heatmap from a dataframe that has been binned by distance from the SFMS, using patches, and annotates based on another pivot table, onto a given axis handle
+    Returns axis handle
+    '''
+    # ---------obtaining sfms function and color mappable---------
+    sfms_func = get_sfms_func(log_mass_bins, sfms)
+    norm = mplcolors.Normalize(vmin=cmin, vmax=cmax)
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+   
+    # -----------defining vertices, for annotating and color-coding the bins-------------
+    for index, row in df.iterrows():
+        interval = row[f'bin_intervals{method_text}']
+        m_grid = np.linspace(row['log_mass_min'], row['log_mass_max'], 50)
+        sfms_line = sfms_func(m_grid)
+        
+        color = sm.to_rgba(row[quant])
+        ax.fill_between(m_grid, sfms_line + interval.left, sfms_line + interval.right, color=color, alpha=0.8, edgecolor='k', lw=0.)
+        
+        s_center = sfms_func(row['log_mass_median']) + (interval.left + interval.right) / 2
+        ax.text(row['log_mass_median'], s_center, int(row['nobj']), color='k' if int(row['nobj']) > 30 else 'w', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
+ 
+    # --------annotating axis borders-----------------
+    ax.set_xlim(log_mass_bins.min() -0.2, log_mass_bins.max() + 0.2)
+    ax.set_ylim(log_sfr_bins.min() -0.2, log_sfr_bins.max()+ 0.2)
+
+    if hide_xaxis:
+        ax.tick_params(axis='x', which='major', labelsize=args.fontsize, labelbottom=False)
+    else:
+        ax.set_xlabel(r'$\log$ Stellar Mass [M$_\odot$]', fontsize=args.fontsize)
+        ax.tick_params(axis='x', which='major', labelsize=args.fontsize, labelbottom=True)
+
+    if hide_yaxis:
+        ax.tick_params(axis='y', which='major', labelsize=args.fontsize, labelleft=False)
+    else:
+        ax.set_ylabel(r'$\log$ SFR [M$_\odot$/yr]', fontsize=args.fontsize)
+        ax.tick_params(axis='y', which='major', labelsize=args.fontsize, labelleft=True)
+
+    # ---------annotating colorbar------------
+    if not hide_cbar:
+        if cmin is None: cmin = df[quant].min()
+        if cmax is None: cmax = df[quant].max()
+        norm = mplcolors.Normalize(vmin=cmin, vmax=cmax)
+
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        cbar = plt.colorbar(sm, ax=ax, label=clabel)
+        cbar.set_label(clabel, fontsize=args.fontsize)
+        cbar.ax.tick_params(labelsize=args.fontsize)
+        cbar.locator = ticker.MaxNLocator(integer=False, nbins=ncbins)#, prune='both')
+        cbar.update_ticks()
+    
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -317,22 +364,27 @@ def plot_SFMS_heatmap_patches(df, args, quant='logOH'):
     fig.subplots_adjust(left=0.07, right=0.97, top=0.95, bottom=0.13, wspace=0.2, hspace=0.)
     
     # ---------plot the heatmaps-------------------
-    if args.plot_minor_major_profile:
-        axes[0] = make_heatmap_patches(axes[0], df, f'minor_{quant}_grad', args, cmap='coolwarm', clabel=r'Minor $\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot minor metallicity gradient heatmap
-        axes[1] = make_heatmap_patches(axes[1], df, f'major_{quant}_grad', args, cmap='coolwarm', clabel=r'Major $\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot major metallicity gradient heatmap
+    if args.bin_by_distance:
+        if args.plot_minor_major_profile:
+            axes[0] = make_heatmap_distance(axes[0], df, sfms, f'minor_{quant}_grad', args, cmap='coolwarm', clabel=r'Minor $\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot integrated metallicity heatmap
+            axes[1] = make_heatmap_distance(axes[1], df, sfms, f'major_{quant}_grad', args, cmap='coolwarm', clabel=r'Major $\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot metallicity gradient heatmap
+        else:
+            axes[0] = make_heatmap_distance(axes[0], df, sfms, f'{quant}_int', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', cmin=7.0, cmax=7.5, ncbins=5) # plot integrated metallicity heatmap
+            axes[1] = make_heatmap_distance(axes[1], df, sfms, f'radial_{quant}_grad', args, cmap='coolwarm', clabel=r'$\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot metallicity gradient heatmap
     else:
-        axes[0] = make_heatmap_patches(axes[0], df, f'{quant}_int', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', cmin=7.0, cmax=7.5, ncbins=5) # plot integrated metallicity heatmap
-        axes[1] = make_heatmap_patches(axes[1], df, f'radial_{quant}_grad', args, cmap='coolwarm', clabel=r'$\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot metallicity gradient heatmap
+        if args.plot_minor_major_profile:
+            axes[0] = make_heatmap_patches(axes[0], df, f'minor_{quant}_grad', args, cmap='coolwarm', clabel=r'Minor $\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot minor metallicity gradient heatmap
+            axes[1] = make_heatmap_patches(axes[1], df, f'major_{quant}_grad', args, cmap='coolwarm', clabel=r'Major $\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot major metallicity gradient heatmap
+        else:
+            axes[0] = make_heatmap_patches(axes[0], df, f'{quant}_int', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', cmin=7.0, cmax=7.5, ncbins=5) # plot integrated metallicity heatmap
+            axes[1] = make_heatmap_patches(axes[1], df, f'radial_{quant}_grad', args, cmap='coolwarm', clabel=r'$\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot metallicity gradient heatmap
 
     # ---------overplot PASSAGE galaxies (integrated stellar mass-SFR)--------------------
     if args.overplot_passage:
-    # ---------reading in the master SED catalog----------------
-        if args.do_all_fields:
+        if args.do_all_fields: # reading in the master SED catalog
             passage_catalog_filename = args.output_dir / 'catalogs' / 'passagepipe_v0.5_SED_fits_cosmosweb_v1.0.0-alpha.fits'
             df_photcat = read_passage_sed_catalog(passage_catalog_filename)
-        
-        # ---------reading in the single-field phot catalog----------------
-        else:
+        else: # reading in the single-field phot catalog
             product_dir = args.input_dir / args.field / 'Products'
             df_photcat = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
             df_photcat['field'] = args.field
@@ -341,9 +393,19 @@ def plot_SFMS_heatmap_patches(df, args, quant='logOH'):
         col, edgecol = 'w', 'sienna'
         for ax in axes:
             ax.scatter(df_photcat['log_mass'], df_photcat['log_sfr'], s=5, c=col, lw=1, edgecolors=edgecol, label=f'{args.field}')
-            ax.legend(fontsize=args.fontsize / args.fontfactor, loc='upper left')
+        axes[0].legend(fontsize=args.fontsize / args.fontfactor, loc='upper left')
 
     plt.show(block=False)
+
+    # ----------over-plotting theoretical diagrams----------
+    if args.overplot_literature:
+        for ax in axes:
+            if sfms == 'Whitaker14': ax = plot_SFMS_Whitaker14(ax, 2, color='crimson')
+            elif sfms == 'Shivaei15': ax = plot_SFMS_Shivaei15(ax, color='royalblue')
+            elif sfms == 'Popesso23': ax = plot_SFMS_Popesso23(ax, 2, color='darkgreen')
+            #elif sfms == 'Popesso23': ax = plot_SFMS_Popesso23(ax, 3, color='royalblue')
+            else: raise ValueError(f'Method {sfms} not found in the list of available SFMS literature methods: Whitaker14, Shivaei15, Popesso23')
+        axes[0].legend(fontsize=args.fontsize / args.fontfactor, loc='upper left')
 
     return fig
 
@@ -356,41 +418,52 @@ if __name__ == "__main__":
     adapt_text = '_adaptivebins' if args.adaptive_bins else ''
     deproject_text = '_nodeproject' if args.skip_deproject else ''
     rescale_text = '_norescale' if args.skip_re_scaling else ''
+    C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
+    binby_text = '_binby_distance' if args.bin_by_distance else ''
 
     # ---------determining list of fields----------------
     if args.do_all_fields:
-        field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par[0-9][0-9][0-9]') + '/')]
-        field_list.sort(key=natural_keys)
+        passage_catalog_filename = args.output_dir / 'catalogs' / 'passagepipe_v0.5_SED_fits_cosmosweb_v1.0.0-alpha.fits'
+        df = read_passage_sed_catalog(passage_catalog_filename)
+        output_dir = args.output_dir / 'stacking'
     else:
-        field_list = args.field_arr
-    
-    # --------loop over all fields------------------
-    for index, field in enumerate(field_list):
-        start_time2 = datetime.now()
-        args.field = f'Par{int(field[3:]):03}' if len(field) < 6 else field
-        print(f'\nStarting field {args.field} which is {index + 1} of {len(field_list)}..')
-
-        # ------determining field-specific paths, etc-----------
         product_dir = args.input_dir / args.field / 'Products'
+        df = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
+        df['field'] = args.field
+        df = get_passage_masses_from_cosmos(df, args, id_col='id') # crossmatch with cosmos-web to get stellar mass and SFR
         output_dir = args.output_dir / args.field / 'stacking'
-        if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
-        output_dir.mkdir(parents=True, exist_ok=True)
-        fig_dir = output_dir / f'plots{deproject_text}{rescale_text}'
-        fig_dir.mkdir(parents=True, exist_ok=True)
-        fits_dir = output_dir / f'maps{deproject_text}{rescale_text}'
-        fits_dir.mkdir(parents=True, exist_ok=True)
 
-        C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
-        grad_filename = fits_dir / f'stacked{fold_text}_fits_allbins_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}.fits'
+    # -------------binning the mass-SFR plane-------------
+    if args.adaptive_bins:
+        if args.bin_by_distance: df, bin_list = bin_SFMS_distance(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
+        else: df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
+    else:
+        if args.bin_by_distance: df, bin_list = bin_SFMS_distance(df, method_text='', delta_bin=0.2, sfms=sfms)
+        df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
 
-        # -------------reading in stacked gradient dataframe-----------------------
-        df_grad = read_stacked_df(grad_filename)
-        
-        # ------------plotting stacked gradients on SFMS--------------------------
-        #fig = plot_SFMS_heatmap_sns(df_grad, args)
-        fig = plot_SFMS_heatmap_patches(df_grad, args)
-        save_fig(fig, fig_dir, f'stacked{adapt_text}{fold_text}_SFMS_heatmap.png', args) # saving the figure
+    if args.bin_by_distance: bin_list = np.sort(bin_list)
+    else: bin_list.sort(key=lambda x: (x[0].left, x[1].left))
 
-        print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
+    # ----------getting directory structure----------
+    if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fig_dir = output_dir / f'plots{deproject_text}{rescale_text}'
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    fits_dir = output_dir / f'maps{deproject_text}{rescale_text}'
+    fits_dir.mkdir(parents=True, exist_ok=True)
+
+    grad_filename = fits_dir / f'stacked{binby_text}{fold_text}_fits_allbins_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}.fits'
+
+    # -------------reading in stacked gradient dataframe-----------------------
+    df_grad = read_stacked_df(grad_filename)
+    if args.bin_by_distance:
+        df = df.groupby(['bin_intervals']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median')).reset_index()
+        df_grad = pd.merge(df_grad, df, on=['bin_intervals'], how='left')
+    
+    # ------------plotting stacked gradients on SFMS--------------------------
+    #fig = plot_SFMS_heatmap_sns(df_grad, args)
+    fig = plot_SFMS_heatmap_patches(df_grad, args)
+    save_fig(fig, fig_dir, f'stacked{adapt_text}{fold_text}_SFMS_heatmap.png', args) # saving the figure
+
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

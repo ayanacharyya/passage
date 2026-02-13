@@ -489,25 +489,26 @@ def read_passage_sed_catalog(filename):
 delta_log_mass, delta_log_sfr = 0.5, 0.5
 log_mass_bins = np.arange(6.5, 11.5 + delta_log_mass/2, delta_log_mass)
 log_sfr_bins = np.arange(-2.5, 2.5 + delta_log_sfr/2, delta_log_sfr)
-    
+
+# ---------------choose which binning methods to try---------------
+methods = ['linear', \
+            'adaptive_nmin', \
+            #'adaptive_nmax', \
+            'voronoi', \
+            'distance', \
+            ]
+min_n = 10 # for adaptive_nmin binning
+max_n = 50 # for adaptive_nmax binning
+target_n = 30 # for voronoi binning
+n_adaptive_bins = 25 # for distance (from SFMS) binning
+sfms =  'Popesso23' # from 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
+
+
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
     args.fontfactor = 1.5
-
-    # ---------------choose which binning methods to try---------------
-    methods = ['linear', \
-                'adaptive_nmin', \
-                #'adaptive_nmax', \
-                'voronoi', \
-                'distance', \
-               ]
-    min_n = 10 # for adaptive_nmin binning
-    max_n = 50 # for adaptive_nmax binning
-    target_n = 30 # for voronoi binning
-    n_adaptive_bins = 25 # for distance (from SFMS) binning
-    sfms =  'Popesso23' # from 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
 
     # ---------reading in the master SED catalog----------------
     if args.do_all_fields:
