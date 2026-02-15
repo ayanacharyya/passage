@@ -345,6 +345,173 @@ def get_Z_C19(line_dict, args):
     return logOH_map, logOH_int, nobj
 
 # --------------------------------------------------------------------------------------------------------------------
+def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
+    '''
+    Calculates and returns the NebulaBayes metallicity given a list of observed line fluxes
+    '''
+    line_flux_array = [np.atleast_1d(item) for item in line_flux_array]
+    
+    map_shape = np.shape(line_flux_array[0])
+    if len(map_shape) == 1: npixels = map_shape[0]
+    else: npixels = map_shape[0] * map_shape[1]
+
+    IDs_array = np.arange(npixels).flatten()
+    unique_IDs_array = np.unique(IDs_array)   
+    print(f'\nAbout to start running NB, with {len(line_label_array)} lines: {line_label_array}..\n')
+    if len(unique_IDs_array) > 60: print(f'This might take ~{int(len(unique_IDs_array) / 60)} min')
+
+    # -----making a "net" mask array and separating out the line fluxes form the input unumpy arrays---------
+    net_mask = np.zeros(np.shape(line_flux_array[0]), dtype=bool)
+    obs_flux_array, obs_err_array = [], []
+
+    for index in range(len(line_flux_array)):
+        if np.ma.isMaskedArray(line_flux_array[index]):
+            net_mask = net_mask | line_flux_array[index].mask
+            obs_flux_array.append(unp.nominal_values(line_flux_array[index].data).flatten())
+            obs_err_array.append(unp.std_devs(line_flux_array[index].data).flatten())
+        else:
+            obs_flux_array.append(unp.nominal_values(line_flux_array[index]).flatten())
+            obs_err_array.append(unp.std_devs(line_flux_array[index]).flatten())
+
+    obs_flux_array = np.array(obs_flux_array)
+    obs_err_array = np.array(obs_err_array)
+    net_mask_array = net_mask.flatten()
+
+    # -----loading the NB HII region model grid---------
+    NB_Model_HII = NB_Model("HII", line_list=line_label_array)
+
+    out_dir = fits_dir / f'{bin_text}_NB_results'
+    out_subdirs = [out_dir / 'prior_plots', out_dir / 'likelihood_plots', out_dir / 'posterior_plots', out_dir / 'best_model_catalogs', out_dir / 'param_estimates_catalogs']
+    for this_out_subdir in out_subdirs: this_out_subdir.mkdir(exist_ok=True, parents=True)
+
+    # -----looping over each pixel to calculate NB metallicity--------
+    logOH_array = []
+    logOH_dict_unique_IDs = {}
+    counter = 0
+    start_time3 = datetime.now()
+
+    for index in range(len(obs_flux_array[0])):
+        this_ID = IDs_array[index]
+        if net_mask_array[index]: # no need to calculate for those pixels that are already masked
+            #print(f'Skipping NB for masked pixel {index + 1} out of {len(obs_flux_array[0])}..')
+            logOH = ufloat(np.nan, np.nan)
+        elif this_ID in logOH_dict_unique_IDs.keys():
+            #print(f'Skipping NB due to existing measurement from unique ID {this_ID} for pixel {index + 1} out of {len(obs_flux_array[0])}..')
+            logOH = logOH_dict_unique_IDs[this_ID]
+        else:
+            start_time4 = datetime.now()
+
+            # ------getting all line fluxes-------------
+            obs_fluxes = obs_flux_array[:,index]
+            obs_errs = obs_err_array[:, index]
+
+            # ------discarding lines with negative fluxes-------------
+            good_obs = (obs_fluxes >= 0) & (obs_errs > 0)
+            obs_fluxes = obs_fluxes[good_obs]
+            obs_errs = obs_errs[good_obs]
+            line_labels = list(np.array(line_label_array)[good_obs])
+            line_waves = np.array(line_waves_array)[good_obs]
+
+            if len(line_labels) > 1:
+                # -------setting up NB parameters----------
+                dered = 'Hbeta' in line_labels and 'Halpha' in line_labels and args.dered_in_NB
+                norm_line = 'Hbeta' if 'Hbeta' in line_labels else 'OIII5007' if 'OIII5007' in line_labels else 'NII6583_Halpha' if 'NII6583_Halpha' in line_labels else 'Halpha' if 'Halpha' in line_labels else line_labels[0]
+                kwargs = {'prior_plot': os.path.join(out_dir, 'prior_plots', f'{this_ID}_HII_prior_plot.pdf'),
+                        'likelihood_plot': os.path.join(out_dir, 'likelihood_plots', f'{this_ID}_HII_likelihood_plot.pdf'),
+                        'posterior_plot': os.path.join( out_dir, 'posterior_plots', f'{this_ID}_HII_posterior_plot.pdf'),
+                        'estimate_table': os.path.join(out_dir, 'best_model_catalogs', f'{this_ID}_HII_param_estimates.csv'),
+                        'best_model_table': os.path.join(out_dir, 'param_estimates_catalogs', f'{this_ID}_HII_best_model.csv'),
+                        'verbosity': 'ERROR',
+                        'norm_line':norm_line,
+                        'deredden': dered,
+                        'propagate_dered_errors': dered,
+                        'obs_wavelengths': line_waves if dered else None
+                        }
+
+                # -------running NB--------------
+                #print(f'Deb1576: binID {this_ID}: nlines={len(obs_fluxes)}, {dict(zip(line_labels, obs_fluxes))}, norm_line = {norm_line}, dereddening on the fly? {dered}') ##
+                Result = NB_Model_HII(obs_fluxes, obs_errs, line_labels, **kwargs)
+
+                # -------estimating the resulting logOH, and associated uncertainty-----------
+                df_estimates = Result.Posterior.DF_estimates # pandas DataFrame
+                logOH_est = df_estimates.loc['12 + log O/H', 'Estimate']
+                logOH_low = df_estimates.loc['12 + log O/H', 'CI68_low']
+                logOH_high = df_estimates.loc['12 + log O/H', 'CI68_high']
+                logOH_err = np.mean([logOH_est - logOH_low, logOH_high - logOH_est])
+                logOH = ufloat(logOH_est, logOH_err)
+                
+                print(f'Ran NB for unique ID {this_ID} ({counter + 1} out of {len(unique_IDs_array)}) with {len(obs_fluxes)} good fluxes in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
+
+                best_model_dict = Result.Posterior.best_model
+                if 'Halpha' in line_labels and 'NII6583' in line_labels:
+                    N2Ha_model = best_model_dict['table'].loc['NII6583', 'Model'] / best_model_dict['table'].loc['Halpha', 'Model']
+                    print(f'N2Ha = {N2Ha_model}')
+            
+            else:
+                logOH = ufloat(np.nan, np.nan)
+                print(f'Could not run NB for unique ID {this_ID} ({counter + 1} out of {len(unique_IDs_array)}) with only {len(obs_fluxes)} good fluxes')
+
+            counter += 1
+            logOH_dict_unique_IDs.update({this_ID: logOH}) # updating to unique ID dictionary once logOH has been calculated for this unique ID
+
+        logOH_array.append(logOH)
+    print(f'\nRan NB for total {counter} unique pixels out of {len(obs_flux_array[0])}, in {timedelta(seconds=(datetime.now() - start_time3).seconds)}\n')
+
+    # ---------collating all the metallicities computed---------
+    log_OH = np.ma.masked_where(net_mask, np.reshape(logOH_array, np.shape(line_flux_array[0])))
+    if len(log_OH) == 1: log_OH = log_OH.data[0]
+
+    return log_OH
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_Z_NB(line_dict, args):
+    '''
+    Computes and returns the spatially resolved as well as intregrated metallicity from a given HDU, based on Bayesian
+    statistics, using NebulaBayes
+    '''
+    # -----dict for converting line label names to those acceptable to NB---------
+    if args.use_original_NB_grid: line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
+                       'Ha':'Halpha', 'SII':'SII6716', 'NeIII-3867':'NeIII3869'}
+    else: line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
+                       'Ha':'Halpha' if args.dered_in_NB else 'NII6583_Halpha', 'SII':'SII6716_31', 'NeIII-3867':'NeIII3869', 'OII-7325':'OII7320', \
+                       'HeI-5877':'HeI5876', 'Hg':'Hgamma', 'Hd':'Hdelta', 'NII':'NII6583'}
+
+    line_list = [item for item in list(line_dict.keys()) if '_nobj' not in item and '_id' not in item]
+    line_map_array, line_int_array, line_label_array, line_waves_array, nobj_array = [], [], [], [], []
+    
+    for line in line_list:
+        line_map, line_int, nobj = get_emission_line_map(line, line_dict, args, silent=False)
+        if not args.do_not_correct_flux:
+            factor = 1.
+            if args.use_original_NB_grid:
+                if line == 'SII':
+                    factor = 2.  # from grizli source code
+                    print(f'Correcting SII to exclude the other SII component, i.e. dividing by factor {factor:.3f}')
+            else:
+                if line == 'OIII':
+                    ratio_5007_to_4959 = 2.98  # from grizli source code
+                    factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
+                    print(f'Un-correcting OIII to include the 4959 component back, i.e. dividing by factor {factor:.3f} because in NB, OIII = 5007+4959')
+                if line == 'Ha' and not args.dered_in_NB:
+                    factor = 0.823  # from grizli source code
+                    print(f'Un-correcting Ha to include the NII component back, i.e. dividing by factor {factor:.3f} because NB can use line summation')
+            if line_map is not None: line_map = np.ma.masked_where(line_map.mask, line_map.data / factor)
+            line_int = line_int / factor
+
+        if line in line_label_dict.keys() and line not in args.exclude_lines:
+            nobj_array.append(nobj)
+            line_map_array.append(line_map)
+            line_int_array.append(line_int)
+            line_label_array.append(line_label_dict[line])
+            line_waves_array.append(rest_wave_dict[line] * 10) # factor of 10 to convert from nm to Angstroms
+
+    # ----------calling NB----------------------
+    logOH_map = compute_Z_NB(line_label_array, line_waves_array, line_map_array)
+    logOH_int = compute_Z_NB(line_label_array, line_waves_array, line_int_array)
+
+    return logOH_map, logOH_int, line_label_array, np.min(nobj_array)
+
+# --------------------------------------------------------------------------------------------------------------------
 def get_metallicity_map(line_dict, args):
     '''
     Computes 2D metallicity and integrated metallicity from a given dictionary of several stacked lines 
@@ -368,7 +535,7 @@ def get_metallicity_map(line_dict, args):
     return logOH_map, logOH_int, nobj
 
 # --------------------------------------------------------------------------------------------------------------------
-def write_metallicity_map(logOH_map, logOH_int, outfilename, args):
+def write_metallicity_map(logOH_map, logOH_int, outfilename, args, nobj=None):
     '''
     Writes the 2D metallicity map and the integrated metallicity (and uncertainties) as a fits file
     '''
@@ -385,6 +552,9 @@ def write_metallicity_map(logOH_map, logOH_int, outfilename, args):
     hdr2['log_oh_int_err'] = None if ~np.isfinite(logOH_int.s) else logOH_int.s
     if 'NB' in args.Zdiag:
         hdr2['nb_old_grid'] = True if args.use_original_NB_grid and args.Zdiag == 'NB' else False
+    if nobj is not None:
+        hdr2['nobj'] = f'{nobj}'
+
 
     logOH_val_hdu = fits.ImageHDU(data=logOH_map_val, name='log_OH', header=hdr2)
     logOH_err_hdu = fits.ImageHDU(data=logOH_map_err, name='log_OH_u')
@@ -392,6 +562,32 @@ def write_metallicity_map(logOH_map, logOH_int, outfilename, args):
     hdul.writeto(outfilename, overwrite=True)
 
     print(f'Saved metallicity maps in {outfilename}')
+
+# --------------------------------------------------------------------------------------------------------------------
+def read_metallicity_map(infilename):
+    '''
+    Reads the 2D metallicity map and the integrated metallicity (and uncertainties) from a fits file
+    '''
+    print(f'\nReading from existing file {infilename}')
+
+    hdul = fits.open(infilename)
+    
+    logOH_map_val = hdul['log_OH'].data
+    logOH_map_err = hdul['log_OH_u'].data
+    mask = np.isnan(logOH_map_val)
+    logOH_map = np.ma.masked_where(mask, unp.uarray(logOH_map_val, logOH_map_err))
+
+    header = hdul['log_OH'].header
+    if 'log_oh_int' in header:
+        val, err = header['log_oh_int'], header['log_oh_int_err']
+        if val is not None and err is not None: logOH_int = ufloat(float(val), float(err))
+        else: logOH_int = ufloat(np.nan, np.nan)
+    else:
+        logOH_int = ufloat(np.nan, np.nan)
+    if 'nobj' in header: nobj = header['nobj']
+    else: nobj = None
+
+    return logOH_map, logOH_int, nobj
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_profile(df, ax, linefit_odr, quant_x, quant_y, col='grey', index=0):
@@ -608,7 +804,7 @@ if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
     if args.re_limit is None: args.re_limit = 2.
-    if args.plot_radial_profiles: args.plot_metallicity = True
+    if args.plot_radial_profiles and not args.plot_line_and_metallicity: args.plot_metallicity = True
 
     deproject_text = '_nodeproject' if args.skip_deproject else ''
     rescale_text = '_norescale' if args.skip_re_scaling else ''
@@ -655,6 +851,7 @@ if __name__ == "__main__":
     if args.bin_by_distance: bin_list = np.sort(bin_list)
     else: bin_list.sort(key=lambda x: (x[0].left, x[1].left))
     #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 7.5) & (item[0].right == 8.5) & (item[1].left == 0.0) & (item[1].right == 0.5)] # to choose the mass=7.5-8.5, sfr=0-0.5 bin for debugging purposes
+    if args.debug_bin: bin_list = bin_list[:1]
 
     # ------------setting up master dataframe----------------------
     if args.bin_by_distance: df_grad = pd.DataFrame(columns=['bin_intervals', 'nobj', 'logOH_int', 'logOH_int_u', 'minor_logOH_grad', 'minor_logOH_grad_u', 'major_logOH_grad', 'major_logOH_grad_u', 'radial_logOH_grad', 'radial_logOH_grad_u'])
@@ -693,12 +890,16 @@ if __name__ == "__main__":
             save_fig(fig_em, fig_dir, f'stacked{fold_text}_line_maps{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -----------------computing metallicity maps of this bin---------------
-        logOH_map, logOH_int, nobj = get_metallicity_map(line_dict, args)
-        if logOH_map is None:
-            print(f'Unable to compute {args.Zdiag} metallicity for {bin_text}. So Skipping.')
-            continue
+        metallicity_map_fits_file = fits_dir / f'stacked{fold_text}_metallicity_map_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}_{bin_text}.fits'
+        if not os.path.exists(metallicity_map_fits_file) or args.clobber:
+            logOH_map, logOH_int, nobj = get_metallicity_map(line_dict, args)
+            if logOH_map is None:
+                print(f'Unable to compute {args.Zdiag} metallicity for {bin_text}. So Skipping.')
+                continue
+            else:
+                write_metallicity_map(logOH_map, logOH_int, metallicity_map_fits_file, args) # saving the metallicity maps as fits files
         else:
-            write_metallicity_map(logOH_map, logOH_int, fits_dir / f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.fits', args) # saving the metallicity maps as fits files
+            logOH_map, logOH_int, nobj = read_metallicity_map(metallicity_map_fits_file)
         
         # -----------------plot metallicity maps of this bin---------------
         if args.plot_metallicity:
