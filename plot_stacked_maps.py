@@ -20,6 +20,7 @@ from util import *
 from make_diagnostic_maps import compute_Z_C19, compute_Z_KD02_R23, compute_Z_P25, compute_Z_Te, compute_Te, take_safe_log_ratio, take_safe_log_sum, myimshow
 from stack_emission_maps import read_stacked_maps
 from plots_for_zgrad_paper import plot_fitted_line, odr_fit
+from make_sfms_bins import log_mass_bins, log_sfr_bins, read_passage_sed_catalog, bin_SFMS_linear, bin_SFMS_adaptive, read_passage_sed_catalog, bin_SFMS_distance, get_sfms_func, n_adaptive_bins, sfms
 
 start_time = datetime.now()
 
@@ -828,13 +829,28 @@ if __name__ == "__main__":
     
     # ---------determining list of fields----------------
     if args.do_all_fields:
-        field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par[0-9][0-9][0-9]') + '/')]
-        field_list.sort(key=natural_keys)
+        passage_catalog_filename = args.output_dir / 'catalogs' / 'passagepipe_v0.5_SED_fits_cosmosweb_v1.0.0-alpha.fits'
+        df = read_passage_sed_catalog(passage_catalog_filename)
         output_dir = args.output_dir / 'stacking'
     else:
-        field_list = args.field_arr
+        product_dir = args.input_dir / args.field / 'Products'
+        df = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
+        df['field'] = args.field
+        df = get_passage_masses_from_cosmos(df, args, id_col='id') # crossmatch with cosmos-web to get stellar mass and SFR
         output_dir = args.output_dir / args.field / 'stacking'
     
+    # -------------binning the mass-SFR plane-------------
+    if args.adaptive_bins:
+        if args.bin_by_distance: df, bin_list = bin_SFMS_distance(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
+        else: df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
+    else:
+        if args.bin_by_distance: df, bin_list = bin_SFMS_distance(df, method_text='', delta_bin=0.2, sfms=sfms)
+        df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
+
+    if args.bin_by_distance: bin_list = np.sort(bin_list)
+    else: bin_list.sort(key=lambda x: (x[0].left, x[1].left))
+    if args.debug_bin: bin_list = bin_list[:1]
+
     # ----------getting directory structure----------
     if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -844,14 +860,6 @@ if __name__ == "__main__":
     fits_dir.mkdir(parents=True, exist_ok=True)
 
     output_filename = fits_dir / f'stacked{binby_text}{fold_text}_fits_allbins_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}.fits'
-
-    # --------getting the list of bins from available fits files---------------
-    stacked_files = glob.glob(str(fits_dir) + '/stacked_maps_*.fits')
-    bin_list = [get_interval_from_filename(item) for item in stacked_files]
-    if args.bin_by_distance: bin_list = np.sort(bin_list)
-    else: bin_list.sort(key=lambda x: (x[0].left, x[1].left))
-    #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 7.5) & (item[0].right == 8.5) & (item[1].left == 0.0) & (item[1].right == 0.5)] # to choose the mass=7.5-8.5, sfr=0-0.5 bin for debugging purposes
-    if args.debug_bin: bin_list = bin_list[:1]
 
     # ------------setting up master dataframe----------------------
     if args.bin_by_distance: df_grad = pd.DataFrame(columns=['bin_intervals', 'nobj', 'logOH_int', 'logOH_int_u', 'minor_logOH_grad', 'minor_logOH_grad_u', 'major_logOH_grad', 'major_logOH_grad_u', 'radial_logOH_grad', 'radial_logOH_grad_u'])

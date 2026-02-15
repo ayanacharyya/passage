@@ -318,7 +318,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='', cmap='virid
         ax.fill_between(m_grid, sfms_line + interval.left, sfms_line + interval.right, color=color, alpha=0.8, edgecolor='k', lw=0.)
         
         s_center = sfms_func(row['log_mass_median']) + (interval.left + interval.right) / 2
-        ax.text(row['log_mass_median'], s_center, int(row['nobj']), color='k' if int(row['nobj']) > 30 else 'w', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
+        if ~np.isnan(row['nobj']): ax.text(row['log_mass_median'], s_center, int(row['nobj']), color='k' if int(row['nobj']) > 30 else 'k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
  
     # --------annotating axis borders-----------------
     ax.set_xlim(log_mass_bins.min() -0.2, log_mass_bins.max() + 0.2)

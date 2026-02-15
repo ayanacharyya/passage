@@ -500,7 +500,7 @@ methods = ['linear', \
 min_n = 10 # for adaptive_nmin binning
 max_n = 50 # for adaptive_nmax binning
 target_n = 30 # for voronoi binning
-n_adaptive_bins = 25 # for distance (from SFMS) binning
+n_adaptive_bins = 15 # for distance (from SFMS) binning
 sfms =  'Popesso23' # from 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
 
 
