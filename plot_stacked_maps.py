@@ -585,7 +585,7 @@ def read_metallicity_map(infilename):
     else:
         logOH_int = ufloat(np.nan, np.nan)
     if 'nobj' in header: nobj = header['nobj']
-    else: nobj = None
+    else: nobj = np.nan
 
     return logOH_map, logOH_int, nobj
 
