@@ -458,9 +458,9 @@ if __name__ == "__main__":
     fits_dir = output_dir / f'maps{deproject_text}{rescale_text}'
     fits_dir.mkdir(parents=True, exist_ok=True)
 
-    if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 8.5) & (item[0].right == 9.5) & (item[1].left == 1.0) & (item[1].right == 1.5)] # to choose the mass=8.5-9.5, sfr=1-1.5 bin for debugging purposes
-    #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.5) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
-
+    if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 8.5) & (item[0].right == 9.) & (item[1].left == 1.0) & (item[1].right == 1.5)] # to choose the mass=8.5-9.5, sfr=1-1.5 bin for debugging purposes
+    #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
+    if args.id is not None: df = df[df['id'].isin(args.id)]
     # ------------looping over each bin-----------------------
     nbin_good = 0
 
@@ -673,12 +673,12 @@ if __name__ == "__main__":
                                     print(f'Deb345: shapes: {this_line} map = {np.shape(line_map)}, rotated = {np.shape(rotated_line_map)}, deprojected = {np.shape(deprojected_line_map)}, recaled = {np.shape(rescaled_line_map)}, redshift={args.z:.1f}, log_mass={obj["log_mass"]:.1f}, log_sfr={obj["log_sfr"]:.1f}, a={args.semi_major:.1f}, b={args.semi_minor:.1f}, a/b={args.semi_major/args.semi_minor:.1f}, pa={args.pa:.1f}, re={re_pix:.1f} pixels') ##
                                     
                                     axes = axes_debug_2d[1]
-                                    axes[0] = myimshow(line_map, axes[0], contour=segmentation_map != args.id, re_pix=re_pix, label='Original', cmap=cmap, col='k')
-                                    axes[1] = myimshow(smoothed_line_map, axes[1], contour=segmentation_map != args.id, re_pix=re_pix, label='Smoothed', cmap=cmap, col='k')
-                                    axes[2] = myimshow(rotated_line_map, axes[2], contour=rotated_segmentation_map != args.id, re_pix=re_pix, label='Rotated', cmap=cmap, col='k')
-                                    axes[3] = myimshow(deprojected_line_map, axes[3], contour=deprojected_segmentation_map != args.id, re_pix=re_pix, label='Deprojected', cmap=cmap, col='k')
-                                    axes[4] = myimshow(rescaled_line_map, axes[4], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Rescaled', cmap=cmap, col='k')
-                                    axes[5] = myimshow(recentered_line_map, axes[5], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=cmap, col='k')
+                                    axes[0] = myimshow(line_map, axes[0], contour=segmentation_map != args.id, re_pix=re_pix, label='Original', cmap=cmap, col='w' if args.fortalk else 'k')
+                                    axes[1] = myimshow(smoothed_line_map, axes[1], contour=segmentation_map != args.id, re_pix=re_pix, label='Smoothed', cmap=cmap, col='w' if args.fortalk else 'k')
+                                    axes[2] = myimshow(rotated_line_map, axes[2], contour=rotated_segmentation_map != args.id, re_pix=re_pix, label='Rotated', cmap=cmap, col='w' if args.fortalk else 'k')
+                                    axes[3] = myimshow(deprojected_line_map, axes[3], contour=deprojected_segmentation_map != args.id, re_pix=re_pix, label='Deprojected', cmap=cmap, col='w' if args.fortalk else 'k')
+                                    axes[4] = myimshow(rescaled_line_map, axes[4], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Rescaled', cmap=cmap, col='w' if args.fortalk else 'k')
+                                    axes[5] = myimshow(recentered_line_map, axes[5], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=cmap, col='w' if args.fortalk else 'k')
 
                                     figname = fig_dir / f'debug_align_{args.id}{deproject_text}{rescale_text}.png'
                                     fig_debug.savefig(figname, transparent=args.fortalk)

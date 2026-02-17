@@ -265,11 +265,17 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
         height = s_max - s_min
         
         color = cmap(norm(row[quant]))
-        rect = patches.Rectangle((m_min, s_min), width, height, facecolor=color, edgecolor='k', linewidth=0.5)
+        rect = patches.Rectangle((m_min, s_min), width, height, facecolor=color, edgecolor='w' if args.fortalk else 'k', linewidth=0.5)
         ax.add_patch(rect)
         
         # -----annotating bins with nobjects--------
-        if row['nobj'] > 0: ax.text(m_min + width/2, s_min + height/2, int(row['nobj']), ha='center', va='center', fontsize=args.fontsize / args.fontfactor, color='k' if abs(row[quant]) < 0.2 else 'w')
+        if 'int' in quant:
+            if row[quant] > cmin + 0.5 * (cmax - cmin): text_color = 'k'
+            else: text_color = 'w'
+        else:
+            if abs(row[quant]) < 0.3: text_color = 'k'
+            else: text_color = 'w'
+        if row['nobj'] > 0: ax.text(m_min + width/2, s_min + height/2, int(row['nobj']), ha='center', va='center', fontsize=args.fontsize / args.fontfactor, color=text_color)
 
     # --------annotating axis borders-----------------
     ax.set_xlabel(r'$\log$ Stellar Mass [M$_\odot$]', fontsize=args.fontsize)
@@ -288,13 +294,6 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
     cbar.locator = ticker.MaxNLocator(integer=False, nbins=ncbins)#, prune='both')
     cbar.update_ticks()
     
-    # ----seaborn heatmaps hide axis edges by default-------
-    for this_ax in [ax, cbar.ax]:
-        for spine in this_ax.spines.values():
-            spine.set_visible(True)
-            spine.set_linewidth(1.)
-            spine.set_edgecolor('black')
-
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -315,10 +314,10 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='', cmap='virid
         sfms_line = sfms_func(m_grid)
         
         color = sm.to_rgba(row[quant])
-        ax.fill_between(m_grid, sfms_line + interval.left, sfms_line + interval.right, color=color, alpha=0.8, edgecolor='k', lw=0.)
+        ax.fill_between(m_grid, sfms_line + interval.left, sfms_line + interval.right, color=color, alpha=0.8, edgecolor='w' if args.fortalk else 'k', lw=0.5)
         
         s_center = sfms_func(row['log_mass_median']) + (interval.left + interval.right) / 2
-        if ~np.isnan(row['nobj']): ax.text(row['log_mass_median'], s_center, int(row['nobj']), color='k' if int(row['nobj']) > 30 else 'k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
+        if ~np.isnan(row['nobj']): ax.text(row['log_mass_median'], s_center, int(row['nobj']), color='w' if args.fortalk else 'k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
  
     # --------annotating axis borders-----------------
     ax.set_xlim(log_mass_bins.min() -0.2, log_mass_bins.max() + 0.2)
@@ -369,8 +368,8 @@ def plot_SFMS_heatmap_patches(df, args, quant='logOH'):
             axes[0] = make_heatmap_distance(axes[0], df, sfms, f'minor_{quant}_grad', args, cmap='coolwarm', clabel=r'Minor $\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot integrated metallicity heatmap
             axes[1] = make_heatmap_distance(axes[1], df, sfms, f'major_{quant}_grad', args, cmap='coolwarm', clabel=r'Major $\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot metallicity gradient heatmap
         else:
-            axes[0] = make_heatmap_distance(axes[0], df, sfms, f'{quant}_int', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', cmin=7.0, cmax=7.5, ncbins=5) # plot integrated metallicity heatmap
-            axes[1] = make_heatmap_distance(axes[1], df, sfms, f'radial_{quant}_grad', args, cmap='coolwarm', clabel=r'$\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot metallicity gradient heatmap
+            axes[0] = make_heatmap_distance(axes[0], df, sfms, f'{quant}_int', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', cmin=7.0, cmax=8., ncbins=5) # plot integrated metallicity heatmap
+            axes[1] = make_heatmap_distance(axes[1], df, sfms, f'radial_{quant}_grad', args, cmap='coolwarm', clabel=r'$\nabla$Z$_r$ [dex/R$_e$]', cmin=-1.5, cmax=1.5, ncbins=4) # plot metallicity gradient heatmap
     else:
         if args.plot_minor_major_profile:
             axes[0] = make_heatmap_patches(axes[0], df, f'minor_{quant}_grad', args, cmap='coolwarm', clabel=r'Minor $\nabla$Z$_r$ [dex/R$_e$]', cmin=-1., cmax=1., ncbins=4) # plot minor metallicity gradient heatmap
@@ -419,7 +418,9 @@ if __name__ == "__main__":
     deproject_text = '_nodeproject' if args.skip_deproject else ''
     rescale_text = '_norescale' if args.skip_re_scaling else ''
     C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
-    binby_text = '_binby_distance' if args.bin_by_distance else ''
+    if args.bin_by_distance: binby_text = f'_binby_distance{n_adaptive_bins}'
+    elif args.adaptive_bins: binby_text = f'_bin_adaptive_max{args.max_gal_per_bin}'
+    else: binby_text = '_bin_linear'
 
     # ---------determining list of fields----------------
     if args.do_all_fields:
@@ -463,7 +464,7 @@ if __name__ == "__main__":
     # ------------plotting stacked gradients on SFMS--------------------------
     #fig = plot_SFMS_heatmap_sns(df_grad, args)
     fig = plot_SFMS_heatmap_patches(df_grad, args)
-    save_fig(fig, fig_dir, f'stacked{adapt_text}{fold_text}_SFMS_heatmap.png', args) # saving the figure
+    save_fig(fig, fig_dir, f'stacked{adapt_text}{binby_text}{fold_text}_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}_SFMS_heatmap.png', args) # saving the figure
 
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

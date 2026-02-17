@@ -357,7 +357,12 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
     else: npixels = map_shape[0] * map_shape[1]
 
     IDs_array = np.arange(npixels).flatten()
-    unique_IDs_array = np.unique(IDs_array)   
+    unique_IDs_array = np.unique(IDs_array)  
+
+    if len(line_label_array) <= 1:
+        if hasattr(line_flux_array[0][0], "__len__"): return np.ma.masked_where(True, unp.uarray(np.ones(np.shape(line_flux_array[0])) * np.nan, np.ones(np.shape(line_flux_array[0])) * np.nan))
+        else: return ufloat(np.nan, np.nan)
+
     print(f'\nAbout to start running NB, with {len(line_label_array)} lines: {line_label_array}..\n')
     if len(unique_IDs_array) > 60: print(f'This might take ~{int(len(unique_IDs_array) / 60)} min')
 
@@ -629,7 +634,7 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
         ax = plot_profile(df_minor, ax, minor_linefit_odr, 'minor_distance', quant, col='salmon', index=0)
         ax = plot_profile(df_major, ax, major_linefit_odr, 'major_distance', quant, col='cornflowerblue', index=1)
     else:
-        ax = plot_profile(df, ax, radial_linefit_odr, 'distance', quant, col='grey')
+        ax = plot_profile(df, ax, radial_linefit_odr, 'distance', quant, col='darkgoldenrod' if args.fortalk else 'grey')
 
     ax.set_aspect('auto') 
 
@@ -810,7 +815,9 @@ if __name__ == "__main__":
     deproject_text = '_nodeproject' if args.skip_deproject else ''
     rescale_text = '_norescale' if args.skip_re_scaling else ''
     C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
-    binby_text = '_binby_distance' if args.bin_by_distance else ''
+    if args.bin_by_distance: binby_text = f'_binby_distance{n_adaptive_bins}'
+    elif args.adaptive_bins: binby_text = f'_bin_adaptive_max{args.max_gal_per_bin}'
+    else: binby_text = '_bin_linear'
     
     # -------------for figure annotations--------------------
     max_ncols = 4
@@ -847,9 +854,13 @@ if __name__ == "__main__":
         if args.bin_by_distance: df, bin_list = bin_SFMS_distance(df, method_text='', delta_bin=0.2, sfms=sfms)
         df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
 
-    if args.bin_by_distance: bin_list = np.sort(bin_list)
-    else: bin_list.sort(key=lambda x: (x[0].left, x[1].left))
-    if args.debug_bin: bin_list = bin_list[:1]
+    if args.bin_by_distance:
+        bin_list = np.sort(bin_list)
+    else:
+        bin_list = list(bin_list)
+        bin_list.sort(key=lambda x: (x[0].left, x[1].left))
+    #if args.debug_bin: bin_list = bin_list[:1]
+    if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.0) & (item[0].right == 9.5) & (item[1].left == 1.0) & (item[1].right == 1.5)] # to choose the mass=8.5-9.5, sfr=1-1.5 bin for debugging purposes
 
     # ----------getting directory structure----------
     if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
@@ -916,7 +927,7 @@ if __name__ == "__main__":
 
         # -----------------plot line maps and metallicity maps of this bin---------------
         if args.plot_line_and_metallicity:
-            fig_met, line_list = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-19.5, cmax=-17.8, Zmin=None, Zmax=None)
+            fig_met, line_list = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-18.5, cmax=-17., Zmin=None, Zmax=None)
             save_fig(fig_met, fig_dir, f'stacked{fold_text}_line_and_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -----------------computing metallicity gradient of this bin---------------
