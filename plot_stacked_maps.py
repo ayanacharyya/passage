@@ -660,7 +660,7 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True,
 
     p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
     ax.scatter(0, 0, marker='x', s=10, c='grey')
-    ax.set_aspect('auto') 
+    ax.set_aspect('equal') 
     
     units = 'kpc' if args.skip_re_scaling else r'R$_e$' 
     ax = annotate_axes(ax, f'Offset ({units})', f'Offset ({units})', args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
@@ -923,12 +923,12 @@ if __name__ == "__main__":
         # -----------------plot metallicity maps of this bin---------------
         if args.plot_metallicity:
             fig_met = plot_metallicity_map(logOH_map, args, bin_text=bin_text, Zmin=None, Zmax=None)
-            if not args.plot_radial_profiles: save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
+            if not args.plot_radial_profiles: save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -----------------plot line maps and metallicity maps of this bin---------------
         if args.plot_line_and_metallicity:
-            fig_met, line_list = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-18.5, cmax=-17., Zmin=None, Zmax=None)
-            save_fig(fig_met, fig_dir, f'stacked{fold_text}_line_and_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
+            fig_met, line_list = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-19.5, cmax=-17.5, Zmin=None, Zmax=None)
+            save_fig(fig_met, fig_dir, f'stacked{fold_text}_line_and_metallicity_map_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -----------------computing metallicity gradient of this bin---------------
         if args.plot_radial_profiles:
@@ -948,7 +948,7 @@ if __name__ == "__main__":
             logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
 
             ax, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(logOH_df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant)
-            save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
+            save_fig(fig_met, fig_dir, f'stacked{fold_text}_metallicity_map_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}_{bin_text}.png', args) # saving the figure
 
             # -------------save fit results to dataframe-----------------------
             if args.bin_by_distance: thisrow = [this_mass_sfr_bin, nobj, logOH_int.n, logOH_int.s, minor_linefit_odr[0].n, minor_linefit_odr[0].s, major_linefit_odr[0].n, major_linefit_odr[0].s, radial_linefit_odr[0].n, radial_linefit_odr[0].s]

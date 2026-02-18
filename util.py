@@ -1704,4 +1704,137 @@ def save_fig(fig, fig_dir, figname, args):
     plt.show(block=False)
 
     return
+'''
+# ---------------------------------------------------------------------------------------------------------------------
+"""Functions from PJW for matching spatial PSFs between observations."""
 
+def gen_psf_line(lines_path: PathLike, line: str = "Ha") -> dict:
+    """
+    Generate a PSF aligned with the direct image in extracted beams.
+
+    The PSF matches the rotation of the direct imaging using the ``"PA_V3"``
+    header keyword.
+
+    Parameters
+    ----------
+    lines_path : PathLike
+        The `"*line.fits"` file from the multiregion fit.
+    line : str | float
+        Either the name of the line or the exact
+        wavelength to use for constructing a
+        monochromatic PSF, the name of a NIRISS filter for a broadband
+        PSF. By default, `"Ha"` will be used.
+
+    Returns
+    -------
+    dict
+        A dictionary with keys corresponding to each unique grism and filter
+        combination, and values of the PSF image.
+    """
+    import stpsf
+    from drizzlepac.astrodrizzle import ablot
+    from astropy import time
+    from grizli.utils import get_wcs_pscale
+
+    from niriss_tools.grism import NIRISS_001_FILTER_LIMITS
+
+    with fits.open(lines_path) as lines_hdul:
+
+        lines_hdr = lines_hdul[0].header
+        obj_id = lines_hdr["ID"]
+
+        line_filt = None
+        line_wav = None
+        match line:
+            case "f115w" | "F115W" | "f150w" | "F150W" | "f200w" | "F200W":
+                line_filt = line
+            case float():
+                line_wav = line
+            case _:
+                line_wav = lines_hdul["LINE", line].header["WAVELEN"]
+        
+        if line_filt is None:
+            for k, v in NIRISS_001_FILTER_LIMITS.items():
+                if (line_wav >= v[0]) and (line_wav <= v[-1]):
+                    line_filt = k
+            if line_filt is None:
+                raise ValueError("Line is not covered by the NIRISS filters.")
+
+        beams_path = (
+            Path(lines_hdr["MRBPPCAT"]).parent / f"glass-a2744_{obj_id:0>5}.beams.fits"
+        )
+        beams_hdr = fits.getheader(beams_path, "REF")
+        # print (beams_hdr)
+
+        # exit()
+        img_wcs = WCS(lines_hdul["DSCI"])
+
+        inst = stpsf.instrument(beams_hdr["INSTRUME"])
+        inst.set_position_from_aperture_name("NIS_CEN")
+        # inst.filter = beams_hdr["FILTER"].split("-")[0]
+        inst.filter = line_filt
+
+        dateobs = time.Time(beams_hdr["DATE-BEG"])  # + 'T' + header['TIME-OBS'])
+        inst.load_wss_opd_by_date(dateobs, verbose=False, plot=False, choice="closest")
+        psf = inst.calc_psf(
+            monochromatic=line_wav / 1e10 if line_wav is not None else None,
+            fov_pixels=np.nanmax(img_wcs._naxis) * 4 + 1,
+        )
+        psf_data = psf["DET_DIST"].data
+
+        # plt.imshow(np.log10(psf_data))
+        # plt.show()
+        # exit()
+        psf_wcs = WCS(psf["DET_DIST"])
+
+        psf_wcs.wcs.crpix = (np.asarray(psf_data.shape) + 1) / 2
+        psf_wcs.wcs.crval = [lines_hdr["RA"], lines_hdr["DEC"]]
+        rotation_angle_rad = np.radians(beams_hdr["PA_V3"] - 360)
+        psf_wcs.wcs.cd = (
+            np.array(
+                [
+                    [np.cos(rotation_angle_rad), -np.sin(rotation_angle_rad)],
+                    [np.sin(rotation_angle_rad), np.cos(rotation_angle_rad)],
+                ]
+            )
+            * (inst.pixelscale * u.arcsec).to(u.deg).value
+        )
+        psf_wcs.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+
+        psf_wcs.pscale = get_wcs_pscale(psf_wcs)
+
+        blotted = ablot.do_blot(
+            psf_data.astype(np.float32),
+            psf_wcs,
+            img_wcs,
+            1,
+            coeffs=True,
+            sinscl=1.0,
+            interp="poly5",
+            stepsize=1,
+        )
+        # psf_aligned_images[beam_name] = blotted
+
+        return blotted
+
+
+def gen_psf_kernel(lines_path: os.PathLike, line: str = "Hb", line_target: str = "Ha"):
+
+    from niriss_tools.isophotal import match_pypher
+    # TODO: open issue on astropy or grizli
+    # There's no good reason why io.fits.getheader cannot open 
+    # headers written by io.fits !
+    with fits.open(lines_path) as blah:
+        line_hdr = blah["DSCI"].header
+
+    line_psf = gen_psf_line(lines_path, line=line)
+    target_psf = gen_psf_line(lines_path, line=line_target)
+
+    psf_kernel = match_pypher(
+        line_psf,
+        target_psf,
+        pixscale=line_hdr["PIXASEC"],
+    )
+
+    return psf_kernel
+'''

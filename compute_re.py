@@ -91,7 +91,9 @@ if __name__ == "__main__":
             # ----------determining object parameters------------
             args.pix_size_arcsec = full_hdu[5].header['PIXASEC']
             args.z = full_hdu[0].header['REDSHIFT']
-
+            args.ra = full_hdu[0].header['RA']
+            args.dec = full_hdu[0].header['DEC']
+            
             # --------determining true center of object---------------------
             args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter=filter_for_re)
 

@@ -3249,7 +3249,7 @@ def myradprof(radius, flux, ax, args, re_kpc, label=''):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def read_direct_image(full_hdu, args, filter='F150W', for_offset=False):
+def read_direct_image_from_extension(full_hdu, args, filter='F150W', for_offset=False):
     '''
     Reads in the direct image of an object in the given filter, by trying out a few combinations of how the filter name might be in the header
     Returns direct image and the final filter name it found in the header
@@ -3298,6 +3298,66 @@ def read_direct_image(full_hdu, args, filter='F150W', for_offset=False):
     return dir_img, filter
 
 # --------------------------------------------------------------------------------------------------------------------
+def read_direct_image_from_drz_img(args, filter='F150W'):
+    '''
+    Reads in the direct image of an object in the given filter, by trying out a few combinations of how the filter name might be in the header
+    Returns direct image and the final filter name it found in the header
+    '''
+    full_field_filename = args.input_dir / f'{args.field}' / 'Products' / f'{args.field}_{filter.lower()}_drz_sci.fits'
+    if not os.path.exists(full_field_filename):
+        try_filter1 = 'F115W'
+        full_field_filename = Path(str(full_field_filename).replace(filter.lower(), try_filter1.lower()))
+        if os.path.exists(full_field_filename):
+            print(f'Did not find direct image with {filter}, so using filter {try_filter1} instead')
+            filter = try_filter1
+        else:
+            try_filter2 = 'F150W'
+            full_field_filename = Path(str(full_field_filename).replace(try_filter1.lower(), try_filter2.lower()))
+            if os.path.exists(full_field_filename):
+                print(f'Did not find direct image with {try_filter1}, so using filter {try_filter2} instead')
+                filter = try_filter2
+            else:
+                try_filter3 = 'F200W'
+                full_field_filename = Path(str(full_field_filename).replace(try_filter2.lower(), try_filter3.lower()))
+                if os.path.exists(full_field_filename):
+                    print(f'Did not find direct image with {try_filter2}, so using filter {try_filter3} instead')
+                    filter = try_filter3
+
+    pos = SkyCoord(args.ra, args.dec, unit = 'deg')
+    size = 2 * args.arcsec_limit * u.arcsec
+    
+    data = fits.open(full_field_filename)
+    image = data[0].data
+    source_header = data[0].header
+    wcs = pywcs.WCS(source_header)
+
+    cutout = Cutout2D(image, pos, size, wcs=wcs)
+    cutout_data = cutout.data * source_header['PHOTFNU'] * 1e6
+
+    return cutout_data, filter
+
+# --------------------------------------------------------------------------------------------------------------------
+def read_seg_map_from_drz_img(args):
+    '''
+    Reads in the drizzled segmentation image of an objec
+    Returns cutout of segmentation map
+    '''
+    full_field_filename = args.input_dir / f'{args.field}' / 'Products' / f'{args.field}_det_drz_seg.fits'
+
+    pos = SkyCoord(args.ra, args.dec, unit = 'deg')
+    size = 2 * args.arcsec_limit * u.arcsec
+    
+    data = fits.open(full_field_filename)
+    image = data[0].data
+    source_header = data[0].header
+    wcs = pywcs.WCS(source_header)
+
+    cutout = Cutout2D(image, pos, size, wcs=wcs)
+    cutout_data = cutout.data
+
+    return cutout_data
+
+# --------------------------------------------------------------------------------------------------------------------
 def get_re(full_hdu, args, filter='F200W', psf=None):
     '''
     Computes the half-light radius in the direct image with the given filter
@@ -3313,12 +3373,11 @@ def get_re(full_hdu, args, filter='F200W', psf=None):
     psf_array /= psf_array.sum()
 
     # -------reading in direct image----------
-    dir_img, filter = read_direct_image(full_hdu, args, filter=filter)
+    dir_img, filter = read_direct_image_from_drz_img(args, filter=filter)
 
     # -------compute re----------
     if dir_img is not None:
-        segmentation_map = full_hdu['SEG'].data
-        segmentation_map = trim_image(segmentation_map, args, skip_re_trim=True)
+        segmentation_map = read_seg_map_from_drz_img(args)
 
         dir_img_shifted = ndimage.shift(dir_img, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
         segmentation_map_shifted = ndimage.shift(segmentation_map, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
@@ -3372,7 +3431,7 @@ def get_offsets_from_center(full_hdu, args, filter='F200W', silent=False):
     Computes the offset from the original center of image to the brightest pixel in the direct image with the given filter
     Returns two integers (offset in x and y axes)
     '''
-    dir_img, filter = read_direct_image(full_hdu, args, filter=filter, for_offset=True)
+    dir_img, filter = read_direct_image_from_extension(full_hdu, args, filter=filter, for_offset=True)
 
     if dir_img is not None:
         segmentation_map = full_hdu['SEG'].data
@@ -3593,6 +3652,8 @@ if __name__ == "__main__":
             args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
             args.available_lines = np.array(['OIII' if item == 'OIII-5007' else item for item in args.available_lines]) # replace 'OIII-5007' with 'OIII'
             args.z = full_hdu[0].header['REDSHIFT']
+            args.ra = full_hdu[0].header['RA']
+            args.dec = full_hdu[0].header['DEC']
             args.ndfilt = full_hdu[0].header['NDFILT']
             args.nlines = full_hdu[0].header['NUMLINES']
             args.distance = cosmo.luminosity_distance(args.z)
