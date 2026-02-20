@@ -272,9 +272,11 @@ if __name__ == "__main__":
     ax.legend(loc='upper right')
     ax.set_xlabel(f'Linelist SNR (threshold)')
     ax.set_ylabel('Fraction of objects')
+    ax.set_ylim(0, 1)
 
     ax_twinx.legend(loc='lower center')
     ax_twinx.set_ylabel('Fraction of disagreeing redshifts')
+    ax_twinx.set_ylim(0, 0.3)
 
     save_fig(fig, fig_dir, f'{",".join(args.field_arr)}{incl_text}_grizli_linelist_zcomp_survived_frac_vs_snr.png', args)
 
