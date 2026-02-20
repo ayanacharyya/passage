@@ -284,6 +284,9 @@ def parse_args():
     parser.add_argument('--overplot_literature', dest='overplot_literature', action='store_true', default=False, help='Overplot the SFMS relations from the literature? Default is no.')
     parser.add_argument('--overplot_passage', dest='overplot_passage', action='store_true', default=False, help='Overplot the PASSAGE data points on the SFMS relation? Default is no.')
 
+    # ---- args added for redshift_tests.py ------------
+    parser.add_argument('--include_all_lines_in_linelist', dest='include_all_lines_in_linelist', action='store_true', default=False, help='Include all lines in the cwt linelist (vs only the strongest line)? Default is no.')
+
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
     if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
