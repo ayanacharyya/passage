@@ -80,7 +80,7 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
         for spine in this_ax.spines.values():
             spine.set_visible(True)
             spine.set_linewidth(1.)
-            spine.set_edgecolor('black')
+            #spine.set_edgecolor('black')
 
     return ax
 
@@ -498,7 +498,7 @@ log_sfr_bins = np.arange(-2.5, 2.5 + delta_log_sfr/2, delta_log_sfr)
 
 # ---------------choose which binning methods to try---------------
 methods = ['linear', \
-            'adaptive_nmin', \
+            #'adaptive_nmin', \
             #'adaptive_nmax', \
             'voronoi', \
             'distance', \
@@ -518,8 +518,8 @@ if __name__ == "__main__":
 
     # ---------reading in the master SED catalog----------------
     if args.do_all_fields:
-        #passage_catalog_filename = args.output_dir / 'catalogs' / 'passagepipe_v0.5_SED_fits_cosmosweb_v1.0.0-alpha.fits'
-        passage_catalog_filename = args.output_dir / 'catalogs' / 'passage_cosmos_redshift_catalog_v2.dat'
+        passage_catalog_filename = args.output_dir / 'catalogs' / 'passagepipe_v0.5_SED_fits_cosmosweb_v1.0.0-alpha.fits'
+        #passage_catalog_filename = args.output_dir / 'catalogs' / 'passage_cosmos_redshift_catalog_v2.dat'
         df = read_passage_sed_catalog(passage_catalog_filename)
         output_dir = args.output_dir / 'stacking'
     
