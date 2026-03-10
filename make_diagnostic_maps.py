@@ -812,6 +812,7 @@ def get_radial_bin_IDs(full_hdu, snr_thresh=3, plot=False, quiet=True, args=None
         radial_bin_edges = custom_spaced_grid(0,  5, args.nbins + 1, power=1.5)
     else:
         radial_bin_edges = custom_spaced_grid(0,  args.re_limit, args.nbins + 1, power=1.5) # user power = 1 for linspace
+        print(f'Deb815: for object {args.id}, using re_kpc={args.re_kpc}, orig shape={np.shape(distance_map)}')
         distance_map /= args.re_kpc # converting from kpc to Re units
 
     print(f'Using {args.nbins} bins with bin edges {radial_bin_edges} {"kpc" if args.re_limit is None else "Re"} for radial binning..')
@@ -820,6 +821,7 @@ def get_radial_bin_IDs(full_hdu, snr_thresh=3, plot=False, quiet=True, args=None
     else: seg_mask = False
     binID_map = np.ma.masked_where(seg_mask | binID_map == args.nbins + 1, binID_map)
     if args.re_limit is None: radial_bin_edges *= cosmo.arcsec_per_kpc_proper(args.z).value # converting from kpc to arcsec units
+    print(f'Deb824: for object {args.id}, map shape={np.shape(binID_map)}')
 
     # -------debugging checks: final binned maps-----------
     if args is not None and args.debug_vorbin:
@@ -946,10 +948,8 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
     line_map_err = line_map_err * factor
 
     # -------------pixel offset to true center----------------
-    line_map = np.roll(line_map, args.ndelta_xpix, axis=0)
-    line_map_err = np.roll(line_map_err, args.ndelta_xpix, axis=0)
-    line_map = np.roll(line_map, args.ndelta_ypix, axis=1)
-    line_map_err = np.roll(line_map_err, args.ndelta_ypix, axis=1)
+    line_map = ndimage.shift(line_map, [args.ndelta_xpix, args.ndelta_ypix], order=0, mode='nearest')
+    line_map_err = ndimage.shift(line_map_err, [args.ndelta_xpix, args.ndelta_ypix], order=0, mode='nearest')
 
     # ----------getting a smaller cutout around the object center-----------
     line_map = trim_image(line_map, args)
@@ -2792,7 +2792,7 @@ def AGN_func(x, theoretical_line):
     elif theoretical_line == 'NB':  # new eqn based on NebulaBayes models
         y = np.poly1d([0.09, -0.03, 0.01, 0.70])(x) #without accounting for HeI, so x-axis is NeIII/OII
     else:
-        sys.exit(f'Requested theoreitcal line {theoretical_line} should be one of K01,S24,H21,B@@_S2Ha,B22_Ne3O2')
+        sys.exit(f'Requested theoreitcal line {theoretical_line} should be one of K01,S24,H21,B22_S2Ha,B22_Ne3O2')
     return y
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -3249,55 +3249,6 @@ def myradprof(radius, flux, ax, args, re_kpc, label=''):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def read_direct_image_from_extension(full_hdu, args, filter='F150W', for_offset=False):
-    '''
-    Reads in the direct image of an object in the given filter, by trying out a few combinations of how the filter name might be in the header
-    Returns direct image and the final filter name it found in the header
-    '''
-    dummy_filter = 'F140W'
-    try:
-        dir_img = full_hdu['DSCI', f'{filter}-{filter}-CLEAR'].data
-        dir_img = trim_image(dir_img, args, skip_re_trim=True)  # 50 x 50 pixels
-    except:
-        try:
-            dir_img = full_hdu['DSCI', f'{filter}-CLEAR'].data
-            dir_img = trim_image(dir_img, args, skip_re_trim=True)  # 50 x 50 pixels
-        except:
-            try: 
-                dir_img = full_hdu['DSCI', filter].data
-                dir_img = trim_image(dir_img, args, skip_re_trim=True)  # 50 x 50 pixels
-            except:
-                try:
-                    dir_img = full_hdu['DSCI', dummy_filter].data
-                    dir_img = trim_image(dir_img, args, skip_re_trim=True)  # 50 x 50 pixels
-                    filter = dummy_filter
-                except:
-                    try:
-                        dir_img = full_hdu['DSCI', 'CLEAR'].data
-                        dir_img = trim_image(dir_img, args, skip_re_trim=True)
-                        filter = 'CLEAR'
-                    except:
-                        try:
-                            full_field_filename = args.input_dir / f'{args.field}' / 'Products' / f'{args.field}_{filter.lower()}-clear_drz_sci.fits'
-                        
-                            pos = SkyCoord(full_hdu[0].header['RA'], full_hdu[0].header['DEC'], unit = 'deg')
-                            size = 2 * args.arcsec_limit * u.arcsec
-                            target_header = full_hdu['DSCI', 'CLEAR'].header
-                            
-                            temp1, temp2 = args.only_seg, args.vorbin
-                            args.only_seg, args.vorbin = False, False
-                            dir_img = get_cutout(full_field_filename, pos, size, target_header, args, plot_test_axes=None, skip_re_trim=True)
-                            print(f'{filter.upper()} not found in full_hdu extension. Therefore trying to get cutout from full field image {full_field_filename}')
-                            args.only_seg, args.vorbin = temp1, temp2
-                        except:
-                            dir_img = None
-
-    #if dir_img is not None and not for_offset:
-    #    dir_img = ndimage.shift(dir_img, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
-
-    return dir_img, filter
-
-# --------------------------------------------------------------------------------------------------------------------
 def read_direct_image_from_drz_img(args, filter='F150W'):
     '''
     Reads in the direct image of an object in the given filter, by trying out a few combinations of how the filter name might be in the header
@@ -3358,7 +3309,68 @@ def read_seg_map_from_drz_img(args):
     return cutout_data
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_re(full_hdu, args, filter='F200W', psf=None):
+def get_re(args, filter='F200W', psf=None):
+    '''
+    Computes the half-light radius in the direct image with the given filter
+    Reads the direct image and segementation map by cropping the full field drizzled image
+    Returns the radius
+    '''
+    # -------reading in direct images----------
+    dir_img, filter = read_direct_image_from_drz_img(args, filter=filter)
+    segmentation_map = read_seg_map_from_drz_img(args)
+
+    re_kpc, re_arcsec = compute_re(dir_img, segmentation_map, args, filter=filter, psf=psf)
+
+    return re_kpc, re_arcsec
+
+# --------------------------------------------------------------------------------------------------------------------
+def read_direct_image_from_extension(full_hdu, args, filter='F150W', for_offset=False):
+    '''
+    Reads in the direct image of an object in the given filter, by trying out a few combinations of how the filter name might be in the header
+    Returns direct image and the final filter name it found in the header
+    '''
+    dummy_filter = 'F140W'
+    try:
+        dir_img = full_hdu['DSCI', f'{filter}-{filter}-CLEAR'].data
+    except:
+        try:
+            dir_img = full_hdu['DSCI', f'{filter}-CLEAR'].data
+        except:
+            try: 
+                dir_img = full_hdu['DSCI', filter].data
+            except:
+                try:
+                    dir_img = full_hdu['DSCI', dummy_filter].data
+                    filter = dummy_filter
+                except:
+                    try:
+                        dir_img = full_hdu['DSCI', 'CLEAR'].data
+                        filter = 'CLEAR'
+                    except:
+                        dir_img = None
+
+    return dir_img, filter
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_re_from_extension(full_hdu, args, filter='F200W', psf=None):
+    '''
+    Computes the half-light radius in the direct image with the given filter
+    Reads the direct image and segementation map from the given full_hdu (which are available as extensions)
+    Returns the radius
+    '''
+    # -------reading in direct images----------
+    dir_img, _ = read_direct_image_from_extension(full_hdu, args, filter=filter)
+    dir_img = trim_image(dir_img, args, skip_re_trim=True)  # 50 x 50 pixels
+    
+    segmentation_map = full_hdu['SEG'].data
+    segmentation_map = trim_image(segmentation_map, args, skip_re_trim=True)  # 50 x 50 pixels
+
+    re_kpc, re_arcsec = compute_re(dir_img, segmentation_map, args, filter=filter, psf=psf)
+
+    return re_kpc, re_arcsec
+
+# --------------------------------------------------------------------------------------------------------------------
+def compute_re(dir_img, segmentation_map, args, filter='F200W', psf=None):
     '''
     Computes the half-light radius in the direct image with the given filter
     Returns the radius
@@ -3372,17 +3384,16 @@ def get_re(full_hdu, args, filter='F200W', psf=None):
     psf_array = psf[0].data
     psf_array /= psf_array.sum()
 
-    # -------reading in direct image----------
-    dir_img, filter = read_direct_image_from_drz_img(args, filter=filter)
-
     # -------compute re----------
     if dir_img is not None:
-        segmentation_map = read_seg_map_from_drz_img(args)
+        dir_img_shifted = ndimage.shift(dir_img, [args.ndelta_xpix, args.ndelta_ypix], order=0, mode='nearest')
+        segmentation_map_shifted = ndimage.shift(segmentation_map, [args.ndelta_xpix, args.ndelta_ypix], order=0, mode='nearest')
 
-        dir_img_shifted = ndimage.shift(dir_img, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
-        segmentation_map_shifted = ndimage.shift(segmentation_map, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
-
-        dir_img_deconvolved = richardson_lucy(dir_img_shifted, psf_array, num_iter=20)
+        if args.id == 2867 and 'field' in args and args.field == 'Par028':
+             dir_img_deconvolved = dir_img_shifted
+             print(f'\n### WARNING ###\nNot performing the Richardson Lucy deconvolution for this particular object {args.id} before computing Re\n')
+        else:
+            dir_img_deconvolved = richardson_lucy(dir_img_shifted, psf_array, num_iter=20)
 
         distance_map = get_distance_map(np.shape(dir_img_shifted), args, for_distmap=True)
         radius = np.ma.compressed(np.ma.masked_where(segmentation_map_shifted != args.id, distance_map)).flatten()
@@ -3681,7 +3692,7 @@ if __name__ == "__main__":
             args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W')
 
             # --------determining effective radius of object---------------------
-            args.re_kpc, args.re_arcsec = get_re(full_hdu, args, filter='F150W')
+            args.re_kpc, args.re_arcsec = get_re_from_extension(full_hdu, args, filter='F150W')
             if args.re_limit is not None:
                 args.pix_size_re = args.pix_size_arcsec / args.re_arcsec
                 offset = args.pix_size_re / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges

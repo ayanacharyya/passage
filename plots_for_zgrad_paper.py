@@ -12,7 +12,7 @@ from util import *
 from get_field_stats import get_crossmatch_with_cosmos, plot_venn, read_stats_df, make_set
 from plot_mappings_grid import plot_ratio_grid, plot_ratio_model
 from make_passage_plots import break_column_into_uncertainty, plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_MZR_literature
-from make_diagnostic_maps import get_re, get_cutout, get_emission_line_map, get_offsets_from_center, annotate_PAs, get_linelist, get_EB_V, get_voronoi_bin_IDs, get_radial_bin_IDs, get_voronoi_bin_distances, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
+from make_diagnostic_maps import get_re_from_extension, get_cutout, get_emission_line_map, get_offsets_from_center, annotate_PAs, get_linelist, get_EB_V, get_voronoi_bin_IDs, get_radial_bin_IDs, get_voronoi_bin_distances, get_AGN_func_methods, AGN_func, take_safe_log_ratio, overplot_AGN_line_on_BPT, get_distance_map, compute_SFR
 
 plt.rcParams['ytick.direction'] = 'in'
 plt.rcParams['ytick.right'] = True
@@ -1411,6 +1411,8 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
     args.z = full_hdu[0].header['REDSHIFT']
     args.id = full_hdu[0].header['ID']
     args.field = field
+    args.ra = full_hdu[0].header['RA']
+    args.dec = full_hdu[0].header['DEC']
     line_wcs = pywcs.WCS(full_hdu['DSCI'].header)
     args.pix_size_arcsec = utils.get_wcs_pscale(line_wcs)
     args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
@@ -1433,7 +1435,8 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
     args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W')
 
     # --------determining effective radius of object---------------------
-    args.re_kpc, args.re_arcsec = get_re(full_hdu, args, filter='F150W')
+    args.re_kpc, args.re_arcsec = get_re_from_extension(full_hdu, args, filter='F150W')
+    
     if args.re_limit is not None:
         args.pix_size_re = args.pix_size_arcsec / args.re_arcsec
         offset = args.pix_size_re / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
@@ -1515,7 +1518,7 @@ def plot_radial_profile_old(image, ax, args, ylim=None, xlim=None, hide_xaxis=Fa
 
     # -------plotting--------
     ax.scatter(df['distance'], df['quant'], c='grey', s=20, alpha=1)
-    ax.errorbar(df['distance'], df['quant'], yerr=df['quant_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
+    ax.errorbar(df['distance'], df['quant'], yerr=df['quant_u'], c='grey', fmt='none', lw=0.5, alpha=1)
     ax.set_aspect('auto') 
 
     # -------radial fitting-------------
@@ -1537,7 +1540,7 @@ def plot_radial_profile_old(image, ax, args, ylim=None, xlim=None, hide_xaxis=Fa
     # --------annotating axis--------------
     if xlim is not None: ax.set_xlim(xlim[0], xlim[1]) # kpc
     if ylim is not None: ax.set_ylim(ylim[0], ylim[1])
-    if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)', label_dict[quant], args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+    if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)', label_dict[quant], args=args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
     
     return ax, linefit
 
@@ -1553,15 +1556,25 @@ def plot_fitted_line(ax, linefit, xarr, fit_color, args, quant='log_OH', short_l
     unit_text = 'dex/kpc' if args.re_limit is None else r'dex/R$_e$'
 
     if len(np.shape(linefit)) == 1:
-        y_fitted = np.poly1d(unp.nominal_values(linefit))(xarr)
-        y_low = np.poly1d(unp.nominal_values(linefit) - unp.std_devs(linefit))(xarr)
-        y_up = np.poly1d(unp.nominal_values(linefit) + unp.std_devs(linefit))(xarr)
-        value_text = f'{linefit[0]: .2f}'
-    
+        # y_fitted = np.poly1d(unp.nominal_values(linefit))(xarr)
+        # y_low = np.poly1d(unp.nominal_values(linefit) - unp.std_devs(linefit))(xarr)
+        # y_up = np.poly1d(unp.nominal_values(linefit) + unp.std_devs(linefit))(xarr)
+        # value_text = f'{linefit[0]: .2f}'
+        yarr = np.poly1d(linefit)(xarr)
+        y_fitted = unp.nominal_values(yarr)
+        y_low = unp.nominal_values(yarr) - unp.std_devs(yarr)
+        y_up = unp.nominal_values(yarr) + unp.std_devs(yarr)
+        value_text = f'{linefit[0]: .2f}'    
     else:
-        y_fitted = np.poly1d(linefit[0])(xarr)
-        y_low = np.poly1d(linefit[1])(xarr)
-        y_up = np.poly1d(linefit[2])(xarr)
+        # sys.exit(f'Deb 1568: This part has not been fixed yet.')
+        # y_fitted = np.poly1d(linefit[0])(xarr)
+        # y_low = np.poly1d(linefit[1])(xarr)
+        # y_up = np.poly1d(linefit[2])(xarr)
+        linefit_with_unc = [ufloat(linefit[0][index], np.mean((linefit[0][index] - linefit[1][index], linefit[2][index] - linefit[0][index]))) for index in range(np.shape(linefit)[1])]
+        yarr = np.poly1d(linefit_with_unc)(xarr)
+        y_fitted = unp.nominal_values(yarr)
+        y_low = unp.nominal_values(yarr) - unp.std_devs(yarr)
+        y_up = unp.nominal_values(yarr) + unp.std_devs(yarr)
         value_text = f'{linefit[0][0]: .2f}' if short_label else r'%.2f$^{%.2f}_{%.2f}$' % (linefit[0][0], linefit[0][0] - linefit[1][0], linefit[2][0] - linefit[0][0])
     
     ax.plot(xarr, y_fitted, color=fit_color, lw=1, ls='dashed')
@@ -1593,8 +1606,8 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     linefit_odr = odr_fit(df, quant_x=quant_x, quant_y=quant)
     if do_mcmc:
         # run lenstronomy
-        linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
-        #linefit_lenstronomy = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
+        #linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
+        linefit_lenstronomy = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
         
         # run MCMC
         params_llim, params_median, params_ulim = mcmc_vorbin_fit(df, args, filter='F150W', quant_x=quant_x, quant_y=quant, plot_corner=False, Zdiag=Zdiag)
@@ -1613,7 +1626,7 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
    
     # -------plotting the data and the fits--------
     ax.scatter(df[quant_x], df[quant], c='grey', s=20, alpha=1)
-    if quant + '_u' in df: ax.errorbar(df['distance'], df[quant], yerr=df[quant + '_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
+    if quant + '_u' in df: ax.errorbar(df['distance'], df[quant], yerr=df[quant + '_u'], c='grey', fmt='none', lw=0.5, alpha=1)
 
     xarr = df[quant_x]
     if do_mcmc:
@@ -1632,7 +1645,7 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     # --------annotating axis--------------
     if xlim is not None: ax.set_xlim(xlim[0], xlim[1]) # kpc
     if ylim is not None: ax.set_ylim(ylim[0], ylim[1])
-    if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)' if args.re_limit is None else r'Radius (R$_e$)', label_dict[quant], args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+    if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)' if args.re_limit is None else r'Radius (R$_e$)', label_dict[quant], args=args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
     
     if quant in ['logOH', 'Z', 'log_OH']: return ax, [linefit_original, linefit_odr, linefit_lenstronomy, params_llim, params_median, params_ulim]
     else: return ax, [linefit_original, linefit_odr]
@@ -1840,7 +1853,7 @@ def plot_rgb_image(full_hdu, filters, ax, args, hide_xaxis=False, hide_yaxis=Fal
     ax.set_ylim(-args.arcsec_limit, args.arcsec_limit)  # arcsec
 
     if 'segmentation_map_arcsec' in args: ax.contour(args.segmentation_map_arcsec != args.id, levels=0, colors='w', extent=extent, linewidths=0.5) # for over-plotting segmentation map
-    if not skip_annotate: ax = annotate_axes(ax, 'arcsec', 'arcsec', args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+    if not skip_annotate: ax = annotate_axes(ax, 'arcsec', 'arcsec', xlim=extent[:2], ylim=extent[2:], args=args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
 
     return ax, rgb_image
 
@@ -1864,7 +1877,7 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True,
     if 'segmentation_map' in args: ax.contour(args.segmentation_map != args.id, levels=0, colors='w' if args.fortalk else 'k', extent=args.extent, linewidths=0.5) # demarcating the segmentation map zone
     if not skip_annotate:
         xylabel = 'arcsec' if args.re_limit is None else r'Offset (R$_e$)'
-        ax = annotate_axes(ax, xylabel, xylabel, args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
+        ax = annotate_axes(ax, xylabel, xylabel, xlim=args.extent[:2], ylim=args.extent[2:], args=args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
 
     return ax
 
@@ -2374,12 +2387,12 @@ def plot_metallicity_fig_single(objid, field, Zdiag, args, fontsize=10, do_mcmc=
     axes[0], _ = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], axes[0], args)
 
     # -----plotting 2D metallicity map-----------
-    Zlim = [7.0, 9.0]
+    Zlim = [6.8, 9.2]
     axes[1] = plot_2D_map(logOH_map, axes[1], f'log O/H + 12 ({Zdiag})', args, clabel='', takelog=False, cmap='cividis', vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=False, hide_yaxis=True, hide_cbar=False)
     axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', loc='lower right')
 
     # ------plotting metallicity radial profile-----------
-    axes[2], _ = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit], Zdiag=Zdiag, do_mcmc=do_mcmc)
+    axes[2], _ = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[-0.2, 5 if args.re_limit is None else args.re_limit], Zdiag=Zdiag, do_mcmc=do_mcmc)
 
     # -------zoom-in annotation------------------
     if args.re_limit is not None:
@@ -2408,7 +2421,7 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10, do_mcmc=Fal
     print(f'Plotting metallicity ({Zdiag}) figure for {len(objlist)} objects..')
 
    # -------setting up the figure--------------------
-    Zlim, cmap = [7.0, 9.1], 'cividis'
+    Zlim, cmap = [6.8, 9.2], 'cividis'
     ncol = 2
     nrow = int(np.ceil(len(objlist) / ncol))
     fig = plt.figure(figsize=(10, 6))
@@ -2452,7 +2465,7 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10, do_mcmc=Fal
             axes[1].add_artist(connect2)
         
         # ------plotting metallicity radial profile-----------
-        axes[2], linefit = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit], hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, short_label=False, Zdiag=Zdiag, do_mcmc=do_mcmc)
+        axes[2], linefit = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=[-0.2, 5 if args.re_limit is None else args.re_limit], hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, short_label=False, Zdiag=Zdiag, do_mcmc=do_mcmc)
         linefit_original, linefit_odr, linefit_lenstronomy, params_llim, params_median, params_ulim = linefit
         linefit_mcmc = unp.uarray(params_median[:2], np.mean([np.array(params_median[:2]) - np.array(params_llim[:2]), np.array(params_ulim[:2]) - np.array(params_median[:2])], axis=0))
         axes[2].yaxis.set_label_position('right')
@@ -2621,8 +2634,8 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     full_hdu = load_full_fits(objid, field, args)
     args = load_object_specific_args(full_hdu, args, field=field)
     logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
-    Zlim = [7.0, 9.0]
-    log_sfr_lim = [-2, 0.7]
+    Zlim = [6.8, 9.2]
+    log_sfr_lim = [-2, 0.8]
 
     # --------setting up the figure------------
     fig, axes = plt.subplots(3 if args.debug_Zsfr else 1, 2, figsize=(5.7, 7) if args.debug_Zsfr else (7, 3))
@@ -2653,18 +2666,19 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
         df = df.groupby('bin_ID', as_index=False).agg(np.mean)
 
     axes[1].scatter(df['log_sfr'], df['logOH'], c='grey', s=20, alpha=1)
-    axes[1].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
+    axes[1].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=1)
 
     # -------Z vs SFR fitting-------------
     fit_color = 'cornflowerblue'
     linefit = odr_fit(df, quant_x='log_sfr', quant_y='logOH')
+    print(f'Deb2663: ID {objid}, linefit', linefit) ##
     axes[1] = plot_fitted_line(axes[1], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
 
     # --------annotating axis--------------
     axes[1].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
     axes[1].set_ylim(Zlim[0], Zlim[1])
     axes[1].set_box_aspect(1)
-    axes[1] = annotate_axes(axes[1], r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args)
+    axes[1] = annotate_axes(axes[1], r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args=args)
 
     # ----------append fit to dataframe and save-----------
     append_to_sfr_fit_df(field, objid, sfr_int, sfr_sum, linefit, Zdiag, args)
@@ -2688,8 +2702,8 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
     objlist = [item for item in objlist if not item[1] in exclude_ids]
     print(f'Plotting metallicity-SFR figure for {len(objlist)} objects..')
 
-    Zlim = [7.0, 9.0]
-    log_sfr_lim = [-2, 0.7]
+    Zlim = [6.8, 9.2]
+    log_sfr_lim = [-2, 0.8]
 
    # -------setting up the figure--------------------
     nrow, ncol = 4, 2
@@ -2730,7 +2744,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         df = df.dropna(axis=0)
 
         axes[1].scatter(df['log_sfr'], df['logOH'], c='grey', s=20, alpha=1)
-        axes[1].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
+        axes[1].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=1)
 
         # -------Z vs SFR fitting-------------
         fit_color = 'cornflowerblue'
@@ -2741,7 +2755,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         axes[1].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
         axes[1].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
         axes[1].set_ylim(Zlim[0], Zlim[1])
-        axes[1] = annotate_axes(axes[1], r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args, hide_xaxis=index < nrow - 1, hide_yaxis=False, hide_cbar=True)
+        axes[1] = annotate_axes(axes[1], r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args=args, hide_xaxis=index < nrow - 1, hide_yaxis=False, hide_cbar=True)
         axes[1].yaxis.set_label_position('right')
         axes[1].yaxis.tick_right()
 
@@ -2787,7 +2801,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     args = load_object_specific_args(full_hdu, args, field=field)
     logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
     logOH_df, _, _ = load_metallicity_df(field, objid, Zdiag, args)
-    Zlim = [7., 8.9]
+    Zlim = [6.8, 9.2]
     log_sfr_lim = [-1., 0.5]
 
     # ----------getting the SFR maps------------------
@@ -2799,7 +2813,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     axes[0] = annotate_kpc_scale_bar(2, axes[0], args, label='2 kpc', color='brown', loc='lower right')
 
     # # ------plotting metallicity radial profile-----------
-    axes[1], _ = plot_radial_profile(logOH_df, axes[1], args, ylim=Zlim, xlim=[0, 5 if args.re_limit is None else args.re_limit], hide_xaxis=True, hide_yaxis=False, hide_cbar=True, short_label=False, do_mcmc=True)
+    axes[1], _ = plot_radial_profile(logOH_df, axes[1], args, ylim=Zlim, xlim=[-0.2, 5 if args.re_limit is None else args.re_limit], hide_xaxis=True, hide_yaxis=False, hide_cbar=True, short_label=False, do_mcmc=True)
     axes[1].yaxis.set_label_position('right')
     axes[1].yaxis.tick_right()
     
@@ -2817,7 +2831,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
         log_sfr_df = log_sfr_df.groupby('bin_ID', as_index=False).agg(np.mean)
 
     # -----plotting SFR radial profile-----------
-    axes[3], _ = plot_radial_profile(log_sfr_df, axes[3], args, quant='SFR', ylim=log_sfr_lim, xlim=[0, 5 if args.re_limit is None else args.re_limit], hide_xaxis=False, hide_yaxis=False, hide_cbar=True, short_label=False)
+    axes[3], _ = plot_radial_profile(log_sfr_df, axes[3], args, quant='SFR', ylim=log_sfr_lim, xlim=[-0.2, 5 if args.re_limit is None else args.re_limit], hide_xaxis=False, hide_yaxis=False, hide_cbar=True, short_label=False)
     axes[3].yaxis.set_label_position('right')
     axes[3].yaxis.tick_right()
   
@@ -2832,7 +2846,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     #df = df[~df['logOH'].between(8.3, 8.4)]
     
     axes[4].scatter(df['log_sfr'], df['logOH'], c='grey', s=20, alpha=1)
-    axes[4].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=0.2)
+    axes[4].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=1)
 
     # -------Z vs SFR fitting-------------
     fit_color = 'cornflowerblue'
@@ -2844,7 +2858,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     axes[4].text(0.95, 0.05, f'ID #{objid}', fontsize=args.fontsize, c='k', ha='right', va='bottom', transform=axes[4].transAxes)
     axes[4].set_xlim(log_sfr_lim[0], log_sfr_lim[1]) # kpc
     axes[4].set_ylim(Zlim[0], Zlim[1])
-    axes[4] = annotate_axes(axes[4], r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args, hide_xaxis=False, hide_yaxis=False, hide_cbar=True)
+    axes[4] = annotate_axes(axes[4], r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', r'$\log$ (O/H) + 12', args=args, hide_xaxis=False, hide_yaxis=False, hide_cbar=True)
     axes[4].set_aspect('equal')
 
     # ----------append fit to dataframe and save-----------
@@ -2882,7 +2896,7 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
     args.Zbranch = Zbranch
 
     # -------setting limits and colors-----------
-    Z_limits = [7.0, 9.1]
+    Z_limits = [6.8, 9.2]
     color_lim_dict = {'color':[None, None, '', ''], 'bin_ID':[None, None, 'Voronoi bin ID', 'rainbow'], 'distance':[0, 5, 'Galactocentric\ndistance (kpc)', 'cividis'], 'distance_re':[0, 1.5, 'Galactocentric\ndistance ' + r'(R$_e$)', 'cividis'], 'agn_dist':[-1, 1, f'Distance from {args.AGN_diag} SF line', args.diverging_cmap]}
     color = 'brown'
 
@@ -2938,7 +2952,7 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
                         # ----annotate axis----------
                         ax.set_xlim(Z_limits)
                         ax.set_ylim(Z_limits)
-                        ax = annotate_axes(ax, Zdiag1, Zdiag2, args, hide_xaxis=Z2_index < nrow, hide_yaxis=Z1_index)
+                        ax = annotate_axes(ax, Zdiag1, Zdiag2, args=args, hide_xaxis=Z2_index < nrow, hide_yaxis=Z1_index)
                     else:
                         print(f'Cannot plot {Zdiag1} vs {Zdiag2} comparison for object {objid}')
 
@@ -2970,7 +2984,7 @@ def plot_nb_comparison_sii(objlist, args, fontsize=10):
     print(f'Plotting NB comparison wth and without SII..')
 
     # -------setting limits and colors-----------
-    Z_limits = [7.0, 9.1]
+    Z_limits = [6.8, 9.2]
     color_lim_dict = {'color':[None, None, '', ''], 'bin_ID':[None, None, 'Voronoi bin ID', 'rainbow'], 'distance':[0, 5, 'Galactocentric distance (kpc)', 'cividis'], 'distance_re':[0, 1.5, r'Galactocentric distance (R$_e$)', 'cividis'], 'agn_dist':[-1, 1, f'Distance from {args.AGN_diag} SF line', args.diverging_cmap]}
     color = 'brown'
     counter = 0
@@ -3012,7 +3026,7 @@ def plot_nb_comparison_sii(objlist, args, fontsize=10):
         # ----annotate axis----------
         ax.set_xlim(Z_limits)
         ax.set_ylim(Z_limits)
-        ax = annotate_axes(ax, r'$\log$ (O/H) + 12 (NB: including S II)', r'$\log$ (O/H) + 12 (NB: excluding S II)', args, hide_xaxis=False, hide_yaxis=False)
+        ax = annotate_axes(ax, r'$\log$ (O/H) + 12 (NB: including S II)', r'$\log$ (O/H) + 12 (NB: excluding S II)', args=args, hide_xaxis=False, hide_yaxis=False)
 
     print(f'Eventually only plotted only {counter} out of {len(objlist)} objects, that have both with and without SII data')
     
@@ -3714,7 +3728,7 @@ def plot_metallicity_fit_tests(objid, field, Zdiag, args, filter='F150W', fontsi
     p = axes[1].imshow(filter_image, extent=(-arcsec_limit, arcsec_limit, -arcsec_limit, arcsec_limit), origin='lower')
     axes[1].scatter(0, 0, marker='x', s=10, c='grey')
     axes[1].set_aspect('auto') 
-    axes[1] = annotate_axes(axes[1], 'arcsec', 'arcsec', args, label=f'{filter} image', clabel='', hide_cbar=False, p=p)
+    axes[1] = annotate_axes(axes[1], 'arcsec', 'arcsec', args=args, label=f'{filter} image', clabel='', hide_cbar=False, p=p)
 
     # -------zoom-in annotation------------------
     if args.re_limit is not None:
@@ -3736,14 +3750,14 @@ def plot_metallicity_fit_tests(objid, field, Zdiag, args, filter='F150W', fontsi
     p = axes[3].imshow(logOH_map_to_plot, extent=(-arcsec_limit, arcsec_limit, -arcsec_limit, arcsec_limit), cmap=cmap, origin='lower', vmin=clim[0], vmax=clim[1])
     axes[3].scatter(0, 0, marker='x', s=10, c='grey')
     axes[3].set_aspect('auto') 
-    axes[3] = annotate_axes(axes[3], 'arcsec', 'arcsec', args, label='Lenstronomy input metallicity', clabel='', hide_cbar=False, p=p, hide_yaxis=True)
+    axes[3] = annotate_axes(axes[3], 'arcsec', 'arcsec', args=args, label='Lenstronomy input metallicity', clabel='', hide_cbar=False, p=p, hide_yaxis=True)
 
     # ------plotting metallicity radial profile-----------
     radprof_ax = axes[4]
     radprof_ax.scatter(logOH_df[quant_x], logOH_df[quant_y], s=20, c='grey', lw=0, alpha=1)
-    radprof_ax.errorbar(logOH_df[quant_x], logOH_df[quant_y], yerr=logOH_df[quant_y + '_u'], fmt='none', c='grey', lw=0.5, alpha=0.2)
+    radprof_ax.errorbar(logOH_df[quant_x], logOH_df[quant_y], yerr=logOH_df[quant_y + '_u'], fmt='none', c='grey', lw=0.5, alpha=1)
     radprof_ax.set_aspect('auto') 
-    radprof_ax = annotate_axes(radprof_ax, 'Radius (arcsec)', r'$\log$ O/H + 12', args)
+    radprof_ax = annotate_axes(radprof_ax, 'Radius (arcsec)', r'$\log$ O/H + 12', args=args)
 
     # -------ploting the radial fits--------------
     xarr = logOH_df[quant_x]
@@ -3852,8 +3866,8 @@ if __name__ == "__main__":
     #plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10)#, exclude_ids=[1303])
 
     # ---------single galaxy plot: Z map and gradient----------------------
-    #plot_metallicity_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10, do_mcmc=False) # zgrad plot
-    #plot_metallicity_fig_single(2128, 'glass-a2744', primary_Zdiag, args, fontsize=10, do_mcmc=False) # zgrad plot
+    #plot_metallicity_fig_single(2867, 'Par028', primary_Zdiag, args, fontsize=10, do_mcmc=False) # zgrad plot
+    #plot_metallicity_fig_single(1333, 'glass-a2744', primary_Zdiag, args, fontsize=10, do_mcmc=False) # zgrad plot
     #plot_metallicity_fit_tests(2867, 'Par028', primary_Zdiag, args, fontsize=10)
     
     # --------to create dataframe of all metallicity quantities including radial fits, etc------------------
@@ -3871,7 +3885,7 @@ if __name__ == "__main__":
     #plot_metallicity_comparison_fig(objlist, args.Zdiag, args, Zbranch='high', fontsize=20)
 
     # ---------single galaxy plot: SFR map and correlation----------------------
-    #plot_metallicity_sfr_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
+    #plot_metallicity_sfr_fig_single(2867, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
     
     # ---------single galaxy plot: SFR-Z radial profile----------------------
     #plot_metallicity_sfr_radial_profile_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=13)

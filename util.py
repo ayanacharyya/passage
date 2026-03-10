@@ -1517,7 +1517,7 @@ def plotline(id, path='/Users/acharyya/Work/astro/passage/passage_data/v0.5/Par0
      return fig
 
 # --------------------------------------------------------------------------------------------------------------------
-def annotate_axes(ax, xlabel, ylabel, args=None, fontsize=10, fontfactor=1, label='', clabel='', hide_xaxis=False, hide_yaxis=False, hide_cbar=True, p=None, hide_cbar_ticks=False, cticks_integer=True):
+def annotate_axes(ax, xlabel, ylabel, xlim=None, ylim=None, args=None, fontsize=10, fontfactor=1, label='', clabel='', hide_xaxis=False, hide_yaxis=False, hide_cbar=True, p=None, hide_cbar_ticks=False, cticks_integer=True):
     '''
     Annotates the axis of a given 2D image
     Returns the axis handle
@@ -1525,6 +1525,7 @@ def annotate_axes(ax, xlabel, ylabel, args=None, fontsize=10, fontfactor=1, labe
     if args is not None: fontsize, fontfactor = args.fontsize, args.fontfactor
     ax.text(0.05, 0.9, label, c='k', fontsize=fontsize/fontfactor, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9), transform=ax.transAxes)
 
+    if xlim is not None: ax.set_xlim(xlim)
     ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=3, prune='both'))
     ax.xaxis.set_minor_locator(ticker.AutoMinorLocator(4))
     if hide_xaxis:
@@ -1533,6 +1534,7 @@ def annotate_axes(ax, xlabel, ylabel, args=None, fontsize=10, fontfactor=1, labe
         ax.set_xlabel(xlabel, fontsize=fontsize)
         ax.tick_params(axis='x', which='major', labelsize=fontsize, labelbottom=True)
 
+    if ylim is not None: ax.set_ylim(ylim)
     ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=3, prune='both'))
     ax.yaxis.set_minor_locator(ticker.AutoMinorLocator(4))
     if hide_yaxis:
