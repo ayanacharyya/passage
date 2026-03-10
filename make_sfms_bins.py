@@ -481,7 +481,7 @@ def read_passage_sed_catalog(filename, use_old=True):
         full_df = pd.read_csv(filename, header=0, sep='\t')
         full_df = full_df[full_df['stellar_mass_50'] > 0].reset_index(drop=True) # to get only those sources that have stellar mass measured
 
-    full_df.rename(columns={'Par':'field', 'passage_id':'id', 'objid':'id', 'stellar_mass_50':'log_mass', 'ssfr_50':'log_ssfr', 'sfr_50':'sfr', 'ra_obj':'ra', 'dec_obj':'dec'}, inplace=True)
+    full_df.rename(columns={'Par':'field', 'passage_id':'id', 'id_photcat':'id', 'objid':'id', 'cosmoswebid_1':'cosmosid', 'stellar_mass_50':'log_mass', 'ssfr_50':'log_ssfr', 'sfr_50':'sfr', 'ra_obj':'ra', 'dec_obj':'dec'}, inplace=True)
     full_df['log_sfr'] = np.log10(full_df['sfr'])
     
     columns_to_extract = ['field', 'id', 'zbest', 'log_mass', 'log_sfr', 'log_ssfr', 'cosmosid']
@@ -518,7 +518,8 @@ if __name__ == "__main__":
 
     # ---------reading in the master SED catalog----------------
     if args.do_all_fields:
-        passage_catalog_filename = args.output_dir / 'catalogs' / 'passagepipe_v0.5_SED_fits_cosmosweb_v1.0.0-alpha.fits'
+        passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
+        #passage_catalog_filename = args.output_dir / 'catalogs' / 'passagepipe_v0.5_SED_fits_cosmosweb_v1.0.0-alpha.fits'
         #passage_catalog_filename = args.output_dir / 'catalogs' / 'passage_cosmos_redshift_catalog_v2.dat'
         df = read_passage_sed_catalog(passage_catalog_filename)
         output_dir = args.output_dir / 'stacking'
