@@ -10,7 +10,7 @@
 from header import *
 from util import *
 from make_diagnostic_maps import trim_image, take_safe_log_ratio, take_safe_log_sum, get_dereddened_flux
-from plots_for_zgrad_paper import odr_fit, plot_fitted_line
+from plots_for_zgrad_paper import odr_fit, plot_fitted_line, get_AGN_func_methods, plot_AGN_demarcation_ax, get_distance_map_from_AGN_line, annotate_kpc_scale_bar, get_ratio_labels, overplot_AGN_line_on_BPT
 
 start_time = datetime.now()
 
@@ -586,12 +586,13 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     # ----------plot fitted line-------------
     xarr = df[quant_x]
     ax = plot_fitted_line(ax, linefit_odr, xarr, col, args, quant=quant, short_label=False, index=index)
+    ax.set_box_aspect(1)
 
     # --------annotating axis--------------
     if xlim is not None: ax.set_xlim(xlim[0], xlim[1]) # kpc
     if ylim is not None: ax.set_ylim(ylim[0], ylim[1])
     if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)' if args.re_limit is None else r'Radius (R$_e$)', label_dict[quant], args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
-    
+
     return ax, linefit_odr
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -616,6 +617,65 @@ def plot_2D_map(image, ax, label, args, cmap='viridis', clabel='', takelog=True,
 
     return ax
 
+# --------------------------------------------------------------------------------------------------------------------
+def plot_AGN_demarcation_object(full_hdu, args, ax, marker='o', size=50, ax_inset=None, hide_cbar=True):
+    '''
+    Plots the spatially resolved AGN demarcation for a given object on a given axis
+    Returns axis handle
+    '''    
+    # -----------getting the fluxes------------------
+    try:
+        ynum_map, _, ynum_int, ynum_sum, _ = get_emission_line_map(args.ynum_line, full_hdu, args, silent=True)
+        yden_map, _, yden_int, yden_sum, _ = get_emission_line_map(args.yden_line, full_hdu, args, silent=True)
+
+        xnum_map, _, xnum_int, xnum_sum, _ = get_emission_line_map(args.xnum_line, full_hdu, args, silent=True)
+        xden_map, _, xden_int, xden_sum, _ = get_emission_line_map(args.xden_line, full_hdu, args, silent=True)
+    except:
+        print(f'Required emission lines not available for {args.id} with {args.AGN_diag} AGN diagnostic. So skipping this object')
+        return ax, None, None
+    
+    if not args.do_not_correct_flux and args.AGN_diag in ['H21', 'B22'] and args.xden_line == 'Ha': # special treatment for H-alpha line, in order to add the NII 6584 component back
+        factor = 0.823  # from grizli source code
+        print(f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
+        xden_map = np.ma.masked_where(xden_map.mask, xden_map.data / factor)
+        xden_int = xden_int / factor
+        xden_sum = xden_sum / factor
+
+   # -----------spatially_resolved-----------------------
+    ax, scatter_plot_handle = plot_AGN_demarcation_ax(xnum_map, xden_map, ynum_map, yden_map, ax, args, marker=marker, size=size, lw=0.5, color=args.AGN_colorby if 'AGN_colorby' in args else None)
+
+    # -----------integrated-----------------------
+    #ax, _ = plot_AGN_demarcation_ax(xnum_int, xden_int, ynum_int, yden_int, ax, args, marker=marker, size=4*size, lw=2)
+    ax, _ = plot_AGN_demarcation_ax(xnum_sum, xden_sum, ynum_sum, yden_sum, ax, args, marker='*', size=4*size, lw=2)
+
+     # -----------2D map inset-----------------------
+    if ax_inset is not None:
+        distance_from_AGN_line_map = get_distance_map_from_AGN_line(xnum_map, xden_map, ynum_map, yden_map, args)
+        ax_inset = plot_2D_map(distance_from_AGN_line_map, ax_inset, '', args, takelog=False, cmap=args.diverging_cmap, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=True, hide_cbar=True)
+
+    # -----------annotating axes-----------------------
+    theoretical_lines, line_labels = get_AGN_func_methods(args)
+    if not hide_cbar:
+        cbar = plt.colorbar(scatter_plot_handle)
+        unit_text = r'kpc' if args.re_limit is None else r'R_e'
+        cbar.set_label(f'Distance from center ({unit_text})' if 'AGN_colorby' in args and args.AGN_colorby == 'distance' else f'Distance from {theoretical_lines[0]} line', fontsize=args.fontsize)
+        cbar.ax.tick_params(labelsize=args.fontsize)
+
+    ax.set_xlim(-2.5, 0.5)
+    ax.set_ylim(-2, 2)
+    ax.set_xlabel(f'Log {get_ratio_labels("NeIII-3867/OII")}' if args.AGN_diag == 'Ne3O2' else f'Log {get_ratio_labels("SII/NII,Ha")}' if args.AGN_diag == 'H21' else f'Log {get_ratio_labels(f"{args.xnum_line}/{args.xden_line}")}', fontsize=args.fontsize)
+    ax.set_ylabel(f'Log {get_ratio_labels("OIII/Hb")}', fontsize=args.fontsize)
+    ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+    ax.set_box_aspect(1)
+
+    # ---------adding literature AGN demarcation lines----------
+    color_arr = ['brown', 'darkgreen', 'dodgerblue', 'cyan', 'sienna']
+    for index, (theoretical_line, line_label) in enumerate(zip(theoretical_lines, line_labels)):
+        #overplot_AGN_line_on_BPT(ax, theoretical_line=theoretical_line, label=line_label, color=color_arr[index], fontsize=args.fontsize, lw=0.5 if index else 1, ls='solid')
+        overplot_AGN_line_on_BPT(ax, theoretical_line=theoretical_line, label=None, color=color_arr[index], fontsize=args.fontsize, lw=0.5 if index else 1, ls='solid')
+
+    return ax, scatter_plot_handle, ax_inset
+
 # --------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
@@ -624,12 +684,15 @@ if __name__ == "__main__":
     args.fontsize = 10
     args.fontfactor = 1
                         
-    line_list = ['OII', 'Hb', 'OIII-4959', 'OIII', 'Ha', 'SII']
+    #line_list = ['OII', 'Hb', 'OIII-4959', 'OIII', 'Ha', 'SII']
+    line_list = ['OII', 'NeIII-3867', 'Hb', 'OIII-4363', 'Hg', 'OIII']
     dered = True
     # --------------defining filenames and directories-------------------------------
-    input_dir = Path('/Users/acharyya/Work/astro/passage/glass_data/resolved_sfh')
+    #input_dir = Path('/Users/acharyya/Work/astro/passage/glass_data/resolved_sfh')
+    input_dir = Path('/Users/acharyya/Work/astro/passage/passage_data/vpjw/Par684')
     fig_dir = input_dir / 'figs'
-    files = glob.glob(str(input_dir) + '/regions_*arcsec.line.fits')
+    #files = glob.glob(str(input_dir) + '/regions_*arcsec.line.fits')
+    files = glob.glob(str(input_dir) + '/*full.fits')
 
     for ind, full_filename in enumerate(files):
         print(f'\nDoing ({ind + 1}/{len(files)})..')
@@ -660,9 +723,9 @@ if __name__ == "__main__":
         args.segmentation_map = segmentation_map
 
         # ------------setup figure-------------
-        nrows, ncols = 3, 3
+        nrows, ncols = 3, 4
         npanels = len(line_list) + 2
-        fig, axes = plt.subplots(nrows, ncols, figsize=(7, 7), layout='constrained')
+        fig, axes = plt.subplots(nrows, ncols, figsize=(8, 7), layout='constrained')
 
         # ----------------line maps------------------
         for index, line in enumerate(line_list):
@@ -701,13 +764,21 @@ if __name__ == "__main__":
 
         ax, radial_linefit_odr = plot_radial_profile(logOH_df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant)
         
-        # ------------deleting remaining axes---------
+        # -----------------spatially resolved AGN diagnostic-------------------
+        index += 1
+        ax = axes[index // ncols][index % ncols]
+        theoretical_lines, line_labels = get_AGN_func_methods(args)  
+        index += 1
+        ax_inset = axes[index // ncols][index % ncols]     
+        ax, scatter_plot_handle, ax_inset = plot_AGN_demarcation_object(full_hdu, args, ax, marker='o', size=5, ax_inset=ax_inset)
+ 
+         # ------------deleting remaining axes---------
         for i in range(index + 1, nrows * ncols):
             ax = axes[i // ncols][i % ncols]
             ax.remove()
    
         # -----------save figure---------------
-        plt.title(f'{full_filename.stem}')
+        fig.suptitle(f'{full_filename.stem}')
         figname = f'{full_filename.stem}.png'
         save_fig(fig, fig_dir, figname, args)
 
