@@ -11,7 +11,7 @@
 
 from header import *
 from util import *
-from make_diagnostic_maps import get_re, get_offsets_from_center
+from make_diagnostic_maps import get_re_from_extension, get_offsets_from_center
 
 start_time = datetime.now()
 
@@ -103,7 +103,7 @@ if __name__ == "__main__":
                 get_psf = False
             
             #try:
-            re_kpc, re_arcsec = get_re(full_hdu, args, filter=filter_for_re, psf=psf)
+            re_kpc, re_arcsec = get_re_from_extension(full_hdu, args, filter=filter_for_re, psf=psf)
             '''
             except:
                 print(f'Could not compute R_e for object {args.id}. Skipping this object.')
