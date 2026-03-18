@@ -36,12 +36,15 @@ def plot_ratio_grid(df_ratios, ax, args, color1='salmon', color2='cornflowerblue
     yratio_name = f'{y_num_labels}/{y_den_labels}'
 
     if args.slice_at_quantity1 is not None:
+        args.slice_at_quantity1 = np.array(np.atleast_1d(args.slice_at_quantity1), dtype='float32')
         print(f'Slicing the model at {args.quantity1} == {args.slice_at_quantity1}')
         df_ratios = df_ratios[df_ratios[args.quantity1].isin(args.slice_at_quantity1)] # to plot grid for only one value of quantity2, to reduce clutter
     if args.slice_at_quantity2 is not None:
-        print(f'Slicing the model at {args.quantity2} == {args.slice_at_quantity3}')
+        args.slice_at_quantity2 = np.array(np.atleast_1d(args.slice_at_quantity2), dtype='float32')
+        print(f'Slicing the model at {args.quantity2} == {args.slice_at_quantity2}')
         df_ratios = df_ratios[df_ratios[args.quantity2].isin(args.slice_at_quantity2)] # to plot grid for only one value of quantity2, to reduce clutter
     if args.slice_at_quantity3 is not None:
+        args.slice_at_quantity3 = np.array(np.atleast_1d(args.slice_at_quantity3), dtype='float32')
         print(f'Slicing the model at {args.quantity3} == {args.slice_at_quantity3}')
         df_ratios = df_ratios[df_ratios[args.quantity3].isin(args.slice_at_quantity3)] # to plot grid for only one value of quantity3, to reduce clutter
 

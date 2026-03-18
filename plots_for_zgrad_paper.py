@@ -1197,7 +1197,7 @@ def make_latex_table(df, args, Zdiag='NB', sum=True):
     return tex_df
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_photoionisation_model_grid(args):
+def get_photoionisation_model_grid(args, AGN_grid=False):
     '''
     Loads and returns a given photoionisation model grid of ratios
     Returns pandas dataframe
@@ -1208,7 +1208,8 @@ def get_photoionisation_model_grid(args):
         df = pd.read_table(grid_filename, delim_whitespace=True)
 
     elif args.phot_models.lower() in ['nebulabayes', 'nb']:
-        grid_filename = Path(NebulaBayes.__path__[0]) / 'grids' / 'NB_HII_grid.fits.gz'
+        if AGN_grid: grid_filename = Path(NebulaBayes.__path__[0]) / 'grids' / 'NB_NLR_grid.fits.gz'
+        else: grid_filename = Path(NebulaBayes.__path__[0]) / 'grids' / 'NB_HII_grid.fits.gz'
         df = Table(fits.getdata(grid_filename)).to_pandas()
         df['log q'] = np.round(df['log U'] + np.log10(3e10), 1)
 
@@ -1259,7 +1260,7 @@ def get_ratio_labels(ratio_name, omit_lambda=False):
     return label
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False, fontsize=10):
+def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False, fontsize=10, show_AGN_grid=False, df_data=None):
     '''
     Plots and saves the ratio vs ratio parameter space and, optionally, a fit to its envelope, for a given photoionisation model grid
     '''
@@ -1283,6 +1284,41 @@ def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False
     # --------plot the model ratios---------------
     ax, xratio_name, yratio_name = plot_ratio_grid(df, ax, args, color1='seagreen', color2='cornflowerblue', color3='slategray')
 
+    # -------over-plot the AGN grid----------------
+    if show_AGN_grid:
+        print(f'Over-plotting NLR photoionisation model grid..')
+        df_agn = get_photoionisation_model_grid(args, AGN_grid=show_AGN_grid)
+        df_agn = df_agn[df_agn['log E_peak'] == -0.75] # choose from [-2.  , -1.75, -1.5 , -1.25, -1.  , -0.75]
+        if ratio_x not in df_agn: df_agn[ratio_x] = df_agn[line_label_dict[args.xnum_line]] / df_agn[line_label_dict[args.xden_line]]
+        if ratio_y not in df_agn: df_agn[ratio_y] = df_agn[line_label_dict[args.ynum_line]] / df_agn[line_label_dict[args.yden_line]]
+        ax, xratio_name, yratio_name = plot_ratio_grid(df_agn, ax, args, color1='orange', color2='crimson', color3='k')
+
+    # ---------over-plot observed data--------------------
+    if df_data is not None:
+        print(f'Over-plotting observed data for {len(df_data)} objects..')
+        theoretical_lines, line_labels = get_AGN_func_methods(args)
+        # -------------correcting Ha back to NII + Ha-----------
+        if not args.do_not_correct_flux and args.AGN_diag in ['H21', 'B22'] and args.xden_line == 'Ha': # special treatment for H-alpha line, in order to add the NII 6584 component back
+            factor = 0.823  # from grizli source code
+            print(f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
+            df_data['Ha'] /= factor
+            df_data['Ha_u'] /= factor
+
+        # --------computing the log ratios-------------------------
+        df_data = df_data[(df_data[args.xnum_line] > 0) & (df_data[args.xden_line] > 0) & (df_data[args.ynum_line] > 0) & (df_data[args.yden_line] > 0)]
+        df_data['y_ratio'] = unp.log10(unp.uarray(df_data[args.ynum_line], df_data[args.ynum_line + '_u']) / unp.uarray(df_data[args.yden_line], df_data[args.yden_line + '_u']))
+        df_data['x_ratio'] = unp.log10(unp.uarray(df_data[args.xnum_line], df_data[args.xnum_line + '_u']) / unp.uarray(df_data[args.xden_line], df_data[args.xden_line + '_u']))
+
+        # --------plotting the data-------------------------
+        for marker in pd.unique(df_data['marker']):
+            df_sub = df_data[df_data['marker'] == marker]
+            scatter_plot_handle = ax.scatter(unp.nominal_values(df_sub['x_ratio']), unp.nominal_values(df_sub['y_ratio']), c='teal', marker=marker, s=100, lw=2, edgecolor='w' if args.fortalk else 'k', label='GLASS (This work)' if marker == 's' else 'PASSAGE (This work)', zorder=20)
+            ax.errorbar(unp.nominal_values(df_sub['x_ratio']), unp.nominal_values(df_sub['y_ratio']), xerr=unp.std_devs(df_sub['x_ratio']), yerr=unp.std_devs(df_sub['y_ratio']), c='gray', fmt='none', lw=2, alpha=0.5, zorder=10)
+        
+        # --------annotating every point-------------------------
+        if args.annotate:
+            for index, row in df_data.iterrows(): ax.text(row['x_ratio'].n, row['y_ratio'].n, f'{row["objid"]}', fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
+
     # ------annotate figure-----------------------
     #ax.grid(which='both', color='gray', linestyle='solid', linewidth=1, alpha=0.3)
     ax.set_xlabel('Log ' + get_ratio_labels(xratio_name), fontsize=args.fontsize)
@@ -1290,10 +1326,10 @@ def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     df = df[(df[xratio_name] > 0) & (df[yratio_name] > 0)] # to avoid math errors later while taking log
-    xmin = args.xmin if args.xmin is not None else np.log10(np.min(df[xratio_name]) * 0.9)
-    xmax = args.xmax if args.xmax is not None else np.log10(np.max(df[xratio_name]) * 1.1)
-    ymin = args.ymin if args.ymin is not None else np.log10(np.min(df[yratio_name]) * 0.9)
-    ymax = args.ymax if args.ymax is not None else np.log10(np.max(df[yratio_name]) * 1.1)
+    xmin = args.xmin if args.xmin is not None else -3.5
+    xmax = args.xmax if args.xmax is not None else 2.0
+    ymin = args.ymin if args.ymin is not None else -4.2
+    ymax = args.ymax if args.ymax is not None else 1.7
 
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
@@ -1606,8 +1642,8 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     linefit_odr = odr_fit(df, quant_x=quant_x, quant_y=quant)
     if do_mcmc:
         # run lenstronomy
-        #linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
-        linefit_lenstronomy = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
+        linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
+        #linefit_lenstronomy = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
         
         # run MCMC
         params_llim, params_median, params_ulim = mcmc_vorbin_fit(df, args, filter='F150W', quant_x=quant_x, quant_y=quant, plot_corner=False, Zdiag=Zdiag)
@@ -2157,8 +2193,8 @@ def plot_AGN_demarcation_figure_integrated(df_input, args, fontsize=10):
     if not args.do_not_correct_flux and args.AGN_diag in ['H21', 'B22'] and args.xden_line == 'Ha': # special treatment for H-alpha line, in order to add the NII 6584 component back
         factor = 0.823  # from grizli source code
         print(f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
-        df['Ha'] /= factor
-        df['Ha_u'] /= factor
+        df_input['Ha'] /= factor
+        df_input['Ha_u'] /= factor
 
     # --------computing the log ratios-------------------------
     df = df_input.copy()
@@ -2184,6 +2220,8 @@ def plot_AGN_demarcation_figure_integrated(df_input, args, fontsize=10):
 
     ax.set_xlim(-2.5, 0.5)
     ax.set_ylim(-1, 1)
+    #ax.set_xlim(-3.5, 2)
+    #ax.set_ylim(-4.2, 1.7)
     ax.set_xlabel(f'Log {get_ratio_labels("NeIII-3867/OII")}' if args.AGN_diag == 'Ne3O2' else f'Log {get_ratio_labels("SII/NII,Ha")}' if args.AGN_diag == 'H21' else f'Log {get_ratio_labels(f"{args.xnum_line}/{args.xden_line}")}', fontsize=args.fontsize)
     ax.set_ylabel(f'Log {get_ratio_labels("OIII/Hb")}', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
@@ -2192,7 +2230,7 @@ def plot_AGN_demarcation_figure_integrated(df_input, args, fontsize=10):
     color_arr = ['brown', 'darkgreen', 'dodgerblue', 'cyan', 'sienna']
     linestyles = ['solid', 'dashed', 'dotted']
     for index, (theoretical_line, line_label) in enumerate(zip(theoretical_lines, line_labels)):
-        overplot_AGN_line_on_BPT(ax, theoretical_line=theoretical_line, label=line_label, color=color_arr[index], fontsize=args.fontsize, lw=2 if index else 2, ls=linestyles[index % len(linestyles)])
+        overplot_AGN_line_on_BPT(ax, xlim=[-2.5, 0.5], theoretical_line=theoretical_line, label=line_label, color=color_arr[index], fontsize=args.fontsize, lw=2 if index else 2, ls=linestyles[index % len(linestyles)])
 
    # -----------saving figure------------
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
@@ -2777,7 +2815,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fontsize=10):
+def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fontsize=10, do_mcmc=True):
     '''
     Plots and saves a single figure with the 2D metallicity map, metallicity radial profile, SFR map, SFR radial profile and metallicity vs SFR plot for a given object
     '''
@@ -2813,7 +2851,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     axes[0] = annotate_kpc_scale_bar(2, axes[0], args, label='2 kpc', color='brown', loc='lower right')
 
     # # ------plotting metallicity radial profile-----------
-    axes[1], _ = plot_radial_profile(logOH_df, axes[1], args, ylim=Zlim, xlim=[-0.2, 5 if args.re_limit is None else args.re_limit], hide_xaxis=True, hide_yaxis=False, hide_cbar=True, short_label=False, do_mcmc=True)
+    axes[1], _ = plot_radial_profile(logOH_df, axes[1], args, ylim=Zlim, xlim=[-0.2, 5 if args.re_limit is None else args.re_limit], hide_xaxis=True, hide_yaxis=False, hide_cbar=True, short_label=False, do_mcmc=do_mcmc)
     axes[1].yaxis.set_label_position('right')
     axes[1].yaxis.tick_right()
     
@@ -3668,7 +3706,7 @@ def odr_fit(df_input, quant_x='distance_arcsec', quant_y='log_OH'):
     if recenter_y and 'OH' in quant_y:
         recenter_to = 8.0
         df[quant_y] = df[quant_y] - recenter_to
-        print(f'\nDeb3541: in odfit(), recentering {quant_y} to {recenter_to}..')
+        print(f'\nDeb3541: in odr_fit(), recentering {quant_y} to {recenter_to}..')
 
     df = df.dropna(axis=0)
     try:
@@ -3820,11 +3858,13 @@ if __name__ == "__main__":
     #args.Zdiag += ['O3O2']
     args.colorcol = 'distance' if args.re_limit is None else 'distance_re'
     args.phot_models = 'nb'
+    show_AGN_grid = True
     log_mass_lim = [7.5, 10]
 
     # -------setting up objects to plot--------------
     Par28_objects = [300, 1303, 1849, 2867]
     #Par28_objects = [2727] + Par28_objects
+    #Par28_objects = [2171] + Par28_objects
     glass_objects = [1721, 1983, 1991, 1333]
     #glass_objects = [2128] + glass_objects
 
@@ -3849,7 +3889,7 @@ if __name__ == "__main__":
     #plot_glass_venn(args, fontsize=10)
 
     # ---------photoionisation model plots----------------------
-    #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True, fontsize=15)
+    #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True, fontsize=15, show_AGN_grid=show_AGN_grid)
     #plot_photoionisation_models('OIII/Hb', 'Z', args, fontsize=15)
 
     # ---------single galaxy plot: example galaxy----------------------
@@ -3866,7 +3906,7 @@ if __name__ == "__main__":
     #plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10)#, exclude_ids=[1303])
 
     # ---------single galaxy plot: Z map and gradient----------------------
-    #plot_metallicity_fig_single(2867, 'Par028', primary_Zdiag, args, fontsize=10, do_mcmc=False) # zgrad plot
+    #plot_metallicity_fig_single(300, 'Par028', primary_Zdiag, args, fontsize=10, do_mcmc=False) # zgrad plot
     #plot_metallicity_fig_single(1333, 'glass-a2744', primary_Zdiag, args, fontsize=10, do_mcmc=False) # zgrad plot
     #plot_metallicity_fit_tests(2867, 'Par028', primary_Zdiag, args, fontsize=10)
     
@@ -3888,10 +3928,11 @@ if __name__ == "__main__":
     #plot_metallicity_sfr_fig_single(2867, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
     
     # ---------single galaxy plot: SFR-Z radial profile----------------------
-    #plot_metallicity_sfr_radial_profile_fig_single(1303, 'Par028', primary_Zdiag, args, fontsize=13)
+    #plot_metallicity_sfr_radial_profile_fig_single(2727, 'Par028', primary_Zdiag, args, fontsize=13, do_mcmc=False)
 
     # ---------loading master dataframe with only objects in objlist------------
     df = make_master_df(objlist, args, sum=True)
+    #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True, fontsize=15, show_AGN_grid=show_AGN_grid, df_data=df)
     
     # --------multi-panel SFR-Z plots------------------
     #plot_metallicity_sfr_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)#, exclude_ids=[1303])
@@ -3909,7 +3950,7 @@ if __name__ == "__main__":
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_lenstronomy_NB'], fontsize=15)
-    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15), colorcol=None)
+    #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)#, colorcol=None)
     #plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH_slope_mcmc_NB', fontsize=15)
     #df = df[~(df['objid'] == 1991)]
     #plot_Mtmix(df, args, mass_col='lp_mass', ycol='log_t_mix', fontsize=15, colorcol='SFR', mgas_method='my')

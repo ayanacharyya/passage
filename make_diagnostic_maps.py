@@ -2796,12 +2796,14 @@ def AGN_func(x, theoretical_line):
     return y
 
 # --------------------------------------------------------------------------------------------------------------------
-def overplot_AGN_line_on_BPT(ax, theoretical_line, label, color='k', fontsize=10, lw=2, ls='dashed'):
+def overplot_AGN_line_on_BPT(ax, theoretical_line, label, color='k', fontsize=10, lw=2, ls='dashed', xlim=None):
     '''
     Overplots a given AGN demarcation line on R3 vs S2 ratio BPT, on an existing axis
     Returns axis handle
     '''
-    x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
+    xmin = xlim[0] if xlim is not None else ax.get_xlim()[0]
+    xmax = xlim[1] if xlim is not None else ax.get_xlim()[1]
+    x = np.linspace(xmin, xmax, 100)
     y = AGN_func(x, theoretical_line)
     ax.plot(x, y, c=color, ls=ls, lw=lw, label=label)
     if label is not None: ax.legend(loc='lower left', fontsize=fontsize)
