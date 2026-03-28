@@ -1589,7 +1589,8 @@ def plot_fitted_line(ax, linefit, xarr, fit_color, args, quant='log_OH', short_l
     xarr = np.linspace(np.min(xarr), np.max(xarr), 10)
     if quant in ['logOH', 'Z', 'log_OH']: main_text = r'$\nabla$Z$_r$'
     else: main_text = r'$\nabla$'
-    unit_text = 'dex/kpc' if args.re_limit is None else r'dex/R$_e$'
+    #unit_text = 'dex/kpc' if args.re_limit is None else r'dex/R$_e$'
+    unit_text = ''
 
     if len(np.shape(linefit)) == 1:
         # y_fitted = np.poly1d(unp.nominal_values(linefit))(xarr)
@@ -1611,7 +1612,7 @@ def plot_fitted_line(ax, linefit, xarr, fit_color, args, quant='log_OH', short_l
         y_fitted = unp.nominal_values(yarr)
         y_low = unp.nominal_values(yarr) - unp.std_devs(yarr)
         y_up = unp.nominal_values(yarr) + unp.std_devs(yarr)
-        value_text = f'{linefit[0][0]: .2f}' if short_label else r'%.2f$^{%.2f}_{%.2f}$' % (linefit[0][0], linefit[0][0] - linefit[1][0], linefit[2][0] - linefit[0][0])
+        value_text = f'{linefit[0][0]: .2f}' if short_label else r'%.2f$^{+%.2f}_{-%.2f}$' % (linefit[0][0], linefit[0][0] - linefit[1][0], linefit[2][0] - linefit[0][0])
     
     ax.plot(xarr, y_fitted, color=fit_color, lw=1, ls='dashed')
     ax.fill_between(xarr, y_low, y_up, color=fit_color, lw=0, alpha=0.3)
@@ -1619,7 +1620,7 @@ def plot_fitted_line(ax, linefit, xarr, fit_color, args, quant='log_OH', short_l
     if label is None:
         label = main_text + ' = ' + value_text
         if not short_label: label += unit_text
-    ax.text(0.1, 0.05 + index * 0.1, label, c=fit_color, fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
+    ax.text(0.1, 0.05 + index * 0.1, label, c='k', fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
     
     return ax
 
@@ -1642,8 +1643,8 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     linefit_odr = odr_fit(df, quant_x=quant_x, quant_y=quant)
     if do_mcmc:
         # run lenstronomy
-        linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
-        #linefit_lenstronomy = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
+        #linefit_lenstronomy = lenstronomy_fit_wrap(df, args, filter='F150W', supersampling_factor=1, Zdiag=Zdiag, quant_x=quant_x, quant_y=quant, return_intermediate=False)
+        linefit_lenstronomy = [ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)]
         
         # run MCMC
         params_llim, params_median, params_ulim = mcmc_vorbin_fit(df, args, filter='F150W', quant_x=quant_x, quant_y=quant, plot_corner=False, Zdiag=Zdiag)
@@ -1776,7 +1777,11 @@ def annotate_kpc_scale_bar(kpc, ax, args, label=None, color='k', loc='lower left
     '''
     pix = kpc * cosmo.arcsec_per_kpc_proper(args.z).value  # converting kpc to arcsec
     if args.re_limit is not None: pix /= args.re_arcsec # converting arcsec to Re units
-    scalebar = AnchoredSizeBar(ax.transData, pix, label, loc, pad=0.5, color=color, frameon=False, size_vertical=0.01, fontproperties={'size':args.fontsize / args.fontfactor})
+    #scalebar = AnchoredSizeBar(ax.transData, pix, label, loc, pad=0.5, color=color, frameon=False, size_vertical=0.01, fontproperties={'size':args.fontsize / args.fontfactor})
+    scalebar = AnchoredSizeBar(ax.transData, pix, label, loc, pad=0.5, color=color, frameon=True, size_vertical=0.02, fontproperties={'size':args.fontsize / args.fontfactor, 'weight':'bold'})
+    scalebar.patch.set_facecolor('w')
+    scalebar.patch.set_alpha(0.7)  # <--- Translucency
+    scalebar.patch.set_boxstyle("round,pad=0.05,rounding_size=0.4")
     ax.add_artist(scalebar)
 
     return ax
@@ -1873,7 +1878,7 @@ def plot_rgb_image(full_hdu, filters, ax, args, hide_xaxis=False, hide_yaxis=Fal
     ax.set_aspect('auto') 
 
     ax.scatter(0, 0, marker='x', s=10, c='grey')
-    ax.text(0.05, 0.05, f'z={args.z:.2f}', c='w', fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
+    #ax.text(0.05, 0.05, f'z={args.z:.2f}', c='w', fontsize=args.fontsize / args.fontfactor, ha='left', va='bottom', transform=ax.transAxes)
 
     # ----------annotate axis---------------
     if args.re_limit is not None:
@@ -2459,12 +2464,12 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10, do_mcmc=Fal
     print(f'Plotting metallicity ({Zdiag}) figure for {len(objlist)} objects..')
 
    # -------setting up the figure--------------------
-    Zlim, cmap = [6.8, 9.2], 'cividis'
+    Zlim, cmap = [6.2, 9.4], 'cividis'
     ncol = 2
     nrow = int(np.ceil(len(objlist) / ncol))
-    fig = plt.figure(figsize=(10, 6))
-    fig.subplots_adjust(left=0.07, right=0.93, bottom=0.07, top=0.93, wspace=0., hspace=0.)
-    outer_gs = gridspec.GridSpec(nrow, ncol, figure=fig, wspace=0.33, hspace=0.)
+    fig = plt.figure(figsize=(10, 7))
+    fig.subplots_adjust(left=0.07, right=0.93, bottom=0.07, top=0.91, wspace=0., hspace=0.)
+    outer_gs = gridspec.GridSpec(nrow, ncol, figure=fig, wspace=0.33, hspace=0.15)
 
     # --------looping over all objects-------------------------
     for index, obj in enumerate(objlist):
@@ -2487,12 +2492,15 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10, do_mcmc=Fal
         logOH_df, logOH_int, logOH_sum =  load_metallicity_df(field, objid, Zdiag, args)
 
         # -----plotting direct image-----------------
-        axes[0], _ = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], axes[0], args, hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, hide_filter_names=index, hide_pa=True)
-        axes[0].text(0.95, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='w', ha='right', va='top', transform=axes[0].transAxes)
+        #axes[0], _ = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], axes[0], args, hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, hide_filter_names=index, hide_pa=True)
+        axes[0], _ = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], axes[0], args, hide_xaxis=hide_xaxis, hide_yaxis=False, hide_cbar=True, hide_filter_names=True, hide_pa=True)
+        #axes[0].text(0.95, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='w', ha='right', va='top', transform=axes[0].transAxes)
+        axes[0].set_title(f'ID #{objid} (z={args.z:.2f})', fontsize=args.fontsize / args.fontfactor / 0.9, c='k', loc='left', va='top')
         
         # -----plotting 2D metallicity map-----------
         axes[1] = plot_2D_map(logOH_map, axes[1], None, args, clabel='', takelog=False, cmap=cmap, vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=hide_xaxis, hide_yaxis=True, hide_cbar=True)
-        axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', color='brown', loc='lower right')
+        #axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', color='brown', loc='lower right')
+        axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', color='k', loc='lower right')
     
         # -------zoom-in annotation------------------
         if args.re_limit is not None:
@@ -3823,7 +3831,7 @@ if __name__ == "__main__":
 
     # -----------setting up hard-coded values-------------------
     args.fontsize = 10
-    args.fontfactor = 1.3
+    args.fontfactor = 1.1
     args.only_seg = True
     args.plot_ratio_maps = True
     args.exclude_lines = [] #['SII']
