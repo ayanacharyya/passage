@@ -1770,18 +1770,19 @@ def plot_1D_spectra(od_hdu, ax, args, show_log_flux=False):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def annotate_kpc_scale_bar(kpc, ax, args, label=None, color='k', loc='lower left'):
+def annotate_kpc_scale_bar(kpc, ax, args, label=None, color='k', loc='lower left', scale_is_re=True, make_box=True):
     '''
     Annotate existing axis with a scale bar corresponding to a given kpc length
     Returns axis handle
     '''
     pix = kpc * cosmo.arcsec_per_kpc_proper(args.z).value  # converting kpc to arcsec
-    if args.re_limit is not None: pix /= args.re_arcsec # converting arcsec to Re units
+    if scale_is_re: pix /= args.re_arcsec # converting arcsec to Re units
     #scalebar = AnchoredSizeBar(ax.transData, pix, label, loc, pad=0.5, color=color, frameon=False, size_vertical=0.01, fontproperties={'size':args.fontsize / args.fontfactor})
-    scalebar = AnchoredSizeBar(ax.transData, pix, label, loc, pad=0.5, color=color, frameon=True, size_vertical=0.02, fontproperties={'size':args.fontsize / args.fontfactor, 'weight':'bold'})
-    scalebar.patch.set_facecolor('w')
-    scalebar.patch.set_alpha(0.7)  # <--- Translucency
-    scalebar.patch.set_boxstyle("round,pad=0.05,rounding_size=0.4")
+    scalebar = AnchoredSizeBar(ax.transData, pix, label, loc, pad=0.5, color=color, frameon=make_box, size_vertical=0.02, fontproperties={'size':args.fontsize / args.fontfactor, 'weight':'bold'})
+    if make_box:
+        scalebar.patch.set_facecolor('w')
+        scalebar.patch.set_alpha(0.7)  # <--- Translucency
+        scalebar.patch.set_boxstyle("round,pad=0.05,rounding_size=0.4")
     ax.add_artist(scalebar)
 
     return ax
@@ -2500,7 +2501,7 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10, do_mcmc=Fal
         # -----plotting 2D metallicity map-----------
         axes[1] = plot_2D_map(logOH_map, axes[1], None, args, clabel='', takelog=False, cmap=cmap, vmin=Zlim[0], vmax=Zlim[1], hide_xaxis=hide_xaxis, hide_yaxis=True, hide_cbar=True)
         #axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', color='brown', loc='lower right')
-        axes[1] = annotate_kpc_scale_bar(2, axes[1], args, label='2 kpc', color='k', loc='lower right')
+        axes[0] = annotate_kpc_scale_bar(2, axes[0], args, label='2 kpc' if index == len(objlist) - 1 else '', color='w', loc='lower right', scale_is_re=False, make_box=False)
     
         # -------zoom-in annotation------------------
         if args.re_limit is not None:
@@ -2748,14 +2749,14 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
     objlist = [item for item in objlist if not item[1] in exclude_ids]
     print(f'Plotting metallicity-SFR figure for {len(objlist)} objects..')
 
-    Zlim = [6.8, 9.2]
+    Zlim = [6.4, 9.6]
     log_sfr_lim = [-2, 0.8]
 
    # -------setting up the figure--------------------
     nrow, ncol = 4, 2
     fig = plt.figure(figsize=(9, 6) if nrow == 3 else (9, 7.5))
     fig.subplots_adjust(left=0.07, right=0.93, bottom=0.08, top=0.9, wspace=0., hspace=0.)
-    outer_gs = gridspec.GridSpec(nrow, ncol, figure=fig, wspace=0.4, hspace=0.)
+    outer_gs = gridspec.GridSpec(nrow, ncol, figure=fig, wspace=0.35, hspace=0.)
 
     # --------looping over all objects-------------------------
     for index, obj in enumerate(objlist):
@@ -2779,8 +2780,9 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
     
         # -----plotting 2D SFR map-----------
         cmap = 'winter'
-        axes[0] = plot_2D_map(log_sfr_map, axes[0], r'$\log$(M/M$_{\odot}$) =' + f'{args.log_mass: .2f}', args, clabel=r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', takelog=False, cmap=cmap, vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=index < nrow - 1, hide_yaxis=False, hide_cbar=True)
-        axes[0] = annotate_kpc_scale_bar(2, axes[0], args, label='2 kpc', color='brown', loc='lower right')
+        #axes[0] = plot_2D_map(log_sfr_map, axes[0], r'$\log$(M/M$_{\odot}$) =' + f'{args.log_mass: .2f}', args, clabel=r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', takelog=False, cmap=cmap, vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=index < nrow - 1, hide_yaxis=False, hide_cbar=True)
+        axes[0] = plot_2D_map(log_sfr_map, axes[0], '', args, clabel=r'$\log$ $\Sigma_{\rm SFR}$ (M$_{\odot}$/yr/kpc$^2$)', takelog=False, cmap=cmap, vmin=log_sfr_lim[0], vmax=log_sfr_lim[1], hide_xaxis=index < nrow - 1, hide_yaxis=False, hide_cbar=True)
+        axes[0] = annotate_kpc_scale_bar(2, axes[0], args, label='2 kpc', color='k', loc='lower right')
 
         # ------plotting metallicity vs SFR-----------
         df = pd.DataFrame({'logOH': unp.nominal_values(np.ma.compressed(logOH_map)), 'logOH_u': unp.std_devs(np.ma.compressed(logOH_map)), 'log_sfr':unp.nominal_values(np.ma.compressed(log_sfr_map)), 'log_sfr_u': unp.std_devs(np.ma.compressed(log_sfr_map))})
@@ -2795,7 +2797,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         # -------Z vs SFR fitting-------------
         fit_color = 'cornflowerblue'
         linefit = odr_fit(df, quant_x='log_sfr', quant_y='logOH')
-        axes[1] = plot_fitted_line(axes[1], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0]: .2f}')
+        axes[1] = plot_fitted_line(axes[1], linefit, df['log_sfr'], fit_color, args, short_label=False, index=0, label=f'Slope = {linefit[0].n: .2f}' + r' $\pm$ ' + f'{linefit[0].s:.2f}')
 
         # --------annotating axis--------------
         axes[1].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
@@ -3943,7 +3945,7 @@ if __name__ == "__main__":
     #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True, fontsize=15, show_AGN_grid=show_AGN_grid, df_data=df)
     
     # --------multi-panel SFR-Z plots------------------
-    #plot_metallicity_sfr_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)#, exclude_ids=[1303])
+    # plot_metallicity_sfr_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)#, exclude_ids=[1303])
     # objlist_ha = [[row['field'], row['objid']] for index, row in df[df['redshift'] < 2.8].iterrows()]
     # #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
 
