@@ -44,7 +44,16 @@ def read_image(filename, remove_ids=[]):
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
-    args.fontfactor = 1.2
+    args.fontfactor = 1.3
+
+    # ----------setup plot parameters------------------
+    quant = 'redshift'
+    delta_quant = 0.02
+    target_quant_arr = [1.556, 1.654, 1.847, 2.070, 2.985]
+    n_snr_lines = 2
+    snr_thresh = 3
+    chisq_thresh = 3
+    sigma_z_thresh = 0.005
 
     # ----------determining directory paths---------------
     if args.drv == 'v0.5': args.drv = 'vpjw'
@@ -52,15 +61,23 @@ if __name__ == "__main__":
     args.input_dir = args.root_dir / 'passage_data' / args.drv / args.field
 
     # ------------reading in files-------------------
-    remove_ids = [7159, 7161, 7162, 7163, 7164, 7169, 7171, 7172, 7172, 7173, 7175, 7176, 7179, 7180, 7181, 7185, 7190] # these are found by eye, looking at the seg map and deciding which areas are affected by the stellar spikes
-    df = read_catalog(args.input_dir / 'compiled_grizli_v1.0.0.fits', remove_ids=remove_ids)
+    remove_ids = [7158, 7159, 7160, 7161, 7162, 7163, 7164, 7169, 7171, 7172, 7172, 7173, 7175, 7176, 7179, 7180, 7181, 7185, 7190] # these are found by eye, looking at the seg map and deciding which areas are affected by the stellar spikes
     seg_map, seg_header = read_image(args.input_dir / 'passage-par682-ir_seg.fits', remove_ids=remove_ids)
+    df = read_catalog(args.input_dir / 'compiled_grizli_v1.0.0.fits', remove_ids=remove_ids)
+    nobj = len(df)
 
-    # ----------setup plot parameters------------------
-    quant = 'redshift'
-    delta_quant1 = 0.1
-    delta_quant2 = 0.01
-    target_quant_arr = [1.552, 1.656, 2.637, 4.876]
+    # -------applying quality cuts on dataframe--------------
+    prominent_lines = ['OII', 'Hb', 'OIII', 'Ha', 'SII', 'PaA', 'PaB']
+    snr_cols = [f'sn_{line}' for line in prominent_lines]
+    mask_df = df[snr_cols] >= snr_thresh
+    df = df[mask_df.sum(axis=1) >= n_snr_lines] # at least n_snr_lines of the prominent lines has snr >= snr_thresh
+    print(f'{len(df)} of {nobj} objects survive the SNR > {snr_thresh} cut in at least {n_snr_lines} lines')
+
+    df = df[df['chinu'] < chisq_thresh]
+    print(f'{len(df)} of the remaining survive the chisq < {chisq_thresh} cut')
+
+    df = df[df['zwidth1'] < sigma_z_thresh]
+    print(f'{len(df)} of the remaining survive the zwidth < {sigma_z_thresh} cut\n')
 
     # ----------setup figure------------------
     fig = plt.figure(figsize=(13, 6), layout='constrained')
@@ -68,8 +85,8 @@ if __name__ == "__main__":
     ax2 = fig.add_subplot(1, 2, 2, projection=pywcs.WCS(seg_header))
 
     # ----------plot histogram------------------
-    bins = np.arange(np.min(df[quant]), np.max(df[quant]), delta_quant1)
-    ax1.hist(df[quant], bins=bins, color='grey', histtype='step', lw=1.)
+    bins = np.arange(np.min(df[quant]), np.max(df[quant]), delta_quant)
+    ax1.hist(df[quant], bins=bins, color='grey', histtype='step', lw=0.5, alpha=0.7)
     ax1 = annotate_axes(ax1, quant, 'Number of objects', args=args)
 
     # ----------plot seg map------------------
@@ -77,14 +94,16 @@ if __name__ == "__main__":
     ax2 = annotate_axes(ax2, 'RA', 'Dec', args=args)
     
     # -----------loop over overplots--------------------
-    cmap_arr = ['Reds', 'Greens', 'Blues', 'Purples', 'Oranges']
+    cmap_arr = ['Reds', 'Greens', 'Blues', 'Purples', 'plasma']
     for index, target_quant in enumerate(target_quant_arr):
         color = mplcolormaps[cmap_arr[index]](0.5)
-        df_sub = df[df[quant].between(target_quant - delta_quant2/2, target_quant + delta_quant2/2)]
-        ax1.hist(df_sub[quant], bins=bins, color=color, label=f'{quant}={target_quant}' + r'$\pm$' + f'{delta_quant2/2}')
+        df_sub = df[df[quant].between(target_quant - delta_quant/2, target_quant + delta_quant/2)]
+        print(f'{len(df_sub)} objects in {target_quant - delta_quant/2 : .3f} < z {target_quant + delta_quant/2 : .3f}')
+        if len(df_sub) < 1: continue
+        ax1.hist(df_sub[quant], bins=bins, color=color, label=f'z={target_quant}' + r'$\pm$' + f'{delta_quant/2} ({len(df_sub)})')
 
         highlight_map = np.where(np.isin(seg_map, df_sub['id'].values), seg_map, np.nan)
-        ax2.imshow(highlight_map, cmap=cmap_arr[index], alpha=1, origin='lower', interpolation='nearest')
+        #ax2.imshow(highlight_map, cmap=cmap_arr[index], alpha=1, origin='lower', interpolation='nearest')
         ax2.scatter(df_sub['ra'], df_sub['dec'], marker='x', color=color, transform=ax2.get_transform('world'))
 
     ax1.legend(loc='upper right', fontsize=args.fontsize / args.fontfactor)
