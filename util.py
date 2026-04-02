@@ -1690,7 +1690,7 @@ def get_passage_masses_from_cosmos(df, args, id_col='objid', field_col='field', 
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def save_fig(fig, fig_dir, figname, args):
+def save_fig(fig, fig_dir, figname, args, dpi=100):
     '''
     Saves a given figure handle as a given output filename
     '''
@@ -1704,7 +1704,7 @@ def save_fig(fig, fig_dir, figname, args):
 
     fig_dir.mkdir(exist_ok=True, parents=True)
     figname = fig_dir / figname
-    fig.savefig(figname, transparent=args.fortalk)
+    fig.savefig(figname, transparent=args.fortalk, dpi=dpi)
     print(f'\nSaved figure as {figname}')
     plt.show(block=False)
 
