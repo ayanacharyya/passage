@@ -13,22 +13,9 @@ from header import *
 from util import *
 from make_diagnostic_maps import trim_image, myimshow, get_offsets_from_center
 from stack_emission_maps import rotate_line_map, deproject_line_map, get_center_offsets, rescale_line_map, weighted_stack_line_maps, plot_2D_map, get_direct_image, write_stacked_maps, get_emission_line_map, setup_fullpage_figure
+from compute_psf_matched_maps import get_niriss_psf, match_to_psf
 
 start_time = datetime.now()
-
-# --------------------------------------------------------------------------------------------------------------------
-def get_niriss_psf(filter_name, supersampling_factor=1, fov_pixels=41):
-    '''
-    Computes NIRISS PSF in a given filter
-    Returns 2D array
-    '''
-    if fov_pixels % 2 == 0: fov_pixels += 1
-    niriss = webbpsf.NIRISS()
-    niriss.filter = filter_name    
-    psf = niriss.calc_psf(fov_pixels=fov_pixels, oversample=supersampling_factor)
-    psf_array  = psf[0].data
-     
-    return psf_array
 
 # --------------------------------------------------------------------------------------------------------------------
 def generate_mock_galaxy_fits(params, output_filename, line_name='X', filter_name='F150W', box_size=50, psf_kernel=None):
@@ -39,7 +26,7 @@ def generate_mock_galaxy_fits(params, output_filename, line_name='X', filter_nam
     Saves the hdulist as output_filename
     '''
     if psf_kernel is None:
-        psf_kernel = get_niriss_psf(filter_name=params['filter'], fov_pixels=box_size)
+        psf_kernel = get_niriss_psf(filter_name=params['filter'], pix_size_arcsec=0.04, fov_pixels=box_size)
 
     # --------computing sersic properties-----------
     ellip = 1 - (params['b_image'] / params['a_image']) # Calculate eccentricity and orientation; Sersic2D uses 'ellip' = 1 - (b/a) and theta in radians
@@ -225,7 +212,7 @@ if __name__ == "__main__":
             full_filename = product_dir / f'{obj["field"]}_{obj["id"]:05d}_maps.fits'
             if not os.path.exists(full_filename) or (args.clobber_mock and index == 0): # only clobber if this is the first iteration
                 if not kernel_loaded:
-                    psf_kernel = get_niriss_psf(filter_name=filter_name, fov_pixels=mock_box_size)
+                    psf_kernel = get_niriss_psf(filter_name=filter_name, pix_size_arcsec=0.04, fov_pixels=mock_box_size)
                     kernel_loaded = True
                 generate_mock_galaxy_fits(obj, full_filename, line_name=line_name, filter_name=filter_name, box_size=mock_box_size, psf_kernel=psf_kernel)
             else:

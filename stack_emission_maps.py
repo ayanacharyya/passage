@@ -7,14 +7,17 @@
              run stack_emission_maps.py --field Par28 --debug_align --id 2822,2698,2583,2171,672
              run stack_emission_maps.py --field Par28 --do_all_obj --clobber --debug_bin --skip_deproject --skip_re_scaling
              run stack_emission_maps.py --field Par28 --do_all_obj --re_limit 2
-             run stack_emission_maps.py --field Par28 --do_all_obj --adaptive_bins --max_gal_per_bin 20
+             run stack_emission_maps.py --system ssd --field Par28 --do_all_obj --adaptive_bins --max_gal_per_bin 20
+             run stack_emission_maps.py --system ssd --field Par28 --do_all_obj --adaptive_bins --bin_by_distance
+             run stack_emission_maps.py --system ssd --field Par28 --do_all_obj --adaptive_bins --bin_by_distance_mass
+             run stack_emission_maps.py --system ssd --field Par28 --id 1982 --clobber --debug_bin --debug_align --adaptive_bins --bin_by_distance_mass
              run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --adaptive_bins --bin_by_distance
 '''
 
 from header import *
 from util import *
 from make_diagnostic_maps import trim_image, get_dereddened_flux, myimshow, get_offsets_from_center, get_cutout
-from make_sfms_bins import bin_SFMS_linear, bin_SFMS_adaptive, read_passage_sed_catalog, bin_SFMS_distance, n_adaptive_bins, sfms
+from make_sfms_bins import bin_SFMS_linear, bin_SFMS_adaptive, read_passage_sed_catalog, bin_SFMS_distance, bin_SFMS_distance_mass, n_adaptive_bins, sfms, n_mass_bins
 
 start_time = datetime.now()
 
@@ -123,7 +126,10 @@ def get_emission_line_map(line, full_hdu, args, dered=True, silent=True):
     line_map /= (pixscale_kpc ** 2) # this is now in ergs/s/cm^2/kpc^2 (i.e. Surface Brightness)
     line_map_err /= (pixscale_kpc ** 2) # this is now in ergs/s/cm^2/kpc^2 (i.e. Surface Brightness)
 
-    return line_map, line_map_err
+    # ---------getting integrated flux-----------------
+    line_int = ufloat(np.nansum(line_map), np.sqrt(np.nansum(line_map_err ** 2))) # ergs/s/cm^2/kpc^2
+
+    return line_map, line_map_err, line_int
 
 # --------------------------------------------------------------------------------------------------------------------
 def rotate_line_map(line_map, args):
@@ -394,37 +400,39 @@ if __name__ == "__main__":
     rescale_text = '_norescale' if args.skip_re_scaling else ''
 
     # -----------define colorbar properties-----------
-    cmin, cmax, cmap = -19.5, -16.5, 'cividis'
+    cmin, cmax, cmap = -2, 1, 'cividis'
     
     # ---------reading in the master SED catalog----------------
+    passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
+    df = read_passage_sed_catalog(passage_catalog_filename)
+
     if args.do_all_fields:
-        passage_catalog_filename = args.output_dir / 'catalogs' / 'passagepipe_v0.5_SED_fits_cosmosweb_v1.0.0-alpha.fits'
-        df = read_passage_sed_catalog(passage_catalog_filename)
-        
-        #re_catalog_filename = args.output_dir / f'catalogs/all_fields_re_list.fits'
-        re_catalog_filename = args.output_dir / f'catalogs/all_fields_re_list_with_CLEAR.fits'
+        re_catalog_filename = args.output_dir / f'catalogs/all_fields_re_list.fits'
         output_dir = args.output_dir / 'stacking'
-    
-    # ---------reading in the single-field phot catalog----------------
+    # ---------curtailing to single-field----------------
     else:
-        product_dir = args.input_dir / args.field / 'Products'
-        df = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
-        df['field'] = args.field
-        df = get_passage_masses_from_cosmos(df, args, id_col='id') # crossmatch with cosmos-web to get stellar mass and SFR
-        
+        df = df[df['field'] == args.field]        
         re_catalog_filename = args.output_dir / f'catalogs/{args.field}_re_list.fits'
         output_dir = args.output_dir / args.field / 'stacking'
 
     # -------------binning the mass-SFR plane-------------
     if args.adaptive_bins:
-        if args.bin_by_distance: df, bin_list = bin_SFMS_distance(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
-        else: df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
+        if args.bin_by_distance:
+            df, bin_list = bin_SFMS_distance(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
+        elif args.bin_by_distance_mass:
+            df, bin_list = bin_SFMS_distance_mass(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms, n_mass_bins=n_mass_bins)
+        else:
+            df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
     else:
-        if args.bin_by_distance: df, bin_list = bin_SFMS_distance(df, method_text='', delta_bin=0.2, sfms=sfms)
-        df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
+        if args.bin_by_distance:
+            df, bin_list = bin_SFMS_distance(df, method_text='', delta_bin=0.2, sfms=sfms)
+        else:
+            df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
     
-    if args.bin_by_distance: bin_list = np.sort(bin_list)
-    else: bin_list.sort(key=lambda x: (x[0].left, x[1].left))
+    if args.bin_by_distance or args.bin_by_distance_mass:
+        bin_list = np.sort(bin_list)
+    else:
+        bin_list.sort(key=lambda x: (x[0].left, x[1].left))
 
     # ---------merge with effective radius catalog--------------------
     if os.path.exists(re_catalog_filename):
@@ -438,17 +446,16 @@ if __name__ == "__main__":
         raise FileNotFoundError(f're catalog not found at {re_catalog_filename}; please create this file first by running compute_re.py. Exiting.')
 
     # -------merge with all photcats by looping over fields--------------
-    if args.do_all_fields:
-        print(f'Combining all photcats to one file before merging to df, might take a few seconds..')
-        fields = pd.unique(df['field'])
-        df_master_photcat = pd.DataFrame()
-        cols_to_extract = ['field', 'id', 'a_image', 'b_image', 'theta_image']
-        for this_field in fields:
-            df_phot_this_field = GTable.read(args.input_dir / this_field / 'Products' / f'{this_field}_photcat.fits').to_pandas()
-            df_phot_this_field['field'] = this_field
-            df_master_photcat = pd.concat([df_master_photcat, df_phot_this_field[cols_to_extract]])
-        
-        df = pd.merge(df, df_master_photcat, on=['field', 'id'], how='inner')
+    print(f'Combining all photcats to one file before merging to df, might take a few seconds..')
+    fields = pd.unique(df['field'])
+    df_master_photcat = pd.DataFrame()
+    cols_to_extract = ['field', 'id', 'a_image', 'b_image', 'theta_image']
+    for this_field in fields:
+        df_phot_this_field = GTable.read(args.input_dir / this_field / 'Products' / f'{this_field}_photcat.fits').to_pandas()
+        df_phot_this_field['field'] = this_field
+        df_master_photcat = pd.concat([df_master_photcat, df_phot_this_field[cols_to_extract]])
+    
+    df = pd.merge(df, df_master_photcat, on=['field', 'id'], how='inner')
 
     # ------determining field-specific paths, etc-----------
     if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
@@ -458,7 +465,8 @@ if __name__ == "__main__":
     fits_dir = output_dir / f'maps{deproject_text}{rescale_text}'
     fits_dir.mkdir(parents=True, exist_ok=True)
 
-    if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 8.5) & (item[0].right == 9.) & (item[1].left == 1.0) & (item[1].right == 1.5)] # to choose the mass=8.5-9.5, sfr=1-1.5 bin for debugging purposes
+    # --------------curtailiug bins for debugging-------------------
+    if args.debug_bin: bin_list = bin_list[1:2]
     #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
     if args.id is not None: df = df[df['id'].isin(args.id)]
     # ------------looping over each bin-----------------------
@@ -467,8 +475,14 @@ if __name__ == "__main__":
     for index2, this_mass_sfr_bin in enumerate(bin_list):
         if args.debug_bin and nbin_good > 0: break
         start_time3 = datetime.now()
-        if args.bin_by_distance: bin_text = f'delta_sfms_bin_{this_mass_sfr_bin.left}-{this_mass_sfr_bin.right}'
-        else: bin_text = f'logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}'
+        if args.bin_by_distance:
+            bin_text = f'delta_sfms_bin_{this_mass_sfr_bin.left}-{this_mass_sfr_bin.right}'
+        elif args.bin_by_distance_mass:
+            this_delta_sfms_bin = this_mass_sfr_bin[0]
+            this_mass_bin = this_mass_sfr_bin[1]
+            bin_text = f'delta_sfms_bin_{this_delta_sfms_bin.left}-{this_delta_sfms_bin.right}_mass_bin_{this_mass_bin.left}-{this_mass_bin.right}'
+        else:
+            bin_text = f'logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}'
         print(f'\tStarting bin ({index2 + 1}/{len(bin_list)}) {bin_text}..', end=' ')
 
         output_filename = fits_dir / f'stacked_maps{deproject_text}{rescale_text}_{bin_text}.fits'
@@ -496,7 +510,11 @@ if __name__ == "__main__":
             ngal_this_bin = len(ids)
         else:
             # --------determine which objects fall in this bin----------
-            mask = df['bin_intervals'] == this_mass_sfr_bin
+            if args.bin_by_distance_mass:
+                mask = (df['bin_intervals'] == this_delta_sfms_bin) & (df['mass_intervals'] == this_mass_bin)
+            else:
+                mask = df['bin_intervals'] == this_mass_sfr_bin
+            
             ids_in_thisbin = df.loc[mask, 'id'].tolist()
             if not args.do_all_obj:
                 ids_in_thisbin = np.array(ids_in_thisbin)[np.isin(ids_in_thisbin, args.ids_in_thisbin)] # subset of IDs of "good-looking" galaxies, just for testing
@@ -545,8 +563,10 @@ if __name__ == "__main__":
 
                         # ------determining directories and filenames---------
                         product_dir = args.input_dir / args.field / 'Products'
-                        full_fits_file = product_dir / 'full' / f'{args.field}_{args.id:05d}.full.fits'
-                        maps_fits_file = product_dir / 'maps' / f'{args.field}_{args.id:05d}.maps.fits'
+                        full_fits_file = product_dir / 'full_psf_matched' / f'{args.field}_{args.id:05d}.full.fits'
+                        maps_fits_file = product_dir / 'maps_psf_matched' / f'{args.field}_{args.id:05d}.maps.fits'
+                        # full_fits_file = product_dir / 'full' / f'{args.field}_{args.id:05d}.full.fits'
+                        # maps_fits_file = product_dir / 'maps' / f'{args.field}_{args.id:05d}.maps.fits'
                         od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.1D.fits'
 
                         if os.path.exists(maps_fits_file): # if the fits files are in maps/
@@ -591,6 +611,14 @@ if __name__ == "__main__":
                         deprojected_segmentation_map = rotated_segmentation_map if args.skip_deproject else deproject_line_map(rotated_segmentation_map, args)
                         rescaled_segmentation_map = rescale_line_map(deprojected_segmentation_map, args)
 
+                        # -----------extracting integrated OIII line flux, for scaling----------------
+                        scaling_line = 'OIII'
+                        if scaling_line in args.available_lines:
+                            _, _, line_int = get_emission_line_map(scaling_line, full_hdu, args, dered=False, silent=True)
+                            integrated_scaling_flux = line_int.n
+                        else:
+                            integrated_scaling_flux = 1e-17 # dummy value for galaxies that do not have OIII-5007 coverage
+
                         # ---------------direct image---------------
                         filter = 'F150W'                    
                         direct_image, exptime = get_direct_image(full_hdu, filter, args) # this is already offset corrected and trimmed
@@ -632,7 +660,11 @@ if __name__ == "__main__":
                                 continue
                             try:
                                 # -----------extracting the emission line map----------------
-                                line_map, line_map_err = get_emission_line_map(this_line, full_hdu, args, dered=True, silent=True)
+                                line_map, line_map_err, _ = get_emission_line_map(this_line, full_hdu, args, dered=True, silent=True)
+
+                                # ----------performing flux-scaling on line map------------------
+                                line_map /= integrated_scaling_flux
+                                line_map_err /= integrated_scaling_flux
 
                                 # ------smoothing the map before rotating--------
                                 smoothing_kernel = Box2DKernel(args.kernel_size, mode=args.kernel_mode)
@@ -661,7 +693,7 @@ if __name__ == "__main__":
 
                                     if args.debug_align:
                                         recentered_direct_image = ndimage.shift(rescaled_direct_image, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], order=0, cval=np.nan)
-                                        axes[5] = myimshow(recentered_direct_image, axes[5], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=direct_image_cmap, col='w')
+                                        axes[6] = myimshow(recentered_direct_image, axes[6], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=direct_image_cmap, col='w')
                                 
                                 # --------recentering the line map---------------------
                                 recentered_line_map = ndimage.shift(rescaled_line_map, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], order=0, cval=np.nan)
@@ -723,7 +755,7 @@ if __name__ == "__main__":
                 # -----stacking all line maps for all objects in this bin-----------
                 stacked_maps, stacked_maps_err, nobj_arr = [], [], []
                 for index4, this_line in enumerate(args.line_list):
-                    stacked_map, stacked_map_err = weighted_stack_line_maps(line_maps_array[index4], line_maps_err_array[index4], additional_weights= 1 / np.array(total_brightness_array[index4]) ** 2)
+                    stacked_map, stacked_map_err = weighted_stack_line_maps(line_maps_array[index4], line_maps_err_array[index4])#, additional_weights= 1 / np.array(total_brightness_array[index4]) ** 2)
                     stacked_maps.append(stacked_map)
                     stacked_maps_err.append(stacked_map_err)
                     nobj_arr.append(len(constituent_ids_array[index4]))

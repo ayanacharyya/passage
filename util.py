@@ -264,6 +264,7 @@ def parse_args():
     parser.add_argument('--debug_align', dest='debug_align', action='store_true', default=False, help='Debug the alignment, deprojection, rotation of emission line maps? Default is no.')
     parser.add_argument('--npix_side', metavar='npix_side', type=int, action='store', default=20, help='Size of the stacked emission maps in pixels? Default is 20')
     parser.add_argument('--bin_by_distance', dest='bin_by_distance', action='store_true', default=False, help='Compute the stellar mass-SFR bins based on the distance from the SFMS? Default is no.')
+    parser.add_argument('--bin_by_distance_mass', dest='bin_by_distance_mass', action='store_true', default=False, help='Compute the stellar mass-SFR bins based on the distance from the SFMS as well as stellar mass? Default is no.')
     parser.add_argument('--adaptive_bins', dest='adaptive_bins', action='store_true', default=False, help='Compute the stellar mass-SFR bins in an adaptive way? Default is no.')
     parser.add_argument('--max_gal_per_bin', metavar='max_gal_per_bin', type=int, action='store', default=20, help='Maximum galaxies allowed in one bin, if binning adaptively; Default is 20')
     parser.add_argument('--max_gal_per_page', metavar='max_gal_per_page', type=int, action='store', default=10, help='Maximum galaxies allowed on one page of the PDF; Default is 10')
@@ -286,6 +287,9 @@ def parse_args():
 
     # ---- args added for redshift_tests.py ------------
     parser.add_argument('--include_all_lines_in_linelist', dest='include_all_lines_in_linelist', action='store_true', default=False, help='Include all lines in the cwt linelist (vs only the strongest line)? Default is no.')
+
+    # ---- args added for read_line_maps.py ------------
+    parser.add_argument('--mask_arcsec', metavar='mask_arcsec', type=float, action='store', default=None, help='Mask everything outside radius of specified arcsecond? Default is None, i.e., do not mask')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
@@ -352,6 +356,19 @@ def parse_args():
     args.Zdiag_arr = args.Zdiag.split(',')
 
     return args
+
+# ----------------------------------------------------------------
+def setup_plot_style():
+    '''
+    Function to set default style for all plots made in this project
+    '''
+    # plt.rcParams['pdf.fonttype']	= 42
+    # plt.rcParams['ps.fonttype'] 	= 42
+    # plt.rcParams['savefig.dpi'] 	= 600
+    plt.rcParams['ytick.direction'] = 'in'
+    plt.rcParams['ytick.right'] = True
+    plt.rcParams['xtick.direction'] = 'in'
+    plt.rcParams['xtick.top'] = True
 
 # -----------------------------------------------------------------------------
 def fix_filter_names(filters):
