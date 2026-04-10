@@ -63,7 +63,8 @@ if __name__ == "__main__":
     # ------------reading in files-------------------
     remove_ids = [7158, 7159, 7160, 7161, 7162, 7163, 7164, 7169, 7171, 7172, 7172, 7173, 7175, 7176, 7179, 7180, 7181, 7185, 7190] # these are found by eye, looking at the seg map and deciding which areas are affected by the stellar spikes
     seg_map, seg_header = read_image(args.input_dir / 'passage-par682-ir_seg.fits', remove_ids=remove_ids)
-    df = read_catalog(args.input_dir / 'compiled_grizli_v1.0.0.fits', remove_ids=remove_ids)
+    #df = read_catalog(args.input_dir / 'compiled_grizli_v1.0.0.fits', remove_ids=remove_ids)
+    df = read_catalog(args.input_dir / 'passage-par682_compiled_grizli_v1.0.1.fits', remove_ids=remove_ids)
     nobj = len(df)
 
     # -------applying quality cuts on dataframe--------------

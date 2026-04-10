@@ -4,11 +4,13 @@
     Author : Ayan
     Created: 18-02-26
     Example: run read_line_maps.py --Zdiag R23 --use_C25 --Zbranch low
-             run read_line_maps.py --Zdiag R23 --use_C25
+             run read_line_maps.py --Zdiag R23 --use_C25 --AGN_diag Ne3O2
+             run read_line_maps.py --Zdiag R23 --use_C25 --AGN_diag Ne3O2 --mask_arcsec 0.3 --arcsec_lim 0.5 --plot_BPT --snr_cut 1
 '''
 
 from header import *
 from util import *
+setup_plot_style()
 from make_diagnostic_maps import trim_image, take_safe_log_ratio, take_safe_log_sum, get_dereddened_flux
 from plots_for_zgrad_paper import odr_fit, plot_fitted_line, get_AGN_func_methods, plot_AGN_demarcation_ax, get_distance_map_from_AGN_line, annotate_kpc_scale_bar, get_ratio_labels, overplot_AGN_line_on_BPT
 
@@ -58,6 +60,20 @@ def get_emission_line_map(line, full_hdu, args, dered=True, silent=True):
     # -------masking outside segmentation map---------
     line_map = np.ma.masked_where(args.segmentation_map != args.id, line_map)
     line_map_err = np.ma.masked_where(args.segmentation_map != args.id, line_map_err)
+
+    # -------masking outside segmentation map---------
+    if args.snr_cut is not None:
+        snr_map = line_map / line_map_err
+        line_map = np.ma.masked_where(snr_map < args.snr_cut, line_map)
+        line_map_err = np.ma.masked_where(snr_map < args.snr_cut, line_map_err)
+
+    # -------masking outside a certain radius---------
+    if args.mask_arcsec is not None:
+        image_shape = np.shape(line_map)
+        center_pix = image_shape[0] / 2.
+        distance_map_arcsec = np.array([[np.sqrt((i - center_pix)**2 + (j - center_pix)**2) for j in range(image_shape[1])] for i in range(image_shape[0])]) * args.pix_size_arcsec # arcsec
+        line_map = np.ma.masked_where(distance_map_arcsec > args.mask_arcsec, line_map)
+        line_map_err = np.ma.masked_where(distance_map_arcsec > args.mask_arcsec, line_map_err)
 
     # -----------getting the dereddened flux value-----------------
     if dered and args.EB_V != 0:
@@ -591,12 +607,45 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     # --------annotating axis--------------
     if xlim is not None: ax.set_xlim(xlim[0], xlim[1]) # kpc
     if ylim is not None: ax.set_ylim(ylim[0], ylim[1])
-    if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)' if args.re_limit is None else r'Radius (R$_e$)', label_dict[quant], args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
+    if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)' if args.re_limit is None else r'Radius (R$_e$)', label_dict[quant], args=args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
 
     return ax, linefit_odr
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_2D_map(image, ax, label, args, cmap='viridis', clabel='', takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True):
+def annotate_kpc_scale_bar(kpc, ax, args, label=None, color='k', loc='lower left', scale_is_re=True, make_box=True):
+    '''
+    Annotate existing axis with a scale bar corresponding to a given kpc length
+    Returns axis handle
+    '''
+    pix = kpc * cosmo.arcsec_per_kpc_proper(args.z).value  # converting kpc to arcsec
+    if scale_is_re: pix /= args.re_arcsec # converting arcsec to Re units
+    #scalebar = AnchoredSizeBar(ax.transData, pix, label, loc, pad=0.5, color=color, frameon=False, size_vertical=0.01, fontproperties={'size':args.fontsize / args.fontfactor})
+    scalebar = AnchoredSizeBar(ax.transData, pix, label, loc, pad=0.5, color=color, frameon=make_box, size_vertical=0.02, fontproperties={'size':args.fontsize / args.fontfactor, 'weight':'bold'})
+    if make_box:
+        scalebar.patch.set_facecolor('w')
+        scalebar.patch.set_alpha(0.7)  # <--- Translucency
+        scalebar.patch.set_boxstyle("round,pad=0.05,rounding_size=0.4")
+    ax.add_artist(scalebar)
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def annotate_arcsec_scale_bar(arcsec, ax, args, label=None, color='k', loc='lower left', make_box=True):
+    '''
+    Annotate existing axis with a scale bar corresponding to a given arcsecond length
+    Returns axis handle
+    '''
+    scalebar = AnchoredSizeBar(ax.transData, arcsec, label, loc, pad=0.5, color=color, frameon=make_box, size_vertical=0.01, fontproperties={'size':args.fontsize / args.fontfactor, 'weight':'normal'})
+    if make_box:
+        scalebar.patch.set_facecolor('w')
+        scalebar.patch.set_alpha(0.7)  # <--- Translucency
+        scalebar.patch.set_boxstyle("round,pad=0.05,rounding_size=0.4")
+    ax.add_artist(scalebar)
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_2D_map(image, ax, label, args, cmap='viridis', clabel='', xlabel=None, ylabel=None, takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True):
     '''
     Plots a given 2D image in a given axis
     Returns the axis handle
@@ -610,10 +659,16 @@ def plot_2D_map(image, ax, label, args, cmap='viridis', clabel='', takelog=True,
 
     p = ax.imshow(image, cmap=cmap, origin='lower', extent=args.extent, vmin=vmin, vmax=vmax)
     ax.scatter(0, 0, marker='x', s=10, c='grey')
-    ax.set_aspect('equal') 
+    ax.set_aspect('equal')
+
+    # if args.mask_arcsec is not None:
+    #     circle = plt.Circle((0, 0), args.mask_arcsec, color='k', fill=False, lw=0.5)
+    #     ax.add_patch(circle)    
     
     units = 'arcsec'
-    ax = annotate_axes(ax, f'Offset ({units})', f'Offset ({units})', args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
+    if xlabel is None: xlabel = f'Offset ({units})' 
+    if ylabel is None: ylabel = f'Offset ({units})'
+    ax = annotate_axes(ax, xlabel, ylabel, args=args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
 
     return ax
 
@@ -647,32 +702,37 @@ def plot_AGN_demarcation_object(full_hdu, args, ax, marker='o', size=50, ax_inse
     # -----------integrated-----------------------
     #ax, _ = plot_AGN_demarcation_ax(xnum_int, xden_int, ynum_int, yden_int, ax, args, marker=marker, size=4*size, lw=2)
     ax, _ = plot_AGN_demarcation_ax(xnum_sum, xden_sum, ynum_sum, yden_sum, ax, args, marker='*', size=4*size, lw=2)
+    ax.set_aspect('auto')
 
-     # -----------2D map inset-----------------------
+    # -----------2D map inset-----------------------
     if ax_inset is not None:
         distance_from_AGN_line_map = get_distance_map_from_AGN_line(xnum_map, xden_map, ynum_map, yden_map, args)
-        ax_inset = plot_2D_map(distance_from_AGN_line_map, ax_inset, '', args, takelog=False, cmap=args.diverging_cmap, vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=True, hide_cbar=True)
+        ax_inset = plot_2D_map(distance_from_AGN_line_map, ax_inset, '', args, xlabel='arcsec', ylabel='arcsec', takelog=False, cmap=args.diverging_cmap, clabel='Distance from\nNB line', vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=True, hide_cbar=not hide_cbar)
+        ax_inset = annotate_arcsec_scale_bar(0.1, ax_inset, args, label='0.1"', loc='lower left', make_box=False)
 
     # -----------annotating axes-----------------------
     theoretical_lines, line_labels = get_AGN_func_methods(args)
     if not hide_cbar:
-        cbar = plt.colorbar(scatter_plot_handle)
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes('right', size='2%', pad=0.05)
+        cbar = plt.colorbar(scatter_plot_handle, cax=cax)
         unit_text = r'kpc' if args.re_limit is None else r'R_e'
         cbar.set_label(f'Distance from center ({unit_text})' if 'AGN_colorby' in args and args.AGN_colorby == 'distance' else f'Distance from {theoretical_lines[0]} line', fontsize=args.fontsize)
         cbar.ax.tick_params(labelsize=args.fontsize)
 
-    ax.set_xlim(-2.5, 0.5)
-    ax.set_ylim(-2, 2)
+    ax.set_xlim(-1, 0.2)
+    ax.set_ylim(-0., 1.)
     ax.set_xlabel(f'Log {get_ratio_labels("NeIII-3867/OII")}' if args.AGN_diag == 'Ne3O2' else f'Log {get_ratio_labels("SII/NII,Ha")}' if args.AGN_diag == 'H21' else f'Log {get_ratio_labels(f"{args.xnum_line}/{args.xden_line}")}', fontsize=args.fontsize)
     ax.set_ylabel(f'Log {get_ratio_labels("OIII/Hb")}', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
-    ax.set_box_aspect(1)
 
     # ---------adding literature AGN demarcation lines----------
     color_arr = ['brown', 'darkgreen', 'dodgerblue', 'cyan', 'sienna']
     for index, (theoretical_line, line_label) in enumerate(zip(theoretical_lines, line_labels)):
+        if line_label == 'This work': line_label = 'NB'
         #overplot_AGN_line_on_BPT(ax, theoretical_line=theoretical_line, label=line_label, color=color_arr[index], fontsize=args.fontsize, lw=0.5 if index else 1, ls='solid')
-        overplot_AGN_line_on_BPT(ax, theoretical_line=theoretical_line, label=None, color=color_arr[index], fontsize=args.fontsize, lw=0.5 if index else 1, ls='solid')
+        overplot_AGN_line_on_BPT(ax, theoretical_line, label=line_label, label_loc='lower left', color=color_arr[index], fontsize=args.fontsize, lw=0.5 if index else 1, ls='solid')
+    #ax.set_ylim(-0.5, 1.)
 
     return ax, scatter_plot_handle, ax_inset
 
@@ -689,7 +749,7 @@ if __name__ == "__main__":
     dered = True
     # --------------defining filenames and directories-------------------------------
     #input_dir = Path('/Users/acharyya/Work/astro/passage/glass_data/resolved_sfh')
-    input_dir = Path('/Users/acharyya/Work/astro/passage/passage_data/vpjw/Par684')
+    input_dir = Path('/Users/acharyya/Work/astro/passage/passage_data/vpjw/Par682')
     fig_dir = input_dir / 'figs'
     #files = glob.glob(str(input_dir) + '/regions_*arcsec.line.fits')
     files = glob.glob(str(input_dir) + '/*full.fits')
@@ -722,64 +782,77 @@ if __name__ == "__main__":
         segmentation_map = trim_image(segmentation_map, args, skip_re_trim=True)
         args.segmentation_map = segmentation_map
 
+        # ------------setup BPT-only figure-------------
+        if args.plot_BPT:
+            fig, ax = plt.subplots(1, 1, figsize=(5, 4))
+            fig.subplots_adjust(left=0.16, bottom=0.1, right=0.85, top=0.98)
+            ax_inset = ax.inset_axes([0.65, 0.05, 0.3, 0.3])
+            theoretical_lines, line_labels = get_AGN_func_methods(args)
+            
+            ax, scatter_plot_handle, ax_inset = plot_AGN_demarcation_object(full_hdu, args, ax, marker='o', size=15, ax_inset=ax_inset, hide_cbar=False)
+
+            figname = f'{full_filename.stem}_resolved_OHNO.png'
+            save_fig(fig, fig_dir, figname, args)
+
         # ------------setup figure-------------
-        nrows, ncols = 3, 4
-        npanels = len(line_list) + 2
-        fig, axes = plt.subplots(nrows, ncols, figsize=(8, 7), layout='constrained')
+        else:
+            nrows, ncols = 3, 4
+            npanels = len(line_list) + 2
+            fig, axes = plt.subplots(nrows, ncols, figsize=(8, 7), layout='constrained')
 
-        # ----------------line maps------------------
-        for index, line in enumerate(line_list):
-            row = index // ncols
-            col = index % ncols
-            ax = axes[row][col]
-            if line in args.available_lines:
-                line_map, _, _, _, _ = get_emission_line_map(line, full_hdu, args, dered=dered, silent=True)
-                ax = plot_2D_map(line_map, ax, f'{line}', args, hide_xaxis=row < nrows - 1, hide_yaxis=col > 0)
-            else:
+            # ----------------line maps------------------
+            for index, line in enumerate(line_list):
+                row = index // ncols
+                col = index % ncols
+                ax = axes[row][col]
+                if line in args.available_lines:
+                    line_map, _, _, _, _ = get_emission_line_map(line, full_hdu, args, dered=dered, silent=True)
+                    ax = plot_2D_map(line_map, ax, f'{line}', args, hide_xaxis=row < nrows - 1, hide_yaxis=col > 0)
+                else:
+                    ax.remove()
+
+            # -----------------metallicity maps-------------------
+            index += 1
+            ax = axes[index // ncols][index % ncols]
+            if args.Zdiag == 'R23' and 'OII' not in args.available_lines:
+                args.Zdiag = 'R3'
+                switched_diag = True
+                print(f'No OII for object {ind + 1}, so switching to R3 (instead of R23)..')
+            
+            logOH_map, _, _ = get_Z(full_hdu, args)
+            ax = plot_2D_map(logOH_map, ax, f'Z ({args.Zdiag})', args)
+            
+            if switched_diag: args.Zdiag = 'R23'
+
+            # -----------------radial profile-------------------
+            index += 1
+            ax = axes[index // ncols][index % ncols]
+            quant = 'log_OH'
+            shape = np.shape(logOH_map.data)
+            center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
+            distance_map_re_kpc = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size_kpc # Re or kpc
+
+            logOH_df = pd.DataFrame({'distance': distance_map_re_kpc.flatten(), f'{quant}': unp.nominal_values(logOH_map.data).flatten(), f'{quant}_u': unp.std_devs(logOH_map.data).flatten()})
+            logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
+
+            ax, radial_linefit_odr = plot_radial_profile(logOH_df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant)
+            
+            # -----------------spatially resolved AGN diagnostic-------------------
+            index += 1
+            ax = axes[index // ncols][index % ncols]
+            theoretical_lines, line_labels = get_AGN_func_methods(args)  
+            index += 1
+            ax_inset = axes[index // ncols][index % ncols]     
+            ax, scatter_plot_handle, ax_inset = plot_AGN_demarcation_object(full_hdu, args, ax, marker='o', size=5, ax_inset=ax_inset)
+    
+            # ------------deleting remaining axes---------
+            for i in range(index + 1, nrows * ncols):
+                ax = axes[i // ncols][i % ncols]
                 ax.remove()
-
-        # -----------------metallicity maps-------------------
-        index += 1
-        ax = axes[index // ncols][index % ncols]
-        if args.Zdiag == 'R23' and 'OII' not in args.available_lines:
-            args.Zdiag = 'R3'
-            switched_diag = True
-            print(f'No OII for object {ind + 1}, so switching to R3 (instead of R23)..')
-        
-        logOH_map, _, _ = get_Z(full_hdu, args)
-        ax = plot_2D_map(logOH_map, ax, f'Z ({args.Zdiag})', args)
-        
-        if switched_diag: args.Zdiag = 'R23'
-
-        # -----------------radial profile-------------------
-        index += 1
-        ax = axes[index // ncols][index % ncols]
-        quant = 'log_OH'
-        shape = np.shape(logOH_map.data)
-        center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
-        distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size_kpc # Re or kpc
-
-        logOH_df = pd.DataFrame({'distance': distance_map.flatten(), f'{quant}': unp.nominal_values(logOH_map.data).flatten(), f'{quant}_u': unp.std_devs(logOH_map.data).flatten()})
-        logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
-
-        ax, radial_linefit_odr = plot_radial_profile(logOH_df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant)
-        
-        # -----------------spatially resolved AGN diagnostic-------------------
-        index += 1
-        ax = axes[index // ncols][index % ncols]
-        theoretical_lines, line_labels = get_AGN_func_methods(args)  
-        index += 1
-        ax_inset = axes[index // ncols][index % ncols]     
-        ax, scatter_plot_handle, ax_inset = plot_AGN_demarcation_object(full_hdu, args, ax, marker='o', size=5, ax_inset=ax_inset)
- 
-         # ------------deleting remaining axes---------
-        for i in range(index + 1, nrows * ncols):
-            ax = axes[i // ncols][i % ncols]
-            ax.remove()
-   
-        # -----------save figure---------------
-        fig.suptitle(f'{full_filename.stem}')
-        figname = f'{full_filename.stem}.png'
-        save_fig(fig, fig_dir, figname, args)
+    
+            # -----------save figure---------------
+            fig.suptitle(f'{full_filename.stem}')
+            figname = f'{full_filename.stem}.png'
+            save_fig(fig, fig_dir, figname, args)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

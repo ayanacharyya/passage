@@ -79,6 +79,8 @@ from astropy.convolution import convolve, interpolate_replace_nans, Gaussian1DKe
 from astropy.visualization import make_lupton_rgb, MinMaxInterval, ManualInterval, LogStretch, LinearStretch, SqrtStretch
 from astropy.modeling.models import Sersic2D
 
+from photutils.psf import matching
+
 # grizli stuff
 import grizli
 from grizli import utils, multifit, fitting, prep, model, jwst_utils, grismconf
@@ -149,10 +151,6 @@ import corner
 from skimage.restoration import richardson_lucy
 
 from matplotlib import pyplot as plt
-plt.rcParams['ytick.direction'] = 'in'
-plt.rcParams['ytick.right'] = True
-plt.rcParams['xtick.direction'] = 'in'
-plt.rcParams['xtick.top'] = True
 
 HOME = Path.home()
 
