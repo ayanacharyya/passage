@@ -14,7 +14,7 @@ from util import *
 from make_diagnostic_maps import get_re_from_extension, get_offsets_from_center
 from make_sfms_bins import read_passage_sed_catalog
 
-webbpsf.setup_logging(level='ERROR') # to suppress chatty-ness of webbpsf
+webbpsf.setup_logging(level='WARNING') # to suppress chatty-ness of webbpsf
 start_time = datetime.now()
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -27,11 +27,11 @@ def get_niriss_psf(filter_name, fov_pixels, supersampling_factor=1):
     niriss = webbpsf.NIRISS()
 
     if type(filter_name) == str:
-        print(f'\nCreating PSF at wavelength {filter_name} filter with fov_pixels={fov_pixels}..')
+        print(f'\n\t\tCreating PSF at wavelength {filter_name} filter with fov_pixels={fov_pixels}..')
         niriss.filter = filter_name    
         psf = niriss.calc_psf(fov_pixels=fov_pixels, oversample=supersampling_factor)
     elif type(filter_name) == np.float64 or type(filter_name) == float: # here 'filter' is actually the observed wavelength in microns, not the filter
-        print(f'\nCreating PSF at wavelength {filter_name} microns with fov_pixels={fov_pixels}..')
+        print(f'\n\t\tCreating PSF at wavelength {filter_name} microns with fov_pixels={fov_pixels}..')
         psf = niriss.calc_psf(monochromatic=filter_name * 1e-6, fov_pixels=fov_pixels, oversample=supersampling_factor)
     else:
         sys.exit(f'Unrecignised data type for filter_name={filter_name}; it can only be str or float')
@@ -77,7 +77,7 @@ def process_fits_extensions(full_hdu, target_psf, args):
     for index, ext in enumerate(full_hdu):
         ext_name = ext.name.upper()
         if any(substring in ext_name for substring in match_list):
-            print(f'PSF-matching extension: {ext.header["EXTVER"]} {ext_name} ({index + 1}/{len(full_hdu)})')
+            print(f'\t\tPSF-matching extension: {ext.header["EXTVER"]} {ext_name} ({index + 1}/{len(full_hdu)})')
             data_to_match = ext.data.copy()
             
             # ----------re-center line map-----------
@@ -89,7 +89,7 @@ def process_fits_extensions(full_hdu, target_psf, args):
             
             new_ext = fits.ImageHDU(data=psf_mached_image, header=ext.header, name=ext_name)            
         else:
-            print(f'Copying untouched: {ext_name} ({index + 1}/{len(full_hdu)})')
+            print(f'\t\tCopying untouched: {ext_name} ({index + 1}/{len(full_hdu)})')
             if isinstance(ext, fits.PrimaryHDU):
                 new_ext = fits.PrimaryHDU(data=ext.data, header=ext.header)
             elif isinstance(ext, fits.BinTableHDU):
@@ -142,7 +142,7 @@ if __name__ == "__main__":
         # ------------looping over the objects-----------------------
         for index2, this_id in enumerate(id_arr):
             args.id = this_id
-            print(f'\tCommencing ({index2 + 1}/{len(id_arr)}) ID {args.id}..')
+            print(f'\t\tCommencing ({index2 + 1}/{len(id_arr)}) ID {args.id}..')
 
             # ------determining directories and filenames---------
             full_fits_file = product_dir / 'full' / f'{args.field}_{args.id:05d}.full.fits'
@@ -153,12 +153,12 @@ if __name__ == "__main__":
             elif os.path.exists(full_fits_file): # if the fits files are in full/
                 full_filename = full_fits_file
             else:
-                print(f'Could not find {full_fits_file} or {maps_fits_file}, so skipping it.')
+                print(f'\t\tCould not find {full_fits_file} or {maps_fits_file}, so skipping it.')
                 continue
 
             outfilename = Path(str(full_filename.parent).replace('maps', 'maps_psf_matched').replace('full', 'full_psf_matched')) / full_filename.name
             if os.path.exists(outfilename) and not args.clobber:
-                print(f'Result file for {args.field}, {args.id} already exists as {outfilename}, so skipping this object.')
+                print(f'\t\tResult file for {args.field}, {args.id} already exists as {outfilename}, so skipping this object.')
                 continue
 
             # ------------read in maps files--------------------------------
@@ -185,10 +185,10 @@ if __name__ == "__main__":
             try:
                 new_hdul = process_fits_extensions(full_hdu, target_psf, args)
                 new_hdul.writeto(outfilename, overwrite=True)
-                print(f'\nSuccessfully saved matched FITS to: {outfilename}')
+                print(f'\n\t\tSuccessfully saved matched FITS to: {outfilename}')
             
             except Exception as e:
-                print(f'Could not produce PSF-matched fits file for object {args.id} due to {e}. Skipping this object.')
+                print(f'\t\tCould not produce PSF-matched fits file for object {args.id} due to {e}. Skipping this object.')
                 continue
             
         print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')

@@ -6,6 +6,7 @@
     Example: run read_line_maps.py --Zdiag R23 --use_C25 --Zbranch low
              run read_line_maps.py --Zdiag R23 --use_C25 --AGN_diag Ne3O2
              run read_line_maps.py --Zdiag R23 --use_C25 --AGN_diag Ne3O2 --mask_arcsec 0.3 --arcsec_lim 0.5 --plot_BPT --snr_cut 1
+             run read_line_maps.py --Zdiag R23 --use_C25 --AGN_diag Ne3O2 --mask_arcsec 0.3 --arcsec_lim 0.5 --snr_cut 1
 '''
 
 from header import *
