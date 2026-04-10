@@ -177,7 +177,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='_distance', cm
         ax.fill_between(m_grid, sfms_line + interval.left, sfms_line + interval.right, color=color, alpha=0.8, edgecolor='k', lw=0.5)
         
         s_center = sfms_func(row['log_mass_median']) + (interval.left + interval.right) / 2
-        ax.text(row['log_mass_median'], s_center, int(row[quant]), color='k' if int(row[quant]) > 30 else 'w', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
+        ax.text(row['log_mass_median'], s_center, int(row[quant]), color='k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
  
     # --------annotating axis borders-----------------
     ax.set_xlim(log_mass_bins.min() -0.2, log_mass_bins.max() + 0.2)
@@ -227,10 +227,15 @@ def plot_SFMS_bins(df, methods, args, scaling=None, centers_scaled=None, bin_sum
     for index, method in enumerate(methods):
         if 'vor' in method:
             axes[index] = make_heatmap_vorbin(axes[index], df, bin_summary, centers_scaled, scaling, 'n_galaxies', args, method_text='_voronoi', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
-        elif 'distance' in method:
+        elif method == 'distance':
             df_sub = df.groupby(f'bin_intervals_{method}').agg(n_galaxies=('log_mass', 'size'), log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median')).reset_index()
             df_sub = df_sub.dropna(subset=[f'bin_intervals_{method}'])
             axes[index] = make_heatmap_distance(axes[index], df_sub, sfms, 'n_galaxies', args, method_text='_distance', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
+        elif method == 'distance_mass':
+            groupby_cols = [f'bin_intervals_{method}', f'mass_intervals_{method}']
+            df_sub = df.groupby(groupby_cols).agg(n_galaxies=('log_mass', 'size'), log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median')).reset_index()
+            df_sub = df_sub.dropna(subset=groupby_cols)
+            axes[index] = make_heatmap_distance(axes[index], df_sub, sfms, 'n_galaxies', args, method_text='_distance_mass', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
         else:
             df_sub = df.groupby(f'bin_intervals_{method}').size().reset_index(name='n_galaxies')
             df_sub[['log_mass_bin', 'log_sfr_bin']] = pd.DataFrame(df_sub[f'bin_intervals_{method}'].tolist(), index=df_sub.index)
@@ -441,6 +446,7 @@ def bin_SFMS_distance(df, method_text = '_distance', delta_bin=0.2, n_adaptive_b
 
     df['log_sfr_ms_expected'] = sfms_func(df['log_mass'])
     df['delta_sfms'] = df['log_sfr'] - df['log_sfr_ms_expected']
+    df = df.dropna(subset=['delta_sfms'])
 
     if n_adaptive_bins is None: # make uniform width bins of width delta_bin
         max_dist = np.ceil(df['delta_sfms'].abs().max() / delta_bin) * delta_bin
@@ -454,7 +460,33 @@ def bin_SFMS_distance(df, method_text = '_distance', delta_bin=0.2, n_adaptive_b
     return df, bin_list
 
 # --------------------------------------------------------------------------------------------------------------------
-def bin_by_method(df, method, sfms='Popesso23', n_adaptive_bins=20, target_n=30, min_n=10, max_n=50):
+def bin_SFMS_distance_mass(df, method_text = '_distance', delta_bin=0.2, n_adaptive_bins=None, n_mass_bins=4, sfms='Popesso23'):
+    '''
+    Bins in SFMS plane based on the distance from a given SFMS relation in bins of width delta_bin
+    Returns dataframe with additional columns containing '_distance', and list of bin edges
+    '''
+    sfms_func = get_sfms_func(df['log_mass'], sfms)
+
+    df['log_sfr_ms_expected'] = sfms_func(df['log_mass'])
+    df['delta_sfms'] = df['log_sfr'] - df['log_sfr_ms_expected']
+    df = df.dropna(subset=['delta_sfms'])
+
+    if n_adaptive_bins is None: # make uniform width bins of width delta_bin
+        max_dist = np.ceil(df['delta_sfms'].abs().max() / delta_bin) * delta_bin
+        bin_edges = np.arange(-max_dist, max_dist + delta_bin, delta_bin)
+        df[f'bin_intervals{method_text}'] = pd.cut(df['delta_sfms'], bins=bin_edges)
+    else: # make n_adaptive_bins of non-uniform width
+        df[f'bin_intervals{method_text}'], bin_edges = pd.qcut(df['delta_sfms'], q=n_adaptive_bins, retbins=True)
+
+    df[f'mass_intervals{method_text}'] = df.groupby(f'bin_intervals{method_text}')['log_mass'].apply(lambda x: pd.qcut(x, q=n_mass_bins)).reset_index(level=0, drop=True)
+    
+    unique_bins_df = df[[f'bin_intervals{method_text}', f'mass_intervals{method_text}']].drop_duplicates().sort_values([f'bin_intervals{method_text}', f'mass_intervals{method_text}'])
+    bin_list = list(unique_bins_df.to_records(index=False))
+
+    return df, bin_list
+
+# --------------------------------------------------------------------------------------------------------------------
+def bin_by_method(df, method, sfms='Popesso23', n_adaptive_bins=20, target_n=30, min_n=10, max_n=50, n_mass_bins=4):
     '''
     Decides which function to call for the binning in SFMS plane, based on the input method
     Returns dataframe with additional columns containing '_{method}', and list of unique bins
@@ -464,6 +496,7 @@ def bin_by_method(df, method, sfms='Popesso23', n_adaptive_bins=20, target_n=30,
     elif method == 'adaptive_nmin': output = bin_SFMS_adaptive(df, method_text=f'_{method}', min_n=min_n)
     elif 'vor' in method: output = bin_SFMS_voronoi(df, method_text=f'_{method}', target_n=target_n)
     elif method == 'distance': output = bin_SFMS_distance(df, method_text=f'_{method}', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
+    elif method == 'distance_mass': output = bin_SFMS_distance_mass(df, method_text=f'_{method}', n_adaptive_bins=n_adaptive_bins, sfms=sfms, n_mass_bins=n_mass_bins)
 
     return output
 
@@ -502,11 +535,13 @@ methods = ['linear', \
             #'adaptive_nmax', \
             'voronoi', \
             'distance', \
+            'distance_mass', \
             ]
 min_n = 10 # for adaptive_nmin binning
 max_n = 50 # for adaptive_nmax binning
 target_n = 30 # for voronoi binning
 n_adaptive_bins = 15 # for distance (from SFMS) binning
+n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
 sfms =  'Popesso23' # from 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
 
 
@@ -546,7 +581,7 @@ if __name__ == "__main__":
             df, bin_list = output
 
     # ------------plotting stacked gradients on SFMS--------------------------
-    fig = plot_SFMS_bins(df, methods, args, centers_scaled=centers_scaled, scaling=scaling, bin_summary=bin_summary, sfms=sfms)
+    fig = plot_SFMS_bins(df, methods, args, centers_scaled=centers_scaled, scaling=scaling, bin_summary=bin_summary, sfms=sfms, n_mass_bins=n_mass_bins)
     save_fig(fig, fig_dir, f'SFMS_binned.png', args) # saving the figure
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
