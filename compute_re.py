@@ -12,6 +12,7 @@
 from header import *
 from util import *
 from make_diagnostic_maps import get_re_from_extension, get_offsets_from_center
+from make_sfms_bins import read_passage_sed_catalog
 
 start_time = datetime.now()
 
@@ -37,16 +38,23 @@ if __name__ == "__main__":
 
     # ---------determining list of fields----------------
     output_dir = args.output_dir / 'catalogs'
+
+    passage_catalog_filename = output_dir / 'SED_fits_v1.0.2_cosmosweb.fits'
+    df_sed = read_passage_sed_catalog(passage_catalog_filename)
+
     if args.do_all_fields:
-        field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par[0-9][0-9][0-9]') + '/')]
-        field_list.sort(key=natural_keys)
+        #field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par[0-9][0-9][0-9]') + '/')]
         outfilename = output_dir / f'all_fields_re_list.fits'
     else:
-        field_list = args.field_arr
+        df_sed = df_sed[df_sed['field'].isin(args.field_arr)]
         outfilename = output_dir / f'{",".join(args.field_arr)}_re_list.fits'
+
+    field_list = list(pd.unique(df_sed['field']))
+    field_list.sort(key=natural_keys)
 
     # --------loop over all fields------------------
     df_re = pd.DataFrame(columns=['field', 'id', 'redshift', 're_kpc', 're_arcsec'])
+    good_counter, bad_counter = 0, 0
 
     for index, field in enumerate(field_list):
         start_time2 = datetime.now()
@@ -60,9 +68,14 @@ if __name__ == "__main__":
             print(f'Result file for {args.field} already exists as {outfilename}, so skipping this field.')
             continue
 
+        if not os.path.exists(product_dir):
+            print(f'Could not find {product_dir}, so skipping this field {args.field}.')
+            continue
+
         # ---------read the photometric catalog file--------------------
         if args.do_all_obj:
-            df = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
+            #df = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
+            df = df_sed[df_sed['field'] == args.field]
             id_arr = df['id'].values
         else:
             id_arr = args.id
@@ -102,13 +115,14 @@ if __name__ == "__main__":
                 psf = get_niriss_psf(args.pix_size_arcsec, filter_for_re) # computing the PSF once (assuming the pixel scale is same for the full sample)
                 get_psf = False
             
-            #try:
-            re_kpc, re_arcsec = get_re_from_extension(full_hdu, args, filter=filter_for_re, psf=psf)
-            '''
+            try:
+                re_kpc, re_arcsec = get_re_from_extension(full_hdu, args, filter=filter_for_re, psf=psf)
+                good_counter += 1
             except:
                 print(f'Could not compute R_e for object {args.id}. Skipping this object.')
+                bad_counter += 1
                 continue
-            '''
+            
             # -------appending to dataframe--------------
             df_re.loc[len(df_re)] = [args.field, args.id, args.z, re_kpc, re_arcsec]
         
@@ -116,6 +130,7 @@ if __name__ == "__main__":
         print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
 
     # ----------write out the dataframe--------------
+    print(f'\nFailed to compute re for {bad_counter} objects out of total {good_counter + bad_counter}')
     if args.write_file:
         Table.from_pandas(df_re).write(outfilename, format='fits', overwrite=True)
         print(f'Written {outfilename}')

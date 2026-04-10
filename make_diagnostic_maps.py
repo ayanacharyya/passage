@@ -2765,7 +2765,7 @@ def get_AGN_func_methods(args):
     else:
         sys.exit('Choose AGN_diag to be one among VO87,H21,O2O3,O2Hb,Ne3O2')
 
-    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021', 'B22_S2Ha':'Backhaus+2022', 'B22_Ne3O2':'Backhaus+2022', 'MAPPINGS':'MAPPINGS', 'F24':'Feuillet+2024', 'NB':'This work'}
+    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021', 'B22_S2Ha':'Backhaus+2022', 'B22_Ne3O2':'Backhaus+2022', 'MAPPINGS':'MAPPINGS', 'F24':'Feuillet+2024', 'NB':'NB (Acharyya+2026)'}
     line_labels = [label_dict[item] for item in theoretical_lines]
 
     return theoretical_lines, line_labels
@@ -2796,7 +2796,7 @@ def AGN_func(x, theoretical_line):
     return y
 
 # --------------------------------------------------------------------------------------------------------------------
-def overplot_AGN_line_on_BPT(ax, theoretical_line, label, color='k', fontsize=10, lw=2, ls='dashed', xlim=None):
+def overplot_AGN_line_on_BPT(ax, theoretical_line, label=None, label_loc='lower left', color='k', fontsize=10, lw=2, ls='dashed', xlim=None):
     '''
     Overplots a given AGN demarcation line on R3 vs S2 ratio BPT, on an existing axis
     Returns axis handle
@@ -2806,7 +2806,7 @@ def overplot_AGN_line_on_BPT(ax, theoretical_line, label, color='k', fontsize=10
     x = np.linspace(xmin, xmax, 100)
     y = AGN_func(x, theoretical_line)
     ax.plot(x, y, c=color, ls=ls, lw=lw, label=label)
-    if label is not None: ax.legend(loc='lower left', fontsize=fontsize)
+    if label is not None: ax.legend(loc=label_loc, fontsize=fontsize)
 
     return ax
 
