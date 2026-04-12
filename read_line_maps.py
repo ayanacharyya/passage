@@ -742,7 +742,6 @@ if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
     if args.re_limit is None: args.re_limit = 2.
-    args.fontsize = 10
     args.fontfactor = 1
                         
     #line_list = ['OII', 'Hb', 'OIII-4959', 'OIII', 'Ha', 'SII']

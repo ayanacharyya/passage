@@ -4,17 +4,17 @@
     Author : Ayan
     Created: 16-01-26
     Example: run compute_psf_matched_maps.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28
-             run compute_psf_matched_maps.py --field Par28 --id 2822 --clobber
-             run compute_psf_matched_maps.py --field Par28 --do_all_obj --clobber
+             run compute_psf_matched_maps.py --system ssd --field Par28 --id 2822 --clobber
+             run compute_psf_matched_maps.py --system ssd --field Par28 --do_all_obj --clobber
              run compute_psf_matched_maps.py --system ssd --do_all_fields --do_all_obj --clobber --write_file
 '''
 
 from header import *
 from util import *
-from make_diagnostic_maps import get_re_from_extension, get_offsets_from_center
+from make_diagnostic_maps import get_offsets_from_center
 from make_sfms_bins import read_passage_sed_catalog
 
-webbpsf.setup_logging(level='WARNING') # to suppress chatty-ness of webbpsf
+webbpsf.setup_logging(level='ERROR') # to suppress chatty-ness of webbpsf
 start_time = datetime.now()
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -108,11 +108,15 @@ if __name__ == "__main__":
     filter_for_re = 'F150W'
 
     # ---------determining list of fields----------------
-    if args.do_all_fields:
-        field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par[0-9][0-9][0-9]') + '/')]
-        field_list.sort(key=natural_keys)
-    else:
-        field_list = args.field_arr
+    output_dir = args.output_dir / 'catalogs'
+    passage_catalog_filename = output_dir / 'SED_fits_v1.0.2_cosmosweb.fits'
+    df_sed = read_passage_sed_catalog(passage_catalog_filename)
+
+    if not args.do_all_fields:
+        df_sed = df_sed[df_sed['field'].isin(args.field_arr)]
+
+    field_list = list(pd.unique(df_sed['field']))
+    field_list.sort(key=natural_keys)
 
     # -------------setup PSF calculations------------------
     target_psf_wave = 1.984 # corresponding to F200W pivot wavelength, in microns
@@ -134,7 +138,8 @@ if __name__ == "__main__":
 
         # ---------read the photometric catalog file--------------------
         if args.do_all_obj:
-            df = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
+            #df = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
+            df = df_sed[df_sed['field'] == args.field]
             id_arr = df['id'].values
         else:
             id_arr = args.id
