@@ -2765,7 +2765,7 @@ def get_AGN_func_methods(args):
     else:
         sys.exit('Choose AGN_diag to be one among VO87,H21,O2O3,O2Hb,Ne3O2')
 
-    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021', 'B22_S2Ha':'Backhaus+2022', 'B22_Ne3O2':'Backhaus+2022', 'MAPPINGS':'MAPPINGS', 'F24':'Feuillet+2024', 'NB':'NB (Acharyya+2026)'}
+    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021', 'B22_S2Ha':'Backhaus+2022', 'B22_Ne3O2':'Backhaus+2022', 'MAPPINGS':'MAPPINGS', 'F24':'Feuillet+2024', 'NB':'NB (Acharyya+2025)'}
     line_labels = [label_dict[item] for item in theoretical_lines]
 
     return theoretical_lines, line_labels

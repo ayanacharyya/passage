@@ -132,6 +132,9 @@ from matplotlib.patches import ConnectionPatch, Polygon
 import matplotlib.patches as patches
 from matplotlib.collections import PatchCollection
 
+import logging
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
+
 import webbpsf
 from statsmodels.regression.linear_model import WLS
 

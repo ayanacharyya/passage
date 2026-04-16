@@ -290,6 +290,7 @@ def parse_args():
 
     # ---- args added for read_line_maps.py ------------
     parser.add_argument('--mask_arcsec', metavar='mask_arcsec', type=float, action='store', default=None, help='Mask everything outside radius of specified arcsecond? Default is None, i.e., do not mask')
+    parser.add_argument('--plot_met_sfr', dest='plot_met_sfr', action='store_true', default=False, help='Plot the metallicity + SFR maps instead of the full diagnostic figure? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
@@ -1534,13 +1535,13 @@ def plotline(id, path='/Users/acharyya/Work/astro/passage/passage_data/v0.5/Par0
      return fig
 
 # --------------------------------------------------------------------------------------------------------------------
-def annotate_axes(ax, xlabel, ylabel, xlim=None, ylim=None, args=None, fontsize=10, fontfactor=1, label='', clabel='', hide_xaxis=False, hide_yaxis=False, hide_cbar=True, p=None, hide_cbar_ticks=False, cticks_integer=True):
+def annotate_axes(ax, xlabel, ylabel, xlim=None, ylim=None, args=None, fontsize=10, fontfactor=1, label='', labelx=0.05, labely=0.9, clabel='', hide_xaxis=False, hide_yaxis=False, hide_cbar=True, p=None, hide_cbar_ticks=False, cticks_integer=True, yaxis_on_right=False):
     '''
     Annotates the axis of a given 2D image
     Returns the axis handle
     '''
     if args is not None: fontsize, fontfactor = args.fontsize, args.fontfactor
-    ax.text(0.05, 0.9, label, c='k', fontsize=fontsize/fontfactor, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9), transform=ax.transAxes)
+    ax.text(labelx, labely, label, c='k', fontsize=fontsize/fontfactor, ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', alpha=0.9), transform=ax.transAxes)
 
     if xlim is not None: ax.set_xlim(xlim)
     ax.xaxis.set_major_locator(ticker.MaxNLocator(nbins=3, prune='both'))
@@ -1558,7 +1559,11 @@ def annotate_axes(ax, xlabel, ylabel, xlim=None, ylim=None, args=None, fontsize=
         ax.tick_params(axis='y', which='major', labelsize=fontsize, labelleft=False)
     else:
         ax.set_ylabel(ylabel, fontsize=fontsize)
-        ax.tick_params(axis='y', which='major', labelsize=fontsize, labelleft=True)
+        if yaxis_on_right:
+            ax.yaxis.set_label_position('right')
+            ax.tick_params(axis='y', which='major', labelsize=fontsize, labelleft=False, labelright=True)
+        else:
+            ax.tick_params(axis='y', which='major', labelsize=fontsize, labelleft=True)
 
     if not hide_cbar and p is not None:
         cax = inset_axes(ax, width="5%", height="100%", loc='right', bbox_to_anchor=(0.05, 0, 1, 1), bbox_transform=ax.transAxes, borderpad=0)

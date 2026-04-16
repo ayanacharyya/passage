@@ -7,12 +7,16 @@
              run read_line_maps.py --Zdiag R23 --use_C25 --AGN_diag Ne3O2
              run read_line_maps.py --Zdiag R23 --use_C25 --AGN_diag Ne3O2 --mask_arcsec 0.3 --arcsec_lim 0.5 --plot_BPT --snr_cut 1
              run read_line_maps.py --Zdiag R23 --use_C25 --AGN_diag Ne3O2 --mask_arcsec 0.3 --arcsec_lim 0.5 --snr_cut 1
+             run read_line_maps.py --Zdiag R23 --use_C25 --mask_arcsec 0.3 --arcsec_lim 0.5 --snr_cut 1 --plot_metallicity --plot_radial_profiles
+             run read_line_maps.py --Zdiag R23 --use_C25 --mask_arcsec 0.3 --arcsec_lim 0.5 --snr_cut 1 --plot_metallicity
+             run read_line_maps.py --Zdiag R23 --use_C25 --mask_arcsec 0.3 --arcsec_lim 0.5 --snr_cut 1 --plot_met_sfr --plot_radial_profiles
+             run read_line_maps.py --Zdiag R23 --use_C25 --mask_arcsec 0.3 --arcsec_lim 0.5 --snr_cut 1 --plot_met_sfr --id 3174
 '''
 
 from header import *
 from util import *
 setup_plot_style()
-from make_diagnostic_maps import trim_image, take_safe_log_ratio, take_safe_log_sum, get_dereddened_flux
+from make_diagnostic_maps import trim_image, take_safe_log_ratio, take_safe_log_sum, get_dereddened_flux, compute_SFR, get_offsets_from_center, compute_EB_V
 from plots_for_zgrad_paper import odr_fit, plot_fitted_line, get_AGN_func_methods, plot_AGN_demarcation_ax, get_distance_map_from_AGN_line, annotate_kpc_scale_bar, get_ratio_labels, overplot_AGN_line_on_BPT
 
 start_time = datetime.now()
@@ -65,8 +69,8 @@ def get_emission_line_map(line, full_hdu, args, dered=True, silent=True):
     # -------masking outside segmentation map---------
     if args.snr_cut is not None:
         snr_map = line_map / line_map_err
-        line_map = np.ma.masked_where(snr_map < args.snr_cut, line_map)
-        line_map_err = np.ma.masked_where(snr_map < args.snr_cut, line_map_err)
+        line_map = np.ma.masked_where((snr_map < args.snr_cut) | line_map.mask, line_map)
+        line_map_err = np.ma.masked_where((snr_map < args.snr_cut) | line_map_err.mask, line_map_err)
 
     # -------masking outside a certain radius---------
     if args.mask_arcsec is not None:
@@ -90,10 +94,26 @@ def get_emission_line_map(line, full_hdu, args, dered=True, silent=True):
     # -----------------------------------------------------
     line_map = unp.uarray(line_map, line_map_err)
     line_int = ufloat(np.nan, np.nan)
-    line_sum = ufloat(np.nan, np.nan)
+    line_sum = np.sum(np.ma.compressed(line_map))
     line_ew = ufloat(np.nan, np.nan)
 
     return line_map, line_wave, line_int, line_sum, line_ew
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_EB_V(full_hdu, args, verbose=False, silent=False):
+    '''
+    Computes and returns the spatially resolved as well as integrated dust extinction map from a given HDU
+    Based on Eqn 4 of Dominguez+2013 (https://iopscience.iop.org/article/10.1088/0004-637X/763/2/145/pdf)
+    '''
+
+    Ha_map, Ha_wave, Ha_int, Ha_sum, _ = get_emission_line_map('Ha', full_hdu, args, dered=False, silent=silent) # do not need to deredden the lines when we are fetching the flux in order to compute reddening
+    Hb_map, Hb_wave, Hb_int, Hb_sum, _ = get_emission_line_map('Hb', full_hdu, args, dered=False, silent=silent)
+
+    EB_V_map = compute_EB_V(Ha_map, Hb_map)
+    EB_V_int = compute_EB_V(Ha_int, Hb_int, verbose=verbose)
+    EB_V_sum = compute_EB_V(Ha_sum, Hb_sum, verbose=verbose)
+
+    return EB_V_map, EB_V_int, EB_V_sum
 
 # --------------------------------------------------------------------------------------------------------------------
 def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
@@ -358,7 +378,7 @@ def compute_Z_C19(ratio, coeff, ax=None, branch='high', use_C25=False, silent=Fa
                 if ax is not None:
                     for index, real_root in enumerate(impossible_roots): ax[0].scatter(real_root, this_ratio, lw=0, s=10, c='grey')
 
-                if branch == 'high': # THIS IS WHERE MAKING THE CHOICE TO GO WITH THE HIGHER METALLICITY BRANCH, WHEREVER THE CHOICE NEEDS TO BE MADE
+                if branch == 'high': # THIS IS WHERE MAKING THE CHOICE TO GO WITH THE HIGHER METALLICITY BRANCH, WHENEVER NECESSARY
                     this_log_OH = np.max(possible_roots)
                 elif branch == 'low':
                     this_log_OH = np.min(possible_roots)
@@ -562,18 +582,7 @@ def get_Z_C19(full_hdu, args):
 def get_Z(full_hdu, args):
     '''
     Computes and returns the spatially resolved as well as intregrated metallicity from a given HDU
-    Also saves the metallicity map as a fits file
-    '''
-    # -----------determining output fits file name---------
-    NB_text = '_orig_grid' if args.use_original_NB_grid and args.Zdiag == 'NB' else ''
-    exclude_text = f'_without_{",".join(args.exclude_lines)}' if len(args.exclude_lines) > 0 and args.Zdiag == 'NB' else ''
-    Zbranch_text = '' if args.Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
-    AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
-    extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
-    dered_text = '_dered' if args.dered_in_NB and 'NB' in args.Zdiag else ''
-    
-    # --------deriving the metallicity map-------------
+    '''    
     if args.Zdiag == 'NB':
         logOH_map, logOH_int, logOH_sum, line_label_array = get_Z_NB(full_hdu, args)
     else:
@@ -602,7 +611,7 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
 
     # ----------plot fitted line-------------
     xarr = df[quant_x]
-    ax = plot_fitted_line(ax, linefit_odr, xarr, col, args, quant=quant, short_label=False, index=index)
+    ax = plot_fitted_line(ax, linefit_odr, xarr, col, args, quant=quant, short_label=False, index=0)
     ax.set_box_aspect(1)
 
     # --------annotating axis--------------
@@ -611,6 +620,137 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)' if args.re_limit is None else r'Radius (R$_e$)', label_dict[quant], args=args, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar)
 
     return ax, linefit_odr
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_sfr_from_oii(OII_flux, redshift):
+    '''
+    Derives SFR given the OII flux and redshift (to convert flux into luminosity) following Figueira+2022
+    Returns SFR
+    '''
+    distance = cosmo.luminosity_distance(redshift)
+    OII_lum = OII_flux * 4 * np.pi * (distance.to('cm').value ** 2) # converting to ergs/s (luminosity)
+    
+    #SFR_OII = OII_lum * 1.26e-41 # luminosity in ergs/s; SFR in Msun/yr; from Vulcani+2010; Salpeter IMF
+    #SFR_OII = OII_lum * ufloat(6.58, 1.65) * 10 ** (-42) # luminosity in ergs/s; SFR in Msun/yr; from Kewley+2004 eq 4; agrees well with Selpeter IMF
+    SFR_OII = (10 ** ufloat(-39.69, 0.07)) * (OII_lum ** ufloat(0.96, 0.01)) # luminosity in ergs/s; SFR in Msun/yr; from Figueira+2022 Table 6 second-to-last row; Chabrier IMF
+
+    return SFR_OII
+
+# --------------------------------------------------------------------------------------------------------------------
+def correct_ha_C20(N2_plus_Ha_map, logOH_map):
+    '''
+    Extract the H-alpha flux from the N2+Halpha compund, following C20 metallicity calibration
+    '''
+    #log_N2Ha_logOH_poly_coeff = [1, -10] # from approx fit to MAPPINGS models
+    log_N2Ha_logOH_poly_coeff = [-0.489, 1.513, -2.554, -5.293, -2.867][::-1] # from Table 2 N2 row of Curti+2019
+
+    if hasattr(N2_plus_Ha_map, "__len__"): # if it is an array
+        logOH_arr = logOH_map.data.flatten()
+        log_N2Ha_arr = []
+        for logOH in logOH_arr:
+            try:
+                #log_N2Ha = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH)
+                log_N2Ha = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH - 8.69) # because using C19 N2 calibration
+                log_N2Ha_arr.append(log_N2Ha)
+            except:
+                log_N2Ha_arr.append(np.nan)
+        log_N2Ha_map = np.ma.masked_where(logOH_map.mask, np.reshape(log_N2Ha_arr, np.shape(logOH_map)))
+        N2Ha_map = np.ma.masked_where(log_N2Ha_map.mask, 10 ** log_N2Ha_map.data)
+
+        Ha_data = N2_plus_Ha_map.data / (1 + N2Ha_map.data)
+        Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask | N2Ha_map.mask, Ha_data)
+    else: # for single values
+        log_N2Ha_int = np.poly1d(log_N2Ha_logOH_poly_coeff)(logOH_map - 8.69)
+        N2Ha_int = 10 ** log_N2Ha_int
+        Ha_map = N2_plus_Ha_map / (1 + N2Ha_int)
+
+    return Ha_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def correct_ha_F18(N2_plus_Ha_map, args):
+    '''
+    Extract the H-alpha flux from the N2+Halpha compund, following F18 N2/Ha calibration
+    '''
+    def F18_func(x, redshift, log_mass): # Eq 3 of Faisst+2018
+        psi = x + 0.138 - 0.042 * (1 + redshift) **2 
+        solve = 3.696 * psi + 3.236 * psi**(-1) + 0.729 * psi ** (-2) + 14.928 + 0.156 * (1 + redshift)**2 - log_mass
+        return solve
+
+    log_N2Ha = brentq(F18_func, -2, 0, args=(args.z, args.log_mass))
+    N2Ha = 10 ** log_N2Ha
+
+    if hasattr(N2_plus_Ha_map, "__len__"): # if it is an array
+        Ha_map = np.ma.masked_where(N2_plus_Ha_map.mask, N2_plus_Ha_map.data / (1 + 1.333 * N2Ha)) # 1.333 factor is because F18 consider BOTH NII components, assuming NII 6548 = N II 6584 / 3
+        Ha_map.data[Ha_map.data==0] = np.nan
+    else: # for single values
+        Ha_map = N2_plus_Ha_map / (1 + 1.333 * N2Ha)
+
+    return Ha_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_corrected_ha(N2_plus_Ha_map, logOH_map, args):
+    '''
+    Computes the corrected Halpha map given the metallicity map and N2+Halpha map
+    Returns corrected and uncorrcted Ha and SFR maps
+    '''
+    Ha_map = correct_ha_C20(N2_plus_Ha_map, logOH_map)
+    #Ha_map = correct_ha_F18(N2_plus_Ha_map, args)
+
+    return Ha_map
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=None, logOH_sum=None):
+    '''
+    Computes the corrected SFR map given the metallicity map and full_hdu (from whic it obtains the uncorrected Halpha map)
+    Returns corrected and uncorrcted Ha and SFR maps
+    '''
+    distance = cosmo.luminosity_distance(args.z)
+
+    # --------deriving the Ha-based SFR where Halpha available---------
+    if 'Ha' in args.available_lines:
+        # -------deriving H-alpha map-----------
+        Ha_map, _, Ha_int, Ha_sum, _ = get_emission_line_map('Ha', full_hdu, args, silent=args.only_integrated)
+        sfr_map_uncorrected = compute_SFR(Ha_map, distance)
+        sfr_map_uncorrected.data[sfr_map_uncorrected.data==0] = np.nan
+
+        # ----------correcting Ha map using metallicity------------
+        if not args.do_not_correct_flux:
+            factor = 0.823 # from James et al. 2023?
+            N2_plus_Ha_map = np.ma.masked_where(Ha_map.mask, Ha_map.data / factor)
+            N2_plus_Ha_int = Ha_int / factor
+            N2_plus_Ha_sum = Ha_sum / factor
+
+        Ha_map = get_corrected_ha(N2_plus_Ha_map, logOH_map, args)
+
+        # -------deriving SFR map-----------
+        sfr_map_corrected = compute_SFR(Ha_map, distance)
+
+        # -------deriving the integrated SFR------------
+        if logOH_int is not None:
+            Ha_int = get_corrected_ha(N2_plus_Ha_int, logOH_int, args)
+            sfr_int_corrected = compute_SFR(Ha_int, distance)
+        else:
+            sfr_int_corrected = ufloat(np.nan, np.nan)
+
+        if logOH_sum is not None:
+            Ha_sum = get_corrected_ha(N2_plus_Ha_sum, logOH_sum, args)
+            sfr_sum_corrected = compute_SFR(Ha_sum, distance)
+        else:
+            sfr_sum_corrected = ufloat(np.nan, np.nan)
+
+        return N2_plus_Ha_map, Ha_map, sfr_map_uncorrected, sfr_map_corrected, sfr_int_corrected, sfr_sum_corrected
+
+    # --------deriving the OII-based SFR in case Halpha unavailable---------
+    elif 'OII' in args.available_lines:
+        print(f'\nH-alpha unavailable for ID {args.id}, so deriving SFR from OII..')
+        OII_map, _, OII_int, OII_sum, _ = get_emission_line_map('OII', full_hdu, args, silent=True)
+        sfr_map = get_sfr_from_oii(OII_map.data, args.z)
+        sfr_map = np.ma.masked_where(OII_map.mask, sfr_map)
+
+        sfr_int = get_sfr_from_oii(OII_int, args.z)
+        sfr_sum = get_sfr_from_oii(OII_sum, args.z)
+
+        return None, OII_map, None, sfr_map, sfr_int, sfr_sum
 
 # --------------------------------------------------------------------------------------------------------------------
 def annotate_kpc_scale_bar(kpc, ax, args, label=None, color='k', loc='lower left', scale_is_re=True, make_box=True):
@@ -646,7 +786,7 @@ def annotate_arcsec_scale_bar(arcsec, ax, args, label=None, color='k', loc='lowe
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_2D_map(image, ax, label, args, cmap='viridis', clabel='', xlabel=None, ylabel=None, takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True):
+def plot_2D_map(image, ax, label, args, labelx=0.05, labely=0.9, cmap='viridis', clabel='', xlabel=None, ylabel=None, takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True):
     '''
     Plots a given 2D image in a given axis
     Returns the axis handle
@@ -669,7 +809,7 @@ def plot_2D_map(image, ax, label, args, cmap='viridis', clabel='', xlabel=None, 
     units = 'arcsec'
     if xlabel is None: xlabel = f'Offset ({units})' 
     if ylabel is None: ylabel = f'Offset ({units})'
-    ax = annotate_axes(ax, xlabel, ylabel, args=args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
+    ax = annotate_axes(ax, xlabel, ylabel, args=args, label=label, labelx=labelx, labely=labely, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
 
     return ax
 
@@ -737,12 +877,86 @@ def plot_AGN_demarcation_object(full_hdu, args, ax, marker='o', size=50, ax_inse
 
     return ax, scatter_plot_handle, ax_inset
 
+# --------------------------------------------------------------------------------------------------------------------
+def save_quant_maps_fits(quant_maps, quants_fits_file, wcs, args):
+    '''
+    Saves the N x 2D spatially resolved quantity maps as N-extension fits files, along with other relevant header info
+    '''
+    # ------------setting up primary header---------------
+    spatial_header = wcs.to_header()
+    primary_hdu = fits.PrimaryHDU(header=spatial_header)
+
+    primary_hdu.header['CONTENT'] = 'Various physical quantity maps'
+    primary_hdu.header['ID'] = args.id
+    primary_hdu.header['REDSHIFT'] = args.z
+    primary_hdu.header['Z_DIAGNOSTIC'] = args.Zdiag
+    
+    hdul = fits.HDUList([primary_hdu])
+
+    params_dict = {
+        'logOH':{'label':'LOG_OH', 'unit':''},
+        'logOH_err':{'label':'LOG_OH_ERR', 'unit':''},
+        'logOH_mask':{'label':'LOG_OH_MASK', 'unit':''},
+        'sfr':{'label':'SFR', 'unit':'Msun/s'},
+        'sfr_err':{'label':'SFR_ERR', 'unit':'Msun/s'},
+        'sfr_mask':{'label':'SFR_MASK', 'unit':''},
+    }
+
+    # ------------looping over fitted lines---------------
+    for label in list(quant_maps.keys()):   
+        quant_data = quant_maps[label]
+        if quant_data is None: continue
+            
+        hdu = fits.ImageHDU(data=quant_data.astype(np.float32), header=spatial_header)
+        hdu.header['EXTNAME'] = params_dict[label]['label']
+        hdu.header['BUNIT'] = params_dict[label]['unit']
+        hdul.append(hdu)
+
+    hdul.writeto(quants_fits_file, overwrite=True)
+    print(f'Successfully saved {len(hdul)-1} extensions to {quants_fits_file}"')
+    return
+
+# --------------------------------------------------------------------------------------------------------------------
+def read_quant_maps_fits(filename):
+    '''
+    Reads a multi-extension FITS file and reconstructs the quant_maps dictionary.
+    Returns:
+    logOH_map and sfr_map: 2D masked arrays
+    extent: to be used for plt.imshow()
+    '''
+    params_dict = {'logOH':{'data':'LOG_OH', 'err': 'LOG_OH_ERR', 'mask': 'LOG_OH_MASK'},
+                   'sfr':{'data':'SFR', 'err': 'SFR_ERR', 'mask': 'SFR_MASK'},
+    }
+    quant_maps = {'logOH': np.nan, 'sfr':np.nan}
+    
+    print(f'Reading existing maps fits file from {filename}')
+    hdul = fits.open(filename)
+
+    for label in list(quant_maps.keys()):
+        hdu_data = hdul[params_dict[label]['data']]
+        #hdu_err = hdul[params_dict[label]['err']]
+        hdu_mask = hdul[params_dict[label]['mask']]
+
+        this_quant = np.ma.masked_where(hdu_mask.data, hdu_data.data)
+        quant_maps.update({label: this_quant})
+
+    logOH_map = quant_maps['logOH']
+    sfr_map = quant_maps['sfr']
+
+    right  = hdu_data.header['CRVAL1'] + (hdu_data.header['NAXIS1'] + 0.5 - hdu_data.header['CRPIX1']) * hdu_data.header['CDELT1']
+    left   = hdu_data.header['CRVAL1'] + (0.5 - hdu_data.header['CRPIX1']) * hdu_data.header['CDELT1']
+    bottom    = hdu_data.header['CRVAL2'] + (hdu_data.header['NAXIS2'] + 0.5 - hdu_data.header['CRPIX2']) * hdu_data.header['CDELT2']
+    top = hdu_data.header['CRVAL2'] + (0.5 - hdu_data.header['CRPIX2']) * hdu_data.header['CDELT2']
+    extent = (left, right, top, bottom)
+    
+    return logOH_map, sfr_map, extent
+
 # --------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
-    if args.re_limit is None: args.re_limit = 2.
     args.fontfactor = 1
+    if args.plot_BPT and args.fontsize == 15: args.fontsize = 10
                         
     #line_list = ['OII', 'Hb', 'OIII-4959', 'OIII', 'Ha', 'SII']
     line_list = ['OII', 'NeIII-3867', 'Hb', 'OIII-4363', 'Hg', 'OIII']
@@ -751,8 +965,11 @@ if __name__ == "__main__":
     #input_dir = Path('/Users/acharyya/Work/astro/passage/glass_data/resolved_sfh')
     input_dir = Path('/Users/acharyya/Work/astro/passage/passage_data/vpjw/Par682')
     fig_dir = input_dir / 'figs'
-    #files = glob.glob(str(input_dir) + '/regions_*arcsec.line.fits')
-    files = glob.glob(str(input_dir) + '/*full.fits')
+    files = glob.glob(str(input_dir) + '/full/regions_*arcsec.line.fits')
+    files += glob.glob(str(input_dir) + f'/full/*.full.fits')
+    if args.id is not None: 
+        files = [f for f in files if any(f"{i:03d}" in f for i in args.id)]
+    files.sort(key=natural_keys)
 
     for ind, full_filename in enumerate(files):
         print(f'\nDoing ({ind + 1}/{len(files)})..')
@@ -770,18 +987,23 @@ if __name__ == "__main__":
         args.pix_size_arcsec = full_hdu[5].header['PIXASEC']
         args.pix_size_kpc = args.pix_size_arcsec / cosmo.arcsec_per_kpc_proper(args.z).value
         
-        args.EB_V = 0. # until it gets over-written, if both H alpha and H beta lines are present
         offset = args.pix_size_arcsec / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
         args.extent = (-args.arcsec_limit - offset, args.arcsec_limit - offset, -args.arcsec_limit - offset, args.arcsec_limit - offset)
         
         # --------determining true center of object rom direct image---------------------
-        args.ndelta_xpix, args.ndelta_ypix = 0, 0
+        args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F200W')
 
         # ---------------segmentation map---------------
         segmentation_map = full_hdu['SEG'].data
         segmentation_map = trim_image(segmentation_map, args, skip_re_trim=True)
         args.segmentation_map = segmentation_map
 
+        # --------------getting reddening-----------------
+        try:
+            args.EB_V_map, _, args.EB_V = get_EB_V(full_hdu, args, verbose=True, silent=True)
+        except:
+            args.EB_V = ufloat(0, 0)
+        
         # ------------setup BPT-only figure-------------
         if args.plot_BPT:
             fig, ax = plt.subplots(1, 1, figsize=(5, 4))
@@ -794,6 +1016,108 @@ if __name__ == "__main__":
             figname = f'{full_filename.stem}_resolved_OHNO.png'
             save_fig(fig, fig_dir, figname, args)
 
+        # ------------setup metallicity-only figure-------------
+        elif args.plot_metallicity:
+            #Zlim = [7, 8.1]
+            Zlim = [None, None]
+            if args.plot_radial_profiles:
+                fig, axes = plt.subplots(1, 2, figsize=(8, 4))
+                fig.subplots_adjust(left=0.13, bottom=0.08, right=0.98, top=0.98, wspace=0.4)
+            else:
+                fig, axes = plt.subplots(1, 1, figsize=(4, 4))
+                axes = np.atleast_1d(axes)
+                fig.subplots_adjust(left=0.13, bottom=0.08, right=0.98, top=0.98, wspace=0.4)
+                                
+            if args.Zdiag == 'R23' and 'OII' not in args.available_lines:
+                args.Zdiag = 'R3'
+                switched_diag = True
+                print(f'No OII for object {ind + 1}, so switching to R3 (instead of R23)..')
+            
+            # -------------2D map-----------------
+            logOH_map, _, _ = get_Z(full_hdu, args)
+            axes[0] = plot_2D_map(logOH_map, axes[0], f'Z ({args.Zdiag})', args, takelog=False, hide_cbar=False, vmin=Zlim[0], vmax=Zlim[1])
+
+            # -------------radial profile----------------
+            if args.plot_radial_profiles:
+                quant = 'log_OH'
+                shape = np.shape(logOH_map.data)
+                center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
+                distance_map_re_kpc = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size_kpc # Re or kpc
+
+                logOH_df = pd.DataFrame({'distance': distance_map_re_kpc.flatten(), f'{quant}': unp.nominal_values(logOH_map.data).flatten(), f'{quant}_u': unp.std_devs(logOH_map.data).flatten()})
+                logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
+
+                axes[1], radial_linefit_odr = plot_radial_profile(logOH_df, axes[1], args, ylim=Zlim, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant)
+
+            figname = f'{full_filename.stem}_resolved_logOH.png'
+            save_fig(fig, fig_dir, figname, args)
+
+        # ------------setup metallicity+SFR-only figure-------------
+        elif args.plot_met_sfr:            
+            if args.Zdiag == 'R23' and 'OII' not in args.available_lines:
+                args.Zdiag = 'R3'
+                switched_diag = True
+                print(f'\nNo OII for object {ind + 1}, so switching to R3 (instead of R23)..')
+            
+            if 'Ha' not in args.available_lines:
+                print(f'\nNo H-alpha for object {ind + 1}, so skipping object..')
+                continue
+
+            sfr_lim = [None, None] #[0, 0.5]
+            Zlim = [7, 8.1]
+            #Zlim = [None, None]
+            if args.plot_radial_profiles:
+                fig, axes = plt.subplots(1, 3, figsize=(9, 3))
+                fig.subplots_adjust(left=0.1, bottom=0.08, right=0.98, top=0.98, wspace=0.5)
+            else:
+                fig, axes = plt.subplots(1, 2, figsize=(6, 3))
+                fig.subplots_adjust(left=0.15, bottom=0.1, right=0.95, top=0.99, wspace=0.2)
+
+            # -------------derive the maps-----------------
+            logOH_map, _, _ = get_Z(full_hdu, args)
+            _, _, sfr_map_uncorrected, sfr_map_corrected, _, _ = get_corrected_sfr(full_hdu, logOH_map, args)
+
+            # -------------save the maps-----------------
+            quants_dict = {'logOH': unp.nominal_values(logOH_map.data), 
+                           'logOH_err': unp.std_devs(logOH_map.data),
+                           'logOH_mask': logOH_map.mask,
+                           'sfr': unp.nominal_values(sfr_map_uncorrected.data),
+                           'sfr_err': unp.std_devs(sfr_map_uncorrected.data),
+                           'sfr_mask': sfr_map_uncorrected.mask,
+                           }
+            w = pywcs.WCS(naxis=2)
+            w.wcs.crpix = [(np.shape(logOH_map)[0] + 1)/2, (np.shape(logOH_map)[1] + 1)/2] 
+            w.wcs.crval = [0, 0]            
+            w.wcs.cdelt = [-args.pix_size_arcsec, args.pix_size_arcsec]            
+            w.wcs.ctype = ["OFFSET-RA", "OFFSET-DEC"]
+            w.wcs.cunit = ["arcsec", "arcsec"]
+
+            outfitsname = input_dir / 'quants' / f'{full_filename.stem.split(".")[0]}_quants.fits'
+            save_quant_maps_fits(quants_dict, outfitsname, w, args)
+            #logOH_map, sfr_map_uncorrected, args.extent = read_quant_maps_fits(outfitsname)
+            
+            # -------------2D SFR map-----------------
+            #axes[0] = plot_2D_map(sfr_map_corrected, axes[0], 'SFR', args, cmap='plasma', takelog=False, hide_cbar=False, vmin=sfr_lim[0], vmax=sfr_lim[1])
+            axes[0] = plot_2D_map(sfr_map_uncorrected, axes[0], f'SFR', args, labelx=0.05, labely=0.15, cmap='plasma', takelog=False, hide_cbar=False, vmin=sfr_lim[0], vmax=sfr_lim[1])
+
+            # -------------2D metallicity map-----------------
+            axes[1] = plot_2D_map(logOH_map, axes[1], r'$\log$(O/H)+12' f' ({args.Zdiag})', args, labelx=0.05, labely=0.15, takelog=False, hide_yaxis=True, hide_cbar=False, vmin=Zlim[0], vmax=Zlim[1])
+
+            # -------------metallicity radial profile----------------
+            if args.plot_radial_profiles:
+                quant = 'log_OH'
+                shape = np.shape(logOH_map.data)
+                center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
+                distance_map_re_kpc = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size_kpc # Re or kpc
+
+                logOH_df = pd.DataFrame({'distance': distance_map_re_kpc.flatten(), f'{quant}': unp.nominal_values(logOH_map.data).flatten(), f'{quant}_u': unp.std_devs(logOH_map.data).flatten()})
+                logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
+
+                axes[2], radial_linefit_odr = plot_radial_profile(logOH_df, axes[2], args, ylim=Zlim, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant)
+
+            figname = f'{full_filename.stem}_resolved_SFR_logOH.png'
+            save_fig(fig, fig_dir, figname, args, dpi=500)
+            
         # ------------setup figure-------------
         else:
             nrows, ncols = 3, 4
