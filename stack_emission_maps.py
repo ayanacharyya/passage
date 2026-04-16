@@ -16,6 +16,7 @@
 
 from header import *
 from util import *
+setup_plot_style()
 from make_diagnostic_maps import trim_image, get_dereddened_flux, myimshow, get_offsets_from_center, get_cutout
 from make_sfms_bins import bin_SFMS_linear, bin_SFMS_adaptive, read_passage_sed_catalog, bin_SFMS_distance, bin_SFMS_distance_mass, n_adaptive_bins, sfms, n_mass_bins
 
@@ -222,7 +223,7 @@ def weighted_stack_line_maps(line_maps_array, line_maps_err_array, additional_we
     weights_array = 1.0 / (line_maps_err_array ** 2)
     stacked_line_map_err = np.sqrt(1.0 / np.nansum(weights_array, axis=0))    
 
-    weights_array = np.sqrt((weights_array/1e37) ** 2 + additional_weights ** 2) # dividing out this typical large factor, otherwise upon summing across many objects it becomes inf
+    weights_array = np.sqrt(weights_array ** 2 + additional_weights ** 2)
     stacked_line_map = np.nansum(line_maps_array * weights_array, axis=0) / np.nansum(weights_array, axis=0)
     
     return stacked_line_map, stacked_line_map_err
@@ -400,7 +401,8 @@ if __name__ == "__main__":
     rescale_text = '_norescale' if args.skip_re_scaling else ''
 
     # -----------define colorbar properties-----------
-    cmin, cmax, cmap = -2, 1, 'cividis'
+    direct_image_cmin, direct_image_cmax, direct_image_cmap = None, None, 'Greys_r'
+    cmin, cmax, cmap = -3.4, -1.4, 'cividis'
     
     # ---------reading in the master SED catalog----------------
     passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
@@ -469,6 +471,7 @@ if __name__ == "__main__":
     if args.debug_bin: bin_list = bin_list[1:2]
     #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
     if args.id is not None: df = df[df['id'].isin(args.id)]
+    
     # ------------looping over each bin-----------------------
     nbin_good = 0
 
@@ -498,7 +501,7 @@ if __name__ == "__main__":
                     ids = line_dict[f'{this_line.upper()}_ids']
                     stacked_map, stacked_map_err = unp.nominal_values(this_map.data), unp.std_devs(this_map.data)
                 else:
-                    stacked_map, stacked_map_err, nobj, ids = np.nan, np.nan, np.nan, 0
+                    stacked_map, stacked_map_err, nobj, ids = np.nan, np.nan, np.nan, [0]
                 
                 stacked_maps.append(stacked_map)
                 stacked_maps_err.append(stacked_map_err)
@@ -550,9 +553,9 @@ if __name__ == "__main__":
                         n_page = chunk_id // args.max_gal_per_page + 1
                         n_useful_rows_in_page = len(chunk) + (1 if n_page == n_total_pages else 0) # +1 for stack on last page
 
-                        fig_orig, axes_orig = setup_fullpage_figure(n_page, n_total_pages, n_lines,  cmin, cmax, cmap, args, in_re_units=False)
-                        fig_flux, axes_flux = setup_fullpage_figure(n_page, n_total_pages, n_lines,  cmin, cmax, cmap, args, in_kpc_units=args.skip_re_scaling)
-                        fig_err, axes_err = setup_fullpage_figure(n_page, n_total_pages, n_lines,  cmin, cmax, cmap, args, in_kpc_units=args.skip_re_scaling)
+                        fig_orig, axes_orig = setup_fullpage_figure(n_page, n_total_pages, n_lines, -2.5, -1, cmap, args, in_re_units=False)
+                        fig_flux, axes_flux = setup_fullpage_figure(n_page, n_total_pages, n_lines, cmin, cmax, cmap, args, in_kpc_units=args.skip_re_scaling)
+                        fig_err, axes_err = setup_fullpage_figure(n_page, n_total_pages, n_lines, cmin, cmax, cmap, args, in_kpc_units=args.skip_re_scaling)
                     
                     # ----------------looping over the objects in this chunk-------------
                     for index3, this_galaxy in enumerate(chunk):
@@ -616,20 +619,27 @@ if __name__ == "__main__":
                         if scaling_line in args.available_lines:
                             _, _, line_int = get_emission_line_map(scaling_line, full_hdu, args, dered=False, silent=True)
                             integrated_scaling_flux = line_int.n
+                            print(f'\nScaling all line fluxes of {args.id} by {scaling_line} flux = {integrated_scaling_flux}')
                         else:
                             integrated_scaling_flux = 1e-17 # dummy value for galaxies that do not have OIII-5007 coverage
-
+                            print(f'\nSince {scaling_line} not available for {args.id}, scaling all lines by {integrated_scaling_flux}')
+                        
                         # ---------------direct image---------------
-                        filter = 'F150W'                    
+                        filter = 'F200W'             
                         direct_image, exptime = get_direct_image(full_hdu, filter, args) # this is already offset corrected and trimmed
                         rotated_direct_image = rotate_line_map(direct_image, args)
                         deprojected_direct_image = rotated_direct_image if args.skip_deproject else deproject_line_map(rotated_direct_image, args)
                         rescaled_direct_image = rescale_line_map(deprojected_direct_image, args)
 
+                        args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled = get_center_offsets(rescaled_direct_image, args, silent=not args.debug_align)
+                        #args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled = 0, 0 
+                        recentered_direct_image = ndimage.shift(rescaled_direct_image, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], order=0, cval=np.nan)
+
+                        recentered_segmentation_map = ndimage.shift(rescaled_segmentation_map, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], order=0, cval=np.nan)
+
                         total_brightness = np.nansum(direct_image)
 
                         # ---------plotting direct image and the rescaled direct image------------------------------
-                        direct_image_cmap, direct_image_cmin, direct_image_cmax = 'Greys_r', None, None
                         if not args.debug_align:
                             axes_orig[index3, 0] = plot_2D_map(direct_image, axes_orig[index3, 0], f'{filter} OG: {args.id}', args, cmap=direct_image_cmap, takelog=False, vmin=direct_image_cmin, vmax=direct_image_cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=False, segmentation_map=segmentation_map, in_re_units=False, seg_col='w')
                             axes_flux[index3, 0] = plot_2D_map(rescaled_direct_image, axes_flux[index3, 0], f'{filter}_rs: {args.id}', args, cmap=direct_image_cmap, takelog=False, vmin=direct_image_cmin, vmax=direct_image_cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=False, in_kpc_units=args.skip_re_scaling)
@@ -638,18 +648,17 @@ if __name__ == "__main__":
                         # ----------plotting the direct image: for debugging--------------
                         if args.debug_align:
                             re_pix = args.re_arcsec / args.pix_size_arcsec
-                            fig_debug, axes_debug_2d = plt.subplots(2, 6, figsize=(13, 6))
+                            fig_debug, axes_debug_2d = plt.subplots(2, 5, figsize=(13, 6))
                             fig_debug.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.3, hspace=0.1)
 
                             axes = axes_debug_2d[0]
                             axes[0] = myimshow(direct_image, axes[0], contour=segmentation_map != args.id, re_pix=re_pix, label='Original', cmap=direct_image_cmap, col='w')
-                            axes[1].set_visible(False) # no smoothed direct image
-                            axes[2] = myimshow(rotated_direct_image, axes[2], contour=rotated_segmentation_map != args.id, re_pix=re_pix, label='Rotated', cmap=direct_image_cmap, col='w')
-                            axes[3] = myimshow(deprojected_direct_image, axes[3], contour=deprojected_segmentation_map != args.id, re_pix=re_pix, label='Deprojected', cmap=direct_image_cmap, col='w')
-                            axes[4] = myimshow(rescaled_direct_image, axes[4], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Rescaled', cmap=direct_image_cmap, col='w')
+                            axes[1] = myimshow(rotated_direct_image, axes[1], contour=rotated_segmentation_map != args.id, re_pix=re_pix, label='Rotated', cmap=direct_image_cmap, col='w')
+                            axes[2] = myimshow(deprojected_direct_image, axes[2], contour=deprojected_segmentation_map != args.id, re_pix=re_pix, label='Deprojected', cmap=direct_image_cmap, col='w')
+                            axes[3] = myimshow(rescaled_direct_image, axes[3], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Rescaled', cmap=direct_image_cmap, col='w')
+                            axes[4] = myimshow(recentered_direct_image, axes[4], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=direct_image_cmap, col='w')
 
                         # ---------looping over all emission lines------------------------------
-                        get_rescaled_recentering = True
                         nlines_good = 0
                         for index4, this_line in enumerate(args.line_list):
                             if this_line not in args.available_lines:
@@ -667,15 +676,15 @@ if __name__ == "__main__":
                                 line_map_err /= integrated_scaling_flux
 
                                 # ------smoothing the map before rotating--------
-                                smoothing_kernel = Box2DKernel(args.kernel_size, mode=args.kernel_mode)
-                                smoothed_line_map = convolve(line_map, smoothing_kernel)
-                                smoothed_line_map_err = convolve(line_map_err, smoothing_kernel)
+                                # smoothing_kernel = Box2DKernel(args.kernel_size, mode=args.kernel_mode)
+                                # smoothed_line_map = convolve(line_map, smoothing_kernel)
+                                # smoothed_line_map_err = convolve(line_map_err, smoothing_kernel)
 
                                 # --------rotating the line map---------------------
-                                #rotated_line_map = rotate_line_map(line_map, args)
-                                #rotated_line_map_err = rotate_line_map(line_map_err, args)
-                                rotated_line_map = rotate_line_map(smoothed_line_map, args)
-                                rotated_line_map_err = rotate_line_map(smoothed_line_map_err, args)
+                                rotated_line_map = rotate_line_map(line_map, args)
+                                rotated_line_map_err = rotate_line_map(line_map_err, args)
+                                # rotated_line_map = rotate_line_map(smoothed_line_map, args)
+                                # rotated_line_map_err = rotate_line_map(smoothed_line_map_err, args)
 
                                 # --------deprojecting the line map---------------------
                                 deprojected_line_map = rotated_line_map if args.skip_deproject else deproject_line_map(rotated_line_map, args)
@@ -684,16 +693,6 @@ if __name__ == "__main__":
                                 # --------scaling the line map by effective radius---------------------
                                 rescaled_line_map = rescale_line_map(deprojected_line_map, args)
                                 rescaled_line_map_err = rescale_line_map(deprojected_line_map_err, args)
-
-                                # --------computing new recentering offsets, after rescaling---------------------
-                                if get_rescaled_recentering:
-                                    args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled = get_center_offsets(rescaled_line_map, args, silent=not args.debug_align)
-                                    recentered_segmentation_map = ndimage.shift(rescaled_segmentation_map, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], order=0, cval=np.nan)
-                                    get_rescaled_recentering = False
-
-                                    if args.debug_align:
-                                        recentered_direct_image = ndimage.shift(rescaled_direct_image, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], order=0, cval=np.nan)
-                                        axes[6] = myimshow(recentered_direct_image, axes[6], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=direct_image_cmap, col='w')
                                 
                                 # --------recentering the line map---------------------
                                 recentered_line_map = ndimage.shift(rescaled_line_map, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], order=0, cval=np.nan)
@@ -706,11 +705,10 @@ if __name__ == "__main__":
                                     
                                     axes = axes_debug_2d[1]
                                     axes[0] = myimshow(line_map, axes[0], contour=segmentation_map != args.id, re_pix=re_pix, label='Original', cmap=cmap, col='w' if args.fortalk else 'k')
-                                    axes[1] = myimshow(smoothed_line_map, axes[1], contour=segmentation_map != args.id, re_pix=re_pix, label='Smoothed', cmap=cmap, col='w' if args.fortalk else 'k')
-                                    axes[2] = myimshow(rotated_line_map, axes[2], contour=rotated_segmentation_map != args.id, re_pix=re_pix, label='Rotated', cmap=cmap, col='w' if args.fortalk else 'k')
-                                    axes[3] = myimshow(deprojected_line_map, axes[3], contour=deprojected_segmentation_map != args.id, re_pix=re_pix, label='Deprojected', cmap=cmap, col='w' if args.fortalk else 'k')
-                                    axes[4] = myimshow(rescaled_line_map, axes[4], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Rescaled', cmap=cmap, col='w' if args.fortalk else 'k')
-                                    axes[5] = myimshow(recentered_line_map, axes[5], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=cmap, col='w' if args.fortalk else 'k')
+                                    axes[1] = myimshow(rotated_line_map, axes[1], contour=rotated_segmentation_map != args.id, re_pix=re_pix, label='Rotated', cmap=cmap, col='w' if args.fortalk else 'k')
+                                    axes[2] = myimshow(deprojected_line_map, axes[2], contour=deprojected_segmentation_map != args.id, re_pix=re_pix, label='Deprojected', cmap=cmap, col='w' if args.fortalk else 'k')
+                                    axes[3] = myimshow(rescaled_line_map, axes[3], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Rescaled', cmap=cmap, col='w' if args.fortalk else 'k')
+                                    axes[4] = myimshow(recentered_line_map, axes[4], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=cmap, col='w' if args.fortalk else 'k')
 
                                     figname = fig_dir / f'debug_align_{args.id}{deproject_text}{rescale_text}.png'
                                     fig_debug.savefig(figname, transparent=args.fortalk)
@@ -728,7 +726,7 @@ if __name__ == "__main__":
                                 nlines_good += 1
 
                                 # -------------plotting this line map of this galaxy-------------------
-                                axes_orig[index3, index4 + 1] = plot_2D_map(line_map, axes_orig[index3, index4 + 1], f'{this_line}: {args.id} OG', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=True, segmentation_map=segmentation_map, in_re_units=False)
+                                axes_orig[index3, index4 + 1] = plot_2D_map(line_map, axes_orig[index3, index4 + 1], f'{this_line}: {args.id} OG', args, cmap=cmap, takelog=True, vmin=-2.5, vmax=-1, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=True, segmentation_map=segmentation_map, in_re_units=False)
                                 axes_flux[index3, index4 + 1] = plot_2D_map(recentered_line_map, axes_flux[index3, index4 + 1], f'{this_line}: {args.id}', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=True, in_kpc_units=args.skip_re_scaling)
                                 axes_err[index3, index4 + 1] = plot_2D_map(recentered_line_map_err, axes_err[index3, index4 + 1], f'{this_line}: {args.id}', args, cmap=cmap, takelog=True, vmin=cmin, vmax=cmax, hide_xaxis=index3 < n_useful_rows_in_page - 1, hide_yaxis=True, in_kpc_units=args.skip_re_scaling)
                             

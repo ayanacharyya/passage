@@ -230,11 +230,13 @@ def plot_SFMS_bins(df, methods, args, scaling=None, centers_scaled=None, bin_sum
         elif method == 'distance':
             df_sub = df.groupby(f'bin_intervals_{method}').agg(n_galaxies=('log_mass', 'size'), log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median')).reset_index()
             df_sub = df_sub.dropna(subset=[f'bin_intervals_{method}'])
+            df_sub = df_sub[df_sub['n_galaxies'] > 0]
             axes[index] = make_heatmap_distance(axes[index], df_sub, sfms, 'n_galaxies', args, method_text='_distance', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
         elif method == 'distance_mass':
             groupby_cols = [f'bin_intervals_{method}', f'mass_intervals_{method}']
             df_sub = df.groupby(groupby_cols).agg(n_galaxies=('log_mass', 'size'), log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median')).reset_index()
             df_sub = df_sub.dropna(subset=groupby_cols)
+            df_sub = df_sub[df_sub['n_galaxies'] > 0]
             axes[index] = make_heatmap_distance(axes[index], df_sub, sfms, 'n_galaxies', args, method_text='_distance_mass', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
         else:
             df_sub = df.groupby(f'bin_intervals_{method}').size().reset_index(name='n_galaxies')
@@ -478,7 +480,8 @@ def bin_SFMS_distance_mass(df, method_text = '_distance', delta_bin=0.2, n_adapt
     else: # make n_adaptive_bins of non-uniform width
         df[f'bin_intervals{method_text}'], bin_edges = pd.qcut(df['delta_sfms'], q=n_adaptive_bins, retbins=True)
 
-    df[f'mass_intervals{method_text}'] = df.groupby(f'bin_intervals{method_text}')['log_mass'].apply(lambda x: pd.qcut(x, q=n_mass_bins)).reset_index(level=0, drop=True)
+    df[f'mass_intervals{method_text}'] = df.groupby(f'bin_intervals{method_text}')['log_mass'].apply(lambda x: pd.qcut(x, q=n_mass_bins)).reset_index(level=0, drop=True) # make n_mass_bins of widths decided to have roughly equal galaxies in each bin
+    #df[f'mass_intervals{method_text}'] = pd.cut(df['log_mass'], bins=n_mass_bins) # make n_mass_bins of equal widths
     
     unique_bins_df = df[[f'bin_intervals{method_text}', f'mass_intervals{method_text}']].drop_duplicates().sort_values([f'bin_intervals{method_text}', f'mass_intervals{method_text}'])
     bin_list = list(unique_bins_df.to_records(index=False))
@@ -537,6 +540,8 @@ methods = ['linear', \
             'distance', \
             'distance_mass', \
             ]
+#methods = ['distance_mass']
+
 min_n = 10 # for adaptive_nmin binning
 max_n = 50 # for adaptive_nmax binning
 target_n = 30 # for voronoi binning
@@ -574,14 +579,14 @@ if __name__ == "__main__":
     # -----------making bins in various ways---------------------
     bin_summary, centers_scaled, scaling = None, None, None
     for method in methods:
-        output = bin_by_method(df, method, sfms=sfms, n_adaptive_bins=n_adaptive_bins, target_n=target_n, min_n=min_n, max_n=max_n)
+        output = bin_by_method(df, method, sfms=sfms, n_adaptive_bins=n_adaptive_bins, target_n=target_n, min_n=min_n, max_n=max_n, n_mass_bins=n_mass_bins)
         if 'vor' in method:
             df, bin_summary, centers_scaled, scaling = output
         else:
             df, bin_list = output
 
     # ------------plotting stacked gradients on SFMS--------------------------
-    fig = plot_SFMS_bins(df, methods, args, centers_scaled=centers_scaled, scaling=scaling, bin_summary=bin_summary, sfms=sfms, n_mass_bins=n_mass_bins)
+    fig = plot_SFMS_bins(df, methods, args, centers_scaled=centers_scaled, scaling=scaling, bin_summary=bin_summary, sfms=sfms)
     save_fig(fig, fig_dir, f'SFMS_binned.png', args) # saving the figure
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

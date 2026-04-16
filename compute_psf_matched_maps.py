@@ -6,7 +6,7 @@
     Example: run compute_psf_matched_maps.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28
              run compute_psf_matched_maps.py --system ssd --field Par28 --id 2822 --clobber
              run compute_psf_matched_maps.py --system ssd --field Par28 --do_all_obj --clobber
-             run compute_psf_matched_maps.py --system ssd --do_all_fields --do_all_obj --clobber --write_file
+             run compute_psf_matched_maps.py --system ssd --do_all_fields --do_all_obj --clobber
 '''
 
 from header import *
@@ -161,7 +161,9 @@ if __name__ == "__main__":
                 print(f'\t\tCould not find {full_fits_file} or {maps_fits_file}, so skipping it.')
                 continue
 
-            outfilename = Path(str(full_filename.parent).replace('maps', 'maps_psf_matched').replace('full', 'full_psf_matched')) / full_filename.name
+            outfiledir = Path(str(full_filename.parent).replace('maps', 'maps_psf_matched').replace('full', 'full_psf_matched'))
+            outfiledir.mkdir(parents=True, exist_ok=True)
+            outfilename = outfiledir / full_filename.name
             if os.path.exists(outfilename) and not args.clobber:
                 print(f'\t\tResult file for {args.field}, {args.id} already exists as {outfilename}, so skipping this object.')
                 continue

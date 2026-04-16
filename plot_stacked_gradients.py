@@ -9,11 +9,12 @@
              run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_minor_major_profile
              run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --fold_maps
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance --overplot_literature --overplot_passage --fold_maps
+             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --overplot_passage --fold_maps
 '''
 
 from header import *
 from util import *
-from make_sfms_bins import log_mass_bins, log_sfr_bins, read_passage_sed_catalog, bin_SFMS_linear, bin_SFMS_adaptive, read_passage_sed_catalog, bin_SFMS_distance, get_sfms_func, n_adaptive_bins, sfms
+from make_sfms_bins import log_mass_bins, log_sfr_bins, read_passage_sed_catalog, bin_SFMS_linear, bin_SFMS_adaptive, read_passage_sed_catalog, bin_SFMS_distance, bin_SFMS_distance_mass, get_sfms_func, n_adaptive_bins, sfms, n_mass_bins
 from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
 
 start_time = datetime.now()
@@ -26,7 +27,7 @@ def read_stacked_df(filename):
     '''
     df = Table.read(filename).to_pandas()
     print(f'Reading in {filename}..')
-    for thiscol in ['log_mass_bin', 'log_sfr_bin', 'bin_intervals']:
+    for thiscol in ['log_mass_bin', 'log_sfr_bin', 'delta_sfms_bin']:
         if thiscol in df:
             df[thiscol] = df[thiscol].str.decode('utf-8')
             df[thiscol] = pd.IntervalIndex.from_tuples(df[thiscol].apply(lambda x: pd.to_numeric(x.strip('()[]').split(', '))).map(tuple), closed='right')
@@ -309,7 +310,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='', cmap='virid
    
     # -----------defining vertices, for annotating and color-coding the bins-------------
     for index, row in df.iterrows():
-        interval = row[f'bin_intervals{method_text}']
+        interval = row['delta_sfms_bin']
         m_grid = np.linspace(row['log_mass_min'], row['log_mass_max'], 50)
         sfms_line = sfms_func(m_grid)
         
@@ -363,7 +364,7 @@ def plot_SFMS_heatmap_patches(df, args, quant='logOH'):
     fig.subplots_adjust(left=0.07, right=0.97, top=0.95, bottom=0.13, wspace=0.2, hspace=0.)
     
     # ---------plot the heatmaps-------------------
-    if args.bin_by_distance:
+    if args.bin_by_distance_mass or args.bin_by_distance:
         if args.plot_minor_major_profile:
             axes[0] = make_heatmap_distance(axes[0], df, sfms, f'minor_{quant}_grad', args, cmap='coolwarm', clabel=r'Minor $\nabla$Z$_r$ [dex/R$_e$]', cmin=-2.5, cmax=2.5, ncbins=4) # plot integrated metallicity heatmap
             axes[1] = make_heatmap_distance(axes[1], df, sfms, f'major_{quant}_grad', args, cmap='coolwarm', clabel=r'Major $\nabla$Z$_r$ [dex/R$_e$]', cmin=-2.5, cmax=2.5, ncbins=4) # plot metallicity gradient heatmap
@@ -409,6 +410,44 @@ def plot_SFMS_heatmap_patches(df, args, quant='logOH'):
     return fig
 
 # --------------------------------------------------------------------------------------------------------------------
+def plot_delta_SFMS_vs_quant(df, args, quant_x='delta_sfms_median', quant_y='logOH'):
+    '''
+    Plots various forms of of stacked integrated metallicities and metallicity gradients vs the distance from SFMS of each stack
+    Returns figure handle
+    '''
+    quant_y_list = [f'{quant_y}_int', f'radial_{quant_y}_grad', f'minor_{quant_y}_grad', f'major_{quant_y}_grad']
+    label_dict = {f'minor_{quant_y}_grad': r'Minor $\nabla$Z$_r$ [dex/R$_e$]',\
+                  f'major_{quant_y}_grad': r'Major $\nabla$Z$_r$ [dex/R$_e$]',\
+                  f'radial_{quant_y}_grad': r'$\nabla$Z$_r$ [dex/R$_e$]',\
+                  f'{quant_y}_int': r'$\log$(O/H) + 12',\
+                  'delta_sfms_median': r'<$\delta$ SFMS> [dex]',\
+                  }
+    lim_dict = {f'minor_{quant_y}_grad': [-2.5, 2.5],\
+                  f'major_{quant_y}_grad': [-2.5, 2.5],\
+                  f'radial_{quant_y}_grad': [-2.5, 2.5],\
+                  f'{quant_y}_int': [7., 9.],\
+                  'delta_sfms_median': [-2, 2],\
+                  }    
+    # -----------------setup the figure---------------
+    fig, axes = plt.subplots(len(quant_y_list), 1, figsize=(4, 7), sharex=True)
+    fig.subplots_adjust(left=0.2, right=0.98, top=0.95, bottom=0.1, wspace=0., hspace=0.)
+    grad_color, int_color = 'cornflowerblue', 'salmon'
+    args.fontsize /= 1.2
+
+    # ---------plot the correlations-------------------
+    for index, this_quant in enumerate(quant_y_list):
+        color = grad_color if 'grad' in this_quant else int_color
+        axes[index].scatter(df[quant_x], df[this_quant], s=50, c=color, lw=1, edgecolors='k')
+        if f'{this_quant}_u' in df:
+            axes[index].errorbar(df[quant_x], df[this_quant], yerr=df[f'{this_quant}_u'], c='grey', lw=0.7, fmt='none', alpha=0.9)
+
+        axes[index] = annotate_axes(axes[index], label_dict[quant_x], label_dict[this_quant], args=args, xlim=lim_dict[quant_x], ylim=lim_dict[this_quant], hide_yaxis=False, hide_xaxis=index < len(quant_y_list) - 1)
+
+    plt.show(block=False)
+
+    return fig
+
+# --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
@@ -418,32 +457,56 @@ if __name__ == "__main__":
     deproject_text = '_nodeproject' if args.skip_deproject else ''
     rescale_text = '_norescale' if args.skip_re_scaling else ''
     C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
-    if args.bin_by_distance: binby_text = f'_binby_distance{n_adaptive_bins}'
-    elif args.adaptive_bins: binby_text = f'_bin_adaptive_max{args.max_gal_per_bin}'
-    else: binby_text = '_bin_linear'
-
-    # ---------determining list of fields----------------
-    if args.do_all_fields:
-        passage_catalog_filename = args.output_dir / 'catalogs' / 'passagepipe_v0.5_SED_fits_cosmosweb_v1.0.0-alpha.fits'
-        df = read_passage_sed_catalog(passage_catalog_filename)
-        output_dir = args.output_dir / 'stacking'
+    
+    # --------------determining output filename--------------------
+    if args.adaptive_bins:
+        if args.bin_by_distance:
+            binby_text = f'_binby_distance{n_adaptive_bins}'
+        elif args.bin_by_distance_mass:
+            binby_text = f'_binby_distance{n_adaptive_bins}_mass{n_mass_bins}'
+        else:
+            binby_text = f'_bin_adaptive_max{args.max_gal_per_bin}'
     else:
-        product_dir = args.input_dir / args.field / 'Products'
-        df = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
-        df['field'] = args.field
-        df = get_passage_masses_from_cosmos(df, args, id_col='id') # crossmatch with cosmos-web to get stellar mass and SFR
+        if args.bin_by_distance:
+            binby_text = f'_binby_distance_delta_bin{0.2}'
+        else:
+            binby_text = '_bin_linear'
+
+    # ---------reading in the master SED catalog----------------
+    passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
+    df = read_passage_sed_catalog(passage_catalog_filename)
+
+    if args.do_all_fields:
+        re_catalog_filename = args.output_dir / f'catalogs/all_fields_re_list.fits'
+        output_dir = args.output_dir / 'stacking'
+    # ---------curtailing to single-field----------------
+    else:
+        # product_dir = args.input_dir / args.field / 'Products'
+        # df = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
+        # df['field'] = args.field
+        # df = get_passage_masses_from_cosmos(df, args, id_col='id') # crossmatch with cosmos-web to get stellar mass and SFR
+        df = df[df['field'] == args.field]        
+        re_catalog_filename = args.output_dir / f'catalogs/{args.field}_re_list.fits'
         output_dir = args.output_dir / args.field / 'stacking'
 
     # -------------binning the mass-SFR plane-------------
     if args.adaptive_bins:
-        if args.bin_by_distance: df, bin_list = bin_SFMS_distance(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
-        else: df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
+        if args.bin_by_distance:
+            df, bin_list = bin_SFMS_distance(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
+        elif args.bin_by_distance_mass:
+            df, bin_list = bin_SFMS_distance_mass(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms, n_mass_bins=n_mass_bins)
+        else:
+            df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
     else:
-        if args.bin_by_distance: df, bin_list = bin_SFMS_distance(df, method_text='', delta_bin=0.2, sfms=sfms)
-        df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
-
-    if args.bin_by_distance: bin_list = np.sort(bin_list)
-    else: bin_list.sort(key=lambda x: (x[0].left, x[1].left))
+        if args.bin_by_distance:
+            df, bin_list = bin_SFMS_distance(df, method_text='', delta_bin=0.2, sfms=sfms)
+        else:
+            df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
+    
+    if args.bin_by_distance or args.bin_by_distance_mass:
+        bin_list = np.sort(bin_list)
+    else:
+        bin_list.sort(key=lambda x: (x[0].left, x[1].left))
 
     # ----------getting directory structure----------
     if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
@@ -457,14 +520,20 @@ if __name__ == "__main__":
 
     # -------------reading in stacked gradient dataframe-----------------------
     df_grad = read_stacked_df(grad_filename)
-    if args.bin_by_distance:
-        df = df.groupby(['bin_intervals']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median')).reset_index()
-        df_grad = pd.merge(df_grad, df, on=['bin_intervals'], how='left')
+    df = df.rename(columns={'bin_intervals': 'delta_sfms_bin', 'mass_intervals':'log_mass_bin'})
+    if args.bin_by_distance_mass:
+        df = df.groupby(['delta_sfms_bin', 'log_mass_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()
+        df_grad = pd.merge(df_grad, df, on=['delta_sfms_bin', 'log_mass_bin'], how='left')
+    elif args.bin_by_distance:
+        df = df.groupby(['delta_sfms_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()
+        df_grad = pd.merge(df_grad, df, on=['delta_sfms_bin'], how='left')
     
     # ------------plotting stacked gradients on SFMS--------------------------
     #fig = plot_SFMS_heatmap_sns(df_grad, args)
-    fig = plot_SFMS_heatmap_patches(df_grad, args)
-    save_fig(fig, fig_dir, f'stacked{adapt_text}{binby_text}{fold_text}_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}_SFMS_heatmap.png', args) # saving the figure
+    #fig = plot_SFMS_heatmap_patches(df_grad, args)
+    #save_fig(fig, fig_dir, f'stacked{adapt_text}{binby_text}{fold_text}_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}_SFMS_heatmap.png', args) # saving the figure
 
+    fig2 = plot_delta_SFMS_vs_quant(df_grad, args, quant_x='delta_sfms_median', quant_y='logOH')
+    save_fig(fig2, fig_dir, f'stacked{adapt_text}{binby_text}{fold_text}_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}_dSFMS_vs_grad.png', args) # saving the figure
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
