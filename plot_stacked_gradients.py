@@ -10,6 +10,7 @@
              run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --fold_maps
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance --overplot_literature --overplot_passage --fold_maps
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --overplot_passage --fold_maps
+             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --overplot_passage --fold_maps --plot_sfms_vs_grad
 '''
 
 from header import *
@@ -416,8 +417,8 @@ def plot_delta_SFMS_vs_quant(df, args, quant_x='delta_sfms_median', quant_y='log
     Returns figure handle
     '''
     quant_y_list = [f'{quant_y}_int', f'radial_{quant_y}_grad', f'minor_{quant_y}_grad', f'major_{quant_y}_grad']
-    label_dict = {f'minor_{quant_y}_grad': r'Minor $\nabla$Z$_r$ [dex/R$_e$]',\
-                  f'major_{quant_y}_grad': r'Major $\nabla$Z$_r$ [dex/R$_e$]',\
+    label_dict = {f'minor_{quant_y}_grad': 'Minor\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
+                  f'major_{quant_y}_grad': 'Major\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
                   f'radial_{quant_y}_grad': r'$\nabla$Z$_r$ [dex/R$_e$]',\
                   f'{quant_y}_int': r'$\log$(O/H) + 12',\
                   'delta_sfms_median': r'<$\delta$ SFMS> [dex]',\
@@ -425,14 +426,14 @@ def plot_delta_SFMS_vs_quant(df, args, quant_x='delta_sfms_median', quant_y='log
     lim_dict = {f'minor_{quant_y}_grad': [-2.5, 2.5],\
                   f'major_{quant_y}_grad': [-2.5, 2.5],\
                   f'radial_{quant_y}_grad': [-2.5, 2.5],\
-                  f'{quant_y}_int': [7., 9.],\
+                  f'{quant_y}_int': [6.8, 8.5],\
                   'delta_sfms_median': [-2, 2],\
                   }    
     # -----------------setup the figure---------------
-    fig, axes = plt.subplots(len(quant_y_list), 1, figsize=(4, 7), sharex=True)
+    fig, axes = plt.subplots(len(quant_y_list), 1, figsize=(5, 7), sharex=True)
     fig.subplots_adjust(left=0.2, right=0.98, top=0.95, bottom=0.1, wspace=0., hspace=0.)
     grad_color, int_color = 'cornflowerblue', 'salmon'
-    args.fontsize /= 1.2
+    args.fontsize /= 1.
 
     # ---------plot the correlations-------------------
     for index, this_quant in enumerate(quant_y_list):
@@ -529,11 +530,12 @@ if __name__ == "__main__":
         df_grad = pd.merge(df_grad, df, on=['delta_sfms_bin'], how='left')
     
     # ------------plotting stacked gradients on SFMS--------------------------
-    #fig = plot_SFMS_heatmap_sns(df_grad, args)
-    #fig = plot_SFMS_heatmap_patches(df_grad, args)
-    #save_fig(fig, fig_dir, f'stacked{adapt_text}{binby_text}{fold_text}_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}_SFMS_heatmap.png', args) # saving the figure
-
-    fig2 = plot_delta_SFMS_vs_quant(df_grad, args, quant_x='delta_sfms_median', quant_y='logOH')
-    save_fig(fig2, fig_dir, f'stacked{adapt_text}{binby_text}{fold_text}_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}_dSFMS_vs_grad.png', args) # saving the figure
+    if args.plot_sfms_vs_grad:
+        fig2 = plot_delta_SFMS_vs_quant(df_grad, args, quant_x='delta_sfms_median', quant_y='logOH')
+        save_fig(fig2, fig_dir, f'stacked{adapt_text}{binby_text}{fold_text}_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}_dSFMS_vs_grad.png', args) # saving the figure
+    else:
+        #fig = plot_SFMS_heatmap_sns(df_grad, args)
+        fig = plot_SFMS_heatmap_patches(df_grad, args)
+        save_fig(fig, fig_dir, f'stacked{adapt_text}{binby_text}{fold_text}_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}_SFMS_heatmap.png', args) # saving the figure
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
