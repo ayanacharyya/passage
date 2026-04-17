@@ -452,6 +452,7 @@ def plot_delta_SFMS_vs_quant(df, args, quant_x='delta_sfms_median', quant_y='log
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
+    if args.re_limit is None: args.re_limit = 2.
     args.fontfactor = 1.2
 
     # ------------reading and binning dataframe-------------
@@ -472,14 +473,16 @@ if __name__ == "__main__":
     if args.plot_sfms_vs_grad:
         fig2 = plot_delta_SFMS_vs_quant(df_grad, args, quant_x='delta_sfms_median', quant_y='logOH')
         save_fig(fig2, args.fig_dir, f'dSFMS_vs_grad{qualifiers}.png', args) # saving the figure
-    else:
+    
+    if args.plot_minor_major_profile:
         #fig = plot_SFMS_heatmap_sns(df_grad, args)
         fig = plot_SFMS_heatmap_patches(df_grad, args)
-        
-        if args.plot_minor_major_profile:
-            figname = f'SFMS_heatmap_minor_major_{qualifiers}.png'
-        else:
-            figname = f'SFMS_heatmap{qualifiers}.png'
+        figname = f'SFMS_heatmap_minor_major_{qualifiers}.png'
         save_fig(fig, args.fig_dir, figname, args) # saving the figure
+    
+    args.plot_minor_major_profile = False
+    fig = plot_SFMS_heatmap_patches(df_grad, args)
+    figname = f'SFMS_heatmap{qualifiers}.png'
+    save_fig(fig, args.fig_dir, figname, args) # saving the figure
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

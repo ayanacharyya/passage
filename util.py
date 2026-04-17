@@ -263,6 +263,7 @@ def parse_args():
     # ---- args added for stack_emission_maps.py ------------
     parser.add_argument('--debug_align', dest='debug_align', action='store_true', default=False, help='Debug the alignment, deprojection, rotation of emission line maps? Default is no.')
     parser.add_argument('--npix_side', metavar='npix_side', type=int, action='store', default=20, help='Size of the stacked emission maps in pixels? Default is 20')
+    parser.add_argument('--bin_by_sfh', dest='bin_by_sfh', action='store_true', default=False, help='Compute the stellar mass-SFR bins based on the SFH parameterisation? Default is no.')
     parser.add_argument('--bin_by_distance', dest='bin_by_distance', action='store_true', default=False, help='Compute the stellar mass-SFR bins based on the distance from the SFMS? Default is no.')
     parser.add_argument('--bin_by_distance_mass', dest='bin_by_distance_mass', action='store_true', default=False, help='Compute the stellar mass-SFR bins based on the distance from the SFMS as well as stellar mass? Default is no.')
     parser.add_argument('--adaptive_bins', dest='adaptive_bins', action='store_true', default=False, help='Compute the stellar mass-SFR bins in an adaptive way? Default is no.')

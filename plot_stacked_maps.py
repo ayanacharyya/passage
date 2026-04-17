@@ -962,13 +962,25 @@ if __name__ == "__main__":
         # -------------save fit results to dataframe-----------------------
         if args.plot_radial_profiles and (args.plot_metallicity or args.plot_line_and_metallicity):
             if args.bin_by_distance_mass:
-                thisrow = [this_delta_sfms_bin, this_mass_bin, nobj, logOH_int.n, logOH_int.s, minor_linefit_odr[0].n, minor_linefit_odr[0].s, major_linefit_odr[0].n, major_linefit_odr[0].s, radial_linefit_odr[0].n, radial_linefit_odr[0].s]
+                thisrow = {'delta_sfms_bin':this_delta_sfms_bin, 'log_mass_bin':this_mass_bin}
             elif args.bin_by_distance:
-                thisrow = [this_bin, nobj, logOH_int.n, logOH_int.s, minor_linefit_odr[0].n, minor_linefit_odr[0].s, major_linefit_odr[0].n, major_linefit_odr[0].s, radial_linefit_odr[0].n, radial_linefit_odr[0].s]
+                thisrow = {'delta_sfms_bin':this_bin} 
             else:
-                thisrow = [this_bin[0], this_bin[1], nobj, logOH_int.n, logOH_int.s, minor_linefit_odr[0].n, minor_linefit_odr[0].s, major_linefit_odr[0].n, major_linefit_odr[0].s, radial_linefit_odr[0].n, radial_linefit_odr[0].s]
+                thisrow = {'log_mass_bin':this_bin[0], 'log_sfr_bin':this_bin[1]}
+            
+            thisrow.update({'nobj':nobj, \
+                            'logOH_int':logOH_int.n, \
+                            'logOH_int_u':logOH_int.s, \
+                            'minor_logOH_grad':minor_linefit_odr[0].n, \
+                            'minor_logOH_grad_u':minor_linefit_odr[0].s, \
+                            'major_logOH_grad': major_linefit_odr[0].n, \
+                            'major_logOH_grad_u': major_linefit_odr[0].s, \
+                            'radial_logOH_grad': radial_linefit_odr[0].n, \
+                            'radial_logOH_grad_u': radial_linefit_odr[0].s, \
+                            })
             df_grad.loc[len(df_grad)] = thisrow
 
+        if len(bin_list) > 5: plt.close('all')
         print(f'\nCompleted bin {bin_text} in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
     
     # --------------------save master dataframe-----------------------------------

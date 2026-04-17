@@ -462,7 +462,7 @@ def bin_SFMS_distance(df, method_text = '_distance', delta_bin=0.2, n_adaptive_b
     return df, bin_list
 
 # --------------------------------------------------------------------------------------------------------------------
-def bin_SFMS_distance_mass(df, method_text = '_distance', delta_bin=0.2, n_adaptive_bins=None, n_mass_bins=4, sfms='Popesso23'):
+def bin_SFMS_distance_mass(df, method_text = '_distance_mass', delta_bin=0.2, n_adaptive_bins=None, n_mass_bins=4, sfms='Popesso23'):
     '''
     Bins in SFMS plane based on the distance from a given SFMS relation in bins of width delta_bin
     Returns dataframe with additional columns containing '_distance', and list of bin edges
@@ -488,7 +488,34 @@ def bin_SFMS_distance_mass(df, method_text = '_distance', delta_bin=0.2, n_adapt
     return df, bin_list
 
 # --------------------------------------------------------------------------------------------------------------------
-def bin_by_method(df, method, sfms='Popesso23', n_adaptive_bins=20, target_n=30, min_n=10, max_n=50, n_mass_bins=4):
+def bin_SFMS_sfh(df, method_text = '_sfh', delta_sfh=0.2, max_n=None, min_n=None):
+    '''
+    Bins in SFMS plane in an adaptive (or, optionally, regular) way based on a SFH parameter
+    Returns dataframe with additional columns containing method_text, and list of unique bins
+    '''
+    if max_n is not None: final_bins = get_adaptive_bins_nmax(df, (log_mass_bins[0],log_mass_bins[-1]), (log_sfr_bins[0],log_sfr_bins[-1]), max_n=max_n)
+    elif min_n is not None: final_bins = get_adaptive_bins_nmin(df, (log_mass_bins[0],log_mass_bins[-1]), (log_sfr_bins[0],log_sfr_bins[-1]), min_n=min_n)
+    else: final_bins = [] # something with dleta_sfh
+
+    df[f'bin_id{method_text}'] = -1
+    df[f'mass_interval{method_text}'] = None
+    df[f'sfr_interval{method_text}'] = None
+    
+    for i, b in enumerate(final_bins):
+        mask = (df['log_mass'] >= b['m_min']) & (df['log_mass'] < b['m_max']) & (df['log_sfr'] >= b['s_min']) & (df['log_sfr'] < b['s_max'])
+        df.loc[mask, f'bin_id{method_text}'] = i
+        
+        df.loc[mask, f'mass_interval{method_text}'] = pd.Interval(left=b['m_min'], right=b['m_max'], closed='left')
+        df.loc[mask, f'sfr_interval{method_text}'] = pd.Interval(left=b['s_min'], right=b['s_max'], closed='left')
+        df[f'bin_intervals{method_text}'] = list(zip(df[f'mass_interval{method_text}'], df[f'sfr_interval{method_text}']))
+
+    df = df[df[f'bin_id{method_text}'] != -1].copy()
+    bin_list = list(pd.unique(df[f'bin_intervals{method_text}']))
+
+    return df, bin_list
+
+# --------------------------------------------------------------------------------------------------------------------
+def bin_by_method(df, method, sfms='Popesso23', n_adaptive_bins=20, target_n=30, min_n=10, max_n=50, n_mass_bins=4, delta_sfms=0.4, delta_sfh=0.4):
     '''
     Decides which function to call for the binning in SFMS plane, based on the input method
     Returns dataframe with additional columns containing '_{method}', and list of unique bins
@@ -505,6 +532,9 @@ def bin_by_method(df, method, sfms='Popesso23', n_adaptive_bins=20, target_n=30,
     
     elif method == 'distance_mass': output = bin_SFMS_distance_mass(df, method_text=f'_{method}', n_adaptive_bins=n_adaptive_bins, sfms=sfms, n_mass_bins=n_mass_bins)
     #elif method == 'distance_mass': output = bin_SFMS_distance_mass(df, method_text=f'_{method}', delta_bin=delta_sfms, sfms=sfms, n_mass_bins=n_mass_bins)
+
+    elif method == 'sfh': output = bin_SFMS_sfh(df, method_text=f'_{method}', max_n=max_n)
+    #elif method == 'sfh': output = bin_SFMS_sfh(df, method_text=f'_{method}', delta_sfh=delta_sfh)
 
     return output
 
@@ -572,6 +602,9 @@ def get_binned_df(args, skip_binning=False):
                 df, bin_summary, centers_scaled, scaling = bin_SFMS_voronoi(df, method_text='', target_n=target_n)
                 bin_list = [bin_summary, centers_scaled, scaling]
                 args.binby_text = f'adap_binby_voronoi_ngal_{target_n}'
+            elif args.bin_by_sfh:
+                df, bin_list = bin_SFMS_sfh(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
+                args.binby_text = f'adap_binby_sfh_maxgal_{args.max_gal_per_bin}'
             elif args.bin_by_distance:
                 df, bin_list = bin_SFMS_distance(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
                 args.binby_text = f'adap_binby_distance_{n_adaptive_bins}_sfms_{sfms}'
@@ -582,7 +615,10 @@ def get_binned_df(args, skip_binning=False):
                 df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
                 args.binby_text = f'adap_binby_mass_sfr_maxgal_{args.max_gal_per_bin}'
         else:
-            if args.bin_by_distance:
+            if args.bin_by_sfh:
+                df, bin_list = bin_SFMS_sfh(df, method_text='', delta_sfh=delta_sfh) # binning the dataframe in an adaptive way
+                args.binby_text = f'lin_binby_sfh_delta_sfh_{delta_sfh}'
+            elif args.bin_by_distance:
                 df, bin_list = bin_SFMS_distance(df, method_text='', delta_bin=delta_sfms, sfms=sfms)
                 args.binby_text = f'lin_binby_distance_delta_bin_{delta_sfms}_sfms_{sfms}'
             elif args.bin_by_distance_mass:
@@ -668,6 +704,7 @@ methods = ['linear', \
             'voronoi', \
             'distance', \
             'distance_mass', \
+            'sfh', \
             ]
 
 min_n = 10 # for adaptive_nmin binning
@@ -677,6 +714,7 @@ n_adaptive_bins = 8 # for distance (from SFMS) binning
 n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
 delta_sfms = 0.4 # delta in distance from SFMS in which to bin in the distance-from-SFMS method, unless binning adaptively
 sfms =  'Popesso23' # from 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
+delta_sfh = 0.4 # delta in SFH parameter () in which to bin, unless binning adaptively
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -690,7 +728,7 @@ if __name__ == "__main__":
     # -----------making bins in various ways---------------------
     bin_summary, centers_scaled, scaling = None, None, None
     for method in methods:
-        output = bin_by_method(df, method, sfms=sfms, n_adaptive_bins=n_adaptive_bins, target_n=target_n, min_n=min_n, max_n=max_n, n_mass_bins=n_mass_bins)
+        output = bin_by_method(df, method, sfms=sfms, n_adaptive_bins=n_adaptive_bins, target_n=target_n, min_n=min_n, max_n=max_n, n_mass_bins=n_mass_bins, delta_sfms=delta_sfms, delta_sfh=delta_sfh)
         if 'vor' in method:
             df, bin_summary, centers_scaled, scaling = output
         else:
