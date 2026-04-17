@@ -18,7 +18,7 @@ from header import *
 from util import *
 setup_plot_style()
 from make_diagnostic_maps import trim_image, get_dereddened_flux, myimshow, get_offsets_from_center, get_cutout
-from make_sfms_bins import bin_SFMS_linear, bin_SFMS_adaptive, read_passage_sed_catalog, bin_SFMS_distance, bin_SFMS_distance_mass, n_adaptive_bins, sfms, n_mass_bins
+from make_sfms_bins import get_binned_df
 
 start_time = datetime.now()
 
@@ -391,85 +391,17 @@ if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
     if args.re_limit is None: args.re_limit = 2.
-    # args.line_list = ['OIII', 'OII', 'NeIII-3867', 'Hb', 'OIII-4363', 'Ha', 'SII']
-    args.line_list = ['OIII', 'OII', 'Hb', 'Ha', 'SII']
-    n_lines = len(args.line_list) + 1 # one additional column for the direct image
     args.ids_in_thisbin = args.id
     args.fontfactor = 1.5
-
-    deproject_text = '_nodeproject' if args.skip_deproject else ''
-    rescale_text = '_norescale' if args.skip_re_scaling else ''
 
     # -----------define colorbar properties-----------
     direct_image_cmin, direct_image_cmax, direct_image_cmap = None, None, 'Greys_r'
     cmin, cmax, cmap = -3.4, -1.4, 'cividis'
     
-    # ---------reading in the master SED catalog----------------
-    passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
-    df = read_passage_sed_catalog(passage_catalog_filename)
+    # ------------reading and binning dataframe-------------
+    df, bin_list, args = get_binned_df(args)
+    n_lines = len(args.line_list) + 1 # one additional column for the direct image
 
-    if args.do_all_fields:
-        re_catalog_filename = args.output_dir / f'catalogs/all_fields_re_list.fits'
-        output_dir = args.output_dir / 'stacking'
-    # ---------curtailing to single-field----------------
-    else:
-        df = df[df['field'] == args.field]        
-        re_catalog_filename = args.output_dir / f'catalogs/{args.field}_re_list.fits'
-        output_dir = args.output_dir / args.field / 'stacking'
-
-    # -------------binning the mass-SFR plane-------------
-    if args.adaptive_bins:
-        if args.bin_by_distance:
-            df, bin_list = bin_SFMS_distance(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
-        elif args.bin_by_distance_mass:
-            df, bin_list = bin_SFMS_distance_mass(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms, n_mass_bins=n_mass_bins)
-        else:
-            df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
-    else:
-        if args.bin_by_distance:
-            df, bin_list = bin_SFMS_distance(df, method_text='', delta_bin=0.2, sfms=sfms)
-        else:
-            df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
-    
-    if args.bin_by_distance or args.bin_by_distance_mass:
-        bin_list = np.sort(bin_list)
-    else:
-        bin_list.sort(key=lambda x: (x[0].left, x[1].left))
-
-    # ---------merge with effective radius catalog--------------------
-    if os.path.exists(re_catalog_filename):
-        df_re = Table.read(re_catalog_filename).to_pandas()
-        if 'redshift' in df_re: df_re.drop(columns=['redshift'], axis=1, inplace=True)
-        df_re['id'] = df_re['id'].astype(int)
-        df_re['field'] = df_re['field'].astype(str)
-        df_re = df_re[df_re['re_kpc'] > 0]
-        df = pd.merge(df, df_re, on=['field', 'id'], how='inner')
-    else:
-        raise FileNotFoundError(f're catalog not found at {re_catalog_filename}; please create this file first by running compute_re.py. Exiting.')
-
-    # -------merge with all photcats by looping over fields--------------
-    print(f'Combining all photcats to one file before merging to df, might take a few seconds..')
-    fields = pd.unique(df['field'])
-    df_master_photcat = pd.DataFrame()
-    cols_to_extract = ['field', 'id', 'a_image', 'b_image', 'theta_image']
-    for this_field in fields:
-        df_phot_this_field = GTable.read(args.input_dir / this_field / 'Products' / f'{this_field}_photcat.fits').to_pandas()
-        df_phot_this_field['field'] = this_field
-        df_master_photcat = pd.concat([df_master_photcat, df_phot_this_field[cols_to_extract]])
-    
-    df = pd.merge(df, df_master_photcat, on=['field', 'id'], how='inner')
-
-    # ------determining field-specific paths, etc-----------
-    if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
-    output_dir.mkdir(parents=True, exist_ok=True)
-    fig_dir = output_dir / f'plots{deproject_text}{rescale_text}'
-    Path(fig_dir / 'binmembers').mkdir(parents=True, exist_ok=True)
-    fits_dir = output_dir / f'maps{deproject_text}{rescale_text}'
-    fits_dir.mkdir(parents=True, exist_ok=True)
-
-    # --------------curtailiug bins for debugging-------------------
-    if args.debug_bin: bin_list = bin_list[1:2]
-    #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
     if args.id is not None: df = df[df['id'].isin(args.id)]
     
     # ------------looping over each bin-----------------------
@@ -488,7 +420,7 @@ if __name__ == "__main__":
             bin_text = f'logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}'
         print(f'\tStarting bin ({index2 + 1}/{len(bin_list)}) {bin_text}..', end=' ')
 
-        output_filename = fits_dir / f'stacked_maps{deproject_text}{rescale_text}_{bin_text}.fits'
+        output_filename = args.fits_dir / f'stacked_maps{args.deproject_text}{args.rescale_text}_{bin_text}.fits'
         if output_filename.exists() and not args.clobber:
             print(f'Reading existing fits file {output_filename}. Re-run with --clobber to rewrite.')
             # -------reading previously saved stacked fits file------------
@@ -535,8 +467,8 @@ if __name__ == "__main__":
 
                 # --------setup PDF for mammoth figures for all emission line map plots----------
                 if not args.debug_align:
-                    fullplot_filename_orig = fig_dir / f'binmembers/binmembers_orig_maps{deproject_text}{rescale_text}_{bin_text}.pdf'
-                    fullplot_filename_flux = fig_dir / f'binmembers/binmembers_flux_maps{deproject_text}{rescale_text}_{bin_text}.pdf'
+                    fullplot_filename_orig = args.fig_dir / f'binmembers/binmembers_orig_maps{args.deproject_text}{args.rescale_text}_{bin_text}.pdf'
+                    fullplot_filename_flux = args.fig_dir / f'binmembers/binmembers_flux_maps{args.deproject_text}{args.rescale_text}_{bin_text}.pdf'
                     fullplot_filename_err = Path(str(fullplot_filename_flux).replace('flux', 'err'))
                     
                     pdf_orig = PdfPages(fullplot_filename_orig)
@@ -710,7 +642,7 @@ if __name__ == "__main__":
                                     axes[3] = myimshow(rescaled_line_map, axes[3], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Rescaled', cmap=cmap, col='w' if args.fortalk else 'k')
                                     axes[4] = myimshow(recentered_line_map, axes[4], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=cmap, col='w' if args.fortalk else 'k')
 
-                                    figname = fig_dir / f'debug_align_{args.id}{deproject_text}{rescale_text}.png'
+                                    figname = fig_dir / f'debug_align_{args.id}{args.deproject_text}{args.rescale_text}.png'
                                     fig_debug.savefig(figname, transparent=args.fortalk)
                                     print(f'\nSaved figure as {figname}')
 

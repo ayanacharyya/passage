@@ -369,7 +369,7 @@ def bin_SFMS_adaptive(df, method_text = '_adaptive', max_n=None, min_n=None):
         df[f'bin_intervals{method_text}'] = list(zip(df[f'mass_interval{method_text}'], df[f'sfr_interval{method_text}']))
 
     df = df[df[f'bin_id{method_text}'] != -1].copy()
-    bin_list = pd.unique(df[f'bin_intervals{method_text}'])
+    bin_list = list(pd.unique(df[f'bin_intervals{method_text}']))
 
     return df, bin_list
 
@@ -477,11 +477,10 @@ def bin_SFMS_distance_mass(df, method_text = '_distance', delta_bin=0.2, n_adapt
         max_dist = np.ceil(df['delta_sfms'].abs().max() / delta_bin) * delta_bin
         bin_edges = np.arange(-max_dist, max_dist + delta_bin, delta_bin)
         df[f'bin_intervals{method_text}'] = pd.cut(df['delta_sfms'], bins=bin_edges)
+        df[f'mass_intervals{method_text}'] = pd.cut(df['log_mass'], bins=n_mass_bins) # make n_mass_bins of equal widths
     else: # make n_adaptive_bins of non-uniform width
         df[f'bin_intervals{method_text}'], bin_edges = pd.qcut(df['delta_sfms'], q=n_adaptive_bins, retbins=True)
-
-    df[f'mass_intervals{method_text}'] = df.groupby(f'bin_intervals{method_text}')['log_mass'].apply(lambda x: pd.qcut(x, q=n_mass_bins)).reset_index(level=0, drop=True) # make n_mass_bins of widths decided to have roughly equal galaxies in each bin
-    #df[f'mass_intervals{method_text}'] = pd.cut(df['log_mass'], bins=n_mass_bins) # make n_mass_bins of equal widths
+        df[f'mass_intervals{method_text}'] = df.groupby(f'bin_intervals{method_text}')['log_mass'].apply(lambda x: pd.qcut(x, q=n_mass_bins)).reset_index(level=0, drop=True) # make n_mass_bins of widths decided to have roughly equal galaxies in each bin
     
     unique_bins_df = df[[f'bin_intervals{method_text}', f'mass_intervals{method_text}']].drop_duplicates().sort_values([f'bin_intervals{method_text}', f'mass_intervals{method_text}'])
     bin_list = list(unique_bins_df.to_records(index=False))
@@ -495,11 +494,17 @@ def bin_by_method(df, method, sfms='Popesso23', n_adaptive_bins=20, target_n=30,
     Returns dataframe with additional columns containing '_{method}', and list of unique bins
     '''
     if method == 'linear': output = bin_SFMS_linear(df, method_text=f'_{method}')
+    
     elif method == 'adaptive_nmax': output= bin_SFMS_adaptive(df, method_text=f'_{method}', max_n=max_n)
     elif method == 'adaptive_nmin': output = bin_SFMS_adaptive(df, method_text=f'_{method}', min_n=min_n)
+    
     elif 'vor' in method: output = bin_SFMS_voronoi(df, method_text=f'_{method}', target_n=target_n)
+    
     elif method == 'distance': output = bin_SFMS_distance(df, method_text=f'_{method}', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
+    #elif method == 'distance': output = bin_SFMS_distance(df, method_text=f'_{method}', delta_bin=delta_sfms, sfms=sfms)
+    
     elif method == 'distance_mass': output = bin_SFMS_distance_mass(df, method_text=f'_{method}', n_adaptive_bins=n_adaptive_bins, sfms=sfms, n_mass_bins=n_mass_bins)
+    #elif method == 'distance_mass': output = bin_SFMS_distance_mass(df, method_text=f'_{method}', delta_bin=delta_sfms, sfms=sfms, n_mass_bins=n_mass_bins)
 
     return output
 
@@ -527,6 +532,130 @@ def read_passage_sed_catalog(filename, use_old=True):
 
     return df
 
+# --------------------------------------------------------------------------------------------------------------------
+def get_binned_df(args, skip_binning=False):
+    '''
+    Read in the full SED dataframe and curtail and bin it as needed to produce the binned dataframe
+    Returns binned pandas dataframe, bin_list, args (with added keywords)
+    '''
+    # ------------add new keywords to args---------------
+    # args.line_list = ['OIII', 'OII', 'NeIII-3867', 'Hb', 'OIII-4363', 'Ha', 'SII']
+    args.line_list = ['OIII', 'OII', 'Hb', 'Ha', 'SII']
+
+    args.deproject_text = '_nodeproject' if args.skip_deproject else ''
+    args.rescale_text = '_norescale' if args.skip_re_scaling else ''
+    args.C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
+    args.fold_text = '_folded' if args.fold_maps else ''
+
+    # ---------reading in the master SED catalog----------------
+    passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
+    df = read_passage_sed_catalog(passage_catalog_filename)
+
+    if args.do_all_fields:
+        re_catalog_filename = args.output_dir / f'catalogs/all_fields_re_list.fits'
+        root_dir = args.output_dir
+    # ---------curtailing to single-field----------------
+    else:
+        df = df[df['field'] == args.field]        
+        re_catalog_filename = args.output_dir / f'catalogs/{args.field}_re_list.fits'
+        root_dir = args.output_dir / args.field
+
+    # --------------returning unbinned dataframe and no bin_list if skip_binning=True--------------
+    if skip_binning:
+        bin_list = None        
+        args.fig_dir = root_dir / f'plots'
+        args.fig_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        # -------------binning the mass-SFR plane-------------
+        if args.adaptive_bins:
+            if args.voronoi_bins:
+                df, bin_summary, centers_scaled, scaling = bin_SFMS_voronoi(df, method_text='', target_n=target_n)
+                bin_list = [bin_summary, centers_scaled, scaling]
+                args.binby_text = f'adap_binby_voronoi_ngal_{target_n}'
+            elif args.bin_by_distance:
+                df, bin_list = bin_SFMS_distance(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
+                args.binby_text = f'adap_binby_distance_{n_adaptive_bins}_sfms_{sfms}'
+            elif args.bin_by_distance_mass:
+                df, bin_list = bin_SFMS_distance_mass(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms, n_mass_bins=n_mass_bins)
+                args.binby_text = f'adap_binby_distance_{n_adaptive_bins}_sfms_{sfms}_mass_{n_mass_bins}'
+            else:
+                df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
+                args.binby_text = f'adap_binby_mass_sfr_maxgal_{args.max_gal_per_bin}'
+        else:
+            if args.bin_by_distance:
+                df, bin_list = bin_SFMS_distance(df, method_text='', delta_bin=delta_sfms, sfms=sfms)
+                args.binby_text = f'lin_binby_distance_delta_bin_{delta_sfms}_sfms_{sfms}'
+            elif args.bin_by_distance_mass:
+                df, bin_list = bin_SFMS_distance_mass(df, method_text='', delta_bin=delta_sfms, sfms=sfms, n_mass_bins=n_mass_bins)
+                args.binby_text = f'lin_binby_distance_delta_bin_{delta_sfms}_sfms_{sfms}_mass_{n_mass_bins}'
+            else:
+                df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
+                args.binby_text = f'lin_binby_mass_sfr_delta_mass_{delta_log_mass}_delta_sfr_{delta_log_sfr}'
+
+        if args.bin_by_distance or args.bin_by_distance_mass:
+            bin_list = np.sort(bin_list)
+        else:
+            bin_list.sort(key=lambda x: (x[0].left, x[1].left))
+
+        # ------determining field-specific paths, etc-----------
+        output_dir = root_dir / f'{args.binby_text}'
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        args.fig_dir = output_dir / f'plots{args.deproject_text}{args.rescale_text}'
+        Path(args.fig_dir / 'binmembers').mkdir(parents=True, exist_ok=True)
+        
+        args.fits_dir = output_dir / f'maps{args.deproject_text}{args.rescale_text}'
+        args.fits_dir.mkdir(parents=True, exist_ok=True)
+
+        args.grad_filename = args.fits_dir / f'stacked{args.binby_text}{args.fold_text}_fits_allbins_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}.fits'
+
+        # ---------merge with effective radius catalog--------------------
+        if os.path.exists(re_catalog_filename):
+            df_re = Table.read(re_catalog_filename).to_pandas()
+            if 'redshift' in df_re: df_re.drop(columns=['redshift'], axis=1, inplace=True)
+            df_re['id'] = df_re['id'].astype(int)
+            df_re['field'] = df_re['field'].astype(str)
+            df_re = df_re[df_re['re_kpc'] > 0]
+            df = pd.merge(df, df_re, on=['field', 'id'], how='inner')
+        else:
+            raise FileNotFoundError(f're catalog not found at {re_catalog_filename}; please create this file first by running compute_re.py. Exiting.')
+
+        # -------merge with all photcats by looping over fields--------------
+        print(f'Combining all photcats to one file before merging to df, might take a few seconds..')
+        fields = pd.unique(df['field'])
+        df_master_photcat = pd.DataFrame()
+        cols_to_extract = ['field', 'id', 'a_image', 'b_image', 'theta_image']
+        for this_field in fields:
+            df_phot_this_field = GTable.read(args.input_dir / this_field / 'Products' / f'{this_field}_photcat.fits').to_pandas()
+            df_phot_this_field['field'] = this_field
+            df_master_photcat = pd.concat([df_master_photcat, df_phot_this_field[cols_to_extract]])
+        
+        df = pd.merge(df, df_master_photcat, on=['field', 'id'], how='inner')
+
+        # --------------curtailiug bins for debugging-------------------
+        if args.debug_bin: bin_list = bin_list[1:2]
+        #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
+
+        # ------determining field-specific paths, etc-----------
+        if args.skip_re_scaling:
+            args.pix_size = (2 * args.kpc_limit) / args.npix_side # kpc
+        else:
+            args.pix_size = (2 * args.re_limit) / args.npix_side # Re
+        
+        if args.fold_maps:
+            if args.skip_re_scaling:
+                args.extent = (0, args.re_limit, 0, args.re_limit)
+            else:
+                args.extent = (0, args.re_limit, 0, args.re_limit)
+        else: 
+            offset = args.pix_size / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
+            if args.skip_re_scaling:
+                args.extent = (-args.kpc_limit - offset, args.kpc_limit - offset, -args.kpc_limit - offset, args.kpc_limit - offset)
+            else:
+                args.extent = (-args.re_limit - offset, args.re_limit - offset, -args.re_limit - offset, args.re_limit - offset)
+
+    return df, bin_list, args
+
 # ----------declaring mass and SFR bins-------------------
 delta_log_mass, delta_log_sfr = 0.5, 0.5
 log_mass_bins = np.arange(6.5, 11.5 + delta_log_mass/2, delta_log_mass)
@@ -540,15 +669,14 @@ methods = ['linear', \
             'distance', \
             'distance_mass', \
             ]
-#methods = ['distance_mass']
 
 min_n = 10 # for adaptive_nmin binning
 max_n = 50 # for adaptive_nmax binning
 target_n = 30 # for voronoi binning
-n_adaptive_bins = 15 # for distance (from SFMS) binning
+n_adaptive_bins = 8 # for distance (from SFMS) binning
 n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
+delta_sfms = 0.4 # delta in distance from SFMS in which to bin in the distance-from-SFMS method, unless binning adaptively
 sfms =  'Popesso23' # from 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
-
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -556,25 +684,8 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
     args.fontfactor = 1.5
 
-    # ---------reading in the master SED catalog----------------
-    if args.do_all_fields:
-        passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
-        #passage_catalog_filename = args.output_dir / 'catalogs' / 'passagepipe_v0.5_SED_fits_cosmosweb_v1.0.0-alpha.fits'
-        #passage_catalog_filename = args.output_dir / 'catalogs' / 'passage_cosmos_redshift_catalog_v2.dat'
-        df = read_passage_sed_catalog(passage_catalog_filename)
-        output_dir = args.output_dir / 'stacking'
-    
-    # ---------reading in the single-field phot catalog----------------
-    else:
-        product_dir = args.input_dir / args.field / 'Products'
-        df = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
-        df['field'] = args.field
-        df = get_passage_masses_from_cosmos(df, args, id_col='id') # crossmatch with cosmos-web to get stellar mass and SFR
-        output_dir = args.output_dir / args.field / 'stacking'
-
-    # ------determining field-specific paths, etc-----------
-    output_dir.mkdir(parents=True, exist_ok=True)
-    fig_dir = output_dir / f'plots'
+    # ------------reading and binning dataframe-------------
+    df, _, args = get_binned_df(args, skip_binning=True)
 
     # -----------making bins in various ways---------------------
     bin_summary, centers_scaled, scaling = None, None, None
@@ -587,6 +698,6 @@ if __name__ == "__main__":
 
     # ------------plotting stacked gradients on SFMS--------------------------
     fig = plot_SFMS_bins(df, methods, args, centers_scaled=centers_scaled, scaling=scaling, bin_summary=bin_summary, sfms=sfms)
-    save_fig(fig, fig_dir, f'SFMS_binned.png', args) # saving the figure
+    save_fig(fig, args.fig_dir, f'SFMS_binned.png', args) # saving the figure
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

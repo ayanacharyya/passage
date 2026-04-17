@@ -104,8 +104,8 @@ if __name__ == "__main__":
     if args.re_limit is None: args.re_limit = 2.
     args.fontfactor = 1.5
 
-    deproject_text = '_nodeproject' if args.skip_deproject else ''
-    rescale_text = '_norescale' if args.skip_re_scaling else ''
+    args.deproject_text = '_nodeproject' if args.skip_deproject else ''
+    args.rescale_text = '_norescale' if args.skip_re_scaling else ''
 
     # -----------define colorbar properties-----------
     cmin, cmax, cmap = -18.5, -15.5, 'cividis'
@@ -160,20 +160,20 @@ if __name__ == "__main__":
     product_dir.mkdir(parents=True, exist_ok=True)
     output_dir = args.output_dir / args.field / 'stacking_mock'
     output_dir.mkdir(parents=True, exist_ok=True)
-    fig_dir = output_dir / f'plots{deproject_text}{rescale_text}'
+    fig_dir = output_dir / f'plots{args.deproject_text}{args.rescale_text}'
     fig_dir.mkdir(parents=True, exist_ok=True)
     Path(fig_dir / 'binmembers').mkdir(parents=True, exist_ok=True)
-    fits_dir = output_dir / f'maps{deproject_text}{rescale_text}'
+    fits_dir = output_dir / f'maps{args.deproject_text}{args.rescale_text}'
     fits_dir.mkdir(parents=True, exist_ok=True)
-    output_filename = fits_dir / f'mock_stacked_maps{deproject_text}{rescale_text}.fits'
+    output_filename = fits_dir / f'mock_stacked_maps{args.deproject_text}{args.rescale_text}.fits'
 
     # -------setting up massive PDF figures-----------
     if args.debug_align:
         fig_debug, axes_debug_2d = plt.subplots(2, 6, figsize=(13, 6))
         fig_debug.subplots_adjust(left=0.07, right=0.95, top=0.9, bottom=0.1, wspace=0.3, hspace=0.1)
     else:
-        fullplot_filename_orig = fig_dir / f'binmembers/mock_binmembers_orig_maps{deproject_text}{rescale_text}.pdf'
-        fullplot_filename_flux = fig_dir / f'binmembers/mock_binmembers_flux_maps{deproject_text}{rescale_text}.pdf'
+        fullplot_filename_orig = fig_dir / f'binmembers/mock_binmembers_orig_maps{args.deproject_text}{args.rescale_text}.pdf'
+        fullplot_filename_flux = fig_dir / f'binmembers/mock_binmembers_flux_maps{args.deproject_text}{args.rescale_text}.pdf'
         fullplot_filename_err = Path(str(fullplot_filename_flux).replace('flux', 'err'))
         
         pdf_orig = PdfPages(fullplot_filename_orig)
@@ -322,7 +322,7 @@ if __name__ == "__main__":
                     axes[4] = myimshow(rescaled_line_map, axes[4], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Rescaled', cmap=cmap, col='k')
                     axes[5] = myimshow(recentered_line_map, axes[5], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=cmap, col='k')
 
-                    figname = fig_dir / f'debug_align_{args.id}{deproject_text}{rescale_text}.png'
+                    figname = fig_dir / f'debug_align_{args.id}{args.deproject_text}{args.rescale_text}.png'
                     fig_debug.savefig(figname, transparent=args.fortalk)
                     print(f'\nSaved figure as {figname}')
 

@@ -15,7 +15,7 @@
 
 from header import *
 from util import *
-from make_sfms_bins import log_mass_bins, log_sfr_bins, read_passage_sed_catalog, bin_SFMS_linear, bin_SFMS_adaptive, read_passage_sed_catalog, bin_SFMS_distance, bin_SFMS_distance_mass, get_sfms_func, n_adaptive_bins, sfms, n_mass_bins
+from make_sfms_bins import log_mass_bins, log_sfr_bins, read_passage_sed_catalog, get_binned_df, read_passage_sed_catalog, get_sfms_func, get_binned_df, sfms
 from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
 
 start_time = datetime.now()
@@ -453,74 +453,12 @@ if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
     args.fontfactor = 1.2
-    fold_text = '_folded' if args.fold_maps else ''
-    adapt_text = '_adaptivebins' if args.adaptive_bins else ''
-    deproject_text = '_nodeproject' if args.skip_deproject else ''
-    rescale_text = '_norescale' if args.skip_re_scaling else ''
-    C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
+
+    # ------------reading and binning dataframe-------------
+    df, bin_list, args = get_binned_df(args)
     
-    # --------------determining output filename--------------------
-    if args.adaptive_bins:
-        if args.bin_by_distance:
-            binby_text = f'_binby_distance{n_adaptive_bins}'
-        elif args.bin_by_distance_mass:
-            binby_text = f'_binby_distance{n_adaptive_bins}_mass{n_mass_bins}'
-        else:
-            binby_text = f'_bin_adaptive_max{args.max_gal_per_bin}'
-    else:
-        if args.bin_by_distance:
-            binby_text = f'_binby_distance_delta_bin{0.2}'
-        else:
-            binby_text = '_bin_linear'
-
-    # ---------reading in the master SED catalog----------------
-    passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
-    df = read_passage_sed_catalog(passage_catalog_filename)
-
-    if args.do_all_fields:
-        re_catalog_filename = args.output_dir / f'catalogs/all_fields_re_list.fits'
-        output_dir = args.output_dir / 'stacking'
-    # ---------curtailing to single-field----------------
-    else:
-        # product_dir = args.input_dir / args.field / 'Products'
-        # df = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
-        # df['field'] = args.field
-        # df = get_passage_masses_from_cosmos(df, args, id_col='id') # crossmatch with cosmos-web to get stellar mass and SFR
-        df = df[df['field'] == args.field]        
-        re_catalog_filename = args.output_dir / f'catalogs/{args.field}_re_list.fits'
-        output_dir = args.output_dir / args.field / 'stacking'
-
-    # -------------binning the mass-SFR plane-------------
-    if args.adaptive_bins:
-        if args.bin_by_distance:
-            df, bin_list = bin_SFMS_distance(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
-        elif args.bin_by_distance_mass:
-            df, bin_list = bin_SFMS_distance_mass(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms, n_mass_bins=n_mass_bins)
-        else:
-            df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
-    else:
-        if args.bin_by_distance:
-            df, bin_list = bin_SFMS_distance(df, method_text='', delta_bin=0.2, sfms=sfms)
-        else:
-            df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
-    
-    if args.bin_by_distance or args.bin_by_distance_mass:
-        bin_list = np.sort(bin_list)
-    else:
-        bin_list.sort(key=lambda x: (x[0].left, x[1].left))
-
-    # ----------getting directory structure----------
-    if args.adaptive_bins: output_dir = Path(str(output_dir).replace('stacking', 'stacking_adaptive'))
-    output_dir.mkdir(parents=True, exist_ok=True)
-    fig_dir = output_dir / f'plots{deproject_text}{rescale_text}'
-    fig_dir.mkdir(parents=True, exist_ok=True)
-    fits_dir = output_dir / f'maps{deproject_text}{rescale_text}'
-    fits_dir.mkdir(parents=True, exist_ok=True)
-
-    grad_filename = fits_dir / f'stacked{binby_text}{fold_text}_fits_allbins_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}.fits'
-
     # -------------reading in stacked gradient dataframe-----------------------
-    df_grad = read_stacked_df(grad_filename)
+    df_grad = read_stacked_df(args.grad_filename)
     df = df.rename(columns={'bin_intervals': 'delta_sfms_bin', 'mass_intervals':'log_mass_bin'})
     if args.bin_by_distance_mass:
         df = df.groupby(['delta_sfms_bin', 'log_mass_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()
@@ -530,12 +468,18 @@ if __name__ == "__main__":
         df_grad = pd.merge(df_grad, df, on=['delta_sfms_bin'], how='left')
     
     # ------------plotting stacked gradients on SFMS--------------------------
+    qualifiers = f'{args.binby_text}{args.fold_text}_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}'
     if args.plot_sfms_vs_grad:
         fig2 = plot_delta_SFMS_vs_quant(df_grad, args, quant_x='delta_sfms_median', quant_y='logOH')
-        save_fig(fig2, fig_dir, f'stacked{adapt_text}{binby_text}{fold_text}_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}_dSFMS_vs_grad.png', args) # saving the figure
+        save_fig(fig2, args.fig_dir, f'dSFMS_vs_grad{qualifiers}.png', args) # saving the figure
     else:
         #fig = plot_SFMS_heatmap_sns(df_grad, args)
         fig = plot_SFMS_heatmap_patches(df_grad, args)
-        save_fig(fig, fig_dir, f'stacked{adapt_text}{binby_text}{fold_text}_Zdiag_{args.Zdiag}{C25_text}{deproject_text}{rescale_text}_SFMS_heatmap.png', args) # saving the figure
+        
+        if args.plot_minor_major_profile:
+            figname = f'SFMS_heatmap_minor_major_{qualifiers}.png'
+        else:
+            figname = f'SFMS_heatmap{qualifiers}.png'
+        save_fig(fig, args.fig_dir, figname, args) # saving the figure
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
