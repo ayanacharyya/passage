@@ -14,14 +14,15 @@
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_radial_profiles
              run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --plot_radial_profiles --adaptive_bins --bin_by_distance --fold_maps
              run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --plot_line_and_metallicity --plot_radial_profiles --adaptive_bins --bin_by_distance_mass --fold_maps
+             run plot_stacked_maps.py --system ssd --do_all_fields --plot_line_and_bpt --AGN_diag Ne3O2 --adaptive_bins --bin_by_distance_mass --fold_maps
 '''
 
 from header import *
 from util import *
-from make_diagnostic_maps import compute_Z_C19, compute_Z_KD02_R23, compute_Z_P25, compute_Z_Te, compute_Te, take_safe_log_ratio, take_safe_log_sum, myimshow
+from make_diagnostic_maps import compute_Z_C19, compute_Z_KD02_R23, compute_Z_P25, compute_Z_Te, compute_Te, take_safe_log_ratio, take_safe_log_sum, myimshow, get_AGN_func_methods
 from make_sfms_bins import get_binned_df
 from stack_emission_maps import read_stacked_maps
-from plots_for_zgrad_paper import plot_fitted_line, odr_fit
+from plots_for_zgrad_paper import plot_fitted_line, odr_fit, plot_AGN_demarcation_ax, get_distance_map_from_AGN_line, get_ratio_labels, overplot_AGN_line_on_BPT
 
 start_time = datetime.now()
 
@@ -681,7 +682,7 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True,
     ax.set_aspect('equal') 
     
     units = 'kpc' if args.skip_re_scaling else r'R$_e$' 
-    ax = annotate_axes(ax, f'Offset ({units})', f'Offset ({units})', args=args, label=label, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
+    ax = annotate_axes(ax, f'Offset ({units})', f'Offset ({units})', args=args, label=label, labelx=0.05, labely=0.92, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
 
     if args.plot_radial_profiles and args.plot_minor_major_profile:
         width = 1 if args.re_limit is None else 0.2 # 1 kpc or 0.2 Re
@@ -880,6 +881,143 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
     return fig, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr
 
 # --------------------------------------------------------------------------------------------------------------------
+def plot_AGN_demarcation_ax(x_num, x_den, y_num, y_den, ax, args, color=None, marker='o', size=20, lw=0.5):
+    '''
+    Plots line ratio vs line ratio on a given axis
+    Returns axis handle and the scatter plot handle
+    '''
+    shape = np.shape(y_num)
+    if args.fold_maps:
+        center_xpix, center_ypix = (args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5 # this yields 0.5 (instead of 0) pixel offset for even-sized stacked maps, because the center of the map is in the center (and not the edge) of the first pixel
+    else:
+        center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
+    distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+
+    df = pd.DataFrame({'xnum': unp.nominal_values(np.atleast_1d(x_num)).flatten(), \
+                       'xnum_u': unp.std_devs(np.atleast_1d(x_num)).flatten(), \
+                       'xden': unp.nominal_values(np.atleast_1d(x_den)).flatten(), \
+                       'xden_u': unp.std_devs(np.atleast_1d(x_den)).flatten(), \
+                       'ynum': unp.nominal_values(np.atleast_1d(y_num)).flatten(), \
+                       'ynum_u': unp.std_devs(np.atleast_1d(y_num)).flatten(), \
+                       'yden': unp.nominal_values(np.atleast_1d(y_den)).flatten(), \
+                       'yden_u': unp.std_devs(np.atleast_1d(y_den)).flatten(), \
+                       'distance': np.atleast_1d(distance_map).flatten()
+                       })
+    df = df.drop_duplicates().reset_index(drop=True)
+    df = df[(df['xnum'] > 0) & (df['xden'] > 0) & (df['ynum'] > 0) & (df['yden'] > 0)]
+
+    y_ratio = unp.log10(unp.uarray(df['ynum'], df['ynum_u']) / unp.uarray(df['yden'], df['yden_u']))
+    x_ratio = unp.log10(unp.uarray(df['xnum'], df['xnum_u']) / unp.uarray(df['xden'], df['xden_u']))
+
+    if color is None:
+        color = get_distance_map_from_AGN_line(df['xnum'], df['xden'], df['ynum'], df['yden'], args).data
+        cmap, vmin, vmax = args.diverging_cmap, -1, 1
+    elif color == 'distance':
+        color = df['distance']
+        cmap, vmin, vmax = 'viridis', None, None
+
+    p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=size, lw=lw, edgecolor='w' if args.fortalk else 'k', zorder=10)
+    ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c='gray', fmt='none', lw=lw, alpha=0.5)
+
+    return ax, p
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_AGN_demarcation_object(line_dict, args, ax, marker='o', size=50, ax_inset=None, hide_cbar=True):
+    '''
+    Plots the spatially resolved AGN demarcation for a given object on a given axis
+    Returns axis handle
+    '''    
+    theoretical_lines, line_labels = get_AGN_func_methods(args)
+
+    # -----------getting the fluxes------------------
+    try:
+        ynum_map, _, _ = get_emission_line_map(args.ynum_line, line_dict, args, silent=True)
+        yden_map, _, _ = get_emission_line_map(args.yden_line, line_dict, args, silent=True)
+
+        xnum_map, _, _ = get_emission_line_map(args.xnum_line, line_dict, args, silent=True)
+        xden_map, _, _ = get_emission_line_map(args.xden_line, line_dict, args, silent=True)
+    except:
+        print(f'Required emission lines not available for {args.id} with {args.AGN_diag} AGN diagnostic. So skipping this object')
+        return ax, None, None
+    
+    if not args.do_not_correct_flux and args.AGN_diag in ['H21', 'B22'] and args.xden_line == 'Ha': # special treatment for H-alpha line, in order to add the NII 6584 component back
+        factor = 0.823  # from grizli source code
+        print(f'Adding the NII component back to Ha, i.e. dividing by factor {factor} because using Henry+21 for AGN-SF separation')
+        xden_map = np.ma.masked_where(xden_map.mask, xden_map.data / factor)
+
+   # -----------spatially_resolved-----------------------
+    ax, scatter_plot_handle = plot_AGN_demarcation_ax(xnum_map, xden_map, ynum_map, yden_map, ax, args, marker=marker, size=size, lw=0.5, color=args.AGN_colorby if 'AGN_colorby' in args else None)
+    ax.set_aspect('auto')
+
+    # -----------2D map inset-----------------------
+    if ax_inset is not None:
+        distance_from_AGN_line_map = get_distance_map_from_AGN_line(xnum_map, xden_map, ynum_map, yden_map, args)
+        ax_inset = plot_2D_map(distance_from_AGN_line_map, ax_inset, '', args, takelog=False, cmap=args.diverging_cmap, clabel='Distance from\nNB line', vmin=-1, vmax=1, hide_xaxis=True, hide_yaxis=True, hide_cbar=True)
+
+    # -----------annotating axes-----------------------
+    if not hide_cbar:
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes('right', size='2%', pad=0.05)
+        cbar = plt.colorbar(scatter_plot_handle, cax=cax)
+        unit_text = r'kpc' if args.re_limit is None else r'R_e'
+        cbar.set_label(f'Distance from center ({unit_text})' if 'AGN_colorby' in args and args.AGN_colorby == 'distance' else f'Distance from {theoretical_lines[0]} line', fontsize=args.fontsize)
+        cbar.ax.tick_params(labelsize=args.fontsize)
+
+    ax.set_xlim(-1, 0.2)
+    ax.set_ylim(-1., 1.)
+    ax.set_xlabel(f'Log {get_ratio_labels("NeIII-3867/OII")}' if args.AGN_diag == 'Ne3O2' else f'Log {get_ratio_labels("SII/NII,Ha")}' if args.AGN_diag == 'H21' else f'Log {get_ratio_labels(f"{args.xnum_line}/{args.xden_line}")}', fontsize=args.fontsize)
+    ax.set_ylabel(f'Log {get_ratio_labels("OIII/Hb")}', fontsize=args.fontsize)
+    ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+
+    # ---------adding literature AGN demarcation lines----------
+    color_arr = ['brown', 'darkgreen', 'dodgerblue', 'cyan', 'sienna']
+    for index, (theoretical_line, line_label) in enumerate(zip(theoretical_lines, line_labels)):
+        if line_label == 'This work': line_label = 'NB'
+        overplot_AGN_line_on_BPT(ax, theoretical_line, label=line_label, label_loc='upper left', color=color_arr[index], fontsize=args.fontsize / args.fontfactor, lw=0.5 if index else 1, ls='solid')
+
+    return ax, scatter_plot_handle, ax_inset
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_line_and_bpt_maps(line_dict, args, bin_text='', cmin=None, cmax=None, takelog=True):
+    '''
+    Makes a nice plot of all emission lines present in a given list of stacked line maps along with the metallicity map
+    Returns figure handle and the list of lines plotted
+    '''
+    # ----------getting line list from fits file-------------
+    line_list = ['OIII', 'HB', 'OII', 'NEIII-3867']
+    absent_lines = [item for item in line_list if item.upper() not in line_dict.keys()]
+    if len(absent_lines) > 0:
+        fig = None
+        print(f'\n{absent_lines} line/s not availble in the stack, so cannot make OHNO BPT\n')
+    else:
+        # -------setting up the figure--------------------
+        fig = plt.figure(figsize=(10, 5))
+        fig.subplots_adjust(left=0.07, right=0.9, bottom=0.12, top=0.9, wspace=0., hspace=0.)
+        outer_gs = gridspec.GridSpec(1, 2, width_ratios=[1.2, 1], figure=fig, wspace=0.3, hspace=0.)
+
+        # --------setting up the sub-figure------------
+        map_gs = outer_gs[0].subgridspec(2, 2, wspace=0., hspace=0.)
+        axes = [fig.add_subplot(map_gs[0, 0]), fig.add_subplot(map_gs[0, 1]), fig.add_subplot(map_gs[1, 0]), fig.add_subplot(map_gs[1, 1])]
+        bpt_gs = outer_gs[1].subgridspec(1, 1, wspace=0., hspace=0.)
+        axes += [fig.add_subplot(bpt_gs[0, 0])]
+        
+        fig.text(0.05, 0.97, f'{bin_text}', fontsize=args.fontsize, c='k', ha='left', va='top')
+        
+        # -----------------plot emission line maps of this bin---------------
+        for index, this_line in enumerate(line_list):
+            this_map, _ , _= get_emission_line_map(this_line, line_dict, args)
+            nobj = line_dict[f'{this_line}_nobj']
+            if type(unp.nominal_values(this_map.data)) == np.ndarray:
+                axes[index] = plot_2D_map(this_map, axes[index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=index < 2, hide_yaxis=index%2 == 1, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True)
+
+        # -----------------plot BPT diagram of this bin---------------
+        ax = axes[-1]
+        ax_inset = ax.inset_axes([0.65, 0.50, 0.3, 0.3])
+        ax, scatter_plot_handle, ax_inset = plot_AGN_demarcation_object(line_dict, args, ax, marker='o', size=30, ax_inset=ax_inset, hide_cbar=False)
+        
+    return fig
+
+# --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
@@ -938,16 +1076,17 @@ if __name__ == "__main__":
             save_fig(fig_em, args.fig_dir, f'stacked{args.fold_text}_line_maps{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -----------------computing metallicity maps of this bin---------------
-        metallicity_map_fits_file = args.fits_dir / f'stacked{args.fold_text}_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.fits'
-        if not os.path.exists(metallicity_map_fits_file) or args.clobber:
-            logOH_map, logOH_int, nobj = get_metallicity_map(line_dict, args)
-            if logOH_map is None:
-                print(f'Unable to compute {args.Zdiag} metallicity for {bin_text}. So Skipping.')
-                continue
+        if args.plot_metallicity or args.plot_line_and_metallicity:
+            metallicity_map_fits_file = args.fits_dir / f'stacked{args.fold_text}_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.fits'
+            if not os.path.exists(metallicity_map_fits_file) or args.clobber:
+                logOH_map, logOH_int, nobj = get_metallicity_map(line_dict, args)
+                if logOH_map is None:
+                    print(f'Unable to compute {args.Zdiag} metallicity for {bin_text}. So Skipping.')
+                    continue
+                else:
+                    write_metallicity_map(logOH_map, logOH_int, metallicity_map_fits_file, args) # saving the metallicity maps as fits files
             else:
-                write_metallicity_map(logOH_map, logOH_int, metallicity_map_fits_file, args) # saving the metallicity maps as fits files
-        else:
-            logOH_map, logOH_int, nobj = read_metallicity_map(metallicity_map_fits_file)
+                logOH_map, logOH_int, nobj = read_metallicity_map(metallicity_map_fits_file)
         
         # -----------------plot metallicity maps of this bin---------------
         if args.plot_metallicity:
@@ -958,6 +1097,12 @@ if __name__ == "__main__":
         if args.plot_line_and_metallicity:
             fig_met, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=-2, Zmin=None, Zmax=None)
             save_fig(fig_met, args.fig_dir, f'stacked{args.fold_text}_line_and_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
+
+        # -----------------plot line maps and metallicity maps of this bin---------------
+        if args.plot_line_and_bpt:
+            fig_bpt = plot_line_and_bpt_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-3.5, cmax=-2.5)
+            if fig_bpt is not None:
+                save_fig(fig_bpt, args.fig_dir, f'stacked{args.fold_text}_line_and_bpt_map_{args.AGN_diag}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -------------save fit results to dataframe-----------------------
         if args.plot_radial_profiles and (args.plot_metallicity or args.plot_line_and_metallicity):

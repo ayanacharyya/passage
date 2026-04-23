@@ -211,7 +211,56 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='_distance', cm
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_SFMS_bins(df, methods, args, scaling=None, centers_scaled=None, bin_summary=None, sfms='Popesso23'):
+def make_scattermap_sfh(ax, df, args, method_text='_sfh', cmap='viridis', hide_xaxis=False, hide_yaxis=False, hide_cbar=False, clabel='', ncbins=4):
+    '''
+    Makes heatmap from a dataframe that has been binned by distance from the SFMS, using patches, and annotates based on another pivot table, onto a given axis handle
+    Returns axis handle
+    '''
+    bin_list = list(pd.unique(df[f'bin_intervals{method_text}']))
+    sorted_bins = sorted(bin_list)
+    midpoints = [b.mid for b in sorted_bins]
+    norm = mplcolors.Normalize(vmin=min(midpoints), vmax=max(midpoints))
+    cmap = plt.get_cmap(cmap)
+    bin_colors = [cmap(norm(m)) for m in midpoints]
+    
+    for index2, this_bin in enumerate(bin_list):
+        df_sub = df[df[f'bin_intervals{method_text}'] == this_bin]
+        ax.scatter(df_sub['log_mass'], df_sub['log_sfr'], s=10, c=bin_colors[index2], lw=0.1, edgecolors='k')
+ 
+    # --------annotating axis borders-----------------
+    ax.set_xlim(log_mass_bins.min() -0.2, log_mass_bins.max() + 0.2)
+    ax.set_ylim(log_sfr_bins.min() -0.2, log_sfr_bins.max()+ 0.2)
+
+    if hide_xaxis:
+        ax.tick_params(axis='x', which='major', labelsize=args.fontsize, labelbottom=False)
+    else:
+        ax.set_xlabel(r'$\log$ Stellar Mass [M$_\odot$]', fontsize=args.fontsize)
+        ax.tick_params(axis='x', which='major', labelsize=args.fontsize, labelbottom=True)
+
+    if hide_yaxis:
+        ax.tick_params(axis='y', which='major', labelsize=args.fontsize, labelleft=False)
+    else:
+        ax.set_ylabel(r'$\log$ SFR [M$_\odot$/yr]', fontsize=args.fontsize)
+        ax.tick_params(axis='y', which='major', labelsize=args.fontsize, labelleft=True)
+
+    # ---------annotating colorbar------------
+    if not hide_cbar:
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes('right', size='2%', pad=0.02)
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        cbar = plt.colorbar(sm, ax=ax, label=clabel, cax=cax)
+        cbar.set_label(clabel, fontsize=args.fontsize)
+        cbar.ax.tick_params(labelsize=args.fontsize)
+        cbar.locator = ticker.MaxNLocator(integer=False, nbins=ncbins)
+        cbar.update_ticks()
+
+        cbar.ax.yaxis.set_ticks_position('left')
+        cbar.ax.yaxis.set_label_position('left')
+    
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled=None, bin_summary=None, sfms='Popesso23'):
     '''
     Makes a nice heatmap (with patches) of stacked integrated metallicities and metallicity gradients
     Returns figure handle
@@ -225,22 +274,24 @@ def plot_SFMS_bins(df, methods, args, scaling=None, centers_scaled=None, bin_sum
     
     # ---------plot the heatmaps-------------------
     for index, method in enumerate(methods):
-        if 'vor' in method:
-            axes[index] = make_heatmap_vorbin(axes[index], df, bin_summary, centers_scaled, scaling, 'n_galaxies', args, method_text='_voronoi', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
-        elif method == 'distance':
-            df_sub = df.groupby(f'bin_intervals_{method}').agg(n_galaxies=('log_mass', 'size'), log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median')).reset_index()
-            df_sub = df_sub.dropna(subset=[f'bin_intervals_{method}'])
-            df_sub = df_sub[df_sub['n_galaxies'] > 0]
-            axes[index] = make_heatmap_distance(axes[index], df_sub, sfms, 'n_galaxies', args, method_text='_distance', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
-        elif method == 'distance_mass':
-            groupby_cols = [f'bin_intervals_{method}', f'mass_intervals_{method}']
+        if 'voronoi' in method:
+            axes[index] = make_heatmap_vorbin(axes[index], df, bin_summary, centers_scaled, scaling, 'n_galaxies', args, method_text=method_texts[index], cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
+        elif 'sfh' in method:
+            axes[index] = make_scattermap_sfh(axes[index], df, args, method_text=method_texts[index], cmap=cmap, hide_cbar=False, hide_yaxis=index)
+        elif 'distance_mass' in method:
+            groupby_cols = [f'bin_intervals{method_texts[index]}', f'mass_intervals{method_texts[index]}']
             df_sub = df.groupby(groupby_cols).agg(n_galaxies=('log_mass', 'size'), log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median')).reset_index()
             df_sub = df_sub.dropna(subset=groupby_cols)
             df_sub = df_sub[df_sub['n_galaxies'] > 0]
-            axes[index] = make_heatmap_distance(axes[index], df_sub, sfms, 'n_galaxies', args, method_text='_distance_mass', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
+            axes[index] = make_heatmap_distance(axes[index], df_sub, sfms, 'n_galaxies', args, method_text=method_texts[index], cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
+        elif 'distance' in method:
+            df_sub = df.groupby(f'bin_intervals{method_texts[index]}').agg(n_galaxies=('log_mass', 'size'), log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median')).reset_index()
+            df_sub = df_sub.dropna(subset=[f'bin_intervals{method_texts[index]}'])
+            df_sub = df_sub[df_sub['n_galaxies'] > 0]
+            axes[index] = make_heatmap_distance(axes[index], df_sub, sfms, 'n_galaxies', args, method_text=method_texts[index], cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
         else:
-            df_sub = df.groupby(f'bin_intervals_{method}').size().reset_index(name='n_galaxies')
-            df_sub[['log_mass_bin', 'log_sfr_bin']] = pd.DataFrame(df_sub[f'bin_intervals_{method}'].tolist(), index=df_sub.index)
+            df_sub = df.groupby(f'bin_intervals{method_texts[index]}').size().reset_index(name='n_galaxies')
+            df_sub[['log_mass_bin', 'log_sfr_bin']] = pd.DataFrame(df_sub[f'bin_intervals{method_texts[index]}'].tolist(), index=df_sub.index)
             axes[index] = make_heatmap_patches(axes[index], df_sub, 'n_galaxies', args, xcolname=f'log_mass_bin', ycolname=f'log_sfr_bin', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
         axes[index].text(0.05, 0.95, f'{method}', ha='left', va='top', c='k', fontsize=args.fontsize, transform=axes[index].transAxes)
         axes[index].set_aspect('equal')
@@ -488,55 +539,21 @@ def bin_SFMS_distance_mass(df, method_text = '_distance_mass', delta_bin=0.2, n_
     return df, bin_list
 
 # --------------------------------------------------------------------------------------------------------------------
-def bin_SFMS_sfh(df, method_text = '_sfh', delta_sfh=0.2, max_n=None, min_n=None):
+def bin_SFMS_sfh(df, method_text = '_sfh', delta_sfh=0.2, n_sfh_bins=None, bin_by_col='delta_tform_90_10'):
     '''
     Bins in SFMS plane in an adaptive (or, optionally, regular) way based on a SFH parameter
     Returns dataframe with additional columns containing method_text, and list of unique bins
     '''
-    if max_n is not None: final_bins = get_adaptive_bins_nmax(df, (log_mass_bins[0],log_mass_bins[-1]), (log_sfr_bins[0],log_sfr_bins[-1]), max_n=max_n)
-    elif min_n is not None: final_bins = get_adaptive_bins_nmin(df, (log_mass_bins[0],log_mass_bins[-1]), (log_sfr_bins[0],log_sfr_bins[-1]), min_n=min_n)
-    else: final_bins = [] # something with dleta_sfh
 
-    df[f'bin_id{method_text}'] = -1
-    df[f'mass_interval{method_text}'] = None
-    df[f'sfr_interval{method_text}'] = None
-    
-    for i, b in enumerate(final_bins):
-        mask = (df['log_mass'] >= b['m_min']) & (df['log_mass'] < b['m_max']) & (df['log_sfr'] >= b['s_min']) & (df['log_sfr'] < b['s_max'])
-        df.loc[mask, f'bin_id{method_text}'] = i
-        
-        df.loc[mask, f'mass_interval{method_text}'] = pd.Interval(left=b['m_min'], right=b['m_max'], closed='left')
-        df.loc[mask, f'sfr_interval{method_text}'] = pd.Interval(left=b['s_min'], right=b['s_max'], closed='left')
-        df[f'bin_intervals{method_text}'] = list(zip(df[f'mass_interval{method_text}'], df[f'sfr_interval{method_text}']))
+    if n_sfh_bins is not None:
+        df[f'bin_intervals{method_text}'] = pd.qcut(df[bin_by_col], q=n_sfh_bins)
+    else:
+        custom_edges = np.arange(np.round(df[bin_by_col].min(), 2), np.round(df[bin_by_col].max(), 2) + delta_sfh, delta_sfh)
+        df[f'bin_intervals{method_text}'] = pd.cut(df[bin_by_col], bins=custom_edges)
 
-    df = df[df[f'bin_id{method_text}'] != -1].copy()
     bin_list = list(pd.unique(df[f'bin_intervals{method_text}']))
 
     return df, bin_list
-
-# --------------------------------------------------------------------------------------------------------------------
-def bin_by_method(df, method, sfms='Popesso23', n_adaptive_bins=20, target_n=30, min_n=10, max_n=50, n_mass_bins=4, delta_sfms=0.4, delta_sfh=0.4):
-    '''
-    Decides which function to call for the binning in SFMS plane, based on the input method
-    Returns dataframe with additional columns containing '_{method}', and list of unique bins
-    '''
-    if method == 'linear': output = bin_SFMS_linear(df, method_text=f'_{method}')
-    
-    elif method == 'adaptive_nmax': output= bin_SFMS_adaptive(df, method_text=f'_{method}', max_n=max_n)
-    elif method == 'adaptive_nmin': output = bin_SFMS_adaptive(df, method_text=f'_{method}', min_n=min_n)
-    
-    elif 'vor' in method: output = bin_SFMS_voronoi(df, method_text=f'_{method}', target_n=target_n)
-    
-    elif method == 'distance': output = bin_SFMS_distance(df, method_text=f'_{method}', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
-    #elif method == 'distance': output = bin_SFMS_distance(df, method_text=f'_{method}', delta_bin=delta_sfms, sfms=sfms)
-    
-    elif method == 'distance_mass': output = bin_SFMS_distance_mass(df, method_text=f'_{method}', n_adaptive_bins=n_adaptive_bins, sfms=sfms, n_mass_bins=n_mass_bins)
-    #elif method == 'distance_mass': output = bin_SFMS_distance_mass(df, method_text=f'_{method}', delta_bin=delta_sfms, sfms=sfms, n_mass_bins=n_mass_bins)
-
-    elif method == 'sfh': output = bin_SFMS_sfh(df, method_text=f'_{method}', max_n=max_n)
-    #elif method == 'sfh': output = bin_SFMS_sfh(df, method_text=f'_{method}', delta_sfh=delta_sfh)
-
-    return output
 
 # --------------------------------------------------------------------------------------------------------------------
 def read_passage_sed_catalog(filename, use_old=True):
@@ -555,22 +572,28 @@ def read_passage_sed_catalog(filename, use_old=True):
     full_df.rename(columns={'Par':'field', 'passage_id':'id', 'id_photcat':'id', 'objid':'id', 'cosmoswebid_1':'cosmosid', 'stellar_mass_50':'log_mass', 'ssfr_50':'log_ssfr', 'sfr_50':'sfr', 'ra_obj':'ra', 'dec_obj':'dec'}, inplace=True)
     full_df['log_sfr'] = np.log10(full_df['sfr'])
     
-    columns_to_extract = ['field', 'id', 'zbest', 'log_mass', 'log_sfr', 'log_ssfr', 'cosmosid']
+    full_df['delta_tform_50_10'] = full_df['tform50_50'] - full_df['tform10_50']
+    full_df['delta_tform_90_50'] = full_df['tform90_50'] - full_df['tform50_50']
+    full_df['delta_tform_90_10'] = full_df['tform90_50'] - full_df['tform10_50']
+
+    columns_to_extract = ['field', 'id', 'zbest', 'log_mass', 'log_sfr', 'log_ssfr', 'cosmosid', 'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10']
     df = full_df[columns_to_extract]
     df['field'] = df['field'].astype(str)
     df.rename(columns={'zbest':'redshift'}, inplace=True)
 
+    df = df.dropna(subset=['log_mass', 'log_sfr'])
+
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_binned_df(args, skip_binning=False):
+def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacking=False):
     '''
     Read in the full SED dataframe and curtail and bin it as needed to produce the binned dataframe
     Returns binned pandas dataframe, bin_list, args (with added keywords)
     '''
     # ------------add new keywords to args---------------
     # args.line_list = ['OIII', 'OII', 'NeIII-3867', 'Hb', 'OIII-4363', 'Ha', 'SII']
-    args.line_list = ['OIII', 'OII', 'Hb', 'Ha', 'SII']
+    args.line_list = ['OIII', 'OII', 'NeIII-3867', 'Hb', 'Ha', 'SII']
 
     args.deproject_text = '_nodeproject' if args.skip_deproject else ''
     args.rescale_text = '_norescale' if args.skip_re_scaling else ''
@@ -578,8 +601,9 @@ def get_binned_df(args, skip_binning=False):
     args.fold_text = '_folded' if args.fold_maps else ''
 
     # ---------reading in the master SED catalog----------------
-    passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
-    df = read_passage_sed_catalog(passage_catalog_filename)
+    if df is None:
+        passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
+        df = read_passage_sed_catalog(passage_catalog_filename)
 
     if args.do_all_fields:
         re_catalog_filename = args.output_dir / f'catalogs/all_fields_re_list.fits'
@@ -593,48 +617,53 @@ def get_binned_df(args, skip_binning=False):
     # --------------returning unbinned dataframe and no bin_list if skip_binning=True--------------
     if skip_binning:
         bin_list = None        
-        args.fig_dir = root_dir / f'plots'
+        args.fig_dir = root_dir / 'stacking'
         args.fig_dir.mkdir(parents=True, exist_ok=True)
     else:
         # -------------binning the mass-SFR plane-------------
         if args.adaptive_bins:
             if args.voronoi_bins:
-                df, bin_summary, centers_scaled, scaling = bin_SFMS_voronoi(df, method_text='', target_n=target_n)
+                df, bin_summary, centers_scaled, scaling = bin_SFMS_voronoi(df, method_text=method_text, target_n=target_n)
                 bin_list = [bin_summary, centers_scaled, scaling]
                 args.binby_text = f'adap_binby_voronoi_ngal_{target_n}'
             elif args.bin_by_sfh:
-                df, bin_list = bin_SFMS_sfh(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
-                args.binby_text = f'adap_binby_sfh_maxgal_{args.max_gal_per_bin}'
+                df, bin_list = bin_SFMS_sfh(df, method_text=method_text, n_sfh_bins=n_sfh_bins) # binning the dataframe in an adaptive way
+                args.binby_text = f'adap_binby_sfh_{n_sfh_bins}'
             elif args.bin_by_distance:
-                df, bin_list = bin_SFMS_distance(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms)
+                df, bin_list = bin_SFMS_distance(df, method_text=method_text, n_adaptive_bins=n_adaptive_bins, sfms=sfms)
                 args.binby_text = f'adap_binby_distance_{n_adaptive_bins}_sfms_{sfms}'
             elif args.bin_by_distance_mass:
-                df, bin_list = bin_SFMS_distance_mass(df, method_text='', n_adaptive_bins=n_adaptive_bins, sfms=sfms, n_mass_bins=n_mass_bins)
+                df, bin_list = bin_SFMS_distance_mass(df, method_text=method_text, n_adaptive_bins=n_adaptive_bins, sfms=sfms, n_mass_bins=n_mass_bins)
                 args.binby_text = f'adap_binby_distance_{n_adaptive_bins}_sfms_{sfms}_mass_{n_mass_bins}'
             else:
-                df, bin_list = bin_SFMS_adaptive(df, method_text='', max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
-                args.binby_text = f'adap_binby_mass_sfr_maxgal_{args.max_gal_per_bin}'
+                if args.min_gal_per_bin is not None:
+                    df, bin_list = bin_SFMS_adaptive(df, method_text=method_text, min_n=args.min_gal_per_bin) # binning the dataframe in an adaptive way
+                    args.binby_text = f'adap_binby_mass_sfr_mingal_{args.min_gal_per_bin}'
+                else:
+                    df, bin_list = bin_SFMS_adaptive(df, method_text=method_text, max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
+                    args.binby_text = f'adap_binby_mass_sfr_maxgal_{args.max_gal_per_bin}'
         else:
             if args.bin_by_sfh:
-                df, bin_list = bin_SFMS_sfh(df, method_text='', delta_sfh=delta_sfh) # binning the dataframe in an adaptive way
+                df, bin_list = bin_SFMS_sfh(df, method_text=method_text, delta_sfh=delta_sfh) # binning the dataframe in an adaptive way
                 args.binby_text = f'lin_binby_sfh_delta_sfh_{delta_sfh}'
             elif args.bin_by_distance:
-                df, bin_list = bin_SFMS_distance(df, method_text='', delta_bin=delta_sfms, sfms=sfms)
+                df, bin_list = bin_SFMS_distance(df, method_text=method_text, delta_bin=delta_sfms, sfms=sfms)
                 args.binby_text = f'lin_binby_distance_delta_bin_{delta_sfms}_sfms_{sfms}'
             elif args.bin_by_distance_mass:
-                df, bin_list = bin_SFMS_distance_mass(df, method_text='', delta_bin=delta_sfms, sfms=sfms, n_mass_bins=n_mass_bins)
+                df, bin_list = bin_SFMS_distance_mass(df, method_text=method_text, delta_bin=delta_sfms, sfms=sfms, n_mass_bins=n_mass_bins)
                 args.binby_text = f'lin_binby_distance_delta_bin_{delta_sfms}_sfms_{sfms}_mass_{n_mass_bins}'
             else:
-                df, bin_list = bin_SFMS_linear(df, method_text='') # -binning the dataframe uniformly by mass and SFR bins
+                df, bin_list = bin_SFMS_linear(df, method_text=method_text) # -binning the dataframe uniformly by mass and SFR bins
                 args.binby_text = f'lin_binby_mass_sfr_delta_mass_{delta_log_mass}_delta_sfr_{delta_log_sfr}'
 
-        if args.bin_by_distance or args.bin_by_distance_mass:
-            bin_list = np.sort(bin_list)
-        else:
-            bin_list.sort(key=lambda x: (x[0].left, x[1].left))
+        if not args.voronoi_bins:
+            if args.bin_by_distance or args.bin_by_distance_mass or args.bin_by_sfh:
+                bin_list = np.sort(bin_list)
+            else:
+                bin_list.sort(key=lambda x: (x[0].left, x[1].left))
 
         # ------determining field-specific paths, etc-----------
-        output_dir = root_dir / f'{args.binby_text}'
+        output_dir = root_dir / 'stacking' / f'{args.binby_text}'
         output_dir.mkdir(parents=True, exist_ok=True)
         
         args.fig_dir = output_dir / f'plots{args.deproject_text}{args.rescale_text}'
@@ -646,27 +675,28 @@ def get_binned_df(args, skip_binning=False):
         args.grad_filename = args.fits_dir / f'stacked{args.binby_text}{args.fold_text}_fits_allbins_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}.fits'
 
         # ---------merge with effective radius catalog--------------------
-        if os.path.exists(re_catalog_filename):
-            df_re = Table.read(re_catalog_filename).to_pandas()
-            if 'redshift' in df_re: df_re.drop(columns=['redshift'], axis=1, inplace=True)
-            df_re['id'] = df_re['id'].astype(int)
-            df_re['field'] = df_re['field'].astype(str)
-            df_re = df_re[df_re['re_kpc'] > 0]
-            df = pd.merge(df, df_re, on=['field', 'id'], how='inner')
-        else:
-            raise FileNotFoundError(f're catalog not found at {re_catalog_filename}; please create this file first by running compute_re.py. Exiting.')
+        if not skip_stacking:
+            if os.path.exists(re_catalog_filename):
+                df_re = Table.read(re_catalog_filename).to_pandas()
+                if 'redshift' in df_re: df_re.drop(columns=['redshift'], axis=1, inplace=True)
+                df_re['id'] = df_re['id'].astype(int)
+                df_re['field'] = df_re['field'].astype(str)
+                df_re = df_re[df_re['re_kpc'] > 0]
+                df = pd.merge(df, df_re, on=['field', 'id'], how='inner')
+            else:
+                raise FileNotFoundError(f're catalog not found at {re_catalog_filename}; please create this file first by running compute_re.py. Exiting.')
 
-        # -------merge with all photcats by looping over fields--------------
-        print(f'Combining all photcats to one file before merging to df, might take a few seconds..')
-        fields = pd.unique(df['field'])
-        df_master_photcat = pd.DataFrame()
-        cols_to_extract = ['field', 'id', 'a_image', 'b_image', 'theta_image']
-        for this_field in fields:
-            df_phot_this_field = GTable.read(args.input_dir / this_field / 'Products' / f'{this_field}_photcat.fits').to_pandas()
-            df_phot_this_field['field'] = this_field
-            df_master_photcat = pd.concat([df_master_photcat, df_phot_this_field[cols_to_extract]])
-        
-        df = pd.merge(df, df_master_photcat, on=['field', 'id'], how='inner')
+            # -------merge with all photcats by looping over fields--------------
+            print(f'Combining all photcats to one file before merging to df, might take a few seconds..')
+            fields = pd.unique(df['field'])
+            df_master_photcat = pd.DataFrame()
+            cols_to_extract = ['field', 'id', 'a_image', 'b_image', 'theta_image']
+            for this_field in fields:
+                df_phot_this_field = GTable.read(args.input_dir / this_field / 'Products' / f'{this_field}_photcat.fits').to_pandas()
+                df_phot_this_field['field'] = this_field
+                df_master_photcat = pd.concat([df_master_photcat, df_phot_this_field[cols_to_extract]])
+            
+            df = pd.merge(df, df_master_photcat, on=['field', 'id'], how='inner')
 
         # --------------curtailiug bins for debugging-------------------
         if args.debug_bin: bin_list = bin_list[1:2]
@@ -698,44 +728,59 @@ log_mass_bins = np.arange(6.5, 11.5 + delta_log_mass/2, delta_log_mass)
 log_sfr_bins = np.arange(-2.5, 2.5 + delta_log_sfr/2, delta_log_sfr)
 
 # ---------------choose which binning methods to try---------------
-methods = ['linear', \
-            #'adaptive_nmin', \
-            #'adaptive_nmax', \
-            'voronoi', \
-            'distance', \
-            'distance_mass', \
-            'sfh', \
+methods = [#'adaptive_nmin', \
+            # 'adaptive_nmax', \
+            # 'adaptive_voronoi', \
+            'adaptive_distance', \
+            'adaptive_distance_mass', \
+            # 'adaptive_sfh', \
+            # 'linear', \
+            # 'linear_distance', \
+            # 'linear_distance_mass', \
+            # 'linear_sfh', \
             ]
 
-min_n = 10 # for adaptive_nmin binning
-max_n = 50 # for adaptive_nmax binning
 target_n = 30 # for voronoi binning
 n_adaptive_bins = 8 # for distance (from SFMS) binning
 n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
 delta_sfms = 0.4 # delta in distance from SFMS in which to bin in the distance-from-SFMS method, unless binning adaptively
 sfms =  'Popesso23' # from 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
-delta_sfh = 0.4 # delta in SFH parameter () in which to bin, unless binning adaptively
+delta_sfh = 0.5 # delta in tform90 - tform10 parameter (in Gyr) in which to bin, unless binning adaptively
+n_sfh_bins = 10 # number of bins in SFH parameter, adaptive, so that each bin contains approximately equal number of objects
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
     args.fontfactor = 1.5
+    if args.re_limit is None: args.re_limit = 2.
 
-    # ------------reading and binning dataframe-------------
-    df, _, args = get_binned_df(args, skip_binning=True)
+    # ---------reading in the master SED catalog----------------
+    passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
+    df = read_passage_sed_catalog(passage_catalog_filename)
 
     # -----------making bins in various ways---------------------
-    bin_summary, centers_scaled, scaling = None, None, None
     for method in methods:
-        output = bin_by_method(df, method, sfms=sfms, n_adaptive_bins=n_adaptive_bins, target_n=target_n, min_n=min_n, max_n=max_n, n_mass_bins=n_mass_bins, delta_sfms=delta_sfms, delta_sfh=delta_sfh)
-        if 'vor' in method:
-            df, bin_summary, centers_scaled, scaling = output
-        else:
-            df, bin_list = output
+        print(f'\nDoing method {method}')
+        args.adaptive_bins, args.voronoi_bins, args.bin_by_sfh, args.bin_by_distance, args.bin_by_distance_mass = [False] * 5
+        args.min_gal_per_bin = None
 
-    # ------------plotting stacked gradients on SFMS--------------------------
-    fig = plot_SFMS_bins(df, methods, args, centers_scaled=centers_scaled, scaling=scaling, bin_summary=bin_summary, sfms=sfms)
-    save_fig(fig, args.fig_dir, f'SFMS_binned.png', args) # saving the figure
+        if method.startswith('adaptive'): args.adaptive_bins = True
+        if 'voronoi' in method: args.voronoi_bins = True
+        elif 'sfh' in method: args.bin_by_sfh = True
+        elif 'distance_mass' in method: args.bin_by_distance_mass = True
+        elif 'distance' in method: args.bin_by_distance = True
+        if '_nmin' in method and args.min_gal_per_bin is None: args.min_gal_per_bin = 20
+
+        df, bin_list, args = get_binned_df(args, df=df, method_text=f'_{method}', skip_stacking=True)
+
+        if 'voronoi' in method:
+            bin_summary, centers_scaled, scaling = bin_list
+        else:
+            bin_summary, centers_scaled, scaling = [None] * 3
+
+        # ------------plotting stacked gradients on SFMS--------------------------
+        fig = plot_SFMS_bins(df, [method], [f'_{method}'], args, centers_scaled=centers_scaled, scaling=scaling, bin_summary=bin_summary, sfms=sfms)
+        save_fig(fig, args.fig_dir, f'SFMS_binned.png', args) # saving the figure
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

@@ -10,8 +10,9 @@
              run stack_emission_maps.py --system ssd --field Par28 --do_all_obj --adaptive_bins --max_gal_per_bin 20
              run stack_emission_maps.py --system ssd --field Par28 --do_all_obj --adaptive_bins --bin_by_distance
              run stack_emission_maps.py --system ssd --field Par28 --do_all_obj --adaptive_bins --bin_by_distance_mass
-             run stack_emission_maps.py --system ssd --field Par28 --id 1982 --clobber --debug_bin --debug_align --adaptive_bins --bin_by_distance_mass
              run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --adaptive_bins --bin_by_distance
+             run stack_emission_maps.py --system ssd --field Par28 --id 1982 --clobber --debug_bin --debug_align --adaptive_bins --bin_by_distance_mass
+             run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --clobber --adaptive_bins --bin_by_distance_mass
 '''
 
 from header import *

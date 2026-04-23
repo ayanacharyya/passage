@@ -268,6 +268,7 @@ def parse_args():
     parser.add_argument('--bin_by_distance_mass', dest='bin_by_distance_mass', action='store_true', default=False, help='Compute the stellar mass-SFR bins based on the distance from the SFMS as well as stellar mass? Default is no.')
     parser.add_argument('--adaptive_bins', dest='adaptive_bins', action='store_true', default=False, help='Compute the stellar mass-SFR bins in an adaptive way? Default is no.')
     parser.add_argument('--voronoi_bins', dest='voronoi_bins', action='store_true', default=False, help='Compute the stellar mass-SFR bins using Voronoi binning? Default is no.')
+    parser.add_argument('--min_gal_per_bin', metavar='min_gal_per_bin', type=int, action='store', default=None, help='Minimum galaxies allowed in one bin, if binning adaptively; Default is None')
     parser.add_argument('--max_gal_per_bin', metavar='max_gal_per_bin', type=int, action='store', default=20, help='Maximum galaxies allowed in one bin, if binning adaptively; Default is 20')
     parser.add_argument('--max_gal_per_page', metavar='max_gal_per_page', type=int, action='store', default=10, help='Maximum galaxies allowed on one page of the PDF; Default is 10')
     parser.add_argument('--debug_bin', dest='debug_bin', action='store_true', default=False, help='Debug just one bin (instead of going through all the bins? Default is no.')
@@ -281,6 +282,7 @@ def parse_args():
     parser.add_argument('--debug_folding', dest='debug_folding', action='store_true', default=False, help='Debug the folding of emission line maps? Default is no.')
     parser.add_argument('--plot_line_maps', dest='plot_line_maps', action='store_true', default=False, help='Plot the stacked emission line maps? Default is no.')
     parser.add_argument('--plot_line_and_metallicity', dest='plot_line_and_metallicity', action='store_true', default=False, help='Plot the stacked emission line maps side by side to metallicity map? Default is no.')
+    parser.add_argument('--plot_line_and_bpt', dest='plot_line_and_bpt', action='store_true', default=False, help='Plot the stacked emission line maps side by side to BPT map? Default is no.')
     parser.add_argument('--plot_minor_major_profile', dest='plot_minor_major_profile', action='store_true', default=False, help='Plot the minor axis and major axis radial profiles separately? Default is no.')
 
     # ---- args added for plot_stacked_gradients.py ------------
