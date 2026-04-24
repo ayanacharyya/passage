@@ -19,7 +19,7 @@ from header import *
 from util import *
 setup_plot_style()
 from make_diagnostic_maps import trim_image, get_dereddened_flux, myimshow, get_offsets_from_center, get_cutout
-from make_sfms_bins import get_binned_df
+from make_sfms_bins import get_binned_df, z_lim
 
 start_time = datetime.now()
 
@@ -400,13 +400,14 @@ if __name__ == "__main__":
     cmin, cmax, cmap = -3.4, -1.4, 'cividis'
     
     # ------------reading and binning dataframe-------------
-    df, bin_list, args = get_binned_df(args)
+    df, bin_list, args = get_binned_df(args, z_lim=z_lim)
     n_lines = len(args.line_list) + 1 # one additional column for the direct image
 
     if args.id is not None: df = df[df['id'].isin(args.id)]
     
     # ------------looping over each bin-----------------------
     nbin_good = 0
+    nobj_total_binned = 0
 
     for index2, this_mass_sfr_bin in enumerate(bin_list):
         if args.debug_bin and nbin_good > 0: break
@@ -444,6 +445,7 @@ if __name__ == "__main__":
             nbin_good += 1
             nobj_good = 0
             ngal_this_bin = len(ids)
+            nobj_no_scale_line = 0
         else:
             # --------determine which objects fall in this bin----------
             if args.bin_by_distance_mass:
@@ -458,13 +460,13 @@ if __name__ == "__main__":
             nobj_good = 0
             ngal_this_bin = len(ids_in_thisbin)
             nrows_total = ngal_this_bin + 1 # one extra row for the stacked plots
+            nobj_no_scale_line = 0
             
             if ngal_this_bin > 0:
                 print(f'which has {ngal_this_bin} objects.')
                 line_maps_array = [[] for _ in range(len(args.line_list))] # each array must be len(args.line_list) long and each element will become a stack of 2D images
                 line_maps_err_array = [[] for _ in range(len(args.line_list))] # each array must be len(args.line_list) long and each element will become a stack of 2D images
                 constituent_ids_array = [[] for _ in range(len(args.line_list))]
-                total_brightness_array = [[] for _ in range(len(args.line_list))]
 
                 # --------setup PDF for mammoth figures for all emission line map plots----------
                 if not args.debug_align:
@@ -493,16 +495,14 @@ if __name__ == "__main__":
                     # ----------------looping over the objects in this chunk-------------
                     for index3, this_galaxy in enumerate(chunk):
                         obj = df.loc[df['id'] == this_galaxy].iloc[0]
-                        print(f'\t\tCommencing ({chunk_id + index3 + 1}/{ngal_this_bin}) ID {this_galaxy}..')
                         args.field = obj['field']
                         args.id = obj['id']
+                        print(f'\n\t\tCommencing ({chunk_id + index3 + 1}/{ngal_this_bin}) ID {args.field}:{this_galaxy}..')
 
                         # ------determining directories and filenames---------
                         product_dir = args.input_dir / args.field / 'Products'
                         full_fits_file = product_dir / 'full_psf_matched' / f'{args.field}_{args.id:05d}.full.fits'
                         maps_fits_file = product_dir / 'maps_psf_matched' / f'{args.field}_{args.id:05d}.maps.fits'
-                        # full_fits_file = product_dir / 'full' / f'{args.field}_{args.id:05d}.full.fits'
-                        # maps_fits_file = product_dir / 'maps' / f'{args.field}_{args.id:05d}.maps.fits'
                         od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.1D.fits'
 
                         if os.path.exists(maps_fits_file): # if the fits files are in maps/
@@ -552,10 +552,16 @@ if __name__ == "__main__":
                         if scaling_line in args.available_lines:
                             _, _, line_int = get_emission_line_map(scaling_line, full_hdu, args, dered=False, silent=True)
                             integrated_scaling_flux = line_int.n
-                            print(f'\nScaling all line fluxes of {args.id} by {scaling_line} flux = {integrated_scaling_flux}')
+                            if integrated_scaling_flux > 0:
+                                print(f'Scaling all line fluxes of {args.id} by {scaling_line} flux = {integrated_scaling_flux}')
+                            else:
+                                print(f'Since integrated flux for {scaling_line} < 0 (= {integrated_scaling_flux}), for {args.id}, not putting this in stack')
+                                nobj_no_scale_line += 1
+                                continue
                         else:
-                            integrated_scaling_flux = 1e-17 # dummy value for galaxies that do not have OIII-5007 coverage
-                            print(f'\nSince {scaling_line} not available for {args.id}, scaling all lines by {integrated_scaling_flux}')
+                            print(f'Since {scaling_line} not available for {args.id}, not putting this in stack')
+                            nobj_no_scale_line += 1
+                            continue
                         
                         # ---------------direct image---------------
                         filter = 'F200W'             
@@ -569,8 +575,6 @@ if __name__ == "__main__":
                         recentered_direct_image = ndimage.shift(rescaled_direct_image, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], order=0, cval=np.nan)
 
                         recentered_segmentation_map = ndimage.shift(rescaled_segmentation_map, [args.ndelta_xpix_rescaled, args.ndelta_ypix_rescaled], order=0, cval=np.nan)
-
-                        total_brightness = np.nansum(direct_image)
 
                         # ---------plotting direct image and the rescaled direct image------------------------------
                         if not args.debug_align:
@@ -608,16 +612,9 @@ if __name__ == "__main__":
                                 line_map /= integrated_scaling_flux
                                 line_map_err /= integrated_scaling_flux
 
-                                # ------smoothing the map before rotating--------
-                                # smoothing_kernel = Box2DKernel(args.kernel_size, mode=args.kernel_mode)
-                                # smoothed_line_map = convolve(line_map, smoothing_kernel)
-                                # smoothed_line_map_err = convolve(line_map_err, smoothing_kernel)
-
                                 # --------rotating the line map---------------------
                                 rotated_line_map = rotate_line_map(line_map, args)
                                 rotated_line_map_err = rotate_line_map(line_map_err, args)
-                                # rotated_line_map = rotate_line_map(smoothed_line_map, args)
-                                # rotated_line_map_err = rotate_line_map(smoothed_line_map_err, args)
 
                                 # --------deprojecting the line map---------------------
                                 deprojected_line_map = rotated_line_map if args.skip_deproject else deproject_line_map(rotated_line_map, args)
@@ -643,7 +640,7 @@ if __name__ == "__main__":
                                     axes[3] = myimshow(rescaled_line_map, axes[3], contour=rescaled_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Rescaled', cmap=cmap, col='w' if args.fortalk else 'k')
                                     axes[4] = myimshow(recentered_line_map, axes[4], contour=recentered_segmentation_map != args.id, re_pix=args.npix_side / (2 * args.re_limit), label='Recentered', cmap=cmap, col='w' if args.fortalk else 'k')
 
-                                    figname = fig_dir / f'debug_align_{args.id}{args.deproject_text}{args.rescale_text}.png'
+                                    figname = args.fig_dir / f'debug_align_{args.id}{args.deproject_text}{args.rescale_text}.png'
                                     fig_debug.savefig(figname, transparent=args.fortalk)
                                     print(f'\nSaved figure as {figname}')
 
@@ -654,7 +651,6 @@ if __name__ == "__main__":
                                 line_maps_array[index4].append(recentered_line_map)
                                 line_maps_err_array[index4].append(recentered_line_map_err)
                                 constituent_ids_array[index4].append(f'{args.field}-{args.id}')
-                                total_brightness_array[index4].append(total_brightness)
 
                                 nlines_good += 1
 
@@ -686,7 +682,7 @@ if __name__ == "__main__":
                 # -----stacking all line maps for all objects in this bin-----------
                 stacked_maps, stacked_maps_err, nobj_arr = [], [], []
                 for index4, this_line in enumerate(args.line_list):
-                    stacked_map, stacked_map_err = weighted_stack_line_maps(line_maps_array[index4], line_maps_err_array[index4])#, additional_weights= 1 / np.array(total_brightness_array[index4]) ** 2)
+                    stacked_map, stacked_map_err = weighted_stack_line_maps(line_maps_array[index4], line_maps_err_array[index4])
                     stacked_maps.append(stacked_map)
                     stacked_maps_err.append(stacked_map_err)
                     nobj_arr.append(len(constituent_ids_array[index4]))
@@ -724,7 +720,9 @@ if __name__ == "__main__":
                 print(f'which has no object. Skipping this bin.')
                 continue
 
-        print(f'\nCompleted bin {bin_text} ({nobj_good} / {ngal_this_bin} objects) in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
+        nobj_total_binned += nobj_good
+        print(f'\nCompleted bin {bin_text} ({nobj_good} / {ngal_this_bin} objects, {nobj_no_scale_line} skipped due to lack of {scaling_line}) in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
         if nobj_good > 1: nbin_good += 1
 
+    print(f'\nBinned total ({nobj_total_binned} / {len(df)}) objects, into {len(bin_list)} bins.')
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

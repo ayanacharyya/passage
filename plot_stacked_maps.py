@@ -20,7 +20,7 @@
 from header import *
 from util import *
 from make_diagnostic_maps import compute_Z_C19, compute_Z_KD02_R23, compute_Z_P25, compute_Z_Te, compute_Te, take_safe_log_ratio, take_safe_log_sum, myimshow, get_AGN_func_methods
-from make_sfms_bins import get_binned_df
+from make_sfms_bins import get_binned_df, z_lim
 from stack_emission_maps import read_stacked_maps
 from plots_for_zgrad_paper import plot_fitted_line, odr_fit, plot_AGN_demarcation_ax, get_distance_map_from_AGN_line, get_ratio_labels, overplot_AGN_line_on_BPT
 
@@ -465,11 +465,11 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
                     N2Ha_model = best_model_dict['table'].loc['NII6583', 'Model'] / best_model_dict['table'].loc['Halpha', 'Model']
                     print(f'N2Ha = {N2Ha_model}')
             
+                counter += 1
             else:
                 logOH = ufloat(np.nan, np.nan)
                 print(f'Could not run NB for unique ID {this_ID} ({counter + 1} out of {len(unique_IDs_array)}) with only {len(obs_fluxes)} good fluxes')
 
-            counter += 1
             logOH_dict_unique_IDs.update({this_ID: logOH}) # updating to unique ID dictionary once logOH has been calculated for this unique ID
 
         logOH_array.append(logOH)
@@ -1025,7 +1025,7 @@ if __name__ == "__main__":
     args.fontfactor = 1.5
 
     # ------------reading and binning dataframe-------------
-    df, bin_list, args = get_binned_df(args)
+    df, bin_list, args = get_binned_df(args, z_lim=z_lim)
     
     # ------------setting up master dataframe----------------------
     common_cols = ['nobj', 'logOH_int', 'logOH_int_u', 'minor_logOH_grad', 'minor_logOH_grad_u', 'major_logOH_grad', 'major_logOH_grad_u', 'radial_logOH_grad', 'radial_logOH_grad_u']
@@ -1050,7 +1050,7 @@ if __name__ == "__main__":
             bin_text = f'delta_sfms_bin_{this_delta_sfms_bin.left}-{this_delta_sfms_bin.right}_mass_bin_{this_mass_bin.left}-{this_mass_bin.right}'
         else:
             bin_text = f'logmassbin_{this_bin[0].left}-{this_bin[0].right}_logsfrbin_{this_bin[1].left}-{this_bin[1].right}'
-        print(f'\tStarting ({index2 + 1}/{len(bin_list)}) {bin_text}..', end=' ')
+        print(f'\n\tStarting ({index2 + 1}/{len(bin_list)}) {bin_text}..', end=' ')
         
         # -------reading previously saved stacked fits file------------
         stacked_filename = args.fits_dir / f'stacked_maps{args.deproject_text}{args.rescale_text}_{bin_text}.fits'
@@ -1058,6 +1058,9 @@ if __name__ == "__main__":
             print(f'No stacked fits file found for {bin_text}, so skipping this bin.')
             continue
         line_dict = read_stacked_maps(stacked_filename, args)
+        if not line_dict:
+            print(f'No lines found for {bin_text}. So Skipping.')
+            continue
         nbin_good += 1
 
         # ---------fold stacked maps along major and minor axis--------------------
@@ -1070,9 +1073,6 @@ if __name__ == "__main__":
         # ---------------plot emission line maps of this bin---------------------
         if args.plot_line_maps:
             fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=-2)
-            if len(line_list) == 0:
-                print(f'No lines found for {bin_text}. So Skipping.')
-                continue
             save_fig(fig_em, args.fig_dir, f'stacked{args.fold_text}_line_maps{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -----------------computing metallicity maps of this bin---------------
@@ -1098,12 +1098,6 @@ if __name__ == "__main__":
             fig_met, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=-2, Zmin=None, Zmax=None)
             save_fig(fig_met, args.fig_dir, f'stacked{args.fold_text}_line_and_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
-        # -----------------plot line maps and metallicity maps of this bin---------------
-        if args.plot_line_and_bpt:
-            fig_bpt = plot_line_and_bpt_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-3.5, cmax=-2.5)
-            if fig_bpt is not None:
-                save_fig(fig_bpt, args.fig_dir, f'stacked{args.fold_text}_line_and_bpt_map_{args.AGN_diag}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
-
         # -------------save fit results to dataframe-----------------------
         if args.plot_radial_profiles and (args.plot_metallicity or args.plot_line_and_metallicity):
             if args.bin_by_distance_mass:
@@ -1113,17 +1107,23 @@ if __name__ == "__main__":
             else:
                 thisrow = {'log_mass_bin':this_bin[0], 'log_sfr_bin':this_bin[1]}
             
-            thisrow.update({'nobj':nobj, \
-                            'logOH_int':logOH_int.n, \
-                            'logOH_int_u':logOH_int.s, \
-                            'minor_logOH_grad':minor_linefit_odr[0].n, \
-                            'minor_logOH_grad_u':minor_linefit_odr[0].s, \
+            thisrow.update({'nobj': nobj, \
+                            'logOH_int': logOH_int.n, \
+                            'logOH_int_u': logOH_int.s, \
+                            'minor_logOH_grad': minor_linefit_odr[0].n, \
+                            'minor_logOH_grad_u': minor_linefit_odr[0].s, \
                             'major_logOH_grad': major_linefit_odr[0].n, \
                             'major_logOH_grad_u': major_linefit_odr[0].s, \
                             'radial_logOH_grad': radial_linefit_odr[0].n, \
                             'radial_logOH_grad_u': radial_linefit_odr[0].s, \
                             })
             df_grad.loc[len(df_grad)] = thisrow
+
+        # -----------------plot line maps and metallicity maps of this bin---------------
+        if args.plot_line_and_bpt:
+            fig_bpt = plot_line_and_bpt_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-3.5, cmax=-2.5)
+            if fig_bpt is not None:
+                save_fig(fig_bpt, args.fig_dir, f'stacked{args.fold_text}_line_and_bpt_map_{args.AGN_diag}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         if len(bin_list) > 5: plt.close('all')
         print(f'\nCompleted bin {bin_text} in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')

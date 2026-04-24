@@ -9,13 +9,14 @@
              run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --fold_maps --plot_minor_major_profile
              run plot_stacked_gradients.py --field Par28 --Zdiag R23 --use_C25 --fold_maps
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance --overplot_literature --overplot_passage --fold_maps
-             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --overplot_passage --fold_maps
-             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --overplot_passage --fold_maps --plot_sfms_vs_grad
+             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --overplot_passage --fold_maps --plot_minor_major_profile
+             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --fold_maps
+             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --fold_maps --plot_sfms_vs_grad
 '''
 
 from header import *
 from util import *
-from make_sfms_bins import log_mass_bins, log_sfr_bins, read_passage_sed_catalog, get_binned_df, read_passage_sed_catalog, get_sfms_func, get_binned_df, sfms
+from make_sfms_bins import log_mass_bins, log_sfr_bins, read_passage_sed_catalog, get_binned_df, read_passage_sed_catalog, get_sfms_func, get_binned_df, sfms, z_lim
 from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
 
 start_time = datetime.now()
@@ -456,7 +457,7 @@ if __name__ == "__main__":
     args.fontfactor = 1.2
 
     # ------------reading and binning dataframe-------------
-    df, bin_list, args = get_binned_df(args)
+    df, bin_list, args = get_binned_df(args, z_lim=z_lim)
     
     # -------------reading in stacked gradient dataframe-----------------------
     df_grad = read_stacked_df(args.grad_filename)
