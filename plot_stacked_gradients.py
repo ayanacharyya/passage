@@ -12,11 +12,12 @@
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --overplot_passage --fold_maps --plot_minor_major_profile
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --fold_maps
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --fold_maps --plot_sfms_vs_grad
+             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --do_all_stacks --fold_maps --plot_sfms_vs_grad
 '''
 
 from header import *
 from util import *
-from make_sfms_bins import log_mass_bins, log_sfr_bins, read_passage_sed_catalog, get_binned_df, read_passage_sed_catalog, get_sfms_func, get_binned_df, sfms, z_lim
+from make_sfms_bins import log_mass_bins, log_sfr_bins, read_passage_sed_catalog, get_binned_df, read_passage_sed_catalog, get_sfms_func, sfms, z_lim
 from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
 
 start_time = datetime.now()
@@ -412,12 +413,11 @@ def plot_SFMS_heatmap_patches(df, args, quant='logOH'):
     return fig
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_delta_SFMS_vs_quant(df, args, quant_x='delta_sfms_median', quant_y='logOH'):
+def plot_delta_SFMS_vs_quant(df, args, axes, quant_x='delta_sfms_median', quant_y='logOH', colorby_col='log_mass_median', cmap='rainbow'):
     '''
     Plots various forms of of stacked integrated metallicities and metallicity gradients vs the distance from SFMS of each stack
     Returns figure handle
     '''
-    quant_y_list = [f'{quant_y}_int', f'radial_{quant_y}_grad', f'minor_{quant_y}_grad', f'major_{quant_y}_grad']
     label_dict = {f'minor_{quant_y}_grad': 'Minor\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
                   f'major_{quant_y}_grad': 'Major\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
                   f'radial_{quant_y}_grad': r'$\nabla$Z$_r$ [dex/R$_e$]',\
@@ -430,16 +430,16 @@ def plot_delta_SFMS_vs_quant(df, args, quant_x='delta_sfms_median', quant_y='log
                   f'{quant_y}_int': [6.8, 8.5],\
                   'delta_sfms_median': [-2, 2],\
                   }    
-    # -----------------setup the figure---------------
-    fig, axes = plt.subplots(len(quant_y_list), 1, figsize=(5, 7), sharex=True)
-    fig.subplots_adjust(left=0.2, right=0.98, top=0.95, bottom=0.1, wspace=0., hspace=0.)
-    grad_color, int_color = 'cornflowerblue', 'salmon'
-    args.fontsize /= 1.
-
+    # lim_dict = {f'minor_{quant_y}_grad': [-0.03, 0.03],\
+    #               f'major_{quant_y}_grad': [-0.03, 0.03],\
+    #               f'radial_{quant_y}_grad': [-0.03, 0.03],\
+    #               f'{quant_y}_int': [6.8, 8.],\
+    #               'delta_sfms_median': [-2, 2],\
+    #               }    
+    
     # ---------plot the correlations-------------------
     for index, this_quant in enumerate(quant_y_list):
-        color = grad_color if 'grad' in this_quant else int_color
-        axes[index].scatter(df[quant_x], df[this_quant], s=50, c=color, lw=1, edgecolors='k')
+        axes[index].scatter(df[quant_x], df[this_quant], s=50, c=df[colorby_col], lw=1, edgecolors='k', cmap=cmap)
         if f'{this_quant}_u' in df:
             axes[index].errorbar(df[quant_x], df[this_quant], yerr=df[f'{this_quant}_u'], c='grey', lw=0.7, fmt='none', alpha=0.9)
 
@@ -447,7 +447,7 @@ def plot_delta_SFMS_vs_quant(df, args, quant_x='delta_sfms_median', quant_y='log
 
     plt.show(block=False)
 
-    return fig
+    return axes
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -456,34 +456,99 @@ if __name__ == "__main__":
     if args.re_limit is None: args.re_limit = 2.
     args.fontfactor = 1.2
 
-    # ------------reading and binning dataframe-------------
-    df, bin_list, args = get_binned_df(args, z_lim=z_lim)
-    
-    # -------------reading in stacked gradient dataframe-----------------------
-    df_grad = read_stacked_df(args.grad_filename)
-    df = df.rename(columns={'bin_intervals': 'delta_sfms_bin', 'mass_intervals':'log_mass_bin'})
-    if args.bin_by_distance_mass:
-        df = df.groupby(['delta_sfms_bin', 'log_mass_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()
-        df_grad = pd.merge(df_grad, df, on=['delta_sfms_bin', 'log_mass_bin'], how='left')
-    elif args.bin_by_distance:
-        df = df.groupby(['delta_sfms_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()
-        df_grad = pd.merge(df_grad, df, on=['delta_sfms_bin'], how='left')
-    
-    # ------------plotting stacked gradients on SFMS--------------------------
-    qualifiers = f'{args.binby_text}{args.fold_text}_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}'
-    if args.plot_sfms_vs_grad:
-        fig2 = plot_delta_SFMS_vs_quant(df_grad, args, quant_x='delta_sfms_median', quant_y='logOH')
-        save_fig(fig2, args.fig_dir, f'dSFMS_vs_grad{qualifiers}.png', args) # saving the figure
+    # ---------------choose which binning methods to try---------------
+    if args.do_all_stacks:
+        methods = [
+                'linear', \
+                'linear_distance', \
+                'linear_distance_mass', \
+                'adaptive_nmax', \
+                'adaptive_distance', \
+                'adaptive_distance_mass', \
+                ]
     else:
-        if args.plot_minor_major_profile:
-            #fig = plot_SFMS_heatmap_sns(df_grad, args)
-            fig = plot_SFMS_heatmap_patches(df_grad, args)
-            figname = f'SFMS_heatmap_minor_major_{qualifiers}.png'
-            save_fig(fig, args.fig_dir, figname, args) # saving the figure
+        methods = [None]
+    
+    # ---------reading in the master SED catalog----------------
+    passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
+    df_input = read_passage_sed_catalog(passage_catalog_filename, z_lim=z_lim, sfms=sfms)
+
+    # ----------setting up master figure (for args.plot_sfms_vs_grad--------------------
+    label_dict = {'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack'}
+    quant_x = 'delta_sfms_median'
+    quant_y = 'logOH'
+    colorby_col = 'log_mass_median'
+    quant_y_list = [f'{quant_y}_int', f'radial_{quant_y}_grad', f'minor_{quant_y}_grad', f'major_{quant_y}_grad']
+    #cmap_arr = ['viridis', 'magma', 'plasma', 'cividis', 'inferno', 'mako'] # uniform
+    #cmap_arr = ['viridis', 'magma', 'inferno', 'YlGnBu', 'PuRd', 'GnBu'] # sequential
+    cmap_arr = ['Reds', 'Blues', 'Greens', 'Greys', 'Oranges', 'Purples'] # single-hue
+ 
+    fig, axes = plt.subplots(len(quant_y_list), 1, figsize=(6, 7), sharex=True)
+    fig.subplots_adjust(left=0.15, right=0.83, top=0.95, bottom=0.1, wspace=0., hspace=0.)
+
+    # -----------making bins in various ways---------------------
+    for index, method in enumerate(methods):
+        if method is not None:
+            print(f'\nDoing method {method}')
+            args.adaptive_bins, args.voronoi_bins, args.bin_by_sfh, args.bin_by_distance, args.bin_by_distance_mass = [False] * 5
+            args.min_gal_per_bin = None
+
+            if method.startswith('adaptive'): args.adaptive_bins = True
+            if 'voronoi' in method: args.voronoi_bins = True
+            elif 'sfh' in method: args.bin_by_sfh = True
+            elif 'distance_mass' in method: args.bin_by_distance_mass = True
+            elif 'distance' in method: args.bin_by_distance = True
+            if '_nmin' in method and args.min_gal_per_bin is None: args.min_gal_per_bin = 20
+
+        # ------------reading and binning dataframe-------------
+        df = df_input.copy()
+        df, bin_list, args = get_binned_df(args, df=df, skip_stacking=True, z_lim=z_lim, sfms=sfms)
+
+        # -------------reading in stacked gradient dataframe-----------------------
+        df_grad = read_stacked_df(args.grad_filename)
+
+        # -------------merging the two dataframes-----------------------
+        if args.bin_by_distance_mass:
+            df2 = df.rename(columns={'mass_interval':'log_mass_bin', 'mass_intervals':'log_mass_bin', 'bin_intervals':'delta_sfms_bin'})
+            df2 = df2.groupby(['delta_sfms_bin', 'log_mass_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()
+            df_grad = pd.merge(df_grad, df2, on=['delta_sfms_bin', 'log_mass_bin'], how='left')
+        elif args.bin_by_distance:
+            df2 = df.rename(columns={'bin_intervals':'delta_sfms_bin'})
+            df2 = df2.groupby(['delta_sfms_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()
+            df_grad = pd.merge(df_grad, df2, on=['delta_sfms_bin'], how='left')
+        else:
+            df2 = df.rename(columns={'mass_interval':'log_mass_bin', 'mass_intervals':'log_mass_bin', 'sfr_intervals':'log_sfr_bin', 'sfr_interval':'log_sfr_bin'})
+            df2 = df2.groupby(['log_mass_bin', 'log_sfr_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()
+            df_grad = pd.merge(df_grad, df2, on=['log_mass_bin', 'log_sfr_bin'], how='left')
         
-        args.plot_minor_major_profile = False
-        fig = plot_SFMS_heatmap_patches(df_grad, args)
-        figname = f'SFMS_heatmap{qualifiers}.png'
-        save_fig(fig, args.fig_dir, figname, args) # saving the figure
+        # ------------plotting stacked gradients on SFMS--------------------------
+        qualifiers = f'{args.binby_text}{args.fold_text}_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}'
+        if args.plot_sfms_vs_grad:
+            axes = plot_delta_SFMS_vs_quant(df_grad, args, axes, quant_x=quant_x, quant_y=quant_y, colorby_col=colorby_col, cmap=cmap_arr[index])
+            
+            if index == len(methods) - 1:
+                # --------adding common colorbar----------------
+                pos_top = axes[0].get_position()
+                pos_bottom = axes[-1].get_position()
+                cax = fig.add_axes([pos_top.x1 + 0.02, pos_bottom.y0, 0.02, pos_top.y1 - pos_bottom.y0]) # [left, bottom, width, height]
+                fig = axes[0].figure
+                im = axes[0].collections[0]
+                cbar = fig.colorbar(im, ax=axes, orientation='vertical', cax=cax)
+                cbar.set_label(label_dict[colorby_col], fontsize=args.fontsize)
+                cbar.ax.tick_params(labelsize=args.fontsize / args.fontfactor)
+            
+                # -----saving figure-----
+                save_fig(fig, args.fig_dir, f'dSFMS_vs_grad_{qualifiers}.png', args) # saving the figure
+        else:
+            if args.plot_minor_major_profile:
+                #fig = plot_SFMS_heatmap_sns(df_grad, args)
+                fig = plot_SFMS_heatmap_patches(df_grad, args)
+                figname = f'SFMS_heatmap_minor_major_{qualifiers}.png'
+                save_fig(fig, args.fig_dir, figname, args) # saving the figure
+            
+            args.plot_minor_major_profile = False
+            fig = plot_SFMS_heatmap_patches(df_grad, args)
+            figname = f'SFMS_heatmap{qualifiers}.png'
+            save_fig(fig, args.fig_dir, figname, args) # saving the figure
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
