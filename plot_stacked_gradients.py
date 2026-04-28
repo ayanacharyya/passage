@@ -12,13 +12,13 @@
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --overplot_passage --fold_maps --plot_minor_major_profile
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --fold_maps
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --fold_maps --plot_sfms_vs_grad
-             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --do_all_stacks --fold_maps --plot_sfms_vs_grad
+             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag NB --do_all_stacks --fold_maps --plot_sfms_vs_grad
 '''
 
 from header import *
 from util import *
-from make_sfms_bins import log_mass_bins, log_sfr_bins, read_passage_sed_catalog, get_binned_df, read_passage_sed_catalog, get_sfms_func, sfms, z_lim
-from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14
+from make_sfms_bins import log_mass_bins, log_sfr_bins, get_stacking_sample, get_binned_df, get_sfms_func, sfms, z_lim
+from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_SFMS_PASSAGE
 
 start_time = datetime.now()
 
@@ -112,6 +112,23 @@ def plot_SFMS_Shivaei15_sns(ax, nx, ny, xmin=7, xmax=11, ymin=0, ymax=1, color='
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
+def plot_SFMS_PASSAGE_sns(ax, nx, ny, xmin=7, xmax=11, ymin=0, ymax=1, color='salmon'):
+    '''
+    Overplots fitted SFMS based on PASSAGE data in Huberty+2026; based on 798 galaxies at z~2 after various filtering (see make_sfms_bins.get_stacking_sample())
+    Returns two lists and a float which is the scatter in the relation: log_mass, log_SFR, c
+    '''
+    a, b, c = -0.0207, 1.1568, -8.1505 # np.poly1d() coefficients [a, b, c]
+
+    log_mass = np.linspace(xmin, xmax, 40)
+    log_SFR = np.polyval([a, b, c], log_mass)
+
+    log_mass, log_SFR = rescale_for_seaborn(log_mass, log_SFR, nx, ny, xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
+    ax.plot(log_mass, log_SFR, ls='solid', c=color, lw=2, label=f'This sample: Huberty+2026')
+    ax.fill_between(log_mass, log_SFR - c/2, log_SFR + c/2, alpha=0.3, facecolor=color)
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_SFMS_Popesso23_sns(ax, redshift, nx, ny, xmin=7, xmax=11, ymin=0, ymax=1, color='cornflowerblue'):
     '''
     Computes an empirical SFMS based on Popesso+23 (https://arxiv.org/abs/2203.10487) Eq 10, for given redshift
@@ -199,6 +216,7 @@ def make_heatmap_sns(ax, pivot_color, pivot_annot, args, cmap='viridis', clabel=
         ax = plot_SFMS_Shivaei15_sns(ax, len(pivot_color.columns), len(pivot_color.index), xmin=log_mass_edges[0], xmax=log_mass_edges[-1], ymin=log_sfr_edges[-1], ymax=log_sfr_edges[0], color='darkgreen')
         ax = plot_SFMS_Popesso23_sns(ax, 2, len(pivot_color.columns), len(pivot_color.index), xmin=log_mass_edges[0], xmax=log_mass_edges[-1], ymin=log_sfr_edges[-1], ymax=log_sfr_edges[0], color='darkgoldenrod')
         #ax = plot_SFMS_Popesso23_sns(ax, 3, len(pivot_color.columns), len(pivot_color.index), xmin=log_mass_edges[0], xmax=log_mass_edges[-1], ymin=log_sfr_edges[-1], ymax=log_sfr_edges[0], color='royalblue')
+        ax = plot_SFMS_PASSAGE_sns(ax, len(pivot_color.columns), len(pivot_color.index), xmin=log_mass_edges[0], xmax=log_mass_edges[-1], ymin=log_sfr_edges[-1], ymax=log_sfr_edges[0], color='darkgreen')
         ax.legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
 
     return ax
@@ -383,19 +401,10 @@ def plot_SFMS_heatmap_patches(df, args, quant='logOH'):
             axes[1] = make_heatmap_patches(axes[1], df, f'radial_{quant}_grad', args, cmap='coolwarm', clabel=r'$\nabla$Z$_r$ [dex/R$_e$]', cmin=-2.5, cmax=2.5, ncbins=4) # plot metallicity gradient heatmap
 
     # ---------overplot PASSAGE galaxies (integrated stellar mass-SFR)--------------------
-    if args.overplot_passage:
-        if args.do_all_fields: # reading in the master SED catalog
-            passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
-            df_photcat = read_passage_sed_catalog(passage_catalog_filename)
-        else: # reading in the single-field phot catalog
-            product_dir = args.input_dir / args.field / 'Products'
-            df_photcat = GTable.read(product_dir / f'{args.field}_photcat.fits').to_pandas()
-            df_photcat['field'] = args.field
-            df_photcat = get_passage_masses_from_cosmos(df_photcat, args, id_col='id') # crossmatch with cosmos-web to get stellar mass and SFR
-            
+    if args.overplot_passage:            
         col, edgecol = 'w', 'sienna'
         for ax in axes:
-            ax.scatter(df_photcat['log_mass'], df_photcat['log_sfr'], s=5, c=col, lw=1, edgecolors=edgecol, label=f'{args.field}')
+            ax.scatter(df['log_mass'], df['log_sfr'], s=5, c=col, lw=1, edgecolors=edgecol, label=f'{args.field}')
         axes[0].legend(fontsize=args.fontsize / args.fontfactor, loc='upper left')
 
     plt.show(block=False)
@@ -407,13 +416,14 @@ def plot_SFMS_heatmap_patches(df, args, quant='logOH'):
             elif sfms == 'Shivaei15': ax = plot_SFMS_Shivaei15(ax, color='royalblue')
             elif sfms == 'Popesso23': ax = plot_SFMS_Popesso23(ax, 2, color='darkgreen')
             #elif sfms == 'Popesso23': ax = plot_SFMS_Popesso23(ax, 3, color='royalblue')
+            elif sfms == 'PASSAGE': axes[index] = plot_SFMS_PASSAGE(axes[index], color='cornflowerblue')
             else: raise ValueError(f'Method {sfms} not found in the list of available SFMS literature methods: Whitaker14, Shivaei15, Popesso23')
         axes[0].legend(fontsize=args.fontsize / args.fontfactor, loc='upper left')
 
     return fig
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_delta_SFMS_vs_quant(df, args, axes, quant_x='delta_sfms_median', quant_y='logOH', colorby_col='log_mass_median', cmap='rainbow'):
+def plot_delta_SFMS_vs_quant(df, args, axes, quant_x='delta_sfms_median', quant_y='logOH', colorby_col='log_mass_median', cmap='rainbow', marker='o'):
     '''
     Plots various forms of of stacked integrated metallicities and metallicity gradients vs the distance from SFMS of each stack
     Returns figure handle
@@ -423,26 +433,30 @@ def plot_delta_SFMS_vs_quant(df, args, axes, quant_x='delta_sfms_median', quant_
                   f'radial_{quant_y}_grad': r'$\nabla$Z$_r$ [dex/R$_e$]',\
                   f'{quant_y}_int': r'$\log$(O/H) + 12',\
                   'delta_sfms_median': r'<$\delta$ SFMS> [dex]',\
+                  'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack',
                   }
-    lim_dict = {f'minor_{quant_y}_grad': [-2.5, 2.5],\
-                  f'major_{quant_y}_grad': [-2.5, 2.5],\
-                  f'radial_{quant_y}_grad': [-2.5, 2.5],\
-                  f'{quant_y}_int': [6.8, 8.5],\
+    lim_dict = {f'minor_{quant_y}_grad': [-3, 2.5],\
+                  f'major_{quant_y}_grad': [-3, 2.5],\
+                  f'radial_{quant_y}_grad': [-3, 2.5],\
+                  f'{quant_y}_int': [6.8, 9.5],\
                   'delta_sfms_median': [-2, 2],\
+                  'log_mass_median': [7.5, 11.0],\
                   }    
     # lim_dict = {f'minor_{quant_y}_grad': [-0.03, 0.03],\
     #               f'major_{quant_y}_grad': [-0.03, 0.03],\
     #               f'radial_{quant_y}_grad': [-0.03, 0.03],\
     #               f'{quant_y}_int': [6.8, 8.],\
     #               'delta_sfms_median': [-2, 2],\
-    #               }    
+    #               'log_mass_median': [7.5, 10.5],\
+    #               }
     
     # ---------plot the correlations-------------------
     for index, this_quant in enumerate(quant_y_list):
-        axes[index].scatter(df[quant_x], df[this_quant], s=50, c=df[colorby_col], lw=1, edgecolors='k', cmap=cmap)
+        axes[index].scatter(df[quant_x], df[this_quant], s=50, c=df[colorby_col], lw=1, edgecolors='k', cmap=cmap, marker=marker)
         if f'{this_quant}_u' in df:
             axes[index].errorbar(df[quant_x], df[this_quant], yerr=df[f'{this_quant}_u'], c='grey', lw=0.7, fmt='none', alpha=0.9)
 
+        if 'grad' in this_quant: axes[index].axhline(0, c='grey', ls='dashed', lw=0.5, zorder=-5)
         axes[index] = annotate_axes(axes[index], label_dict[quant_x], label_dict[this_quant], args=args, xlim=lim_dict[quant_x], ylim=lim_dict[this_quant], hide_yaxis=False, hide_xaxis=index < len(quant_y_list) - 1)
 
     plt.show(block=False)
@@ -471,20 +485,22 @@ if __name__ == "__main__":
     
     # ---------reading in the master SED catalog----------------
     passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
-    df_input = read_passage_sed_catalog(passage_catalog_filename, z_lim=z_lim, sfms=sfms)
+    df_input = get_stacking_sample(passage_catalog_filename, args, z_lim=z_lim, sfms=sfms)
 
     # ----------setting up master figure (for args.plot_sfms_vs_grad--------------------
-    label_dict = {'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack'}
-    quant_x = 'delta_sfms_median'
-    quant_y = 'logOH'
-    colorby_col = 'log_mass_median'
-    quant_y_list = [f'{quant_y}_int', f'radial_{quant_y}_grad', f'minor_{quant_y}_grad', f'major_{quant_y}_grad']
-    #cmap_arr = ['viridis', 'magma', 'plasma', 'cividis', 'inferno', 'mako'] # uniform
-    #cmap_arr = ['viridis', 'magma', 'inferno', 'YlGnBu', 'PuRd', 'GnBu'] # sequential
-    cmap_arr = ['Reds', 'Blues', 'Greens', 'Greys', 'Oranges', 'Purples'] # single-hue
- 
-    fig, axes = plt.subplots(len(quant_y_list), 1, figsize=(6, 7), sharex=True)
-    fig.subplots_adjust(left=0.15, right=0.83, top=0.95, bottom=0.1, wspace=0., hspace=0.)
+    if args.plot_sfms_vs_grad:
+        label_dict = {'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack', 'delta_sfms_median': r'<$\delta$ SFMS> [dex]'}
+        lim_dict = {'log_mass_median': [7.5, 11.0], 'delta_sfms_median': [-2, 2]}
+        #quant_x, colorby_col = 'delta_sfms_median', 'log_mass_median'
+        quant_x, colorby_col = 'log_mass_median', 'delta_sfms_median'
+        quant_y = 'logOH'
+        quant_y_list = [f'{quant_y}_int', f'radial_{quant_y}_grad', f'minor_{quant_y}_grad', f'major_{quant_y}_grad']
+        marker_arr = ['o', 's', 'd', 'P', 'X', '^']
+        sequential_cmap = 'viridis'
+        diverging_cmap = 'RdBu'
+
+        fig, axes = plt.subplots(len(quant_y_list), 1, figsize=(6, 7), sharex=True)
+        fig.subplots_adjust(left=0.15, right=0.83, top=0.95, bottom=0.1, wspace=0., hspace=0.)
 
     # -----------making bins in various ways---------------------
     for index, method in enumerate(methods):
@@ -524,7 +540,7 @@ if __name__ == "__main__":
         # ------------plotting stacked gradients on SFMS--------------------------
         qualifiers = f'{args.binby_text}{args.fold_text}_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}'
         if args.plot_sfms_vs_grad:
-            axes = plot_delta_SFMS_vs_quant(df_grad, args, axes, quant_x=quant_x, quant_y=quant_y, colorby_col=colorby_col, cmap=cmap_arr[index])
+            axes = plot_delta_SFMS_vs_quant(df_grad, args, axes, quant_x=quant_x, quant_y=quant_y, colorby_col=colorby_col, cmap=diverging_cmap if 'sfms' in colorby_col else sequential_cmap, marker=marker_arr[index])
             
             if index == len(methods) - 1:
                 # --------adding common colorbar----------------
@@ -533,12 +549,13 @@ if __name__ == "__main__":
                 cax = fig.add_axes([pos_top.x1 + 0.02, pos_bottom.y0, 0.02, pos_top.y1 - pos_bottom.y0]) # [left, bottom, width, height]
                 fig = axes[0].figure
                 im = axes[0].collections[0]
+                im.set_clim(lim_dict[colorby_col])
                 cbar = fig.colorbar(im, ax=axes, orientation='vertical', cax=cax)
                 cbar.set_label(label_dict[colorby_col], fontsize=args.fontsize)
                 cbar.ax.tick_params(labelsize=args.fontsize / args.fontfactor)
             
                 # -----saving figure-----
-                save_fig(fig, args.fig_dir, f'dSFMS_vs_grad_{qualifiers}.png', args) # saving the figure
+                save_fig(fig, args.fig_dir, f'{quant_x}_vs_{quant_y}_colorby_{colorby_col}_{qualifiers}.png', args) # saving the figure
         else:
             if args.plot_minor_major_profile:
                 #fig = plot_SFMS_heatmap_sns(df_grad, args)
@@ -548,7 +565,7 @@ if __name__ == "__main__":
             
             args.plot_minor_major_profile = False
             fig = plot_SFMS_heatmap_patches(df_grad, args)
-            figname = f'SFMS_heatmap{qualifiers}.png'
+            figname = f'SFMS_heatmap_{qualifiers}.png'
             save_fig(fig, args.fig_dir, figname, args) # saving the figure
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

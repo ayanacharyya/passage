@@ -20,7 +20,7 @@
 from header import *
 from util import *
 from make_diagnostic_maps import compute_Z_C19, compute_Z_KD02_R23, compute_Z_P25, compute_Z_Te, compute_Te, take_safe_log_ratio, take_safe_log_sum, myimshow, get_AGN_func_methods
-from make_sfms_bins import get_binned_df, z_lim
+from make_sfms_bins import get_binned_df, z_lim, sfms
 from stack_emission_maps import read_stacked_maps
 from plots_for_zgrad_paper import plot_fitted_line, odr_fit, plot_AGN_demarcation_ax, get_distance_map_from_AGN_line, get_ratio_labels, overplot_AGN_line_on_BPT
 
@@ -1025,7 +1025,7 @@ if __name__ == "__main__":
     args.fontfactor = 1.5
 
     # ------------reading and binning dataframe-------------
-    df, bin_list, args = get_binned_df(args, z_lim=z_lim)
+    df, bin_list, args = get_binned_df(args, z_lim=z_lim, sfms=sfms)
     
     # ------------setting up master dataframe----------------------
     common_cols = ['nobj', 'logOH_int', 'logOH_int_u', 'minor_logOH_grad', 'minor_logOH_grad_u', 'major_logOH_grad', 'major_logOH_grad_u', 'radial_logOH_grad', 'radial_logOH_grad_u']
@@ -1084,7 +1084,7 @@ if __name__ == "__main__":
                     print(f'Unable to compute {args.Zdiag} metallicity for {bin_text}. So Skipping.')
                     continue
                 else:
-                    write_metallicity_map(logOH_map, logOH_int, metallicity_map_fits_file, args) # saving the metallicity maps as fits files
+                    write_metallicity_map(logOH_map, logOH_int, metallicity_map_fits_file, args, nobj=nobj) # saving the metallicity maps as fits files
             else:
                 logOH_map, logOH_int, nobj = read_metallicity_map(metallicity_map_fits_file)
         

@@ -165,6 +165,32 @@ def plot_SFMS_Popesso23(ax, redshift, color='cornflowerblue'):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
+def get_SFMS_PASSAGE(log_mass_min, log_mass_max, nbins=40):
+    '''
+    Overplots fitted SFMS based on PASSAGE data in Huberty+2026; based on 798 galaxies at z~2 after various filtering (see make_sfms_bins.get_stacking_sample())
+    Returns two lists and a float which is the scatter in the relation: log_mass, log_SFR, c
+    '''
+    a, b, c = -0.0207, 1.1568, -8.1505 # np.poly1d() coefficients [a, b, c]
+
+    log_mass = np.linspace(log_mass_min, log_mass_max, nbins//2)
+    log_SFR = np.polyval([a, b, c], log_mass)
+
+    return log_mass, log_SFR
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_SFMS_PASSAGE(ax, color='salmon'):
+    '''
+    Overplots fitted SFMS based on the PASSAGE sample (Huberty+2026)
+    Then overplots this on a given existing axis handle
+    Returns axis handle
+    '''
+
+    log_mass, log_SFR = get_SFMS_PASSAGE(ax.get_xlim()[0], ax.get_xlim()[1])
+    ax.plot(log_mass, log_SFR, ls='solid', c=color, lw=2, label=f'This sample (Huberty+26)')
+
+    return ax
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_MZR_literature(ax):
     '''
     Computes empirical MZRs based on several studies
@@ -592,6 +618,7 @@ if __name__ == "__main__":
                 ax = plot_SFMS_Popesso23(ax, 1.2, color='blue')
                 ax = plot_SFMS_Popesso23(ax, 2.0, color='cornflowerblue')
                 ax = plot_SFMS_Shivaei15(ax, color='salmon')
+                ax = plot_SFMS_PASSAGE(ax, color='brown')
                 ax = plot_SFMS_Whitaker14(ax, 0.6, color='forestgreen')
                 ax = plot_SFMS_Whitaker14(ax, 1.2, color='limegreen')
                 ax = plot_SFMS_Whitaker14(ax, 1.8, color='yellowgreen')

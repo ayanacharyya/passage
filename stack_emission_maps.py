@@ -19,7 +19,7 @@ from header import *
 from util import *
 setup_plot_style()
 from make_diagnostic_maps import trim_image, get_dereddened_flux, myimshow, get_offsets_from_center, get_cutout
-from make_sfms_bins import get_binned_df, z_lim
+from make_sfms_bins import get_binned_df, z_lim, sfms
 
 start_time = datetime.now()
 
@@ -400,7 +400,7 @@ if __name__ == "__main__":
     cmin, cmax, cmap = -3.4, -1.4, 'cividis'
     
     # ------------reading and binning dataframe-------------
-    df, bin_list, args = get_binned_df(args, z_lim=z_lim)
+    df, bin_list, args = get_binned_df(args, z_lim=z_lim, sfms=sfms)
     n_lines = len(args.line_list) + 1 # one additional column for the direct image
 
     if args.id is not None: df = df[df['id'].isin(args.id)]
@@ -408,6 +408,7 @@ if __name__ == "__main__":
     # ------------looping over each bin-----------------------
     nbin_good = 0
     nobj_total_binned = 0
+    scaling_line = 'OIII'
 
     for index2, this_mass_sfr_bin in enumerate(bin_list):
         if args.debug_bin and nbin_good > 0: break
@@ -427,19 +428,17 @@ if __name__ == "__main__":
             print(f'Reading existing fits file {output_filename}. Re-run with --clobber to rewrite.')
             # -------reading previously saved stacked fits file------------
             line_dict = read_stacked_maps(output_filename, args)
-            stacked_maps, stacked_maps_err, nobj_arr, constituent_ids_array = [], [], [], []
+            stacked_maps, stacked_maps_err, constituent_ids_array = [], [], []
             for index4, this_line in enumerate(args.line_list):
                 if this_line.upper() in line_dict:
                     this_map = line_dict[this_line.upper()]
-                    nobj = line_dict[f'{this_line.upper()}_nobj']
                     ids = line_dict[f'{this_line.upper()}_ids']
                     stacked_map, stacked_map_err = unp.nominal_values(this_map.data), unp.std_devs(this_map.data)
                 else:
-                    stacked_map, stacked_map_err, nobj, ids = np.nan, np.nan, np.nan, [0]
+                    stacked_map, stacked_map_err, ids = np.nan, np.nan, [0]
                 
                 stacked_maps.append(stacked_map)
                 stacked_maps_err.append(stacked_map_err)
-                nobj_arr.append(nobj)
                 constituent_ids_array.append(ids)                 
             
             nbin_good += 1
@@ -548,7 +547,6 @@ if __name__ == "__main__":
                         rescaled_segmentation_map = rescale_line_map(deprojected_segmentation_map, args)
 
                         # -----------extracting integrated OIII line flux, for scaling----------------
-                        scaling_line = 'OIII'
                         if scaling_line in args.available_lines:
                             _, _, line_int = get_emission_line_map(scaling_line, full_hdu, args, dered=False, silent=True)
                             integrated_scaling_flux = line_int.n
@@ -680,12 +678,11 @@ if __name__ == "__main__":
                         pdf_err.savefig(fig_err)
                 
                 # -----stacking all line maps for all objects in this bin-----------
-                stacked_maps, stacked_maps_err, nobj_arr = [], [], []
+                stacked_maps, stacked_maps_err = [], []
                 for index4, this_line in enumerate(args.line_list):
                     stacked_map, stacked_map_err = weighted_stack_line_maps(line_maps_array[index4], line_maps_err_array[index4])
                     stacked_maps.append(stacked_map)
                     stacked_maps_err.append(stacked_map_err)
-                    nobj_arr.append(len(constituent_ids_array[index4]))
 
                     # --------displaying stacked maps at the bottom of the mammoth figure---------
                     if not args.debug_align:

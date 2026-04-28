@@ -260,6 +260,9 @@ def parse_args():
     parser.add_argument('--wave_axis', metavar='wave_axis', type=int, action='store', default=3, help='Axis of the wavelength dimension in the IFU datacube. Default is 3')
     parser.add_argument('--contmask_lambda', metavar='contmask_lambda', type=float, action='store', default=50, help='Velocity window half-width for masking the spectra before fitting continuum. Default is 200 km/s')
 
+    # ---- args added for make_sfms_bins.py ------------
+    parser.add_argument('--plot_mex', dest='plot_mex', action='store_true', default=False, help='Plot the Mass excitation diagram for the passage sample? Default is no.')
+
     # ---- args added for stack_emission_maps.py ------------
     parser.add_argument('--debug_align', dest='debug_align', action='store_true', default=False, help='Debug the alignment, deprojection, rotation of emission line maps? Default is no.')
     parser.add_argument('--npix_side', metavar='npix_side', type=int, action='store', default=20, help='Size of the stacked emission maps in pixels? Default is 20')

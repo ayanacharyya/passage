@@ -10,7 +10,7 @@
 
 from header import *
 from util import *
-from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, get_SFMS_Popesso23, get_SFMS_Shivaei15, get_SFMS_Whitaker14
+from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_SFMS_PASSAGE, get_SFMS_Popesso23, get_SFMS_Shivaei15, get_SFMS_Whitaker14, get_SFMS_PASSAGE
 
 start_time = datetime.now()
 
@@ -294,7 +294,7 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
             df_sub[['log_mass_bin', 'log_sfr_bin']] = pd.DataFrame(df_sub[f'bin_intervals{method_texts[index]}'].tolist(), index=df_sub.index)
             axes[index] = make_heatmap_patches(axes[index], df_sub, 'n_galaxies', args, xcolname=f'log_mass_bin', ycolname=f'log_sfr_bin', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
         axes[index].text(0.05, 0.95, f'{method}', ha='left', va='top', c='k', fontsize=args.fontsize, transform=axes[index].transAxes)
-        axes[index].set_aspect('equal')
+        axes[index].set_aspect('auto')
 
         # ----------over-plotting data and theoretical diagrams----------
         if args.overplot_passage:
@@ -306,6 +306,7 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
             elif sfms == 'Shivaei15': axes[index] = plot_SFMS_Shivaei15(axes[index], color='royalblue')
             elif sfms == 'Popesso23': axes[index] = plot_SFMS_Popesso23(axes[index], 2, color='darkgoldenrod')
             #elif sfms == 'Popesso23': axes[index] = plot_SFMS_Popesso23(axes[index], 3, color='royalblue')
+            elif sfms == 'PASSAGE': axes[index] = plot_SFMS_PASSAGE(axes[index], color='darkgoldenrod')
             else: raise ValueError(f'Method {sfms} not found in the list of available SFMS literature methods: Whitaker14, Shivaei15, Popesso23')
             if index == 0: axes[index].legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
 
@@ -318,6 +319,51 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
     cbar.ax.tick_params(labelsize=args.fontsize)
     cbar.locator = ticker.MaxNLocator(integer=False, nbins=ncbins)#, prune='both')
     cbar.update_ticks()
+
+    plt.show(block=False)
+
+    return fig
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=50, z_lim=None):
+    '''
+    Plots the mass-excitation diagram given a dataframe with list of objects and properties
+    Returns figure handle
+    '''
+    print(f'Plotting mass-excitation diagram...')
+    # ----------setting up the diagram----------
+    fig, ax = plt.subplots(1, figsize=(5.2, 5))
+    fig.subplots_adjust(left=0.18, right=0.95, bottom=0.11, top=0.95)
+
+    # ---------making plot--------------
+    p = ax.scatter(df[mass_col], df['O3Hb'], c=df['redshift'], marker='o', s=size, edgecolor='k', lw=0.5, cmap='viridis', vmin=z_lim[0] if z_lim is not None else None, vmax=z_lim[1] if z_lim is not None else None)
+    ax.errorbar(df[mass_col], df['O3Hb'], yerr=df['O3Hb_u'], c='gray', fmt='none', lw=1, alpha=0.8)
+    if mass_col + '_u' in df: ax.errorbar(df[mass_col], df['O3Hb'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+
+    if df_agn is not None:
+        ax.scatter(df_agn[mass_col], df_agn['O3Hb'], c='w', marker='o', s=2 * size, edgecolor='r', lw=2, zorder=-5) # puts red circles around AGN objects
+
+    # ----------making colorbar----------
+    cbar = plt.colorbar(p, pad=0.01)
+    cbar.set_label('Redshift', fontsize=args.fontsize)
+    cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
+
+    # ---------annotate axes and save figure-------
+    plt.legend(fontsize=args.fontsize)
+    ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
+    ax.set_ylabel(r'log O III/H$\beta$', fontsize=args.fontsize)
+    ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
+
+    ax.set_xlim(log_mass_bins.min() - 0.2, log_mass_bins.max() + 0.2)
+    ax.set_ylim(-1.5, 3)
+
+    # ---------adding literature lines from Juneau+2014 (https://iopscience.iop.org/article/10.1088/0004-637X/788/1/88/pdf)----------
+    x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
+    y_up = np.piecewise(x, [x <= 10, x > 10], [lambda x: (0.375 / (x - 10.5)) + 1.14, lambda x: np.poly1d([410.24, -109.333, 9.71731, -0.288244][::-1])(x)]) # J14 eq 1
+    y_lo = np.piecewise(x, [x <= 9.6, x > 9.6], [lambda x: (0.375 / (x - 10.5)) + 1.14, lambda x: np.poly1d([352.066, -93.8249, 8.32651, -0.246416][::-1])(x)]) # J14 eq 2
+    ax.plot(x, y_up, c='k', ls='dashed', lw=2, label='Juneau+2014')
+    ax.plot(x, y_lo, c='brown', ls='dashed', lw=2)
+    plt.legend()
 
     plt.show(block=False)
 
@@ -415,8 +461,8 @@ def bin_SFMS_adaptive(df, method_text = '_adaptive', max_n=None, min_n=None):
         mask = (df['log_mass'] >= b['m_min']) & (df['log_mass'] < b['m_max']) & (df['log_sfr'] >= b['s_min']) & (df['log_sfr'] < b['s_max'])
         df.loc[mask, f'bin_id{method_text}'] = i
         
-        df.loc[mask, f'mass_interval{method_text}'] = pd.Interval(left=b['m_min'], right=b['m_max'], closed='left')
-        df.loc[mask, f'sfr_interval{method_text}'] = pd.Interval(left=b['s_min'], right=b['s_max'], closed='left')
+        df.loc[mask, f'mass_interval{method_text}'] = pd.Interval(left=b['m_min'], right=b['m_max'], closed='right')
+        df.loc[mask, f'sfr_interval{method_text}'] = pd.Interval(left=b['s_min'], right=b['s_max'], closed='right')
         df[f'bin_intervals{method_text}'] = list(zip(df[f'mass_interval{method_text}'], df[f'sfr_interval{method_text}']))
 
     df = df[df[f'bin_id{method_text}'] != -1].copy()
@@ -479,10 +525,14 @@ def get_sfms_func(log_mass_arr, method):
     if method == 'Whitaker14': (log_mass1, log_SFR1), (log_mass2, log_SFR2), (z1, z2) = get_SFMS_Whitaker14(log_mass_min, log_mass_max, redshift)
     elif method == 'Shivaei15': (log_mass1, log_SFR1), (log_mass2, log_SFR2), scatter = get_SFMS_Shivaei15(log_mass_min, log_mass_max)
     elif method == 'Popesso23': (log_mass1, log_SFR1), (log_mass2, log_SFR2) = get_SFMS_Popesso23(log_mass_min, log_mass_max, redshift)
+    elif method == 'PASSAGE': log_mass, log_SFR = get_SFMS_PASSAGE(log_mass_min, log_mass_max)
     else: raise ValueError(f'Method {method} not found in the list of available SFMS literature methods: Whitaker14, Shivaei15, Popesso23')
 
-    log_mass_arr = np.hstack([log_mass1, log_mass2])
-    log_sfr_arr = np.hstack([log_SFR1, log_SFR2])
+    if method == 'PASSAGE':
+        log_mass_arr, log_sfr_arr = log_mass, log_SFR
+    else:
+        log_mass_arr = np.hstack([log_mass1, log_mass2])
+        log_sfr_arr = np.hstack([log_SFR1, log_SFR2])
     if type(log_sfr_arr[0]) != np.float64: log_sfr_arr = unp.nominal_values(log_sfr_arr) # if it is an uncertainties array then just take the nominal values
 
     sfms_func = interp1d(log_mass_arr, log_sfr_arr, kind='linear', fill_value='extrapolate')
@@ -544,7 +594,7 @@ def bin_SFMS_sfh(df, method_text = '_sfh', delta_sfh=0.2, n_sfh_bins=None, bin_b
     return df, bin_list
 
 # --------------------------------------------------------------------------------------------------------------------
-def read_passage_sed_catalog(filename, use_old=True, z_lim=None, sfms='Popesso23'):
+def read_passage_sed_catalog(filename, use_old=True):
     '''
     Read the combined master catalog from PASSAGE SED fits, rename a few columns, and only keep the mass and SFR columns
     Return pandas dataframe
@@ -566,28 +616,106 @@ def read_passage_sed_catalog(filename, use_old=True, z_lim=None, sfms='Popesso23
     full_df['delta_tform_90_50'] = full_df['tform90_50'] - full_df['tform50_50']
     full_df['delta_tform_90_10'] = full_df['tform90_50'] - full_df['tform10_50']
 
-    sfms_func = get_sfms_func(full_df['log_mass'], sfms)
-
-    full_df['log_sfr_ms_expected'] = sfms_func(full_df['log_mass'])
-    full_df['delta_sfms'] = full_df['log_sfr'] - full_df['log_sfr_ms_expected']
-    full_df = full_df.dropna(subset=['delta_sfms'])
-
     # --------extracting relevant columns-----------
-    columns_to_extract = ['field', 'id', 'redshift', 'log_mass', 'log_sfr', 'log_ssfr', 'cosmosid', 'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10', 'delta_sfms']
+    columns_to_extract = ['field', 'id', 'redshift', 'log_mass', 'log_sfr', 'log_ssfr', 'cosmosid', 'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10']
     df = full_df[columns_to_extract]
     df['field'] = df['field'].astype(str)
     nobj1 = len(df)
 
     df = df.dropna(subset=['log_mass', 'log_sfr'])
     nobj2 = len(df)
-    print(f'\nOut of initial {nobj1} objects, {nobj2} had mass available..')
+    print(f'\nOut of initial {nobj1} objects, {nobj2} had mass available.')
 
+    return df
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_stacking_sample(passage_catalog_filename, args, use_old=True, z_lim=None, sfms='Popesso23'):
+    '''
+    Read the combined master catalog from PASSAGE SED fits, rename a few columns, and only keep the mass and SFR columns
+    Return pandas dataframe
+    '''
+    df = read_passage_sed_catalog(passage_catalog_filename, use_old=use_old)
+    if not args.do_all_fields:
+        df = df[df['field'] == args.field]        
+    nobj1 = len(df)
+
+    # -------------add delta sfms column--------------------
+    sfms_func = get_sfms_func(df['log_mass'], sfms)
+
+    df['log_sfr_ms_expected'] = sfms_func(df['log_mass'])
+    df['delta_sfms'] = df['log_sfr'] - df['log_sfr_ms_expected']
+    df = df.dropna(subset=['delta_sfms'])
+    print(f'Out of the {nobj1} objects, {len(df)} had delta sfms computable..', end='')
+
+    # ------------cut by redshift------------------
     if z_lim is not None:
         df = df[df['redshift'].between(z_lim[0], z_lim[1])]
-        nobj3 = len(df)
-        print(f'..out of which {nobj3} made the redshift cut zlim={z_lim}, which is the final sample')
+        print(f'..out of which {len(df)} made the redshift cut zlim={z_lim}..', end='')
+
+    # --------curtailing to desired SFR-mass limits--------------
+    df = df[(df['log_sfr'].between(log_sfr_bins.min(), log_sfr_bins.max())) & (df['log_mass'].between(log_mass_bins.min(), log_mass_bins.max()))]
+    print(f'..out of which {len(df)} made the extreme mass-sfr cut: log mass within ({log_mass_bins.min()}, {log_mass_bins.max()}) amd log sfr within ({log_sfr_bins.min()}, {log_sfr_bins.max()})..', end='')
+
+    # ------------------determine fil and path names---------
+    if args.do_all_fields:
+        re_catalog_filename = args.output_dir / f'catalogs/all_fields_re_list.fits'
     else:
-        print(f'..which is the final sample')
+        re_catalog_filename = args.output_dir / f'catalogs/{args.field}_re_list.fits'
+
+    # ---------merge with effective radius catalog--------------------
+    # ---------THIS IS WHERE THE COSMOS2020 FIELDS ARE AUTOMATICALLY DISCARDED AND ----------
+    # ------- ONLY COSMOS-WEB FIELDS STAY, BECAUSE RE DATAFRAME DOES NOT HAVE THE C2020 FIELDS --------------- 
+    if os.path.exists(re_catalog_filename):
+        df_re = Table.read(re_catalog_filename).to_pandas()
+        if 'redshift' in df_re: df_re.drop(columns=['redshift'], axis=1, inplace=True)
+        df_re['id'] = df_re['id'].astype(int)
+        df_re['field'] = df_re['field'].astype(str)
+        df_re = df_re[df_re['re_kpc'] > 0]
+        df = pd.merge(df, df_re, on=['field', 'id'], how='inner')
+        print(f'..out of which {len(df)} are in cosmos-web and have Re computed.')
+    else:
+        raise FileNotFoundError(f're catalog not found at {re_catalog_filename}; please create this file first by running compute_re.py. Exiting.')
+
+    # -------merge with all speccats by looping over fields--------------
+    print(f'\nCombining all speccats to one file before merging to df, might take a few seconds..')
+    fields = pd.unique(df['field'])
+    df_master_speccat = pd.DataFrame()
+    lines_to_extract = ['OIII', 'Hb']
+    linecols = np.hstack([[f'flux_{item}', f'err_{item}', f'sn_{item}'] for item in lines_to_extract])
+    cols_to_extract = np.hstack([['field', 'id'], linecols])
+    multi_dim_cols = ['cdf_z']
+    for this_field in fields:
+        tab_spec_this_field = GTable.read(args.input_dir / this_field / 'Products' / f'{this_field}_speccat.fits')
+        tab_spec_this_field.remove_columns(multi_dim_cols)
+        df_spec_this_field = tab_spec_this_field.to_pandas()
+        df_spec_this_field['field'] = this_field
+        df_master_speccat = pd.concat([df_master_speccat, df_spec_this_field[cols_to_extract]])
+    
+    df = pd.merge(df, df_master_speccat, on=['field', 'id'], how='inner')
+
+    # ----------------removing AGNs---------------------
+    nobj = len(df)
+    df_temp = df.copy()
+    cols_to_check = ['flux_OIII', 'err_OIII', 'err_Hb', 'flux_Hb']
+    df_temp = df_temp[(df_temp[cols_to_check] > 0).all(axis=1)]
+
+    quant = unp.log10(unp.uarray(df_temp['flux_OIII'], df_temp['err_OIII']) / unp.uarray(df_temp['flux_Hb'], df_temp['err_Hb']))
+    df_temp['O3Hb'] = unp.nominal_values(quant)
+    df_temp['O3Hb_u'] = unp.std_devs(quant)
+    df_temp['O3Hb_J14_lim'] = df_temp['log_mass'].map(lambda x: np.piecewise(x, [x <= 10, x > 10], [lambda x: (0.375 / (x - 10.5)) + 1.14, lambda x: np.poly1d([410.24, -109.333, 9.71731, -0.288244][::-1])(x)])) # J14 eq 1
+    
+    df_agn = df_temp[df_temp['O3Hb'] - df_temp['O3Hb_u'] > df_temp['O3Hb_J14_lim']]
+
+    df = df.merge(df_agn[['field', 'id']], on=['field', 'id'], how='left', indicator=True)
+    df = df[df['_merge'] == 'left_only'].drop(columns='_merge').reset_index(drop=False) # keep only the rows that exist ONLY in the left dataframe (df)
+
+    print(f'\nOut of the {nobj} objects, {len(df_agn)} are above MEx line, so they are removed; final sample is {len(df)} galaxies.')
+    
+    if args.plot_mex:
+        fig = plot_MEx(df_temp, args, df_agn=df_agn, z_lim=z_lim)
+        if args.do_all_fields: fig_dir = args.output_dir / 'stacking'
+        else: fig_dir = args.output_dir / args.field / 'stacking'
+        save_fig(fig, fig_dir, 'mass_excitation_colorby_redshift.png', args)
 
     return df
 
@@ -607,19 +735,17 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
     args.fold_text = '_folded' if args.fold_maps else ''
     args.zlim_text = '' if z_lim is None else f'_zlim_{z_lim[0]}_{z_lim[1]}'
 
-    # ---------reading in the master SED catalog----------------
-    if df is None:
-        passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
-        df = read_passage_sed_catalog(passage_catalog_filename, z_lim=z_lim, sfms=sfms)
-
+    # ------------------determine fil and path names---------
     if args.do_all_fields:
-        re_catalog_filename = args.output_dir / f'catalogs/all_fields_re_list.fits'
         root_dir = args.output_dir
     # ---------curtailing to single-field----------------
     else:
-        df = df[df['field'] == args.field]        
-        re_catalog_filename = args.output_dir / f'catalogs/{args.field}_re_list.fits'
         root_dir = args.output_dir / args.field
+
+    # ---------reading in the master SED catalog----------------
+    if df is None:
+        passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
+        df = get_stacking_sample(passage_catalog_filename, args, z_lim=z_lim, sfms=sfms)
 
     # --------------returning unbinned dataframe and no bin_list if skip_binning=True--------------
     if skip_binning:
@@ -681,18 +807,7 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
 
         args.grad_filename = args.fits_dir / f'stacked_{args.binby_text}{args.fold_text}_fits_allbins_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}{args.zlim_text}.fits'
 
-        # ---------merge with effective radius catalog--------------------
         if not skip_stacking:
-            if os.path.exists(re_catalog_filename):
-                df_re = Table.read(re_catalog_filename).to_pandas()
-                if 'redshift' in df_re: df_re.drop(columns=['redshift'], axis=1, inplace=True)
-                df_re['id'] = df_re['id'].astype(int)
-                df_re['field'] = df_re['field'].astype(str)
-                df_re = df_re[df_re['re_kpc'] > 0]
-                df = pd.merge(df, df_re, on=['field', 'id'], how='inner')
-            else:
-                raise FileNotFoundError(f're catalog not found at {re_catalog_filename}; please create this file first by running compute_re.py. Exiting.')
-
             # -------merge with all photcats by looping over fields--------------
             print(f'Combining all photcats to one file before merging to df, might take a few seconds..')
             fields = pd.unique(df['field'])
@@ -752,7 +867,7 @@ target_n = 30 # for voronoi binning
 n_adaptive_bins = 8 # for distance (from SFMS) binning
 n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
 delta_sfms_bin = 0.4 # delta in distance from SFMS in which to bin in the distance-from-SFMS method, unless binning adaptively
-sfms =  'Popesso23' # from 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
+sfms =  'PASSAGE' # from 'PASSAGE', 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
 delta_sfh = 0.5 # delta in tform90 - tform10 parameter (in Gyr) in which to bin, unless binning adaptively
 n_sfh_bins = 10 # number of bins in SFH parameter, adaptive, so that each bin contains approximately equal number of objects
 
@@ -769,7 +884,7 @@ if __name__ == "__main__":
 
     # ---------reading in the master SED catalog----------------
     passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
-    df = read_passage_sed_catalog(passage_catalog_filename, z_lim=z_lim, sfms=sfms)
+    df = get_stacking_sample(passage_catalog_filename, args, z_lim=z_lim, sfms=sfms)
 
     # -----------making bins in various ways---------------------
     for method in methods:
