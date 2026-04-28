@@ -416,7 +416,7 @@ def plot_SFMS_heatmap_patches(df, args, quant='logOH'):
             elif sfms == 'Shivaei15': ax = plot_SFMS_Shivaei15(ax, color='royalblue')
             elif sfms == 'Popesso23': ax = plot_SFMS_Popesso23(ax, 2, color='darkgreen')
             #elif sfms == 'Popesso23': ax = plot_SFMS_Popesso23(ax, 3, color='royalblue')
-            elif sfms == 'PASSAGE': axes[index] = plot_SFMS_PASSAGE(axes[index], color='cornflowerblue')
+            elif sfms == 'PASSAGE': ax = plot_SFMS_PASSAGE(ax, color='cornflowerblue')
             else: raise ValueError(f'Method {sfms} not found in the list of available SFMS literature methods: Whitaker14, Shivaei15, Popesso23')
         axes[0].legend(fontsize=args.fontsize / args.fontfactor, loc='upper left')
 
