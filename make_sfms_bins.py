@@ -594,20 +594,21 @@ def bin_SFMS_sfh(df, method_text = '_sfh', delta_sfh=0.2, n_sfh_bins=None, bin_b
     return df, bin_list
 
 # --------------------------------------------------------------------------------------------------------------------
-def read_passage_sed_catalog(filename, use_old=True):
+def read_passage_sed_catalog(filename):
     '''
     Read the combined master catalog from PASSAGE SED fits, rename a few columns, and only keep the mass and SFR columns
     Return pandas dataframe
     '''
-    if use_old:
+    if Path(filename).suffix == '.fits':
         print(f'Reading master PASSAGE SED catalog from {filename}..')
         full_df = Table.read(filename).to_pandas()
     else:
         print(f'Reading PASSAGE line finding catalog from {filename}..')
         full_df = pd.read_csv(filename, header=0, sep='\t')
-        full_df = full_df[full_df['stellar_mass_50'] > 0].reset_index(drop=True) # to get only those sources that have stellar mass measured
+        full_df = full_df[full_df['mass_50'] > 0].reset_index(drop=True) # to get only those sources that have stellar mass measured
+        full_df = full_df.drop('id', axis=1)
 
-    full_df.rename(columns={'Par':'field', 'passage_id':'id', 'id_photcat':'id', 'objid':'id', 'cosmoswebid_1':'cosmosid', 'zbest':'redshift', 'stellar_mass_50':'log_mass', 'ssfr_50':'log_ssfr', 'sfr_50':'sfr', 'ra_obj':'ra', 'dec_obj':'dec'}, inplace=True)
+    full_df.rename(columns={'Par':'field', 'passage_id':'id', 'id_photcat':'id', 'objid':'id', 'field_id':'id', 'cosmoswebid_1':'cosmosid', 'z_best':'redshift', 'zbest':'redshift', 'mass_50':'log_mass', 'stellar_mass_50':'log_mass', 'ssfr_50':'log_ssfr', 'sfr_50':'sfr', 'ra_obj':'ra', 'dec_obj':'dec'}, inplace=True)
     
     # -----------computing new columns------------
     full_df['log_sfr'] = np.log10(full_df['sfr'])
@@ -629,12 +630,12 @@ def read_passage_sed_catalog(filename, use_old=True):
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_stacking_sample(passage_catalog_filename, args, use_old=True, z_lim=None, sfms='Popesso23'):
+def get_stacking_sample(passage_catalog_filename, args, z_lim=None, sfms='Popesso23'):
     '''
     Read the combined master catalog from PASSAGE SED fits, rename a few columns, and only keep the mass and SFR columns
     Return pandas dataframe
     '''
-    df = read_passage_sed_catalog(passage_catalog_filename, use_old=use_old)
+    df = read_passage_sed_catalog(passage_catalog_filename)
     if not args.do_all_fields:
         df = df[df['field'] == args.field]        
     nobj1 = len(df)
@@ -675,24 +676,39 @@ def get_stacking_sample(passage_catalog_filename, args, use_old=True, z_lim=None
         print(f'..out of which {len(df)} are in cosmos-web and have Re computed.')
     else:
         raise FileNotFoundError(f're catalog not found at {re_catalog_filename}; please create this file first by running compute_re.py. Exiting.')
-
-    # -------merge with all speccats by looping over fields--------------
+    
+    # -------merge with all speccats to get emission line fluxes by looping over fields--------------
     print(f'\nCombining all speccats to one file before merging to df, might take a few seconds..')
     fields = pd.unique(df['field'])
     df_master_speccat = pd.DataFrame()
     lines_to_extract = ['OIII', 'Hb']
     linecols = np.hstack([[f'flux_{item}', f'err_{item}', f'sn_{item}'] for item in lines_to_extract])
-    cols_to_extract = np.hstack([['field', 'id'], linecols])
+    cols_to_extract = np.hstack([['field', 'id', 'redshift_grizli'], linecols])
     multi_dim_cols = ['cdf_z']
     for this_field in fields:
         tab_spec_this_field = GTable.read(args.input_dir / this_field / 'Products' / f'{this_field}_speccat.fits')
         tab_spec_this_field.remove_columns(multi_dim_cols)
         df_spec_this_field = tab_spec_this_field.to_pandas()
         df_spec_this_field['field'] = this_field
+        df_spec_this_field = df_spec_this_field.rename(columns={'redshift': 'redshift_grizli'})
         df_master_speccat = pd.concat([df_master_speccat, df_spec_this_field[cols_to_extract]])
     
     df = pd.merge(df, df_master_speccat, on=['field', 'id'], how='inner')
+    '''
+    # ---------merge with Huberty catalog to get emission line fluxes--------------
+    huberty_catalog_filename = args.output_dir / 'catalogs' / 'passage_cosmos_redshift_catalog_v3_internal_with_EW.dat'
+    df_speccat = pd.read_csv(huberty_catalog_filename)
+    df_speccat = df_speccat.drop('id', axis=1)
+    df_speccat = df_speccat.rename(columns={'field_id': 'id', 'z_best': 'redshift_huberty', 'o3_4959_5007_flux': 'flux_OIII', 'hb_4863_flux': 'flux_Hb', 'snr_OIII': 'sn_OIII', 'snr_Hb': 'sn_Hb'})
+    lines_to_extract = ['OIII', 'Hb']
+    for line in lines_to_extract:
+        df_speccat[f'err_{line}'] = df_speccat[f'flux_{line}'] / df_speccat[f'sn_{line}']
+    linecols = np.hstack([[f'flux_{item}', f'err_{item}', f'sn_{item}'] for item in lines_to_extract])
+    cols_to_extract = np.hstack([['field', 'id', 'redshift_huberty'], linecols])
+    df_speccat = df_speccat[cols_to_extract]
 
+    df = pd.merge(df, df_speccat, on=['field', 'id'], how='inner')
+    '''
     # ----------------removing AGNs---------------------
     nobj = len(df)
     df_temp = df.copy()

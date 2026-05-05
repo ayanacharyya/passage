@@ -428,31 +428,10 @@ def plot_delta_SFMS_vs_quant(df, args, axes, quant_x='delta_sfms_median', quant_
     Plots various forms of of stacked integrated metallicities and metallicity gradients vs the distance from SFMS of each stack
     Returns figure handle
     '''
-    label_dict = {f'minor_{quant_y}_grad': 'Minor\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
-                  f'major_{quant_y}_grad': 'Major\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
-                  f'radial_{quant_y}_grad': r'$\nabla$Z$_r$ [dex/R$_e$]',\
-                  f'{quant_y}_int': r'$\log$(O/H) + 12',\
-                  'delta_sfms_median': r'<$\delta$ SFMS> [dex]',\
-                  'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack',
-                  }
-    lim_dict = {f'minor_{quant_y}_grad': [-3, 2.5],\
-                  f'major_{quant_y}_grad': [-3, 2.5],\
-                  f'radial_{quant_y}_grad': [-3, 2.5],\
-                  f'{quant_y}_int': [6.8, 9.5],\
-                  'delta_sfms_median': [-2, 2],\
-                  'log_mass_median': [7.5, 11.0],\
-                  }    
-    # lim_dict = {f'minor_{quant_y}_grad': [-0.03, 0.03],\
-    #               f'major_{quant_y}_grad': [-0.03, 0.03],\
-    #               f'radial_{quant_y}_grad': [-0.03, 0.03],\
-    #               f'{quant_y}_int': [6.8, 8.],\
-    #               'delta_sfms_median': [-2, 2],\
-    #               'log_mass_median': [7.5, 10.5],\
-    #               }
-    
+    quant_y_list = [f'{quant_y}_int', f'radial_{quant_y}_grad', f'minor_{quant_y}_grad', f'major_{quant_y}_grad']
     # ---------plot the correlations-------------------
     for index, this_quant in enumerate(quant_y_list):
-        axes[index].scatter(df[quant_x], df[this_quant], s=50, c=df[colorby_col], lw=1, edgecolors='k', cmap=cmap, marker=marker)
+        axes[index].scatter(df[quant_x], df[this_quant], s=50, c=df[colorby_col], lw=1, vmin=lim_dict[colorby_col][0], vmax=lim_dict[colorby_col][1], edgecolors='k', cmap=cmap, marker=marker)
         if f'{this_quant}_u' in df:
             axes[index].errorbar(df[quant_x], df[this_quant], yerr=df[f'{this_quant}_u'], c='grey', lw=0.7, fmt='none', alpha=0.9)
 
@@ -462,6 +441,22 @@ def plot_delta_SFMS_vs_quant(df, args, axes, quant_x='delta_sfms_median', quant_
     plt.show(block=False)
 
     return axes
+
+# ----------------------------global dicts-------------------------------------------------------------------
+label_dict = {'minor_logOH_grad': 'Minor\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
+                'major_logOH_grad': 'Major\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
+                'radial_logOH_grad': r'$\nabla$Z$_r$ [dex/R$_e$]',\
+                'logOH_int': r'$\log$(O/H) + 12',\
+                'delta_sfms_median': r'<$\delta$ SFMS> [dex]',\
+                'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack',
+                }
+lim_dict = {'minor_logOH_grad': [-3, 2.5],\
+                'major_logOH_grad': [-3, 2.5],\
+                'radial_logOH_grad': [-3, 2.5],\
+                'logOH_int': [6.8, 9.5],\
+                'delta_sfms_median': [-0.6, 0.6],\
+                'log_mass_median': [7.0, 10.0],\
+                }    
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -489,8 +484,6 @@ if __name__ == "__main__":
 
     # ----------setting up master figure (for args.plot_sfms_vs_grad--------------------
     if args.plot_sfms_vs_grad:
-        label_dict = {'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack', 'delta_sfms_median': r'<$\delta$ SFMS> [dex]'}
-        lim_dict = {'log_mass_median': [7.5, 11.0], 'delta_sfms_median': [-2, 2]}
         #quant_x, colorby_col = 'delta_sfms_median', 'log_mass_median'
         quant_x, colorby_col = 'log_mass_median', 'delta_sfms_median'
         quant_y = 'logOH'

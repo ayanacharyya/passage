@@ -422,6 +422,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
             # ------getting all line fluxes-------------
             obs_fluxes = obs_flux_array[:,index]
             obs_errs = obs_err_array[:, index]
+            print(f'\n\tDeb425: binID {this_ID} ({index + 1}/{len(obs_flux_array[0])}): initally nlines={len(obs_fluxes)}, {dict(zip(line_label_array, obs_fluxes))}') ##
 
             # ------discarding lines with negative fluxes-------------
             good_obs = (obs_fluxes >= 0) & (obs_errs > 0)
@@ -447,7 +448,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
                         }
 
                 # -------running NB--------------
-                #print(f'Deb1576: binID {this_ID}: nlines={len(obs_fluxes)}, {dict(zip(line_labels, obs_fluxes))}, norm_line = {norm_line}, dereddening on the fly? {dered}') ##
+                print(f'\n\tDeb450: binID {this_ID}: nlines={len(obs_fluxes)}, {dict(zip(line_labels, obs_fluxes))}, norm_line = {norm_line}, dereddening on the fly? {dered}') ##
                 Result = NB_Model_HII(obs_fluxes, obs_errs, line_labels, **kwargs)
 
                 # -------estimating the resulting logOH, and associated uncertainty-----------
@@ -493,7 +494,8 @@ def get_Z_NB(line_dict, args):
     else: line_label_dict = {'OII':'OII3726_29', 'Hb':'Hbeta', 'OIII':'OIII5007', 'OIII-4363':'OIII4363', 'OI-6302':'OI6300', \
                        'Ha':'Halpha' if args.dered_in_NB else 'NII6583_Halpha', 'SII':'SII6716_31', 'NeIII-3867':'NeIII3869', 'OII-7325':'OII7320', \
                        'HeI-5877':'HeI5876', 'Hg':'Hgamma', 'Hd':'Hdelta', 'NII':'NII6583'}
-
+    line_label_dict.update({k.upper(): v for k, v in line_label_dict.items()})
+    
     line_list = [item for item in list(line_dict.keys()) if '_nobj' not in item and '_id' not in item]
     line_map_array, line_int_array, line_label_array, line_waves_array, nobj_array = [], [], [], [], []
     

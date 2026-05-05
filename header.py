@@ -163,6 +163,7 @@ rest_wave_dict = {'Lya': 121.6, 'OII': 372.7, 'NeIII-3867':386.9, 'Hd': 434.0, '
                   'PaA': 1874.5, 'OII-7325':732.0, 'HeI-5877':587.6, 'Hg':434.0, 'Hd':410.2, 
                   'CIII':190., 'OIII1660':166.0, 'NIII':175.0, 'HeI':318.7, 'HeII':164.0, 
                   'CII':232.0, 'SiII':180.8, 'OII2470':247.0}  # approximate wavelengths in nm
+rest_wave_dict.update({k.upper(): v for k, v in rest_wave_dict.items()})
 
 # Below: NIRISS filter data taken from Table 1 in https://jwst-docs.stsci.edu/jwst-near-infrared-imager-and-slitless-spectrograph/niriss-instrumentation/niriss-filters#gsc.tab=0
 filter_waverange_dict = {'F090W': [0.796, 1.005], 'F115W': [1.013, 1.283], 'F150W': [1.330, 1.671],
