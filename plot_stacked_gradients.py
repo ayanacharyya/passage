@@ -17,7 +17,7 @@
 
 from header import *
 from util import *
-from make_sfms_bins import log_mass_bins, log_sfr_bins, get_stacking_sample, get_binned_df, get_sfms_func, sfms, z_lim
+from make_sfms_bins import log_mass_bins, log_sfr_bins, get_stacking_sample, get_binned_df, get_sfms_func, sfms, z_lim, passage_catalog
 from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_SFMS_PASSAGE
 
 start_time = datetime.now()
@@ -450,9 +450,9 @@ label_dict = {'minor_logOH_grad': 'Minor\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
                 'delta_sfms_median': r'<$\delta$ SFMS> [dex]',\
                 'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack',
                 }
-lim_dict = {'minor_logOH_grad': [-3, 2.5],\
-                'major_logOH_grad': [-3, 2.5],\
-                'radial_logOH_grad': [-3, 2.5],\
+lim_dict = {'minor_logOH_grad': [-3, 3],\
+                'major_logOH_grad': [-3, 3],\
+                'radial_logOH_grad': [-3, 3],\
                 'logOH_int': [6.8, 9.5],\
                 'delta_sfms_median': [-0.6, 0.6],\
                 'log_mass_median': [7.0, 10.0],\
@@ -479,7 +479,7 @@ if __name__ == "__main__":
         methods = [None]
     
     # ---------reading in the master SED catalog----------------
-    passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
+    passage_catalog_filename = args.output_dir / 'catalogs' / passage_catalog
     df_input = get_stacking_sample(passage_catalog_filename, args, z_lim=z_lim, sfms=sfms)
 
     # ----------setting up master figure (for args.plot_sfms_vs_grad--------------------

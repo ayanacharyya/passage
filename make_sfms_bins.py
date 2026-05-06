@@ -608,7 +608,7 @@ def read_passage_sed_catalog(filename):
         full_df = full_df[full_df['mass_50'] > 0].reset_index(drop=True) # to get only those sources that have stellar mass measured
         full_df = full_df.drop('id', axis=1)
 
-    full_df.rename(columns={'Par':'field', 'passage_id':'id', 'id_photcat':'id', 'objid':'id', 'field_id':'id', 'cosmoswebid_1':'cosmosid', 'z_best':'redshift', 'zbest':'redshift', 'mass_50':'log_mass', 'stellar_mass_50':'log_mass', 'ssfr_50':'log_ssfr', 'sfr_50':'sfr', 'ra_obj':'ra', 'dec_obj':'dec'}, inplace=True)
+    full_df.rename(columns={'Par':'field', 'passage_id':'id', 'id_photcat':'id', 'objid':'id', 'field_id':'id', 'z_best':'redshift', 'zbest':'redshift', 'mass_50':'log_mass', 'stellar_mass_50':'log_mass', 'ssfr_50':'log_ssfr', 'sfr_50':'sfr', 'ra_obj':'ra', 'dec_obj':'dec'}, inplace=True)
     
     # -----------computing new columns------------
     full_df['log_sfr'] = np.log10(full_df['sfr'])
@@ -618,7 +618,7 @@ def read_passage_sed_catalog(filename):
     full_df['delta_tform_90_10'] = full_df['tform90_50'] - full_df['tform10_50']
 
     # --------extracting relevant columns-----------
-    columns_to_extract = ['field', 'id', 'redshift', 'log_mass', 'log_sfr', 'log_ssfr', 'cosmosid', 'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10']
+    columns_to_extract = ['field', 'id', 'redshift', 'log_mass', 'log_sfr', 'log_ssfr', 'cosmoswebid', 'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10']
     df = full_df[columns_to_extract]
     df['field'] = df['field'].astype(str)
     nobj1 = len(df)
@@ -760,7 +760,7 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
 
     # ---------reading in the master SED catalog----------------
     if df is None:
-        passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
+        passage_catalog_filename = args.output_dir / 'catalogs' / passage_catalog
         df = get_stacking_sample(passage_catalog_filename, args, z_lim=z_lim, sfms=sfms)
 
     # --------------returning unbinned dataframe and no bin_list if skip_binning=True--------------
@@ -891,6 +891,9 @@ n_sfh_bins = 10 # number of bins in SFH parameter, adaptive, so that each bin co
 z_lim = [1.15, 2.35] # for having OII and OIII and Ha
 #z_lim = None # no redshift cut
 
+# passage_catalog = 'SED_fits_v1.0.2_cosmosweb.fits'
+passage_catalog = 'SED_fits_v1.0.3_best.fits'
+
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
@@ -899,7 +902,7 @@ if __name__ == "__main__":
     if args.re_limit is None: args.re_limit = 2.
 
     # ---------reading in the master SED catalog----------------
-    passage_catalog_filename = args.output_dir / 'catalogs' / 'SED_fits_v1.0.2_cosmosweb.fits'
+    passage_catalog_filename = args.output_dir / 'catalogs' / passage_catalog
     df = get_stacking_sample(passage_catalog_filename, args, z_lim=z_lim, sfms=sfms)
 
     # -----------making bins in various ways---------------------
