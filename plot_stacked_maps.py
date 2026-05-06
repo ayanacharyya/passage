@@ -1025,6 +1025,7 @@ if __name__ == "__main__":
     if not args.keep: plt.close('all')
     if args.re_limit is None: args.re_limit = 2.
     args.fontfactor = 1.5
+    args.dered_in_NB = True
 
     # ------------reading and binning dataframe-------------
     df, bin_list, args = get_binned_df(args, z_lim=z_lim, sfms=sfms)
