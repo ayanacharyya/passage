@@ -22,7 +22,7 @@ from util import *
 from make_diagnostic_maps import compute_Z_C19, compute_Z_KD02_R23, compute_Z_P25, compute_Z_Te, compute_Te, take_safe_log_ratio, take_safe_log_sum, myimshow, get_AGN_func_methods
 from make_sfms_bins import get_binned_df, z_lim, sfms
 from stack_emission_maps import read_stacked_maps
-from plots_for_zgrad_paper import plot_fitted_line, odr_fit, plot_AGN_demarcation_ax, get_distance_map_from_AGN_line, get_ratio_labels, overplot_AGN_line_on_BPT
+from plots_for_zgrad_paper import plot_fitted_line, wls_fit, plot_AGN_demarcation_ax, get_distance_map_from_AGN_line, get_ratio_labels, overplot_AGN_line_on_BPT
 
 start_time = datetime.now()
 
@@ -646,12 +646,12 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     # -------fitting by various methods--------------
     width = 1 if args.re_limit is None else 0.2 # 1 kpc or 0.2 Re
     df_minor = df[df['major_distance'] <= width]
-    minor_linefit_odr = odr_fit(df_minor, quant_x='minor_distance', quant_y=quant)
+    minor_linefit_odr = wls_fit(df_minor, quant_x='minor_distance', quant_y=quant)
     
     df_major = df[df['minor_distance'] <= width]
-    major_linefit_odr = odr_fit(df_major, quant_x='major_distance', quant_y=quant)
+    major_linefit_odr = wls_fit(df_major, quant_x='major_distance', quant_y=quant)
     
-    radial_linefit_odr = odr_fit(df, quant_x='distance', quant_y=quant)
+    radial_linefit_odr = wls_fit(df, quant_x='distance', quant_y=quant)
 
     if args.plot_minor_major_profile:
         ax = plot_profile(df_minor, ax, minor_linefit_odr, 'minor_distance', quant, col='salmon', index=0, skip_fitting=skip_fitting)

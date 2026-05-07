@@ -328,7 +328,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='', cmap='virid
     sfms_func = get_sfms_func(log_mass_bins, sfms)
     norm = mplcolors.Normalize(vmin=cmin, vmax=cmax)
     sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
-   
+
     # -----------defining vertices, for annotating and color-coding the bins-------------
     for index, row in df.iterrows():
         interval = row['delta_sfms_bin']
@@ -340,7 +340,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='', cmap='virid
         
         s_center = sfms_func(row['log_mass_median']) + (interval.left + interval.right) / 2
         if ~np.isnan(row['nobj']): ax.text(row['log_mass_median'], s_center, int(row['nobj']), color='w' if args.fortalk else 'k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
- 
+    
     # --------annotating axis borders-----------------
     ax.set_xlim(log_mass_bins.min() -0.2, log_mass_bins.max() + 0.2)
     ax.set_ylim(log_sfr_bins.min() -0.2, log_sfr_bins.max()+ 0.2)
@@ -378,7 +378,7 @@ def plot_SFMS_heatmap_patches(df, args, quant='logOH'):
     Makes a nice heatmap (with patches) of stacked integrated metallicities and metallicity gradients
     Returns figure handle
     '''
-    if quant == 'logOH': df = df[df[f'radial_{quant}_grad'] > -2] # removing spurious values that are clearly bogus
+    #if quant == 'logOH': df = df[df[f'radial_{quant}_grad'] > -2] # removing spurious values that are clearly bogus
     
     # -----------------setup the figure---------------
     fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
@@ -442,6 +442,16 @@ def plot_delta_SFMS_vs_quant(df, args, axes, quant_x='delta_sfms_median', quant_
 
     return axes
 
+# --------------------------------------------------------------------------------------------------------------------
+def fix_interval_precision(series, precision=3):
+    '''
+    Extracts bounds, rounds them, and reconstructs the Interval objects.
+    '''
+    # Handle the case where the column might have NaNs
+    return series.apply(lambda x: pd.Interval(round(x.left, precision), 
+                                              round(x.right, precision), 
+                                              closed=x.closed) if pd.notnull(x) else x)
+
 # ----------------------------global dicts-------------------------------------------------------------------
 label_dict = {'minor_logOH_grad': 'Minor\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
                 'major_logOH_grad': 'Major\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
@@ -450,9 +460,9 @@ label_dict = {'minor_logOH_grad': 'Minor\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
                 'delta_sfms_median': r'<$\delta$ SFMS> [dex]',\
                 'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack',
                 }
-lim_dict = {'minor_logOH_grad': [-3, 3],\
-                'major_logOH_grad': [-3, 3],\
-                'radial_logOH_grad': [-3, 3],\
+lim_dict = {'minor_logOH_grad': [-1, 1],\
+                'major_logOH_grad': [-1.5, 1.5],\
+                'radial_logOH_grad': [-1, 1],\
                 'logOH_int': [6.8, 9.5],\
                 'delta_sfms_median': [-0.6, 0.6],\
                 'log_mass_median': [7.0, 10.0],\
@@ -484,8 +494,8 @@ if __name__ == "__main__":
 
     # ----------setting up master figure (for args.plot_sfms_vs_grad--------------------
     if args.plot_sfms_vs_grad:
-        #quant_x, colorby_col = 'delta_sfms_median', 'log_mass_median'
-        quant_x, colorby_col = 'log_mass_median', 'delta_sfms_median'
+        quant_x, colorby_col = 'delta_sfms_median', 'log_mass_median'
+        #quant_x, colorby_col = 'log_mass_median', 'delta_sfms_median'
         quant_y = 'logOH'
         quant_y_list = [f'{quant_y}_int', f'radial_{quant_y}_grad', f'minor_{quant_y}_grad', f'major_{quant_y}_grad']
         marker_arr = ['o', 's', 'd', 'P', 'X', '^']
@@ -510,26 +520,32 @@ if __name__ == "__main__":
             if '_nmin' in method and args.min_gal_per_bin is None: args.min_gal_per_bin = 20
 
         # ------------reading and binning dataframe-------------
+        interval_cols = ['delta_sfms_bin', 'log_mass_bin', 'log_sfr_bin', 'mass_interval', 'mass_intervals', 'bin_intervals', 'sfr_interval', 'sfr_intervals']
         df = df_input.copy()
         df, bin_list, args = get_binned_df(args, df=df, skip_stacking=True, z_lim=z_lim, sfms=sfms)
+        for col in interval_cols:
+            if col in df: df[col] = fix_interval_precision(df[col], precision=3)
 
         # -------------reading in stacked gradient dataframe-----------------------
         df_grad = read_stacked_df(args.grad_filename)
+        df_grad['nobj'] = df_grad['nobj'].astype(int)
+        for col in interval_cols:
+            if col in df_grad: df_grad[col] = fix_interval_precision(df_grad[col], precision=3)
 
         # -------------merging the two dataframes-----------------------
         if args.bin_by_distance_mass:
             df2 = df.rename(columns={'mass_interval':'log_mass_bin', 'mass_intervals':'log_mass_bin', 'bin_intervals':'delta_sfms_bin'})
             df2 = df2.groupby(['delta_sfms_bin', 'log_mass_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()
-            df_grad = pd.merge(df_grad, df2, on=['delta_sfms_bin', 'log_mass_bin'], how='left')
+            df_grad = pd.merge(df_grad, df2, on=['delta_sfms_bin', 'log_mass_bin'], how='left').reset_index(drop=True)
         elif args.bin_by_distance:
             df2 = df.rename(columns={'bin_intervals':'delta_sfms_bin'})
             df2 = df2.groupby(['delta_sfms_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()
-            df_grad = pd.merge(df_grad, df2, on=['delta_sfms_bin'], how='left')
+            df_grad = pd.merge(df_grad, df2, on=['delta_sfms_bin'], how='left').reset_index(drop=True)
         else:
             df2 = df.rename(columns={'mass_interval':'log_mass_bin', 'mass_intervals':'log_mass_bin', 'sfr_intervals':'log_sfr_bin', 'sfr_interval':'log_sfr_bin'})
             df2 = df2.groupby(['log_mass_bin', 'log_sfr_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()
-            df_grad = pd.merge(df_grad, df2, on=['log_mass_bin', 'log_sfr_bin'], how='left')
-        
+            df_grad = pd.merge(df_grad, df2, on=['log_mass_bin', 'log_sfr_bin'], how='left').reset_index(drop=True)
+
         # ------------plotting stacked gradients on SFMS--------------------------
         qualifiers = f'{args.binby_text}{args.fold_text}_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}'
         if args.plot_sfms_vs_grad:

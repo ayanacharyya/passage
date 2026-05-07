@@ -3705,24 +3705,23 @@ def original_fit(df, quant_x='distance_arcsec', quant_y='log_OH'):
     return linefit
 
 # --------------------------------------------------------------------------------------------------------------------
-def odr_fit(df_input, quant_x='distance_arcsec', quant_y='log_OH'):
+def odr_fit(df_input, quant_x='distance_arcsec', quant_y='log_OH', recenter_y=False):
     '''
     Fits the x and y columns using WLS
     Returns fitted parameters
     '''
     df = df_input[[quant_x, quant_y, quant_y + '_u']]
-    recenter_y = False
     # ---------rescaling y-axis for better fit----------
     if recenter_y and 'OH' in quant_y:
         recenter_to = 8.0
         df[quant_y] = df[quant_y] - recenter_to
-        print(f'\nDeb3541: in odr_fit(), recentering {quant_y} to {recenter_to}..')
 
     df = df.dropna(axis=0)
     try:
         model = Model(lambda param, x: np.poly1d(param)(x))
         data = RealData(df[quant_x], df[quant_y], sy=df[quant_y + '_u'] if quant_y + '_u' in df and np.sum(df[quant_y + '_u']) > 0 else None, sx=df[quant_x + '_u'] if quant_x + '_u' in df and np.sum(df[quant_x + '_u']) > 0 else None)
         odr = ODR(data, model, beta0=[0., 0.])  # Initial guess for slope and intercept
+        odr = ODR(data, model, beta0=[0., np.nanmedian(df[quant_y])])  # Initial guess for slope and intercept
         output = odr.run()
         linefit = [ufloat(output.beta[0], output.sd_beta[0]), ufloat(output.beta[1], output.sd_beta[1])]
         if recenter_y and 'OH' in quant_y: linefit[1] = linefit[1] + recenter_to
