@@ -84,6 +84,6 @@ if __name__ == "__main__":
 
         # -------saving the figure---------
         figname = image_dir / f'rgb.png'
-        save_fig(fig, image_dir, f'rgb_{",".join(filters)}.png', args, dpi=1000)
+        save_fig(fig, image_dir, f'{args.field}_rgb_{",".join(filters)}.png', args, dpi=1000)
     
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
