@@ -494,8 +494,8 @@ if __name__ == "__main__":
 
     # ----------setting up master figure (for args.plot_sfms_vs_grad--------------------
     if args.plot_sfms_vs_grad:
-        quant_x, colorby_col = 'delta_sfms_median', 'log_mass_median'
-        #quant_x, colorby_col = 'log_mass_median', 'delta_sfms_median'
+        #quant_x, colorby_col = 'delta_sfms_median', 'log_mass_median'
+        quant_x, colorby_col = 'log_mass_median', 'delta_sfms_median'
         quant_y = 'logOH'
         quant_y_list = [f'{quant_y}_int', f'radial_{quant_y}_grad', f'minor_{quant_y}_grad', f'major_{quant_y}_grad']
         marker_arr = ['o', 's', 'd', 'P', 'X', '^']
@@ -524,7 +524,9 @@ if __name__ == "__main__":
         df = df_input.copy()
         df, bin_list, args = get_binned_df(args, df=df, skip_stacking=True, z_lim=z_lim, sfms=sfms)
         for col in interval_cols:
-            if col in df: df[col] = fix_interval_precision(df[col], precision=3)
+            if col in df: 
+                try: df[col] = fix_interval_precision(df[col], precision=3)
+                except: pass
 
         # -------------reading in stacked gradient dataframe-----------------------
         df_grad = read_stacked_df(args.grad_filename)
