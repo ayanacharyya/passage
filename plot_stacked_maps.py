@@ -594,7 +594,15 @@ def read_metallicity_map(infilename):
     
     logOH_map_val = hdul['log_OH'].data
     logOH_map_err = hdul['log_OH_u'].data
+    
     mask = np.isnan(logOH_map_val)
+    if args.snr_cut is not None:
+        snr_map = logOH_map_val / logOH_map_err
+        snr_mask = snr_map < args.snr_cut
+        mask = mask | snr_mask
+    
+    logOH_map_val = np.where(mask, np.nan, logOH_map_val)
+    logOH_map_err = np.where(mask, np.nan, logOH_map_err)
     logOH_map = np.ma.masked_where(mask, unp.uarray(logOH_map_val, logOH_map_err))
 
     header = hdul['log_OH'].header
@@ -1088,8 +1096,8 @@ if __name__ == "__main__":
                     continue
                 else:
                     write_metallicity_map(logOH_map, logOH_int, metallicity_map_fits_file, args, nobj=nobj) # saving the metallicity maps as fits files
-            else:
-                logOH_map, logOH_int, nobj = read_metallicity_map(metallicity_map_fits_file)
+            
+            logOH_map, logOH_int, nobj = read_metallicity_map(metallicity_map_fits_file)
         
         # -----------------plot metallicity maps of this bin---------------
         if args.plot_metallicity:
