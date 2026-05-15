@@ -2239,8 +2239,8 @@ def plot_AGN_demarcation_figure_integrated(df_input, args, fontsize=10):
         ax.set_xlim(-3.5, 2)
         ax.set_ylim(-4.2, 1.7)
     elif args.AGN_diag == 'O2Hb':
-        ax.set_xlim(-0.5, 1.5)
-        ax.set_ylim(-0.5, 2)
+        ax.set_xlim(-0.5, 1.)
+        ax.set_ylim(-0.5, 1.)
         
     ax.set_xlabel(f'Log {get_ratio_labels("NeIII-3867/OII")}' if args.AGN_diag == 'Ne3O2' else f'Log {get_ratio_labels("SII/NII,Ha")}' if args.AGN_diag == 'H21' else f'Log {get_ratio_labels(f"{args.xnum_line}/{args.xden_line}")}', fontsize=args.fontsize)
     ax.set_ylabel(f'Log {get_ratio_labels("OIII/Hb")}', fontsize=args.fontsize)
@@ -3885,14 +3885,11 @@ if __name__ == "__main__":
     log_mass_lim = [7.5, 10]
 
     # -------setting up objects to plot--------------
-    # Par28_objects = [300, 1303, 1849, 2867]
-    # Par28_objects = [2727] + Par28_objects
-    # Par28_objects = [2171] + Par28_objects
-    Par28_objects = [300]
+    Par28_objects = [300, 1303, 1849, 2867]
+    #Par28_objects = [2727] + Par28_objects
+    #Par28_objects = [2171] + Par28_objects
     
     glass_objects = [1983, 1333, 2128, 1991]
-    #glass_objects = [1721, 1983, 1991, 1333]
-    #glass_objects = [2128] + glass_objects
 
     obj_segid_dict = {300:288, 1303:1321, 1849:1862, 2867:2801}
     if 'pjw' in args.drv: Par28_objects = [obj_segid_dict[item] for item in Par28_objects]
