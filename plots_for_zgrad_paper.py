@@ -5,10 +5,10 @@
     Created: 09-04-25
     Example: run plots_for_zgrad_paper.py --phot_models nb --debug_Zsfr
              run plots_for_zgrad_paper.py --histbycol SNR
-             run plots_for_zgrad_paper.py --AGN_diag Ne3O2 --glass_version orig --clobber
-             run plots_for_zgrad_paper.py --AGN_diag O2Hb --glass_version orig --keep
-             run plots_for_zgrad_paper.py --AGN_diag Ne3O2 --glass_version pjw --clobber
-             run plots_for_zgrad_paper.py --AGN_diag O2Hb --glass_version pjw --keep
+             run plots_for_zgrad_paper.py --AGN_diag Ne3O2 --glass_version orig --annotate --clobber
+             run plots_for_zgrad_paper.py --AGN_diag O2Hb --glass_version orig --annotate --keep
+             run plots_for_zgrad_paper.py --AGN_diag Ne3O2 --glass_version pjw --annotate --clobber
+             run plots_for_zgrad_paper.py --AGN_diag O2Hb --glass_version pjw --annotate --keep
 '''
 from header import *
 from util import *
@@ -3890,7 +3890,7 @@ if __name__ == "__main__":
     # Par28_objects = [2171] + Par28_objects
     Par28_objects = [300]
     
-    glass_objects = [1983, 1333]
+    glass_objects = [1983, 1333, 2128, 1991]
     #glass_objects = [1721, 1983, 1991, 1333]
     #glass_objects = [2128] + glass_objects
 
