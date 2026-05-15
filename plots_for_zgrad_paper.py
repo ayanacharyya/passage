@@ -5,6 +5,10 @@
     Created: 09-04-25
     Example: run plots_for_zgrad_paper.py --phot_models nb --debug_Zsfr
              run plots_for_zgrad_paper.py --histbycol SNR
+             run plots_for_zgrad_paper.py --AGN_diag Ne3O2 --glass_version orig --clobber
+             run plots_for_zgrad_paper.py --AGN_diag O2Hb --glass_version orig --keep
+             run plots_for_zgrad_paper.py --AGN_diag Ne3O2 --glass_version pjw --clobber
+             run plots_for_zgrad_paper.py --AGN_diag O2Hb --glass_version pjw --keep
 '''
 from header import *
 from util import *
@@ -371,7 +375,7 @@ def make_master_df(objlist, args, sum=True):
     sum_text = '_sum' if sum else '_grizli_int'
     plot_output_dir = args.root_dir / 'zgrad_paper_plots'
     if 'pjw' in args.drv: plot_output_dir = Path(str(plot_output_dir) + '_pjw')
-    filename = plot_output_dir / f'master_df_using{sum_text}_with_COSMOS{cosmos_name}.csv'
+    filename = plot_output_dir / f'master_df_using{sum_text}_with_COSMOS{cosmos_name}_glassver_{args.glass_version}.csv'
     
     # -------------making the master df-------------------
     if not os.path.exists(filename) or args.clobber:
@@ -595,10 +599,10 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
         df_sub = df[df['marker'] == m]
         p = ax.scatter(df_sub[mass_col], df_sub[sfr_col], c=df_sub['redshift'], marker=m, plotnonfinite=True, s=200 if args.fortalk else 100, lw=1, edgecolor='k', cmap='summer' if args.fortalk else 'viridis', label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
         if sfr_col2 is not None: ax.scatter(df_sub[mass_col], df_sub[sfr_col2], marker=m, s=100, lw=1, edgecolor='k', facecolors='none')
-    if sfr_col + '_u' in df: ax.errorbar(df[mass_col], df[sfr_col], yerr=df[sfr_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
-    if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[sfr_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+    if sfr_col + '_u' in df: ax.errorbar(df[mass_col], df[sfr_col], yerr=df[sfr_col + '_u'], c='gray', fmt='none', lw=1, alpha=1)
+    if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[sfr_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=1)
     if sfr_col2 is not None:
-        ax.errorbar(df[mass_col], df[sfr_col2], yerr=df[sfr_col2 + '_u'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+        ax.errorbar(df[mass_col], df[sfr_col2], yerr=df[sfr_col2 + '_u'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=1)
         #for i, row in df.iterrows(): ax.arrow(row[mass_col], row[sfr_col], 0, row[sfr_col2] - row[sfr_col], lw=0.5, color='grey', length_includes_head=True, head_width=3e-2)
         #ax.vlines(df[mass_col], df[sfr_col], df[sfr_col2], color='k', ls='dashed', lw=0.5, zorder=-10)
     if args.annotate:
@@ -654,8 +658,8 @@ def plot_MEx(df, args, mass_col='lp_mass', fontsize=10):
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
         p = ax.scatter(df_sub[mass_col], df_sub['O3Hb'], c=df_sub['redshift'], marker=m, s=100, edgecolor='k', lw=1, cmap='viridis', vmin=1.7, vmax=3.1, label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
-    ax.errorbar(df[mass_col], df['O3Hb'], yerr=df['O3Hb_u'], c='gray', fmt='none', lw=1, alpha=0.5)
-    if mass_col + '_u' in df: ax.errorbar(df[mass_col], df['O3Hb'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+    ax.errorbar(df[mass_col], df['O3Hb'], yerr=df['O3Hb_u'], c='gray', fmt='none', lw=1, alpha=1)
+    if mass_col + '_u' in df: ax.errorbar(df[mass_col], df['O3Hb'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=1)
     if args.annotate:
         for index, row in df.iterrows(): ax.text(row[mass_col], row['O3Hb'], f'{row["objid"]}', fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
 
@@ -766,12 +770,12 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
             this_work.append(h)
 
         if this_zgrad_col + '_u' in df:
-            axes[0].errorbar(df[mass_col], df[this_zgrad_col], yerr=df[this_zgrad_col + '_u'], c=color_arr[index], fmt='none', lw=1, alpha=0.5, zorder=100)
-            axes[1].errorbar(df[mass_col], df[this_zgrad_col] / df['re_kpc'], yerr=df[this_zgrad_col + '_u'] / df['re_kpc'], c=color_arr[index], fmt='none', lw=1, alpha=0.5, zorder=100)
+            axes[0].errorbar(df[mass_col], df[this_zgrad_col], yerr=df[this_zgrad_col + '_u'], c=color_arr[index], fmt='none', lw=1, alpha=1, zorder=100)
+            axes[1].errorbar(df[mass_col], df[this_zgrad_col] / df['re_kpc'], yerr=df[this_zgrad_col + '_u'] / df['re_kpc'], c=color_arr[index], fmt='none', lw=1, alpha=1, zorder=100)
 
         if mass_col + '_u' in df:
-            axes[0].errorbar(df[mass_col], df[this_zgrad_col], xerr=df[mass_col + '_u'], c=color_arr[index], fmt='none', lw=1, alpha=0.5, zorder=100)
-            axes[1].errorbar(df[mass_col], df[this_zgrad_col] / df['re_kpc'], xerr=df[mass_col + '_u'], c=color_arr[index], fmt='none', lw=1, alpha=0.5, zorder=100)
+            axes[0].errorbar(df[mass_col], df[this_zgrad_col], xerr=df[mass_col + '_u'], c=color_arr[index], fmt='none', lw=1, alpha=1, zorder=100)
+            axes[1].errorbar(df[mass_col], df[this_zgrad_col] / df['re_kpc'], xerr=df[mass_col + '_u'], c=color_arr[index], fmt='none', lw=1, alpha=1, zorder=100)
 
     for ax in axes: ax.axhline(0, ls='--', c='k', lw=0.5)
 
@@ -824,20 +828,20 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     sample = 'jones15'
     df_lit = pd.read_csv(literature_dir / f'mzgr_{sample}.csv')
     j15 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], ec='k', marker=marker_dict[sample])
-    axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad'], yerr=df_lit['Zgrad_u'], color=color_dict[sample], lw=0.5, fmt='none')
+    axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad'], yerr=df_lit['Zgrad_u'], color=color_dict[sample], lw=1, alpha=1, fmt='none')
     
     sample = 'wang17'
     df_lit = pd.read_csv(literature_dir / f'mzgr_{sample}.csv')
     w17 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], ec='k', marker=marker_dict[sample])
-    axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad'], yerr=df_lit['Zgrad_u'], color=color_dict[sample], lw=0.5, fmt='none')
+    axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad'], yerr=df_lit['Zgrad_u'], color=color_dict[sample], lw=1, alpha=1, fmt='none')
 
     # --------plotting Wang+19 data: for dex/kpc----------
     w19 = axes[1].scatter([9.05, 9.41], [0.12, 0.11], color='sienna', marker='*', s=100, lw=0.5, edgecolor='k', label='Wang+19')
-    axes[1].errorbar([9.05, 9.41], [0.12, 0.11], xerr=[0.05, 0.01], yerr=[0.01, 0.02], c='gray', fmt='none', lw=1, alpha=0.5)
+    axes[1].errorbar([9.05, 9.41], [0.12, 0.11], xerr=[0.05, 0.01], yerr=[0.01, 0.02], c='gray', fmt='none', lw=1, alpha=1)
 
     # --------plotting Wang+22 data: for dex/kpc----------
     w22 = axes[1].scatter(9.04, 0.165, color='goldenrod', marker='*', s=200, lw=0.5, edgecolor='k', label='Wang+22')
-    axes[1].errorbar(9.04, 0.165, xerr=0.05, yerr=0.023, c='gray', fmt='none', lw=1, alpha=0.5)
+    axes[1].errorbar(9.04, 0.165, xerr=0.05, yerr=0.023, c='gray', fmt='none', lw=1, alpha=1)
 
    # --------NOT plotting Li+25 (NGDEEP) redshift-binnd data: dex/kpc----------
     sample = 'li25'
@@ -851,11 +855,11 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
 
     df_lit_sub = df_lit[df_lit['id'].str.contains('stack')]
     l25s = axes[1].scatter(df_lit_sub['logMass'], df_lit_sub['zgrad'], color=color_dict[sample], lw=1, label=legend_dict[sample] + ' (6 < z < 7; stacked)', marker='h', ec='k', s=100)
-    axes[1].errorbar(df_lit_sub['logMass'], df_lit_sub['zgrad'], yerr=df_lit_sub['zgrad_err'], color=color_dict[sample], lw=0.5, fmt='none')
+    axes[1].errorbar(df_lit_sub['logMass'], df_lit_sub['zgrad'], yerr=df_lit_sub['zgrad_err'], color=color_dict[sample], lw=1, alpha=1, fmt='none')
 
     df_lit_sub = df_lit[~(df_lit['id'].str.contains('stack'))]
     l25 = axes[1].scatter(df_lit_sub['logMass'], df_lit_sub['zgrad'], color=color_dict[sample], lw=0.5, label=legend_dict[sample] + ' (z < 3.5)', marker='h')
-    axes[1].errorbar(df_lit_sub['logMass'], df_lit_sub['zgrad'], yerr=df_lit_sub['zgrad_err'], color=color_dict[sample], lw=0.5, fmt='none')
+    axes[1].errorbar(df_lit_sub['logMass'], df_lit_sub['zgrad'], yerr=df_lit_sub['zgrad_err'], color=color_dict[sample], lw=1, alpha=1, fmt='none')
 
     # --------plotting Li+25 (ASPIRE + FRESCO) mass-binned data: for dex/kpc vs mass----------
     mass_bin = [7.74, 8.44, 9.06, 7.67, 8.14]
@@ -864,25 +868,25 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     zgrad_bin_err = [0.17,0.16,0.18,0.22,0.22]
 
     l25b = axes[1].scatter(mass_bin, zgrad_bin, color=color_dict[sample], lw=1, label=legend_dict[sample] + ' (z > 5; binned)', marker='D', ec='k', s=100)
-    axes[1].errorbar(mass_bin, zgrad_bin, xerr=mass_bin_err, yerr=zgrad_bin_err, color=color_dict[sample], lw=0.5, fmt='none')
+    axes[1].errorbar(mass_bin, zgrad_bin, xerr=mass_bin_err, yerr=zgrad_bin_err, color=color_dict[sample], lw=1, alpha=1, fmt='none')
 
     # --------plotting Venturi+24 data: for dex/re and dex/kpc----------
     sample = 'venturi24'
     df_lit = pd.read_csv(literature_dir / f'mzgr_{sample}.csv', comment='#', delim_whitespace=True)
     v24 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad_re'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], marker=marker_dict[sample], ec='k')
-    axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad_re'], xerr=df_lit['log_mass_u'], yerr=df_lit['Zgrad_re_u'], color=color_dict[sample], lw=0.5, fmt='none')
+    axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad_re'], xerr=df_lit['log_mass_u'], yerr=df_lit['Zgrad_re_u'], color=color_dict[sample], lw=1, alpha=1, fmt='none')
 
     axes[1].scatter(df_lit['log_mass'], df_lit['Zgrad_kpc'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], marker=marker_dict[sample], ec='k')
-    axes[1].errorbar(df_lit['log_mass'], df_lit['Zgrad_kpc'], xerr=df_lit['log_mass_u'], yerr=df_lit['Zgrad_kpc_u'], color=color_dict[sample], lw=0.5, fmt='none')
+    axes[1].errorbar(df_lit['log_mass'], df_lit['Zgrad_kpc'], xerr=df_lit['log_mass_u'], yerr=df_lit['Zgrad_kpc_u'], color=color_dict[sample], lw=1, alpha=1, fmt='none')
 
     # --------plotting Ju+25 data: for dex/re and dex/kpc----------
     sample = 'ju25'
     df_lit = pd.read_csv(literature_dir / f'mzgr_{sample}.csv', comment='#', delim_whitespace=True)
     j25 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad_re'], color=color_dict[sample], lw=0.5, label=legend_dict[sample] + ' (z~1)', marker=marker_dict[sample], ec='k')
-    axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad_re'], yerr=df_lit['Zgrad_re_u'], color=color_dict[sample], lw=0.5, fmt='none')
+    axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad_re'], yerr=df_lit['Zgrad_re_u'], color=color_dict[sample], lw=1, alpha=1, fmt='none')
 
     axes[1].scatter(df_lit['log_mass'], df_lit['Zgrad_kpc'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], marker=marker_dict[sample], ec='k')
-    axes[1].errorbar(df_lit['log_mass'], df_lit['Zgrad_kpc'], yerr=df_lit['Zgrad_kpc_u'], color=color_dict[sample], lw=0.5, fmt='none')
+    axes[1].errorbar(df_lit['log_mass'], df_lit['Zgrad_kpc'], yerr=df_lit['Zgrad_kpc_u'], color=color_dict[sample], lw=1, alpha=1, fmt='none')
 
     # --------plotting Franchetto+21 data: for dex/kpc----------
     coeff = [-0.199, 0.199 * 10 - 0.432] # Franchetto+21 eq 6
@@ -898,7 +902,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     sample = 'khoram25'
     df_lit = pd.read_csv(literature_dir / f'mzgr_{sample}.csv', comment='#')
     k25 = axes[0].scatter(df_lit['log_mass'], df_lit['Zgrad'], color=color_dict[sample], lw=0.5, label=legend_dict[sample], ec='k', marker=marker_dict[sample])
-    axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad'], yerr=df_lit['Zgrad_u'], color=color_dict[sample], lw=0.5, fmt='none')
+    axes[0].errorbar(df_lit['log_mass'], df_lit['Zgrad'], yerr=df_lit['Zgrad_u'], color=color_dict[sample], lw=1, alpha=1, fmt='none')
 
     # ---------annotate axes and save figure-------
     handles = this_work + [j15, w17, w19, m20] + s21 + [w22, v24, l25, l25s, l25b, j25, k25] + [f21, foggie, fire2]
@@ -937,8 +941,8 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', colo
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
         p = ax.scatter(df_sub[mass_col], df_sub[zgrad_col], c=df_sub[colorcol] if colorcol is not None else 'crimson', marker=m, plotnonfinite=True, s=200 if args.fortalk else 100, lw=1, edgecolor='k', cmap='summer' if args.fortalk else 'viridis', vmin=7.5, vmax=9.1, label='GLASS' if m == 's' else 'PASSAGE')
-    if zgrad_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], yerr=df[zgrad_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
-    if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+    if zgrad_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], yerr=df[zgrad_col + '_u'], c='gray', fmt='none', lw=1, alpha=1)
+    if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[zgrad_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=1)
     if args.annotate:
         for index, row in df.iterrows(): ax.text(row[mass_col], row[zgrad_col], f'{row["objid"]}', fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
     
@@ -994,8 +998,8 @@ def plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH
     for m in pd.unique(df['marker']):
         df_sub = df[df['marker'] == m]
         p = ax.scatter(df_sub[mass_col], df_sub[z_col], c=df_sub[colorcol], marker=m, plotnonfinite=True, s=500 if args.fortalk else 100, lw=1, edgecolor='k', cmap='summer' if args.fortalk else 'viridis', label='GLASS (This work)' if m == 's' else 'PASSAGE (This work)')
-    if z_col + '_u' in df: ax.errorbar(df[mass_col], df[z_col], yerr=df[z_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
-    if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[z_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+    if z_col + '_u' in df: ax.errorbar(df[mass_col], df[z_col], yerr=df[z_col + '_u'], c='gray', fmt='none', lw=1, alpha=1)
+    if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[z_col], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=1)
     if args.annotate:
         for index, row in df.iterrows(): ax.text(row[mass_col], row[z_col], f'{row["objid"]}', fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
     
@@ -1095,9 +1099,9 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
             p = ax.scatter(df_sub[mass_col], df_sub[f'{ycol}_{method}'], c='seagreen' if colorcol is None else df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=200 if args.fortalk else 100, lw=1, edgecolor='k', cmap='summer' if args.fortalk else 'viridis', label='GLASS' if m == 's' else 'PASSAGE')
             #p = ax.scatter(df_sub[mass_col], df_sub[f'log_t_ratio'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis', label='GLASS' if m == 's' else 'PASSAGE')
             #ax.scatter(df_sub[mass_col], df_sub['log_t_dyn'], c=df_sub[colorcol] if mgas_method is not None else col_arr[index], marker=m, plotnonfinite=True, s=100, lw=1, edgecolor='k', cmap='viridis')
-        if f'{ycol}_{method}_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], yerr=df[f'{ycol}_{method}_u'], c='gray', fmt='none', lw=1, alpha=0.5)
-        if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
-        #if f'log_t_dyn_u' in df: ax.errorbar(df[mass_col], df['log_t_dyn'], yerr=df['log_t_dyn_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+        if f'{ycol}_{method}_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], yerr=df[f'{ycol}_{method}_u'], c='gray', fmt='none', lw=1, alpha=1)
+        if mass_col + '_u' in df: ax.errorbar(df[mass_col], df[f'{ycol}_{method}'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=1)
+        #if f'log_t_dyn_u' in df: ax.errorbar(df[mass_col], df['log_t_dyn'], yerr=df['log_t_dyn_u'], c='gray', fmt='none', lw=1, alpha=1)
     
     ax.axhline(0, c='k', ls='--', lw=0.5)
     if args.annotate:
@@ -1313,7 +1317,7 @@ def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False
         for marker in pd.unique(df_data['marker']):
             df_sub = df_data[df_data['marker'] == marker]
             scatter_plot_handle = ax.scatter(unp.nominal_values(df_sub['x_ratio']), unp.nominal_values(df_sub['y_ratio']), c='teal', marker=marker, s=100, lw=2, edgecolor='w' if args.fortalk else 'k', label='GLASS (This work)' if marker == 's' else 'PASSAGE (This work)', zorder=20)
-            ax.errorbar(unp.nominal_values(df_sub['x_ratio']), unp.nominal_values(df_sub['y_ratio']), xerr=unp.std_devs(df_sub['x_ratio']), yerr=unp.std_devs(df_sub['y_ratio']), c='gray', fmt='none', lw=2, alpha=0.5, zorder=10)
+            ax.errorbar(unp.nominal_values(df_sub['x_ratio']), unp.nominal_values(df_sub['y_ratio']), xerr=unp.std_devs(df_sub['x_ratio']), yerr=unp.std_devs(df_sub['y_ratio']), c='gray', fmt='none', lw=1, alpha=1, zorder=10)
         
         # --------annotating every point-------------------------
         if args.annotate:
@@ -1416,12 +1420,16 @@ def load_full_fits(objid, field, args):
     product_dir = get_data_path(field, args)
     full_fits_file = product_dir / 'full' / f'{field}_{objid:05d}.full.fits'
     maps_fits_file = product_dir / 'maps' / f'{field}_{objid:05d}.maps.fits'
+    data_fits_file = product_dir / 'data' / f'{objid:05d}_data.fits'
 
     if os.path.exists(maps_fits_file): # if the maps.fits files are available
         full_hdu = fits.open(maps_fits_file)
 
     elif os.path.exists(full_fits_file):  # if the full.fits files are available
         full_hdu = fits.open(full_fits_file)
+
+    elif os.path.exists(data_fits_file):  # if the _data.fits files are available
+        full_hdu = fits.open(data_fits_file)
 
     return full_hdu
 
@@ -1457,7 +1465,7 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
     # ----------getting info from the photometric catalog-------------
     if args.use_elliptical_bins:
 
-        if 'glass' in field: survey_name, args.drv = 'glass', 'orig'
+        if 'glass' in field: survey_name, args.drv = 'glass', args.glass_version
         elif 'Par' in field: survey_name, args.drv = 'passage', args.drv_orig
         catalog_file = args.root_dir / f'{survey_name}_data/' / args.drv / args.field / 'Products' / f'{args.field}_photcat.fits'
         catalog = GTable.read(catalog_file)
@@ -1508,7 +1516,7 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
     if args.radbin and args.voronoi_line is not None and not args.only_integrated:
         args.voronoi_bin_IDs = get_radial_bin_IDs(full_hdu, snr_thresh=args.voronoi_snr, plot=False, quiet=True, args=args)
         args.voronoi_bin_distances = get_voronoi_bin_distances(full_hdu, 'OIII', args)
-        args.vorbin = True
+        #args.vorbin = True # why had I done this? needs more testing to investigate; commenting out for now
 
     # ---------------dust value---------------
     try:
@@ -1554,7 +1562,7 @@ def plot_radial_profile_old(image, ax, args, ylim=None, xlim=None, hide_xaxis=Fa
 
     # -------plotting--------
     ax.scatter(df['distance'], df['quant'], c='grey', s=20, alpha=1)
-    ax.errorbar(df['distance'], df['quant'], yerr=df['quant_u'], c='grey', fmt='none', lw=0.5, alpha=1)
+    ax.errorbar(df['distance'], df['quant'], yerr=df['quant_u'], c='grey', fmt='none', lw=1, alpha=1)
     ax.set_aspect('auto') 
 
     # -------radial fitting-------------
@@ -1663,7 +1671,7 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
    
     # -------plotting the data and the fits--------
     ax.scatter(df[quant_x], df[quant], c='grey', s=20, alpha=1)
-    if quant + '_u' in df: ax.errorbar(df['distance'], df[quant], yerr=df[quant + '_u'], c='grey', fmt='none', lw=0.5, alpha=1)
+    if quant + '_u' in df: ax.errorbar(df['distance'], df[quant], yerr=df[quant + '_u'], c='grey', fmt='none', lw=1, alpha=1)
 
     xarr = df[quant_x]
     if do_mcmc:
@@ -2094,7 +2102,7 @@ def plot_AGN_demarcation_ax(x_num, x_den, y_num, y_den, ax, args, color=None, ma
 
     p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=color, cmap=cmap, vmin=vmin, vmax=vmax, marker=marker, s=size, lw=lw, edgecolor='w' if args.fortalk else 'k', zorder=10)
     #p = ax.scatter(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), c=df['distance'], cmap='viridis', vmin=0, vmax=5, marker=marker, s=size, lw=lw, edgecolor='w' if args.fortalk else 'k', zorder=10)
-    ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c='gray', fmt='none', lw=lw, alpha=0.5)
+    ax.errorbar(unp.nominal_values(x_ratio), unp.nominal_values(y_ratio), xerr=unp.std_devs(x_ratio), yerr=unp.std_devs(y_ratio), c='gray', fmt='none', lw=1, alpha=1)
 
     return ax, p
 
@@ -2213,7 +2221,7 @@ def plot_AGN_demarcation_figure_integrated(df_input, args, fontsize=10):
     for marker in pd.unique(df['marker']):
         df_sub = df[df['marker'] == marker]
         scatter_plot_handle = ax.scatter(unp.nominal_values(df_sub['x_ratio']), unp.nominal_values(df_sub['y_ratio']), c=df_sub['color'], cmap=args.diverging_cmap, vmin=-1, vmax=1, marker=marker, s=100, lw=2, edgecolor='w' if args.fortalk else 'k', label='GLASS (This work)' if marker == 's' else 'PASSAGE (This work)')
-        ax.errorbar(unp.nominal_values(df_sub['x_ratio']), unp.nominal_values(df_sub['y_ratio']), xerr=unp.std_devs(df_sub['x_ratio']), yerr=unp.std_devs(df_sub['y_ratio']), c='gray', fmt='none', lw=2, alpha=0.5, zorder=-1)
+        ax.errorbar(unp.nominal_values(df_sub['x_ratio']), unp.nominal_values(df_sub['y_ratio']), xerr=unp.std_devs(df_sub['x_ratio']), yerr=unp.std_devs(df_sub['y_ratio']), c='gray', fmt='none', lw=1, alpha=1, zorder=-1)
     
     # --------annotating every point-------------------------
     if args.annotate:
@@ -2224,10 +2232,16 @@ def plot_AGN_demarcation_figure_integrated(df_input, args, fontsize=10):
     cbar.set_label(f'Distance from maximum upper envelope', fontsize=args.fontsize)
     cbar.ax.tick_params(labelsize=args.fontsize)
 
-    ax.set_xlim(-2.5, 0.5)
-    ax.set_ylim(-1, 1)
-    #ax.set_xlim(-3.5, 2)
-    #ax.set_ylim(-4.2, 1.7)
+    if args.AGN_diag == 'Ne3O2':
+        ax.set_xlim(-2.5, 0.5)
+        ax.set_ylim(-0.5, 1)
+    elif args.AGN_diag == 'VO87':
+        ax.set_xlim(-3.5, 2)
+        ax.set_ylim(-4.2, 1.7)
+    elif args.AGN_diag == 'O2Hb':
+        ax.set_xlim(-0.5, 1.5)
+        ax.set_ylim(-0.5, 2)
+        
     ax.set_xlabel(f'Log {get_ratio_labels("NeIII-3867/OII")}' if args.AGN_diag == 'Ne3O2' else f'Log {get_ratio_labels("SII/NII,Ha")}' if args.AGN_diag == 'H21' else f'Log {get_ratio_labels(f"{args.xnum_line}/{args.xden_line}")}', fontsize=args.fontsize)
     ax.set_ylabel(f'Log {get_ratio_labels("OIII/Hb")}', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
@@ -2236,11 +2250,11 @@ def plot_AGN_demarcation_figure_integrated(df_input, args, fontsize=10):
     color_arr = ['brown', 'darkgreen', 'dodgerblue', 'cyan', 'sienna']
     linestyles = ['solid', 'dashed', 'dotted']
     for index, (theoretical_line, line_label) in enumerate(zip(theoretical_lines, line_labels)):
-        overplot_AGN_line_on_BPT(ax, xlim=[-2.5, 0.5], theoretical_line=theoretical_line, label=line_label, color=color_arr[index], fontsize=args.fontsize, lw=2 if index else 2, ls=linestyles[index % len(linestyles)])
+        overplot_AGN_line_on_BPT(ax, xlim=[-2.5, 1.5], theoretical_line=theoretical_line, label=line_label, label_loc='upper left' if args.AGN_diag == 'O2Hb' else 'lower left', color=color_arr[index], fontsize=args.fontsize, lw=2 if index else 2, ls=linestyles[index % len(linestyles)])
 
    # -----------saving figure------------
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'BPT_integrated_upto_{extent_text}_AGNdiag_{args.AGN_diag}.png'
+    figname = f'BPT_integrated_upto_{extent_text}_AGNdiag_{args.AGN_diag}_glassver_{args.glass_version}.png'
     save_fig(fig, figname, args)
 
     return df
@@ -2713,7 +2727,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
         df = df.groupby('bin_ID', as_index=False).agg(np.mean)
 
     axes[1].scatter(df['log_sfr'], df['logOH'], c='grey', s=20, alpha=1)
-    axes[1].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=1)
+    axes[1].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=1, alpha=1)
 
     # -------Z vs SFR fitting-------------
     fit_color = 'cornflowerblue'
@@ -2792,7 +2806,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
         df = df.dropna(axis=0)
 
         axes[1].scatter(df['log_sfr'], df['logOH'], c='grey', s=20, alpha=1)
-        axes[1].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=1)
+        axes[1].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=1, alpha=1)
 
         # -------Z vs SFR fitting-------------
         fit_color = 'cornflowerblue'
@@ -2894,7 +2908,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     #df = df[~df['logOH'].between(8.3, 8.4)]
     
     axes[4].scatter(df['log_sfr'], df['logOH'], c='grey', s=20, alpha=1)
-    axes[4].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=0.5, alpha=1)
+    axes[4].errorbar(df['log_sfr'], df['logOH'], xerr=df['log_sfr_u'], yerr=df['logOH_u'], c='grey', fmt='none', lw=1, alpha=1)
 
     # -------Z vs SFR fitting-------------
     fit_color = 'cornflowerblue'
@@ -2987,11 +3001,11 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
                     if len(df) > 0:
                         # ---plotting integrated--
                         ax.scatter(logOH_sum_Zdiag1.n, logOH_sum_Zdiag2.n, s=markersize, c=color, lw=1, edgecolor='k', marker=marker)
-                        ax.errorbar(logOH_sum_Zdiag1.n, logOH_sum_Zdiag2.n, xerr=logOH_sum_Zdiag1.s, yerr=logOH_sum_Zdiag2.s, c='grey', fmt='none', lw=0.5, alpha=0.5)
+                        ax.errorbar(logOH_sum_Zdiag1.n, logOH_sum_Zdiag2.n, xerr=logOH_sum_Zdiag1.s, yerr=logOH_sum_Zdiag2.s, c='grey', fmt='none', lw=1, alpha=1)
 
                         # ---plotting spatially resolved--
                         p = ax.scatter(df[f'log_OH_{Zdiag1}'], df[f'log_OH_{Zdiag2}'], s=markersize/4, c=df[args.colorcol], lw=0, marker=marker, cmap=color_lim_dict[args.colorcol][3], vmin=color_lim_dict[args.colorcol][0], vmax=color_lim_dict[args.colorcol][1])
-                        ax.errorbar(df[f'log_OH_{Zdiag1}'], df[f'log_OH_{Zdiag2}'], xerr=df[f'log_OH_{Zdiag1}_err'], yerr=df[f'log_OH_{Zdiag2}_err'], c='grey', fmt='none', lw=0.1, alpha=0.5)
+                        ax.errorbar(df[f'log_OH_{Zdiag1}'], df[f'log_OH_{Zdiag2}'], xerr=df[f'log_OH_{Zdiag1}_err'], yerr=df[f'log_OH_{Zdiag2}_err'], c='grey', fmt='none', lw=1, alpha=1)
 
                         ax.plot(Z_limits, Z_limits, ls='dotted', lw=0.1, c='k')
 
@@ -3063,13 +3077,13 @@ def plot_nb_comparison_sii(objlist, args, fontsize=10):
 
         # ---plotting spatially resolved--
         p = ax.scatter(df[f'log_OH_with_SII'], df[f'log_OH_without_SII'], s=markersize/4, c=df[args.colorcol], lw=0, marker=marker, cmap=color_lim_dict[args.colorcol][3], vmin=color_lim_dict[args.colorcol][0], vmax=color_lim_dict[args.colorcol][1])
-        ax.errorbar(df[f'log_OH_with_SII'], df[f'log_OH_without_SII'], xerr=df[f'log_OH_u_with_SII'], yerr=df[f'log_OH_u_without_SII'], c='grey', fmt='none', lw=0.1, alpha=0.5)
+        ax.errorbar(df[f'log_OH_with_SII'], df[f'log_OH_without_SII'], xerr=df[f'log_OH_u_with_SII'], yerr=df[f'log_OH_u_without_SII'], c='grey', fmt='none', lw=1, alpha=1)
 
         ax.plot(Z_limits, Z_limits, ls='dotted', lw=0.1, c='k')
 
         # ---plotting integrated--
         ax.scatter(this_logOH_sum_wsii.n, this_logOH_sum_wosii.n, s=markersize, c=color, lw=1, edgecolor='k', marker=marker)
-        ax.errorbar(this_logOH_sum_wsii.n, this_logOH_sum_wosii.n, xerr=this_logOH_sum_wsii.s, yerr=this_logOH_sum_wosii.s, c='grey', fmt='none', lw=0.5, alpha=0.5)
+        ax.errorbar(this_logOH_sum_wsii.n, this_logOH_sum_wosii.n, xerr=this_logOH_sum_wsii.s, yerr=this_logOH_sum_wosii.s, c='grey', fmt='none', lw=1, alpha=1)
 
         # ----annotate axis----------
         ax.set_xlim(Z_limits)
@@ -3337,8 +3351,8 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
                 ax.scatter(df_sub[f'{ratio}_int'], df_sub[f'{histcol_int}_int'], c='navy', marker=m, s=50, ec='k', lw=0.5, label='Grizli-integrated' if index == 0 and index2 == 0 else None)
                 ax.scatter(df_sub[f'{ratio}_sum'], df_sub[f'{histcol_int}_sum'], c='brown', marker=m, s=50, ec='k', lw=0.5, label='2D map summed' if index == 0 and index2 == 0 else None)
             
-            ax.errorbar(df_int[f'{ratio}_int'], df_int[f'{histcol_int}_int'], xerr = df_int[f'{ratio}_int_u'], color='grey', alpha=0.5, lw=0.5, fmt='none')     
-            ax.errorbar(df_int[f'{ratio}_sum'], df_int[f'{histcol_int}_sum'], xerr = df_int[f'{ratio}_sum_u'], color='grey', alpha=0.5, lw=0.5, fmt='none')
+            ax.errorbar(df_int[f'{ratio}_int'], df_int[f'{histcol_int}_int'], xerr = df_int[f'{ratio}_int_u'], color='grey', lw=1, alpha=1, fmt='none')     
+            ax.errorbar(df_int[f'{ratio}_sum'], df_int[f'{histcol_int}_sum'], xerr = df_int[f'{ratio}_sum_u'], color='grey', lw=1, alpha=1, fmt='none')
 
         # ---------plotting the different zones--------------
         shade_alpha = 0.2
@@ -3802,7 +3816,7 @@ def plot_metallicity_fit_tests(objid, field, Zdiag, args, filter='F150W', fontsi
     # ------plotting metallicity radial profile-----------
     radprof_ax = axes[4]
     radprof_ax.scatter(logOH_df[quant_x], logOH_df[quant_y], s=20, c='grey', lw=0, alpha=1)
-    radprof_ax.errorbar(logOH_df[quant_x], logOH_df[quant_y], yerr=logOH_df[quant_y + '_u'], fmt='none', c='grey', lw=0.5, alpha=1)
+    radprof_ax.errorbar(logOH_df[quant_x], logOH_df[quant_y], yerr=logOH_df[quant_y + '_u'], fmt='none', c='grey', lw=1, alpha=1)
     radprof_ax.set_aspect('auto') 
     radprof_ax = annotate_axes(radprof_ax, 'Radius (arcsec)', r'$\log$ O/H + 12', args=args)
 
@@ -3855,7 +3869,7 @@ if __name__ == "__main__":
 
     primary_Zdiag = 'NB'
     cosmos_name = 'web' # choose between '2020' (i.e. COSMOS2020 catalog) or 'web' (i.e. COSMOSWeb catalog))
-    args.version_dict = {'passage': args.drv_orig, 'glass': 'orig'}
+    args.version_dict = {'passage': args.drv_orig, 'glass': args.glass_version}
 
     args.plot_conditions = 'SNR,photometry'.split(',')
     #args.line_list = 'OII,NeIII-3867,Hb,OIII'.split(',')
@@ -3871,10 +3885,13 @@ if __name__ == "__main__":
     log_mass_lim = [7.5, 10]
 
     # -------setting up objects to plot--------------
-    Par28_objects = [300, 1303, 1849, 2867]
-    #Par28_objects = [2727] + Par28_objects
-    #Par28_objects = [2171] + Par28_objects
-    glass_objects = [1721, 1983, 1991, 1333]
+    # Par28_objects = [300, 1303, 1849, 2867]
+    # Par28_objects = [2727] + Par28_objects
+    # Par28_objects = [2171] + Par28_objects
+    Par28_objects = [300]
+    
+    glass_objects = [1983, 1333]
+    #glass_objects = [1721, 1983, 1991, 1333]
     #glass_objects = [2128] + glass_objects
 
     obj_segid_dict = {300:288, 1303:1321, 1849:1862, 2867:2801}
@@ -3954,7 +3971,7 @@ if __name__ == "__main__":
     # ---------full population plots----------------------
     #plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
-    #df_agn = plot_AGN_demarcation_figure_integrated(df, args, fontsize=15)
+    df_agn = plot_AGN_demarcation_figure_integrated(df, args, fontsize=15)
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)

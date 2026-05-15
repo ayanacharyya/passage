@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument('--keep', dest='keep', action='store_true', default=False, help='Keep existing plot windows open? Default is no.')
     parser.add_argument('--forpaper', dest='forpaper', action='store_true', default=False, help='Format plots to paper quality? Default is no.')
     parser.add_argument('--fortalk', dest='fortalk', action='store_true', default=False, help='Format plots suitable for putting in talks? Default is no.')
-    parser.add_argument('--drv', metavar='drv', type=str, action='store', default='v0.5', help='Which data reduction version? Default v0.1')
+    parser.add_argument('--drv', metavar='drv', type=str, action='store', default='v0.5', help='Which data reduction version? Default v0.5')
     parser.add_argument('--fontsize', metavar='fontsize', type=int, action='store', default=15, help='fontsize of plot labels, etc.; default is 15')
 
     parser.add_argument('--field', metavar='field', type=str, action='store', default='Par3', help='Which passage field? Default is Par50')
@@ -248,6 +248,7 @@ def parse_args():
     parser.add_argument('--histbycol', metavar='histbycol', type=str, action='store', default=None, help='Column name whose average per bin would be shown on line ratio histogram y-axis; Default is None, i.e., the usual counts will be on histogram y-axis')
     parser.add_argument('--clobber_mcmc', dest='clobber_mcmc', action='store_true', default=False, help='Over-write existing MCMC file? Default is no.')
     parser.add_argument('--fit_correlation', dest='fit_correlation', action='store_true', default=False, help='Fit a slope between x and y? Default is no.')
+    parser.add_argument('--glass_version', metavar='glass_version', type=str, action='store', default='orig', help='Which GLASS data reduction version? Default orig')
 
     # ------- args added for integrated_vs_summed.py ------------------------------
     parser.add_argument('--nocolorcoding', dest='nocolorcoding', action='store_true', default=False, help='No color-coding for scatter plots? Default is no.')

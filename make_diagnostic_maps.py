@@ -584,9 +584,17 @@ def get_voronoi_bin_IDs(full_hdu, snr_thresh, plot=False, quiet=True, args=None)
         line_hdu = full_hdu['LINE', args.voronoi_line]
         initial_map_err = 1e-17 / (full_hdu['LINEWHT', args.voronoi_line].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
     except KeyError:
-        if args.voronoi_line == 'OIII':
-            line_hdu = full_hdu['LINE', 'OIII-5007']
-            initial_map_err = 1e-17 / (full_hdu['LINEWHT', 'OIII-5007'].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
+        try:
+            line_hdu = full_hdu['LINE', args.voronoi_line]
+            initial_map_err = full_hdu['ERR', args.voronoi_line].data # in units of ergs/s/cm^2
+        except KeyError:
+            if args.voronoi_line == 'OIII':
+                try:
+                    line_hdu = full_hdu['LINE', 'OIII-5007']
+                    initial_map_err = 1e-17 / (full_hdu['LINEWHT', 'OIII-5007'].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
+                except KeyError:
+                    line_hdu = full_hdu['LINE', 'OIII-5007']
+                    initial_map_err = full_hdu['ERR', 'OIII-5007'].data # in units of ergs/s/cm^2
 
     initial_map = line_hdu.data * 1e-17 # in units of ergs/s/cm^2
 
@@ -918,7 +926,7 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
         line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}'] # rest-frame EW
         line_ew_err = full_hdu[2].header[f'EWHW_{line_index_in_cov:03d}'] # rest-frame EW uncertainty
         line_ew = ufloat(line_ew, line_ew_err)
-    except KeyError:
+    except Exception:
         line_ew = ufloat(np.nan, np.nan)
 
     # ---------getting the spatially resolved line flux map----------------
@@ -926,9 +934,17 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
         line_hdu = full_hdu['LINE', line]
         line_map_err = 1e-17 / (full_hdu['LINEWHT', line].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
     except KeyError:
-        if line == 'OIII':
-            line_hdu = full_hdu['LINE', 'OIII-5007']
-            line_map_err = 1e-17 / (full_hdu['LINEWHT', 'OIII-5007'].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
+        try:
+            line_hdu = full_hdu['LINE', line]
+            line_map_err = full_hdu['ERR', line].data # in units of ergs/s/cm^2
+        except KeyError:
+            if line == 'OIII':
+                try:
+                    line_hdu = full_hdu['LINE', 'OIII-5007']
+                    line_map_err = 1e-17 / (full_hdu['LINEWHT', 'OIII-5007'].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
+                except KeyError:
+                    line_hdu = full_hdu['LINE', 'OIII-5007']
+                    line_map_err = full_hdu['ERR', 'OIII-5007'].data # in units of ergs/s/cm^2
 
     line_map = line_hdu.data * 1e-17 # in units of ergs/s/cm^2
     line_wave = line_hdu.header['RESTWAVE'] # in Angstrom
@@ -2759,13 +2775,22 @@ def get_AGN_func_methods(args):
     elif args.AGN_diag == 'O2O3':
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'OII', 'OIII', []
     elif args.AGN_diag == 'O2Hb':
-        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OII', 'Hb', 'OIII', 'Hb', []
+        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'OII', 'Hb', ['L10']
     elif args.AGN_diag == 'Ne3O2':
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'NeIII-3867', 'OII', ['NB', 'F24', 'B22_Ne3O2']
     else:
         sys.exit('Choose AGN_diag to be one among VO87,H21,O2O3,O2Hb,Ne3O2')
 
-    label_dict = {'K01': 'Kewley+2001', 'S24': 'Schultz+2024', 'H21':'Henry+2021', 'B22_S2Ha':'Backhaus+2022', 'B22_Ne3O2':'Backhaus+2022', 'MAPPINGS':'MAPPINGS', 'F24':'Feuillet+2024', 'NB':'NB (Acharyya+2025)'}
+    label_dict = {'K01': 'Kewley+2001', 
+                  'S24': 'Schultz+2024', 
+                  'H21': 'Henry+2021', 
+                  'B22_S2Ha': 'Backhaus+2022', 
+                  'B22_Ne3O2': 'Backhaus+2022', 
+                  'MAPPINGS': 'MAPPINGS', 
+                  'F24': 'Feuillet+2024', 
+                  'NB': 'NB (Acharyya+2025)',
+                  'L10': 'Lamareille+2010',
+                  }
     line_labels = [label_dict[item] for item in theoretical_lines]
 
     return theoretical_lines, line_labels
@@ -2791,6 +2816,8 @@ def AGN_func(x, theoretical_line):
         y = np.poly1d([0.05, -0.25, 0.15, 0.89])(x)
     elif theoretical_line == 'NB':  # new eqn based on NebulaBayes models
         y = np.poly1d([0.09, -0.03, 0.01, 0.70])(x) #without accounting for HeI, so x-axis is NeIII/OII
+    elif theoretical_line == 'L10':  # Eq 1 of Lamareille+2010 (https://ui.adsabs.harvard.edu/abs/2010A%26A...509A..53L/abstract)
+        y = np.piecewise(x, [x < 0.92, x > 0.92], [lambda x: 0.11 / (x - 0.92) + 0.85, lambda x: -np.inf])
     else:
         sys.exit(f'Requested theoreitcal line {theoretical_line} should be one of K01,S24,H21,B22_S2Ha,B22_Ne3O2')
     return y
