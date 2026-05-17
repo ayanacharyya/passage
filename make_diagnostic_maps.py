@@ -2156,7 +2156,7 @@ def get_Z(full_hdu, args):
             logOH_map_err = np.where(logOH_map.mask, np.nan, unp.std_devs(logOH_map.data))
 
             distance_map = get_distance_map(np.shape(logOH_map_val), args)
-            if args.vorbin:  # getting how many unique IDs present, so that NB does not have to run unnecessary repeats
+            if args.vorbin or args.radbin:  # getting how many unique IDs present, so that NB does not have to run unnecessary repeats
                 bin_IDs_map = np.where(args.voronoi_bin_IDs.mask, np.nan, args.voronoi_bin_IDs.data)
                 distance_map = np.where(args.voronoi_bin_IDs.mask, np.nan, distance_map.data)
             else:

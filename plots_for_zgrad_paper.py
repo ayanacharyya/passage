@@ -431,8 +431,6 @@ def make_master_df(objlist, args, sum=True):
         # --------get metallicity info----------
         df_logOH_passage = get_logOH_df(passage_objlist, args, survey='passage')
         common_columns = list(set(df.columns) & set(df_logOH_passage.columns))
-
-        print(f'Deb435:', df, df_logOH_passage, common_columns) ##
         df = pd.merge(df, df_logOH_passage, on=common_columns, how='left')
 
         df_logOH_glass = get_logOH_df(glass_objlist, args, survey='glass')
@@ -1838,12 +1836,18 @@ def get_direct_image(full_hdu, filter, args):
         try:
             hdu = full_hdu['DSCI', f'{filter}-CLEAR']
             image = hdu.data
-            exptime = full_hdu[0].header[f'T_{filter.upper()}']
+            try:
+                exptime = full_hdu[0].header[f'T_{filter.upper()}']
+            except:
+                exptime = 1
         except:
             try:
                 hdu = full_hdu['DSCI', f'{filter.upper()}-{filter.upper()}-CLEAR']
                 image = hdu.data
-                exptime = full_hdu[0].header[f'T_{filter.upper()}']
+                try:
+                    exptime = full_hdu[0].header[f'T_{filter.upper()}']
+                except:
+                    exptime = 1
             except:
                 full_field_filename = get_data_path(args.field, args) / f'{args.field}_{filter.lower()}-clear_drz_sci.fits'
                 print(f'{filter.upper()} not found in full_hdu extension. Therefore trying to get cutout from full field image {full_field_filename}')
@@ -2576,7 +2580,7 @@ def plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10, do_mcmc=Fal
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     C25_text = '_wC25' if args.use_C25 and 'NB' not in Zdiag else ''
     dered_text = '_dered' if args.dered_in_NB and 'NB' in Zdiag else ''
-    figname = f'metallicity_multi_panel{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}_upto_{extent_text}{C25_text}{dered_text}.png'
+    figname = f'metallicity_multi_panel{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}_upto_{extent_text}{C25_text}{dered_text}_glassver_{args.glass_version}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2796,7 +2800,8 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
     log_sfr_lim = [-2, 0.8]
 
    # -------setting up the figure--------------------
-    nrow, ncol = 4, 2
+    ncol = 2
+    nrow = int(np.ceil(len(objlist) / ncol))
     fig = plt.figure(figsize=(9, 6) if nrow == 3 else (9, 7.5))
     fig.subplots_adjust(left=0.07, right=0.93, bottom=0.08, top=0.9, wspace=0., hspace=0.)
     outer_gs = gridspec.GridSpec(nrow, ncol, figure=fig, wspace=0.35, hspace=0.)
@@ -2818,7 +2823,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
 
         # ----------getting the SFR maps------------------
         _, _, _, sfr_map, sfr_int, sfr_sum = get_corrected_sfr(full_hdu, logOH_map, args, logOH_int=logOH_int, logOH_sum=logOH_sum)
-        sfr_map.data[sfr_map.data < 0] = np.nan
+        sfr_map.data[unp.nominal_values(sfr_map.data) <= 0] = np.nan
         log_sfr_map = np.ma.masked_where(sfr_map.mask | logOH_map.mask, unp.log10(sfr_map.data))
     
         # -----plotting 2D SFR map-----------
@@ -2829,7 +2834,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
 
         # ------plotting metallicity vs SFR-----------
         df = pd.DataFrame({'logOH': unp.nominal_values(np.ma.compressed(logOH_map)), 'logOH_u': unp.std_devs(np.ma.compressed(logOH_map)), 'log_sfr':unp.nominal_values(np.ma.compressed(log_sfr_map)), 'log_sfr_u': unp.std_devs(np.ma.compressed(log_sfr_map))})
-        if args.vorbin:
+        if args.vorbin or args.radbin:
             df['bin_ID'] = np.ma.compressed(np.ma.masked_where(log_sfr_map.mask, args.voronoi_bin_IDs.data))
             df = df.groupby('bin_ID', as_index=False).agg(np.mean)
         df = df.dropna(axis=0)
@@ -2862,7 +2867,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
     
      # -----------saving figure------------
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'metallicity-sfr_multi_panel_upto_{extent_text}.png'
+    figname = f'metallicity-sfr_multi_panel_upto_{extent_text}_glassver_{args.glass_version}.png'
     save_fig(fig, figname, args)
 
     return
@@ -3989,7 +3994,7 @@ if __name__ == "__main__":
     #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True, fontsize=15, show_AGN_grid=show_AGN_grid, df_data=df)
     
     # --------multi-panel SFR-Z plots------------------
-    # plot_metallicity_sfr_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)#, exclude_ids=[1303])
+    #plot_metallicity_sfr_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)#, exclude_ids=[1303])
     # objlist_ha = [[row['field'], row['objid']] for index, row in df[df['redshift'] < 2.8].iterrows()]
     # #plot_nb_comparison_sii(objlist_ha, args, fontsize=15)
 
