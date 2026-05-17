@@ -329,7 +329,7 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
         if len(df[df[ycol + '_err'] > 0]) == 0: image_err = None
 
         # --------processing the dataframe in case voronoi binning has been performed and there are duplicate data values------
-        if args.vorbin:
+        if args.vorbin or args.radbin:
             df['bin_ID'] = np.ma.compressed(np.ma.masked_where(image.mask, args.voronoi_bin_IDs.data))
             df = df.groupby('bin_ID', as_index=False).agg(np.mean)
         
@@ -337,24 +337,24 @@ def plot_radial_profile(image, ax, args, label=None, ymin=None, ymax=None, hide_
         df = df.sort_values(by=xcol)
 
     # -------proceeding with plotting--------
-    ax.scatter(df[xcol], df[ycol], c=df['agn_dist'] if metallicity_multi_color else 'grey', cmap=args.diverging_cmap if metallicity_multi_color else None, s=20 if args.vorbin else 1, alpha=1 if args.vorbin else 0.2)
-    if ycol + '_err' in df: ax.errorbar(df[xcol], df[ycol], yerr=df[ycol + '_err'], c='grey', fmt='none', lw=2 if args.vorbin else 0.5, alpha=0.2 if args.vorbin else 0.1)
+    ax.scatter(df[xcol], df[ycol], c=df['agn_dist'] if metallicity_multi_color else 'grey', cmap=args.diverging_cmap if metallicity_multi_color else None, s=20 if args.vorbin or args.radbin else 1, alpha=1 if args.vorbin or args.radbin else 0.2)
+    if ycol + '_err' in df: ax.errorbar(df[xcol], df[ycol], yerr=df[ycol + '_err'], c='grey', fmt='none', lw=2 if args.vorbin or args.radbin else 0.5, alpha=0.2 if args.vorbin or args.radbin else 0.1)
     for index, row in df.iterrows(): ax.text(row[xcol], row[ycol], row['bin_ID'].astype(int), c='k', fontsize=args.fontsize/1.5)
 
     if args.radius_max is not None: ax.set_xlim(0, args.radius_max) # kpc
     ax.set_ylim(ymin, ymax)
     ax.set_box_aspect(1)
 
-    if args.vorbin:
-        print(f'Not radially binning {label} profile since already voronoi binned')
+    if args.vorbin or args.radbin:
+        print(f'Not radially binning {label} profile since 2D map was already binned')
         # ----------to fit and plot the binned profile--------------
         try:
             linefit, linecov = np.polyfit(df[xcol], df[ycol], 1, cov=True, w=1. / (df[ycol + '_err']) ** 2 if image_err is not None else None)
             y_fitted = np.poly1d(linefit)(df[xcol])
             ax.plot(df[xcol], y_fitted, color=color, lw=1, ls='dashed')
             linefit = np.array([ufloat(linefit[0], np.sqrt(linecov[0][0])), ufloat(linefit[1], np.sqrt(linecov[1][1]))])
-        except Exception:
-            print(f'Could not fit radial profile in this case..')
+        except Exception as e:
+            print(f'Could not fit radial profile in this case due to {e}')
             linefit = np.array([ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)])
     else:
         ax, linefit = plot_binned_profile(df, ax, xcol=xcol, ycol=ycol)
@@ -1652,7 +1652,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
     '''
     line_flux_array = [np.atleast_1d(item) for item in line_flux_array]
     npixels = len(line_flux_array[0])
-    if args.vorbin and npixels > 1: # getting how many unique IDs present, so that NB does not have to run unnecessary repeats
+    if (args.vorbin or args.radbin) and npixels > 1: # getting how many unique IDs present, so that NB does not have to run unnecessary repeats
         IDs_array = args.voronoi_bin_IDs.astype(int).flatten()
     else:
         IDs_array = np.arange(npixels).flatten()
@@ -1665,7 +1665,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
     obs_flux_array, obs_err_array = [], []
 
     for index in range(len(line_flux_array)):
-        if np.ma.isMaskedArray(line_flux_array[index]):
+        if np.ma.isMaskedArray(line_flux_array[index]):            
             net_mask = net_mask | line_flux_array[index].mask
             obs_flux_array.append(unp.nominal_values(line_flux_array[index].data).flatten())
             obs_err_array.append(unp.std_devs(line_flux_array[index].data).flatten())
@@ -1707,7 +1707,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
             obs_errs = obs_err_array[:, index]
 
             # ------discarding lines with negative fluxes-------------
-            good_obs = obs_fluxes >= 0
+            good_obs = (obs_fluxes > 0) & (obs_errs > 0)
             obs_fluxes = obs_fluxes[good_obs]
             obs_errs = obs_errs[good_obs]
             line_labels = list(np.array(line_label_array)[good_obs])
@@ -3581,9 +3581,13 @@ if __name__ == "__main__":
 
         # ---------prep the catalog file--------------------
         catalog_file = product_dir / f'{args.field}_photcat.fits'
+        if not os.path.exists(catalog_file):
+            print(f'{catalog_file} does not exist, so attempting to look for *phot.fits instead of *photcat.fits')
+            catalog_file = str(catalog_file).replace('photcat', 'phot')
+
         if os.path.exists(catalog_file):
             catalog = GTable.read(catalog_file)
-        elif args.do_all_obj:
+        else:
             print(f'photcat file for {args.field} does not exist, please download from gdrive or run data reduction. Until then, skipping this field.')
             continue
 
@@ -3656,6 +3660,7 @@ if __name__ == "__main__":
             full_fits_file1 = output_subdir / f'{args.field}_{args.id:05d}.full.fits'
             full_fits_file2 = product_dir / 'full' / f'{args.field}_{args.id:05d}.full.fits'
             maps_fits_file = product_dir / 'maps' / f'{args.field}_{args.id:05d}.maps.fits'
+            data_fits_file = product_dir / 'data' / f'{args.id:05d}_data.fits'
 
             if os.path.exists(full_fits_file1): # if the fits files are in sub-directories for individual objects
                 full_filename = full_fits_file1
@@ -3667,6 +3672,10 @@ if __name__ == "__main__":
 
             elif os.path.exists(full_fits_file2): # if the fits files are in Products/
                 full_filename = full_fits_file2
+                od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.1D.fits'
+
+            elif os.path.exists(data_fits_file):  # if the _data.fits files are available
+                full_filename = data_fits_file
                 od_filename = product_dir / 'spec1D' / f'{args.field}_{args.id:05d}.1D.fits'
 
             else:
@@ -3685,8 +3694,8 @@ if __name__ == "__main__":
             if os.path.exists(od_filename):
                 od_hdu = fits.open(od_filename)
             else:
-                print('1D fits file does not exists, cannot proceed, so skipping..')
-                continue
+                print('1D fits file does not exists, will lead to error if forced to plot 1D spectra..')
+                #continue
 
             # ----------determining global parameters------------
             args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
@@ -3750,7 +3759,7 @@ if __name__ == "__main__":
             if args.radbin and not args.only_integrated:
                 args.voronoi_bin_IDs = get_radial_bin_IDs(full_hdu, snr_thresh=args.voronoi_snr, plot=args.debug_vorbin, quiet=not args.debug_vorbin, args=args)
                 args.voronoi_bin_distances = get_voronoi_bin_distances(full_hdu, 'OIII', args)
-                args.vorbin = True
+                #args.vorbin = True # why had I done this? needs more testing to investigate; commenting out for now
 
                 if args.voronoi_bin_IDs is None:
                     print(f'Voronoi binning was not possible, therefore skipping this object..')

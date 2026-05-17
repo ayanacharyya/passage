@@ -5,10 +5,11 @@
     Created: 09-04-25
     Example: run plots_for_zgrad_paper.py --phot_models nb --debug_Zsfr
              run plots_for_zgrad_paper.py --histbycol SNR
-             run plots_for_zgrad_paper.py --AGN_diag Ne3O2 --glass_version orig --annotate --clobber
-             run plots_for_zgrad_paper.py --AGN_diag O2Hb --glass_version orig --annotate --keep
-             run plots_for_zgrad_paper.py --AGN_diag Ne3O2 --glass_version pjw --annotate --clobber
-             run plots_for_zgrad_paper.py --AGN_diag O2Hb --glass_version pjw --annotate --keep
+             run plots_for_zgrad_paper.py --AGN_diag Ne3O2 --glass_version pjw_extractions_v4 --annotate
+             run plots_for_zgrad_paper.py --AGN_diag O2Hb --glass_version pjw_extractions_v4 --annotate --keep
+             run plots_for_zgrad_paper.py --AGN_diag Ne3O2 --glass_version pjw_multiregion_analysis_v9 --annotate
+             run plots_for_zgrad_paper.py --AGN_diag Ne3O2 --glass_version pjw_ngdeep_custom_jwst_ar --annotate
+             run plots_for_zgrad_paper.py --AGN_diag Ne3O2 --glass_version pjw_ngdeep_custom --annotate
 '''
 from header import *
 from util import *
@@ -52,7 +53,7 @@ def save_fig(fig, figname, args):
     else:
         plot_output_dir = args.root_dir / 'zgrad_paper_plots'
 
-    if 'pjw' in args.drv: plot_output_dir = Path(str(plot_output_dir) + '_pjw')
+    if 'pjw' in args.drv_orig: plot_output_dir = Path(str(plot_output_dir) + '_pjw')
 
     plot_output_dir.mkdir(exist_ok=True, parents=True)
     figname = plot_output_dir / figname
@@ -101,8 +102,8 @@ def plot_glass_venn(args, fontsize=10):
 
     # -------loading the data--------------
     #glass_catalog_filename = args.root_dir / 'glass_data' / 'a2744_spec_cat_niriss_20250401.fits'
-    glass_catalog_filename = args.root_dir / 'glass_data' / 'full_internal_em_line_data.fits'
-    #glass_catalog_filename = args.root_dir / 'glass_data' / 'hlsp_glass-jwst_jwst_niriss_abell2744_v1.0_cat.fits'
+    #glass_catalog_filename = args.root_dir / 'glass_data' / 'full_internal_em_line_data.fits'
+    glass_catalog_filename = args.root_dir / 'glass_data' / 'hlsp_glass-jwst_jwst_niriss_abell2744_v1.0_cat.fits'
     
     tab = Table(fits.open(glass_catalog_filename)[1].data)
     if 'cdf_z' in tab.columns: tab.remove_column('cdf_z') # because multi dimension column does not agree well with pandas
@@ -196,23 +197,28 @@ def get_sfr_df(objlist, args, Zdiag, Zdiag_branch='low', survey='passage', sum=T
 
     filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits.csv'
     
-    df_sfr = pd.read_csv(filename)
-    df_sfr = df_sfr.drop_duplicates(subset=['field', 'objid', 'Zdiag', 'Zdiag_branch', 'AGN_diag', 'extent_value', 'extent_unit', 'dered_in_NB', 'snr_text', 'only_seg', 'vorbin_text'], keep='last')
-    
-    if args.re_limit is not None: df_sfr = df_sfr[(df_sfr['extent_unit'] == 're') & (df_sfr['extent_value'] == args.re_limit)]
-    else: df_sfr = df_sfr[(df_sfr['extent_unit'] == 'arcsec') & (df_sfr['extent_value'] == args.arcsec_limit)]
-    if args.AGN_diag != 'None': df_sfr = df_sfr[df_sfr['AGN_diag'] == args.AGN_diag]
-    df_sfr = df_sfr[(df_sfr['Zdiag'] == Zdiag) & (df_sfr['Zdiag_branch'] == Zdiag_branch) & (df_sfr['dered_in_NB'] == args.dered_in_NB) & (df_sfr['only_seg'] == args.only_seg) & (df_sfr['vorbin_text'] == args.vorbin_text)]
-    
-    df_sfr = df_sfr.drop(['Zdiag', 'Zdiag_branch', 'AGN_diag', 'dered_in_NB', 'snr_text', 'only_seg', 'vorbin_text'], axis=1)
-    df_sfr = pd.merge(df, df_sfr, on=['field', 'objid'], how='left')
+    if os.path.exists(filename):
+        df_sfr = pd.read_csv(filename)
+        df_sfr = df_sfr.drop_duplicates(subset=['field', 'objid', 'Zdiag', 'Zdiag_branch', 'AGN_diag', 'extent_value', 'extent_unit', 'dered_in_NB', 'snr_text', 'only_seg', 'vorbin_text'], keep='last')
+        
+        if args.re_limit is not None: df_sfr = df_sfr[(df_sfr['extent_unit'] == 're') & (df_sfr['extent_value'] == args.re_limit)]
+        else: df_sfr = df_sfr[(df_sfr['extent_unit'] == 'arcsec') & (df_sfr['extent_value'] == args.arcsec_limit)]
+        if args.AGN_diag != 'None' and np.isfinite(df_sfr['AGN_diag']).any():
+            df_sfr = df_sfr[df_sfr['AGN_diag'] == args.AGN_diag]
+        df_sfr = df_sfr[(df_sfr['Zdiag'] == Zdiag) & (df_sfr['Zdiag_branch'] == Zdiag_branch) & (df_sfr['dered_in_NB'] == args.dered_in_NB) & (df_sfr['only_seg'] == args.only_seg) & (df_sfr['vorbin_text'] == args.vorbin_text)]
+        
+        df_sfr = df_sfr.drop(['Zdiag', 'Zdiag_branch', 'AGN_diag', 'dered_in_NB', 'snr_text', 'only_seg', 'vorbin_text'], axis=1)
+        df_sfr = pd.merge(df, df_sfr, on=['field', 'objid'], how='left')
 
-    cols_to_extract = ['field', 'objid', 'logZ_logSFR_slope', 'logZ_logSFR_slope_u']
-    if sum: cols_to_extract += ['SFR_sum', 'SFR_sum_u']
-    else: cols_to_extract += ['SFR_int', 'SFR_int_u']
-    df_sfr = df_sfr[cols_to_extract]
-    df_sfr = df_sfr.rename(columns = {'SFR_sum': 'SFR', 'SFR_sum_u': 'SFR_u', 'SFR_int': 'SFR', 'SFR_int_u': 'SFR_u'})
- 
+        cols_to_extract = ['field', 'objid', 'logZ_logSFR_slope', 'logZ_logSFR_slope_u']
+        if sum: cols_to_extract += ['SFR_sum', 'SFR_sum_u']
+        else: cols_to_extract += ['SFR_int', 'SFR_int_u']
+        df_sfr = df_sfr[cols_to_extract]
+        df_sfr = df_sfr.rename(columns = {'SFR_sum': 'SFR', 'SFR_sum_u': 'SFR_u', 'SFR_int': 'SFR', 'SFR_int_u': 'SFR_u'})
+    else:
+        print(f'Could not find SFR properties file {filename}, so returning no SFR-related columns')
+        df_sfr = df
+    
     return df_sfr
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -225,37 +231,41 @@ def get_logOH_df(objlist, args, survey='passage'):
 
     filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_allfits.csv'
     
-    df_logOH = pd.read_csv(filename)
-    df_logOH = df_logOH.drop_duplicates(subset=['field', 'objid', 'Zdiag_branch', 'Zdiag', 'extent_value', 'extent_unit', 'dered_in_NB', 'snr_text', 'only_seg', 'vorbin_text'], keep='last')
-    if args.re_limit is not None: df_logOH = df_logOH[(df_logOH['extent_unit'] == 're') & (df_logOH['extent_value'] == args.re_limit)]
-    else: df_logOH = df_logOH[(df_logOH['extent_unit'] == 'arcsec') & (df_logOH['extent_value'] == args.arcsec_limit)]    
-    if args.AGN_diag != 'None': df_logOH = df_logOH[df_logOH['AGN_diag'] == args.AGN_diag]
-    df_logOH = df_logOH[(df_logOH['dered_in_NB'] == args.dered_in_NB) & (df_logOH['only_seg'] == args.only_seg) & (df_logOH['vorbin_text'] == args.vorbin_text)]
+    if os.path.exists(filename):
+        df_logOH = pd.read_csv(filename)
+        df_logOH = df_logOH.drop_duplicates(subset=['field', 'objid', 'Zdiag_branch', 'Zdiag', 'extent_value', 'extent_unit', 'dered_in_NB', 'snr_text', 'only_seg', 'vorbin_text'], keep='last')
+        if args.re_limit is not None: df_logOH = df_logOH[(df_logOH['extent_unit'] == 're') & (df_logOH['extent_value'] == args.re_limit)]
+        else: df_logOH = df_logOH[(df_logOH['extent_unit'] == 'arcsec') & (df_logOH['extent_value'] == args.arcsec_limit)]    
+        if args.AGN_diag != 'None' and np.isfinite(df_logOH['AGN_diag']).any():
+            df_logOH = df_logOH[df_logOH['AGN_diag'] == args.AGN_diag]
+        df_logOH = df_logOH[(df_logOH['dered_in_NB'] == args.dered_in_NB) & (df_logOH['only_seg'] == args.only_seg) & (df_logOH['vorbin_text'] == args.vorbin_text)]
 
-    df_logOH = df_logOH.drop(['extent_unit', 'extent_value', 'AGN_diag', 'dered_in_NB', 'snr_text', 'only_seg', 'vorbin_text'], axis=1)
-    df_logOH = pd.merge(df, df_logOH, on=['field', 'objid'], how='inner')
+        df_logOH = df_logOH.drop(['extent_unit', 'extent_value', 'AGN_diag', 'dered_in_NB', 'snr_text', 'only_seg', 'vorbin_text'], axis=1)
+        df_logOH = pd.merge(df, df_logOH, on=['field', 'objid'], how='inner')
 
-    substrings = ['logOH', 'pa', 'q']
-    cols_to_join = [item for item in df_logOH.columns if any([i in item for i in substrings])]
-    cols_to_join = [item for item in cols_to_join if not any([item.endswith(i) for i in ['_u', '_ulim', '_llim']])]
-    Zdiag_arr = np.hstack([[item] if item in ['NB', 'P25'] else [item + '_C25_low', item + '_low', item + '_high'] for item in args.Zdiag])
+        substrings = ['logOH', 'pa', 'q']
+        cols_to_join = [item for item in df_logOH.columns if any([i in item for i in substrings])]
+        cols_to_join = [item for item in cols_to_join if not any([item.endswith(i) for i in ['_u', '_ulim', '_llim']])]
+        Zdiag_arr = np.hstack([[item] if item in ['NB', 'P25'] else [item + '_C25_low', item + '_low', item + '_high'] for item in args.Zdiag])
 
-    for Zdiag in Zdiag_arr:
-        if 'low' in Zdiag: df_sub = df_logOH[(df_logOH['Zdiag'] == Zdiag[:-4]) & (df_logOH['Zdiag_branch'] == 'low')]
-        elif 'high' in Zdiag: df_sub = df_logOH[(df_logOH['Zdiag'] == Zdiag[:-5]) & (df_logOH['Zdiag_branch'] == 'high')]
-        else: df_sub = df_logOH[(df_logOH['Zdiag'] == Zdiag)].drop_duplicates(subset=['field', 'objid', 'Zdiag'], keep='last')
-        df_sub = df_sub.drop(['Zdiag', 'Zdiag_branch'], axis=1)
-        
-        rename_dict = {}
-        for col in cols_to_join:
-            rename_dict.update({f'{col}': f'{col}_{Zdiag}'})
-            rename_dict.update({f'{col}_u': f'{col}_{Zdiag}_u'})
-            rename_dict.update({f'{col}_ulim': f'{col}_{Zdiag}_ulim'})
-            rename_dict.update({f'{col}_llim': f'{col}_{Zdiag}_llim'})
-        df_sub = df_sub.rename(columns=rename_dict)
-        #common_columns = list(set(df.columns) & set(df_sub.columns))
-        common_columns = ['field', 'objid']
-        df = pd.merge(df, df_sub, on=common_columns, how='left')
+        for Zdiag in Zdiag_arr:
+            if 'low' in Zdiag: df_sub = df_logOH[(df_logOH['Zdiag'] == Zdiag[:-4]) & (df_logOH['Zdiag_branch'] == 'low')]
+            elif 'high' in Zdiag: df_sub = df_logOH[(df_logOH['Zdiag'] == Zdiag[:-5]) & (df_logOH['Zdiag_branch'] == 'high')]
+            else: df_sub = df_logOH[(df_logOH['Zdiag'] == Zdiag)].drop_duplicates(subset=['field', 'objid', 'Zdiag'], keep='last')
+            df_sub = df_sub.drop(['Zdiag', 'Zdiag_branch'], axis=1)
+            
+            rename_dict = {}
+            for col in cols_to_join:
+                rename_dict.update({f'{col}': f'{col}_{Zdiag}'})
+                rename_dict.update({f'{col}_u': f'{col}_{Zdiag}_u'})
+                rename_dict.update({f'{col}_ulim': f'{col}_{Zdiag}_ulim'})
+                rename_dict.update({f'{col}_llim': f'{col}_{Zdiag}_llim'})
+            df_sub = df_sub.rename(columns=rename_dict)
+            #common_columns = list(set(df.columns) & set(df_sub.columns))
+            common_columns = ['field', 'objid']
+            df = pd.merge(df, df_sub, on=common_columns, how='left')
+    else:
+        print(f'Could not find metallicity properties file {filename}, so returning no metallicity-related columns')
 
     return df
 
@@ -420,15 +430,23 @@ def make_master_df(objlist, args, sum=True):
 
         # --------get metallicity info----------
         df_logOH_passage = get_logOH_df(passage_objlist, args, survey='passage')
+        common_columns = list(set(df.columns) & set(df_logOH_passage.columns))
+
+        print(f'Deb435:', df, df_logOH_passage, common_columns) ##
+        df = pd.merge(df, df_logOH_passage, on=common_columns, how='left')
+
         df_logOH_glass = get_logOH_df(glass_objlist, args, survey='glass')
-        df_logOH = pd.concat([df_logOH_passage, df_logOH_glass])
-        df = pd.merge(df, df_logOH, on=['field', 'objid'])
+        common_columns = list(set(df.columns) & set(df_logOH_glass.columns))
+        df = pd.merge(df, df_logOH_glass, on=common_columns, how='left')
 
         # -------getting SFR info--------------
         df_sfr_passage = get_sfr_df(passage_objlist, args, 'NB', survey='passage', sum=sum)
+        common_columns = list(set(df.columns) & set(df_sfr_passage.columns))
+        df = pd.merge(df, df_sfr_passage, on=common_columns, how='left')
+        
         df_sfr_glass = get_sfr_df(glass_objlist, args, 'NB', survey='glass', sum=sum)
-        df_sfr = pd.concat([df_sfr_passage, df_sfr_glass])
-        df = pd.merge(df, df_sfr, on=['field', 'objid'])
+        common_columns = list(set(df.columns) & set(df_sfr_glass.columns))
+        df = pd.merge(df, df_sfr_glass, on=common_columns, how='left')
 
         # -------writing out dataframe--------------
         df.to_csv(filename, index=False)
@@ -1468,12 +1486,23 @@ def load_object_specific_args(full_hdu, args, skip_vorbin=False, field=None, sum
         if 'glass' in field: survey_name, args.drv = 'glass', args.glass_version
         elif 'Par' in field: survey_name, args.drv = 'passage', args.drv_orig
         catalog_file = args.root_dir / f'{survey_name}_data/' / args.drv / args.field / 'Products' / f'{args.field}_photcat.fits'
-        catalog = GTable.read(catalog_file)
-        
-        obj = catalog[catalog['id']==args.id][0]
-        args.mag = obj['mag_auto']        
-        args.q = obj['b_image'] / obj['a_image']
-        args.pa = obj['theta_image'] # radians
+
+        if not os.path.exists(catalog_file):
+            catalog_file = str(catalog_file).replace('photcat', 'phot')
+            print(f'{catalog_file} does not exist, so attempting to look for *phot.fits instead of *photcat.fits')
+
+        try:
+            catalog = GTable.read(catalog_file)        
+            obj = catalog[catalog['id']==args.id][0]
+            args.mag = obj['mag_auto']        
+            args.q = obj['b_image'] / obj['a_image']
+            args.pa = obj['theta_image'] # radians
+            print(f'\nRead photcat from existing {catalog_file}')
+        except FileNotFoundError:
+            print(f'\nNo photcat file found, so putting dummy values in for mag, q and pa')
+            args.mag = np.nan
+            args.q = 1.
+            args.pa = 0.
 
     # -------determining true center of object-------------
     args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W')
@@ -3533,8 +3562,9 @@ def mcmc_vorbin_fit(logOH_df, args, filter='F150W', quant_x='distance_arcsec', q
     exclude_text = f'_without_{",".join(args.exclude_lines)}' if len(args.exclude_lines) > 0 and 'NB' in Zdiag else ''
     dered_text = '_dered' if args.dered_in_NB and 'NB' in Zdiag else ''
     AGN_diag_text = f'_AGNdiag_{args.AGN_diag}'if args.AGN_diag != 'None' else ''
+    glass_version_text = f'_glassver_{args.glass_version}' if 'glass' in args.field else ''
  
-    mcmc_filename = args.root_dir / 'zgrad_paper_plots' / f'{args.field}_{args.id:05d}_logOH{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}_MCMC_ndim_{ndim}_nwalkers_{args.nwalkers}_niter_{args.niter}_upto_{extent_text}{C25_text}{AGN_diag_text}{exclude_text}{dered_text}.h5py'
+    mcmc_filename = args.root_dir / 'zgrad_paper_plots' / f'{args.field}_{args.id:05d}_logOH{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}_MCMC_ndim_{ndim}_nwalkers_{args.nwalkers}_niter_{args.niter}_upto_{extent_text}{C25_text}{AGN_diag_text}{exclude_text}{dered_text}{glass_version_text}.h5py'
 
     # ----------------checking if saved file exists--------------
     if not os.path.exists(mcmc_filename) or args.clobber_mcmc:
@@ -3888,8 +3918,9 @@ if __name__ == "__main__":
     Par28_objects = [300, 1303, 1849, 2867]
     #Par28_objects = [2727] + Par28_objects
     #Par28_objects = [2171] + Par28_objects
-    
+
     glass_objects = [1983, 1333, 2128, 1991]
+    if args.glass_version != 'pjw_multiregion_analysis_v9': glass_objects = [1721] + glass_objects
 
     obj_segid_dict = {300:288, 1303:1321, 1849:1862, 2867:2801}
     if 'pjw' in args.drv: Par28_objects = [obj_segid_dict[item] for item in Par28_objects]
@@ -3940,7 +3971,7 @@ if __name__ == "__main__":
     #         plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10)
 
     # --------multi-panel Z map plots------------------
-    #plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10, do_mcmc=True)
+    plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10, do_mcmc=True)
     #plot_metallicity_fig_multiple(objlist, 'R23', args, fontsize=10, do_mcmc=True)
 
     # ---------metallicity comparison plots----------------------
@@ -3968,7 +3999,7 @@ if __name__ == "__main__":
     # ---------full population plots----------------------
     #plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=15)
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
-    df_agn = plot_AGN_demarcation_figure_integrated(df, args, fontsize=15)
+    #df_agn = plot_AGN_demarcation_figure_integrated(df, args, fontsize=15)
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
