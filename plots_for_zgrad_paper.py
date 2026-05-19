@@ -193,11 +193,11 @@ def get_sfr_df(objlist, args, Zdiag, Zdiag_branch='low', survey='passage', sum=T
     Loads and returns a dataframe that holds all the sfr-related properties for a given list of objects
     Returns dataframe
     '''
-    df = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
-
     filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits.csv'
     
     if os.path.exists(filename):
+        df = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
+        print(f'\nReading SFR fit parameters from {filename}..')
         df_sfr = pd.read_csv(filename)
         df_sfr = df_sfr.drop_duplicates(subset=['field', 'objid', 'Zdiag', 'Zdiag_branch', 'AGN_diag', 'extent_value', 'extent_unit', 'dered_in_NB', 'snr_text', 'only_seg', 'vorbin_text'], keep='last')
         
@@ -216,8 +216,8 @@ def get_sfr_df(objlist, args, Zdiag, Zdiag_branch='low', survey='passage', sum=T
         df_sfr = df_sfr[cols_to_extract]
         df_sfr = df_sfr.rename(columns = {'SFR_sum': 'SFR', 'SFR_sum_u': 'SFR_u', 'SFR_int': 'SFR', 'SFR_int_u': 'SFR_u'})
     else:
-        print(f'Could not find SFR properties file {filename}, so returning no SFR-related columns')
-        df_sfr = df
+        print(f'Could not find SFR properties file {filename}, so returning empty dataframe')
+        df_sfr = pd.DataFrame()
     
     return df_sfr
 
@@ -227,11 +227,11 @@ def get_logOH_df(objlist, args, survey='passage'):
     Loads and returns a dataframe that holds all the metallicity-related properties for a given list of objects
     Returns dataframe
     '''
-    df = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
-
     filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_allfits.csv'
     
     if os.path.exists(filename):
+        df = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
+        print(f'\nReading metallicity fit parameters from {filename}..')
         df_logOH = pd.read_csv(filename)
         df_logOH = df_logOH.drop_duplicates(subset=['field', 'objid', 'Zdiag_branch', 'Zdiag', 'extent_value', 'extent_unit', 'dered_in_NB', 'snr_text', 'only_seg', 'vorbin_text'], keep='last')
         if args.re_limit is not None: df_logOH = df_logOH[(df_logOH['extent_unit'] == 're') & (df_logOH['extent_value'] == args.re_limit)]
@@ -265,7 +265,8 @@ def get_logOH_df(objlist, args, survey='passage'):
             common_columns = ['field', 'objid']
             df = pd.merge(df, df_sub, on=common_columns, how='left')
     else:
-        print(f'Could not find metallicity properties file {filename}, so returning no metallicity-related columns')
+        print(f'Could not find metallicity properties file {filename}, so returning empty dataframe')
+        df = pd.DataFrame()
 
     return df
 
@@ -421,30 +422,12 @@ def make_master_df(objlist, args, sum=True):
 
             args.only_integrated = True
             for line in line_list:
-                try: _, _, line_int, line_sum, _ = get_emission_line_map(line, full_hdu, args, silent=True)
+                try: _, _, line_int, line_sum, _ = get_emission_line_map(line, full_hdu, args, silent=False)
                 except UnboundLocalError: line_int, line_sum = ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)
                 if not sum: line_sum = line_int # choose the grizli reported integrated values
                 df.loc[index, f'{line}'] = line_sum.n
                 df.loc[index, f'{line}_u'] = line_sum.s  
             args.only_integrated = False
-
-        # --------get metallicity info----------
-        df_logOH_passage = get_logOH_df(passage_objlist, args, survey='passage')
-        common_columns = list(set(df.columns) & set(df_logOH_passage.columns))
-        df = pd.merge(df, df_logOH_passage, on=common_columns, how='left')
-
-        df_logOH_glass = get_logOH_df(glass_objlist, args, survey='glass')
-        common_columns = list(set(df.columns) & set(df_logOH_glass.columns))
-        df = pd.merge(df, df_logOH_glass, on=common_columns, how='left')
-
-        # -------getting SFR info--------------
-        df_sfr_passage = get_sfr_df(passage_objlist, args, 'NB', survey='passage', sum=sum)
-        common_columns = list(set(df.columns) & set(df_sfr_passage.columns))
-        df = pd.merge(df, df_sfr_passage, on=common_columns, how='left')
-        
-        df_sfr_glass = get_sfr_df(glass_objlist, args, 'NB', survey='glass', sum=sum)
-        common_columns = list(set(df.columns) & set(df_sfr_glass.columns))
-        df = pd.merge(df, df_sfr_glass, on=common_columns, how='left')
 
         # -------writing out dataframe--------------
         df.to_csv(filename, index=False)
@@ -454,6 +437,18 @@ def make_master_df(objlist, args, sum=True):
     else:
         print(f'Reading in existing {filename}')
         df = pd.read_csv(filename)
+
+    # --------get metallicity info----------
+    df_logOH_passage = get_logOH_df(passage_objlist, args, survey='passage')
+    df_logOH_glass = get_logOH_df(glass_objlist, args, survey='glass')
+    df_logOH = pd.concat([df_logOH_passage, df_logOH_glass])
+    df = pd.merge(df, df_logOH, on=['field', 'objid'], how='left')
+
+    # -------getting SFR info--------------
+    df_sfr_passage = get_sfr_df(passage_objlist, args, 'NB', survey='passage', sum=sum)    
+    df_sfr_glass = get_sfr_df(glass_objlist, args, 'NB', survey='glass', sum=sum)
+    df_sfr = pd.concat([df_sfr_passage, df_sfr_glass])
+    df = pd.merge(df, df_sfr, on=['field', 'objid'], how='left')
 
     # --------selecting only necessary objects------------
     df_base = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
@@ -466,19 +461,6 @@ def make_master_df(objlist, args, sum=True):
     df['SFR_OII_u'] = unp.std_devs(SFR_OII)
 
     # ------computing mixing timescales-----------
-    #Zdiag = 'NB'
-    #Z_SFR_slope = unp.uarray(df['logZ_logSFR_slope'], df['logZ_logSFR_slope_u']) * (10 ** (unp.uarray(df[f'logOH_sum_{Zdiag}'], df[f'logOH_sum_{Zdiag}_u']) - 8.69)) / unp.uarray(df['SFR'], df['SFR_u']) # computing Z-SFR slope from logZ-logSFR slope
-    
-    # df['Z_SFR_slope'] = unp.nominal_values(Z_SFR_slope) # now this is in yr/Msun
-    # df['Z_SFR_slope_u'] = unp.std_devs(Z_SFR_slope) # now this is in yr/Msun
-
-    # df['log_mmol_T20'] = df.apply(lambda row: get_mmol_from_mstar(row['lp_mass'], row['redshift'], method='T20'), axis=1) 
-    # for method in ['C18', 'G20', 'B23', 'C23']:
-    #     df['log_mgas_' + method] = df.apply(lambda row: get_mg_from_mstar(row['lp_mass'], log_mmol=row['log_mmol_T20'], method=method), axis=1)
-    #     t_mix = Z_SFR_slope * (10 ** df['log_mgas_' + method]) / 1e9 # in Gyr
-    #     df['t_mix_' + method] = unp.nominal_values(t_mix)  # in Gyr
-    #     df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)  # in Gyr
-
     method = 'my'
     A, alpha = 2.5e-4, 1.5
     beta = 1 - 1/alpha
@@ -487,12 +469,8 @@ def make_master_df(objlist, args, sum=True):
     df['pix_area'] = df['npix_in_vorbin'] * df['pix_size_arcsec'] / df['redshift'].apply(lambda x: cosmo.arcsec_per_kpc_proper(x).value) # converting arcsec to kpc
     Sigma = unp.uarray(df['SFR'] / df['pix_area'], df['SFR_u'] / df['pix_area'])
     t_mix = log_slope / (B * (Sigma ** beta) * (beta + log_slope)) # in yr
-    #t_mix = log_slope / (B * (Sigma ** beta) * beta) # in yr
     df['t_mix_' + method] = unp.nominal_values(t_mix)
     df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)
-    # log_t_mix = unp.log10(t_mix)
-    # df['log_t_mix_' + method] = unp.nominal_values(log_t_mix)
-    # df['log_t_mix_' + method + '_u'] = unp.std_devs(log_t_mix)
 
     # --------computing dynamical time scale-------
     log_t_dyn = unp.log10(2.1e7 * (df['re_kpc'] ** 1.5) * ((10 ** unp.uarray(df['lp_mass'], df['lp_mass_u']) / 1e9) ** -0.5))
@@ -651,7 +629,7 @@ def plot_SFMS(df, args, mass_col='lp_mass', sfr_col='lp_SFR', fontsize=10):
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
     ax.set_ylim(-0.5, 1.2 if sfr_col2 is None else 1.5)
 
-    figname = f'SFMS_colorby_redshift.png'
+    figname = f'SFMS_colorby_redshift_glassver_{args.glass_version}.png'
     save_fig(fig, figname, args)
 
     return
@@ -701,7 +679,7 @@ def plot_MEx(df, args, mass_col='lp_mass', fontsize=10):
     ax.plot(x, y_lo, c='brown', ls='dashed', lw=2)
     plt.legend()
 
-    figname = f'mass_excitation_colorby_redshift.png'
+    figname = f'mass_excitation_colorby_redshift_glassver_{args.glass_version}.png'
     save_fig(fig, figname, args)
 
     return
@@ -923,7 +901,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
     # ---------annotate axes and save figure-------
     handles = this_work + [j15, w17, w19, m20] + s21 + [w22, v24, l25, l25s, l25b, j25, k25] + [f21, foggie, fire2]
     labels = [h.get_label() for h in handles]
-    fig.legend(handles, labels, loc='upper center', ncol=6, bbox_to_anchor=(0.5, 0.99), fontsize=args.fontsize / args.fontfactor)
+    fig.legend(handles, labels, loc='upper center', ncol=6, bbox_to_anchor=(0.5, 0.99), fontsize=args.fontsize / args.fontfactor / 1.22)
 
     for ax in axes:
         #ax.legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
@@ -936,7 +914,7 @@ def plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_NB', fontsi
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     xcol_text = 'z' if mass_col == 'redshift' else 'M' if 'mass' in mass_col else mass_col
-    figname = f'{xcol_text}Zgrad_Zdiag_{",".join(zgrad_col)}_upto_{extent_text}.png'
+    figname = f'{xcol_text}Zgrad_Zdiag_{",".join(zgrad_col)}_upto_{extent_text}_glassver_{args.glass_version}.png'
     save_fig(fig, figname, args)
 
     return
@@ -993,7 +971,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', colo
     ax.legend(fontsize=args.fontsize, loc='upper left')
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'MZsfr_colorby_Z_upto_{extent_text}.png'
+    figname = f'MZsfr_colorby_Z_upto_{extent_text}_glassver_{args.glass_version}.png'
     save_fig(fig, figname, args)
 
     return
@@ -1072,7 +1050,7 @@ def plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH
     ax.legend(fontsize=args.fontsize / args.fontfactor, loc='lower right', markerscale=0.5 if args.fortalk else 1)
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'MZR_colorby_{colorcol}_upto_{extent_text}.png'
+    figname = f'MZR_colorby_{colorcol}_upto_{extent_text}_glassver_{args.glass_version}.png'
     save_fig(fig, figname, args)
 
     return
@@ -1107,6 +1085,7 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
         
         # ---------making log columns---------
         if 'log_' in f'{ycol}_{method}' and f'{ycol}_{method}' not in df and f'{ycol}_{method}'[4:] in df:
+            df = df[df[f'{ycol}_{method}'[4:]] > 0]
             df = break_column_into_uncertainty(df, f'{ycol}_{method}'[4:], make_log=True)
 
         # ---------------plotting-------------
@@ -1143,16 +1122,18 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_lim[0], log_mass_lim[1])
-    if mgas_method is None or mgas_method == 'C23': ax.set_ylim(-0.7, 4.3)
-    elif mgas_method is not None and mgas_method == 'my':
-        if 'log_' in ycol: ax.set_ylim(2.2, 3.7) # (None, None) #
+    if mgas_method is None or mgas_method == 'C23':
+        ax.set_ylim(-0.7, 4.3)
+    elif mgas_method == 'my':
+        if 'log_' in ycol: ax.set_ylim(1.8, 3.7) # (None, None) #
         else: ax.set_ylim(-100, 1100) #(None, None) #
-    else: ax.set_ylim(-0.5, 0.6)
+    else:
+        ax.set_ylim(-0.5, 0.6)
 
     ax.legend(fontsize=args.fontsize, loc='upper right')
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'M_tmix_colorby_{colorcol}_{mgas_method}_upto_{extent_text}.png' if mgas_method is not None else f'M_tmix_upto_{extent_text}.png'
+    figname = f'M_tmix_colorby_{colorcol}_{mgas_method}_upto_{extent_text}_glassver_{args.glass_version}.png' if mgas_method is not None else f'M_tmix_upto_{extent_text}_glassver_{args.glass_version}.png'
     save_fig(fig, figname, args)
 
     return
@@ -1183,7 +1164,7 @@ def plot_re_histogram(df, args, fontsize=10):
     ax.set_ylabel(r'Frequency', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
-    figname = f'Re_histogram.png'
+    figname = f'Re_histogram_glassver_{args.glass_version}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2272,8 +2253,8 @@ def plot_AGN_demarcation_figure_integrated(df_input, args, fontsize=10):
         ax.set_xlim(-3.5, 2)
         ax.set_ylim(-4.2, 1.7)
     elif args.AGN_diag == 'O2Hb':
-        ax.set_xlim(-0.5, 1.)
-        ax.set_ylim(-0.5, 1.)
+        ax.set_xlim(-0.5, 2.)
+        ax.set_ylim(-0.5, 2.)
         
     ax.set_xlabel(f'Log {get_ratio_labels("NeIII-3867/OII")}' if args.AGN_diag == 'Ne3O2' else f'Log {get_ratio_labels("SII/NII,Ha")}' if args.AGN_diag == 'H21' else f'Log {get_ratio_labels(f"{args.xnum_line}/{args.xden_line}")}', fontsize=args.fontsize)
     ax.set_ylabel(f'Log {get_ratio_labels("OIII/Hb")}', fontsize=args.fontsize)
@@ -2728,7 +2709,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     full_hdu = load_full_fits(objid, field, args)
     args = load_object_specific_args(full_hdu, args, field=field)
     logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
-    Zlim = [6.8, 9.2]
+    Zlim = [6.8, 9.6]
     log_sfr_lim = [-2, 0.8]
 
     # --------setting up the figure------------
@@ -2755,7 +2736,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
 
     # ------plotting metallicity vs SFR-----------
     df = pd.DataFrame({'logOH': unp.nominal_values(np.ma.compressed(logOH_map)), 'logOH_u': unp.std_devs(np.ma.compressed(logOH_map)), 'log_sfr':unp.nominal_values(np.ma.compressed(log_sfr_map)), 'log_sfr_u': unp.std_devs(np.ma.compressed(log_sfr_map))})
-    if args.vorbin:
+    if args.vorbin or args.radbin:
         df['bin_ID'] = np.ma.compressed(np.ma.masked_where(log_sfr_map.mask, args.voronoi_bin_IDs.data))
         df = df.groupby('bin_ID', as_index=False).agg(np.mean)
 
@@ -2922,7 +2903,7 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
     # ----------getting the distance map--------
     distance_map = get_distance_map(np.shape(log_sfr_map), args)
     log_sfr_df['distance'] = np.ma.compressed(np.ma.masked_where(log_sfr_map.mask, distance_map.data))
-    if args.vorbin:
+    if args.vorbin or args.radbin:
         log_sfr_df['bin_ID'] = np.ma.compressed(np.ma.masked_where(log_sfr_map.mask, args.voronoi_bin_IDs.data))
         log_sfr_df = log_sfr_df.groupby('bin_ID', as_index=False).agg(np.mean)
 
@@ -3066,7 +3047,7 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
     # ------------saving the full figure--------------------------
     colorby_text = f'_colorby_{args.colorcol}' if args.colorcol != 'color' else ''
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'Zdiag{Zbranch_text}_comparison{colorby_text}{args.vorbin_text}_upto_{extent_text}.png'
+    figname = f'Zdiag{Zbranch_text}_comparison{colorby_text}{args.vorbin_text}_upto_{extent_text}_glass_ver_{args.glass_version}.png'
     save_fig(fig, figname, args)
 
     return
@@ -3167,7 +3148,7 @@ def get_line_ratio_df(objlist, ratios, args):
     Creates (or loads from existing) a dataframe for all objects with line fluxes and ratios for a given list of ratios for all spaxels and saves it as a fits file
     Returns dataframe
     '''
-    outfitsname = args.root_dir / 'zgrad_paper_plots' / f'line_ratios_df{args.snr_text}{args.only_seg_text}{args.vorbin_text}.fits'
+    outfitsname = args.root_dir / 'zgrad_paper_plots' / f'line_ratios_df{args.snr_text}{args.only_seg_text}{args.vorbin_text}_glassver_{args.glass_version}.fits'
     
     if not os.path.exists(outfitsname) or args.clobber:
         print(f'Making df of {ratios} for {len(objlist)} objects..')
@@ -3241,8 +3222,10 @@ def get_line_ratio_df(objlist, ratios, args):
                 num_map = np.ma.masked_where(net_mask, num_map.data)
                 den_map = np.ma.masked_where(net_mask, den_map.data)
                 
-                if args.vorbin: vorbin_id_map = np.ma.masked_where(net_mask, args.voronoi_bin_IDs.data)
-                else: vorbin_id_map = np.ma.masked_where(net_mask, np.arange(np.shape(distance_map)[0] * np.shape(distance_map)[1]).reshape(np.shape(distance_map)))
+                if args.vorbin or args.radbin:
+                    vorbin_id_map = np.ma.masked_where(net_mask, args.voronoi_bin_IDs.data)
+                else:
+                    vorbin_id_map = np.ma.masked_where(net_mask, np.arange(np.shape(distance_map)[0] * np.shape(distance_map)[1]).reshape(np.shape(distance_map)))
 
                 # --------making the dataframe--------------
                 df = pd.DataFrame({'bin_ID': np.ma.compressed(vorbin_id_map), \
@@ -3420,7 +3403,7 @@ def plot_line_ratio_histogram(full_df_spaxels, objlist, Zdiag_arr, args, fontsiz
     # ---------saving the fig--------------
     histbycol_text = '' if args.histbycol is None else f'_histby_{args.histbycol.lower()}'
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'histogram_ratios_{"_".join(ratios).replace("/", "-")}{histbycol_text}_upto_{extent_text}.png'
+    figname = f'histogram_ratios_{"_".join(ratios).replace("/", "-")}{histbycol_text}_upto_{extent_text}_glassver_{args.glass_version}.png'
     save_fig(fig, figname, args)
 
     return
@@ -3924,15 +3907,26 @@ if __name__ == "__main__":
     #Par28_objects = [2727] + Par28_objects
     #Par28_objects = [2171] + Par28_objects
 
-    glass_objects = [1983, 1333, 2128, 1991]
-    if args.glass_version != 'pjw_multiregion_analysis_v9': glass_objects = [1721] + glass_objects
+    if args.glass_version == 'pjw_extractions_v4':
+        glass_objects_for_bpt = [2128, 1991, 1721, 1983, 1333]
+        glass_objects = [2128, 1991, 1721] # after removing 1983 and 1333
+    elif args.glass_version == 'pjw_ngdeep_custom':
+        glass_objects_for_bpt = [2128, 1991, 1721, 1983, 1333]
+        glass_objects = [2128, 1991, 1721, 1333] # after removing 1983
+    elif args.glass_version == 'pjw_multiregion_analysis_v9':
+        glass_objects_for_bpt = [2128, 1991, 1983, 1333]
+        glass_objects = [2128, 1991, 1983, 1333]
+    #glass_objects = glass_objects_for_bpt # use this for computing a certain parameter or plot for ALL objects irrespective of AGN vs SF, and comment it out for discarding AGN objects
 
     obj_segid_dict = {300:288, 1303:1321, 1849:1862, 2867:2801}
     if 'pjw' in args.drv: Par28_objects = [obj_segid_dict[item] for item in Par28_objects]
 
     passage_objlist = [['Par028', item] for item in Par28_objects]
     glass_objlist = [['glass-a2744', item] for item in glass_objects]
+    glass_objlist_for_bpt = [['glass-a2744', item] for item in glass_objects_for_bpt]
+    
     objlist = passage_objlist + glass_objlist
+    objlist_for_bpt = passage_objlist + glass_objlist_for_bpt
 
     # -----------setting up global properties-------------------
     args.snr_text = f'_snr{args.snr_cut}' if args.snr_cut is not None else ''
@@ -3976,7 +3970,7 @@ if __name__ == "__main__":
     #         plot_metallicity_fig_multiple(objlist, Zdiag, args, fontsize=10)
 
     # --------multi-panel Z map plots------------------
-    plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10, do_mcmc=True)
+    #plot_metallicity_fig_multiple(objlist, primary_Zdiag, args, fontsize=10, do_mcmc=True)
     #plot_metallicity_fig_multiple(objlist, 'R23', args, fontsize=10, do_mcmc=True)
 
     # ---------metallicity comparison plots----------------------
@@ -3985,13 +3979,15 @@ if __name__ == "__main__":
 
     # ---------single galaxy plot: SFR map and correlation----------------------
     #plot_metallicity_sfr_fig_single(2867, 'Par028', primary_Zdiag, args, fontsize=10) # z-sfr plot
+    #plot_metallicity_sfr_fig_single(2128, 'glass-a2744', primary_Zdiag, args, fontsize=10) # z-sfr plot
     
     # ---------single galaxy plot: SFR-Z radial profile----------------------
     #plot_metallicity_sfr_radial_profile_fig_single(2727, 'Par028', primary_Zdiag, args, fontsize=13, do_mcmc=False)
 
     # ---------loading master dataframe with only objects in objlist------------
-    df = make_master_df(objlist, args, sum=True)
-    #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True, fontsize=15, show_AGN_grid=show_AGN_grid, df_data=df)
+    #df = make_master_df(objlist_for_bpt, args, sum=True) # use this for producing a plot for ALL objects irrespective of AGN vs SF
+    df = make_master_df(objlist, args, sum=True) # and use this to produce the plot after discarding AGN objects
+    #plot_photoionisation_model_grid('NeIII/OII', 'OIII/Hb', args, fit_y_envelope=True, fontsize=15, show_AGN_grid=show_AGN_grid, df_data=df) # this did not make it into the paper
     
     # --------multi-panel SFR-Z plots------------------
     #plot_metallicity_sfr_fig_multiple(objlist, primary_Zdiag, args, fontsize=10)#, exclude_ids=[1303])
@@ -4002,18 +3998,18 @@ if __name__ == "__main__":
     #df_latex = make_latex_table(df, args, sum=True)
 
     # ---------full population plots----------------------
-    #plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=15)
+    #plot_gasmass_comparison(df, args, mass_col='lp_mass', fontsize=15) # this did not make it into the paper
     #plot_MEx(df, args, mass_col='lp_mass', fontsize=15)
     #df_agn = plot_AGN_demarcation_figure_integrated(df, args, fontsize=15)
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
-    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
-    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_lenstronomy_NB'], fontsize=15)
+    plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
+    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_lenstronomy_NB'], fontsize=15) # this did not make it into the paper
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)#, colorcol=None)
-    #plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH_slope_mcmc_NB', fontsize=15)
+    #plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH_slope_mcmc_NB', fontsize=15) # this did not make it into the paper
     #df = df[~(df['objid'] == 1991)]
     #plot_Mtmix(df, args, mass_col='lp_mass', ycol='log_t_mix', fontsize=15, colorcol='SFR', mgas_method='my')
-    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='log_t_mix', fontsize=20, colorcol=None, mgas_method='my')
+    #plot_Mtmix(df, args, mass_col='lp_mass', ycol='log_t_mix', fontsize=20, colorcol=None, mgas_method='my') # this did not make it into the paper
     #plot_re_histogram(df, args, fontsize=15)
 
     # -----------line ratio histograms--------------

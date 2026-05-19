@@ -580,23 +580,7 @@ def get_voronoi_bin_IDs(full_hdu, snr_thresh, plot=False, quiet=True, args=None)
     Returns the 2D map (of same shape as input map) with just the IDs
     '''
     # ---------getting the spatially resolved line flux map----------------
-    try:
-        line_hdu = full_hdu['LINE', args.voronoi_line]
-        initial_map_err = 1e-17 / (full_hdu['LINEWHT', args.voronoi_line].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
-    except KeyError:
-        try:
-            line_hdu = full_hdu['LINE', args.voronoi_line]
-            initial_map_err = full_hdu['ERR', args.voronoi_line].data # in units of ergs/s/cm^2
-        except KeyError:
-            if args.voronoi_line == 'OIII':
-                try:
-                    line_hdu = full_hdu['LINE', 'OIII-5007']
-                    initial_map_err = 1e-17 / (full_hdu['LINEWHT', 'OIII-5007'].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
-                except KeyError:
-                    line_hdu = full_hdu['LINE', 'OIII-5007']
-                    initial_map_err = full_hdu['ERR', 'OIII-5007'].data # in units of ergs/s/cm^2
-
-    initial_map = line_hdu.data * 1e-17 # in units of ergs/s/cm^2
+    initial_map, initial_map_err, _ = get_line_map_from_hdu(full_hdu, args.voronoi_line)
 
     # -------------pixel offset to true center----------------
     print(f'Correcting emission lines for pixel offset by {args.ndelta_xpix} on x and {args.ndelta_ypix} on y')
@@ -737,8 +721,8 @@ def bin_2D_radial(map, bin_IDs, map_err=None, debug_vorbin=False, ax=None):
     '''
     Binning a given 2D array according to a given bin IDs map, to get the mean flux in each bin
     '''
-    valid_mask = bin_IDs.data.ravel() >= 0
-    map_flat = map.ravel()[valid_mask]
+    valid_mask = (bin_IDs.data.ravel() >= 0) & (~map.ravel().mask)
+    map_flat = map.data.ravel()[valid_mask]
     bin_IDs_flat = bin_IDs.data.ravel()[valid_mask]
     n_bins = len(np.unique(bin_IDs_flat))
 
@@ -747,10 +731,10 @@ def bin_2D_radial(map, bin_IDs, map_err=None, debug_vorbin=False, ax=None):
     bin_counts = np.bincount(bin_IDs_flat, minlength=n_bins)
     map_mean = map_sum / bin_counts
 
-    binned_map = np.full_like(map, np.nan, dtype=float)
-    valid_pixels = bin_IDs.data >= 0
+    binned_map = np.full_like(map.data, np.nan, dtype=float)
+    valid_pixels = (bin_IDs.data >= 0) & (~map.mask)
     binned_map[valid_pixels] = map_mean[bin_IDs.data[valid_pixels]]
-    binned_map = np.ma.masked_where(bin_IDs.mask, binned_map)
+    binned_map = np.ma.masked_where(~valid_pixels, binned_map)
 
     # Sum errors in quadrature per bin: sqrt(sum(err^2))
     if map_err is not None:
@@ -761,6 +745,80 @@ def bin_2D_radial(map, bin_IDs, map_err=None, debug_vorbin=False, ax=None):
         binned_map_err = np.full_like(map, np.nan, dtype=float)
         binned_map_err[valid_pixels] = map_err_rms[bin_IDs.data[valid_pixels]]
         binned_map_err = np.ma.masked_where(bin_IDs.mask, binned_map_err)
+
+        # --------computing how many bins with SNR above a certain threshold for the given line--------------
+        snr = binned_map / binned_map_err
+        print(f'Upon radial binning, out of {len(np.unique(np.ma.compressed(bin_IDs)))} radbins {len(np.unique(np.ma.compressed(np.ma.masked_where(bin_IDs.mask | (snr <= 0), bin_IDs.data))))} have SNR>0 and {len(np.unique(np.ma.compressed(np.ma.masked_where(bin_IDs.mask | (snr < 3), bin_IDs.data))))} have SNR>=3\n')
+
+    if debug_vorbin:
+        col_arr = plt.cm.viridis(np.linspace(0, 1, n_bins))
+        for index, this_bin_ID in enumerate(np.unique(bin_IDs_flat)):
+            this_bin_mask = bin_IDs_flat == this_bin_ID
+            all_pixel_fluxes = map_flat[this_bin_mask]
+            all_pixel_errors = map_err_flat[this_bin_mask]
+            all_pixels_snr = all_pixel_fluxes / all_pixel_errors
+
+            good_fluxes_mask = all_pixels_snr > 0
+            good_pixel_fluxes = all_pixel_fluxes[good_fluxes_mask]
+
+            print(f'Deb763: id {int(this_bin_ID)}/{n_bins}: {len(all_pixel_fluxes)} pixels; {len(good_pixel_fluxes)} good pixels') ##
+            if ax is not None:
+                hist, bin_edges = np.histogram(all_pixels_snr, bins=50, density=True, range=(-5, 5))
+                bin_centers = bin_edges[:-1] + np.diff(bin_edges)
+                ax.step(bin_centers, hist + index * 1., lw=0.5, where='mid', color=col_arr[index])
+
+    if map_err is None: return binned_map
+    else: return binned_map, binned_map_err
+
+# --------------------------------------------------------------------------------------------------------------------
+def bin_2D_radial_new(map, bin_IDs, map_err=None, debug_vorbin=False, ax=None):
+    '''
+    Binning a given 2D array according to a given bin IDs map, to get the mean flux in each bin
+    '''
+    # ---------determining up the clean arrays--------------
+    valid_pixels = (bin_IDs.data >= 0) & (~map.mask) & (~bin_IDs.mask)
+    bin_IDs_flat = bin_IDs.data[valid_pixels]
+    map_flat = map.data[valid_pixels]
+
+    if map_err is not None:
+        map_err_flat = map_err.data[valid_pixels]
+    else:
+        map_err_flat = np.full_like(map_flat, 1e-20, dtype=float) # small non-zero dummy value
+    
+    # ---------setting up and binning the dataframe------------
+    df = pd.DataFrame({'bin_ID':bin_IDs_flat, 'flux':map_flat, 'err': map_err_flat})
+    df['weight'] = 1.0 / (df['err'] ** 2)
+    df['weighted_flux'] = df['flux'] * df['weight']
+    
+    bin_profile = df.groupby('bin_ID').agg(
+                                            sum_weight=('weight', lambda x: x.sum(min_count=1)),
+                                            sum_weighted_flux=('weighted_flux', lambda x: x.sum(min_count=1)),
+                                            mean_flux=('flux', 'mean'),
+                                            mean_err=('err', 'mean'),
+                                            )
+    bin_profile['w_mean_flux'] = bin_profile['sum_weighted_flux'] / bin_profile['sum_weight']
+    bin_profile['w_mean_err'] = np.sqrt(1.0 / bin_profile['sum_weight'])
+    n_bins = len(bin_profile)
+
+    # -------assignining to output maps--------------
+    max_bin_id = int(bin_IDs_flat.max())
+    lookup_table = np.full(max_bin_id + 1, np.nan)
+    #lookup_table[bin_profile.index.astype(int)] = bin_profile['w_mean_flux'].values
+    lookup_table[bin_profile.index.astype(int)] = bin_profile['mean_flux'].values
+
+    binned_map = np.full_like(map.data, np.nan, dtype=float)
+    binned_map[valid_pixels] = lookup_table[bin_IDs_flat]
+    binned_map = np.ma.masked_where(~valid_pixels, binned_map)
+
+    # Sum errors in quadrature per bin: sqrt(sum(err^2))
+    if map_err is not None:
+        errlookup_table = np.full(max_bin_id + 1, np.nan)
+        #errlookup_table[bin_profile.index.astype(int)] = bin_profile['w_mean_err'].values
+        errlookup_table[bin_profile.index.astype(int)] = bin_profile['mean_err'].values
+
+        binned_map_err = np.full_like(map_err.data, np.nan, dtype=float)
+        binned_map_err[valid_pixels] = errlookup_table[bin_IDs_flat]
+        binned_map_err = np.ma.masked_where(~valid_pixels, binned_map_err)
 
         # --------computing how many bins with SNR above a certain threshold for the given line--------------
         snr = binned_map / binned_map_err
@@ -873,17 +931,43 @@ def cut_by_segment(map, args):
     return cut_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_emission_line_int(line, full_hdu, args, dered=True, silent=False):
+def get_line_map_from_hdu(full_hdu, line):
+    '''
+    Determines which hdu extension is for a given line
+    Returns the line map, line uncertainty map, and line wavelength
+    '''
+    try:
+        line_hdu = full_hdu['LINE', line]
+        line_map = line_hdu.data
+        line_map_err = 1. / (full_hdu['LINEWHT', line].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty
+    except KeyError:
+        try:
+            line_hdu = full_hdu['LINE', line]
+            line_map = line_hdu.data
+            line_map_err = full_hdu['ERR', line].data
+        except KeyError:
+            if line == 'OIII':
+                try:
+                    line_hdu = full_hdu['LINE', 'OIII-5007']
+                    line_map = line_hdu.data
+                    line_map_err = 1. / (full_hdu['LINEWHT', 'OIII-5007'].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty
+                except KeyError:
+                    line_hdu = full_hdu['LINE', 'OIII-5007']
+                    line_map = line_hdu.data
+                    line_map_err = full_hdu['ERR', 'OIII-5007'].data
+
+    line_map_unit_corrected = line_map * 1e-17 # in units of ergs/s/cm^2
+    line_map_err_unit_corrected = line_map_err * 1e-17 # in units of ergs/s/cm^2
+    line_wave = line_hdu.header['RESTWAVE'] # in Angstrom
+
+    return line_map_unit_corrected, line_map_err_unit_corrected, line_wave
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_emission_line_int(line, full_hdu, args, dered=True, line_wave=None, silent=False):
     '''
     Retrieve the integrated flux for a given emission line from the HDU
     Returns the 2D line image
     '''
-    try:
-        line_hdu = full_hdu['LINE', line]
-    except KeyError:
-        if line == 'OIII': line_hdu = full_hdu['LINE', 'OIII-5007']
-    line_wave = line_hdu.header['RESTWAVE'] # in Angstrom
-
     line_index = np.where(args.available_lines == line)[0][0]
     try:
         line_int = full_hdu[0].header[f'FLUX{line_index + 1:03d}'] # ergs/s/cm^2
@@ -916,11 +1000,14 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
     Retrieve the emission map for a given line from the HDU
     Returns the 2D line image
     '''
-    # -----------getting the integrated flux value from grizli-----------------
-    line_int = get_emission_line_int(line, full_hdu, args, dered=dered and not for_vorbin, silent=silent)
-
     # -----------getting the integrated EW value-----------------
-    line_index = np.where(args.available_lines == line)[0][0]
+    if not silent: print(f'\nGetting {line} map for object {args.id}..')
+    try:
+        line_index = np.where(args.available_lines == line)[0][0]
+    except IndexError:
+        if not silent: print(f'{line} does not exist in the list of available lines {args.available_lines} for object {args.id}, therefore returning NaNs..')
+        return None, np.nan, ufloat(np.nan, np.nan), ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)
+    
     try:
         line_index_in_cov = int([item for item in list(full_hdu[2].header.keys()) if full_hdu[0].header[f'FLUX{line_index + 1:03d}'] == full_hdu[2].header[item]][0][5:])
         line_ew = full_hdu[2].header[f'EW50_{line_index_in_cov:03d}'] # rest-frame EW
@@ -930,27 +1017,13 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
         line_ew = ufloat(np.nan, np.nan)
 
     # ---------getting the spatially resolved line flux map----------------
-    try:
-        line_hdu = full_hdu['LINE', line]
-        line_map_err = 1e-17 / (full_hdu['LINEWHT', line].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
-    except KeyError:
-        try:
-            line_hdu = full_hdu['LINE', line]
-            line_map_err = full_hdu['ERR', line].data # in units of ergs/s/cm^2
-        except KeyError:
-            if line == 'OIII':
-                try:
-                    line_hdu = full_hdu['LINE', 'OIII-5007']
-                    line_map_err = 1e-17 / (full_hdu['LINEWHT', 'OIII-5007'].data ** 0.5)  # ERR = 1/sqrt(LINEWHT) = flux uncertainty; in units of ergs/s/cm^2
-                except KeyError:
-                    line_hdu = full_hdu['LINE', 'OIII-5007']
-                    line_map_err = full_hdu['ERR', 'OIII-5007'].data # in units of ergs/s/cm^2
+    line_map, line_map_err, line_wave = get_line_map_from_hdu(full_hdu, line)
 
-    line_map = line_hdu.data * 1e-17 # in units of ergs/s/cm^2
-    line_wave = line_hdu.header['RESTWAVE'] # in Angstrom
-    factor = 1.0
+    # -----------getting the integrated flux value from grizli-----------------
+    line_int = get_emission_line_int(line, full_hdu, args, dered=dered and not for_vorbin, line_wave=line_wave, silent=silent)
 
     # ----------deblending flux--------------------
+    factor = 1.0
     if not args.do_not_correct_flux:
         if line == 'OIII': # special treatment for OIII 5007 line, in order to account for and remove the OIII 4959 component
             ratio_5007_to_4959 = 2.98 # from grizli source code
@@ -985,7 +1058,7 @@ def get_emission_line_map(line, full_hdu, args, dered=True, for_vorbin=False, si
         line_map_err = unp.std_devs(line_map_quant)
 
     # -----------getting the integrated flux value by summing the 2D map-----------------
-    line_sum = np.sum(np.ma.masked_where(seg_mask | ~np.isfinite(line_map.data), unp.uarray(line_map.data, line_map_err.data))) # ergs/s/cm^2
+    line_sum = np.nansum(np.ma.masked_where(seg_mask | ~np.isfinite(line_map.data), unp.uarray(line_map.data, line_map_err.data))) # ergs/s/cm^2
     if not silent: print(f'Summed up {line} flux for object {args.id} is {line_sum:.1e} ergs/s/cm^2.')
 
     if args.only_integrated:
@@ -2527,13 +2600,19 @@ def get_direct_image(full_hdu, filter, args, skip_vorbin=False):
             hdu = full_hdu['DSCI', f'{filter}-CLEAR']
             image = hdu.data
             image_wht = None
-            exptime = full_hdu[0].header[f'T_{filter.upper()}']
+            try:
+                exptime = full_hdu[0].header[f'T_{filter.upper()}']
+            except:
+                exptime = 1
         except:
             try:
                 hdu = full_hdu['DSCI', f'{filter.upper()}-{filter.upper()}-CLEAR']
                 image = hdu.data
                 image_wht = None
-                exptime = full_hdu[0].header[f'T_{filter.upper()}']
+                try:
+                    exptime = full_hdu[0].header[f'T_{filter.upper()}']
+                except:
+                    exptime = 1
             except:
                 full_field_filename = args.input_dir / f'{args.field}' / 'Products' / f'{args.field}_{filter.lower()}-clear_drz_sci.fits'
                 print(f'{filter.upper()} not found in full_hdu extension. Therefore trying to get cutout from full field image {full_field_filename}')
@@ -3880,7 +3959,10 @@ if __name__ == "__main__":
                 axis_dirimg = plot_direct_image(full_hdu, axis_dirimg, args)
 
                 # ---------1D spectra------------------------------
-                axis_1dspec = plot_1d_spectra(od_hdu, axis_1dspec, args)
+                try:
+                    axis_1dspec = plot_1d_spectra(od_hdu, axis_1dspec, args)
+                except:
+                    axis_1dspec.remove()
 
                 # -----------------emission line maps---------------
                 for ind, line in enumerate(all_lines_to_plot):

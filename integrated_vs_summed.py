@@ -4,6 +4,9 @@
     Author : Ayan
     Created: 09-04-25
     Example: run integrated_vs_summed.py --Zbranch low
+             run integrated_vs_summed.py --glass_version pjw_extractions_v4
+             run integrated_vs_summed.py --glass_version pjw_ngdeep_custom
+             run integrated_vs_summed.py --glass_version pjw_multiregion_analysis_v9
 '''
 from header import *
 from util import *
@@ -206,7 +209,7 @@ def compare_line_ratios(df, ratio_list, args, lim=[-2, 2]):
     # ----------saving the figure-----------------
     colorby_text = '' if args.nocolorcoding or args.colorcol == 'ez_z_phot' else f'_colby_{args.colorcol}'
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = args.output_dir / 'plots' / f'sum_vs_int_line_ratio_comparison_{args.snr_text}{args.only_seg_text}_{",".join(ratio_list).replace("/", "-")}{args.colorby_text}_upto_{extent_text}.png'
+    figname = args.output_dir / 'plots' / f'sum_vs_int_line_ratio_comparison_{args.snr_text}{args.only_seg_text}_{",".join(ratio_list).replace("/", "-")}{args.colorby_text}_upto_{extent_text}_glassver_{args.glass_version}.png'
     ax.figure.savefig(figname, transparent=args.fortalk)
     print(f'Saved figure as {figname}')
     plt.show(block=False)
@@ -258,6 +261,7 @@ def compare_metallicities(df, Zdiag_arr, args, lim=[7, 9]):
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
+    args.drv_orig = args.drv
     if not args.keep: plt.close('all')
 
     # -----------setting up hard-coded values-------------------
@@ -274,7 +278,7 @@ if __name__ == "__main__":
     args.nbins = 5
     args.use_elliptical_bins = True
 
-    args.version_dict = {'passage': 'v0.5', 'glass': 'orig'}
+    args.version_dict = {'passage': args.drv_orig, 'glass': args.glass_version}
     args.re_limit = 2.5
 
     args.line_list = 'OII,Hb,OIII,NeIII-3867'.split(',')
@@ -287,7 +291,13 @@ if __name__ == "__main__":
 
     # -------setting up objects to plot--------------
     Par28_objects = [300, 1303, 1849, 2867]
-    glass_objects = [1721, 1983, 1991, 2128]
+
+    if args.glass_version == 'pjw_extractions_v4':
+        glass_objects = [2128, 1991, 1721] # after removing 1983 and 1333
+    elif args.glass_version == 'pjw_ngdeep_custom':
+        glass_objects = [2128, 1991, 1721, 1333] # after removing 1983
+    elif args.glass_version == 'pjw_multiregion_analysis_v9':
+        glass_objects = [2128, 1991, 1983, 1333]
 
     passage_objlist = [['Par028', item] for item in Par28_objects]
     glass_objlist = [['glass-a2744', item] for item in glass_objects]
@@ -302,7 +312,7 @@ if __name__ == "__main__":
 
     # -------loading the dataframe------------------
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    output_dfname = args.output_dir / 'catalogs' / f'sum_vs_int_comparison_{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zbranch-{args.Zbranch}_AGNdiag_{args.AGN_diag}{args.exclude_text}_upto_{extent_text}.csv'
+    output_dfname = args.output_dir / 'catalogs' / f'sum_vs_int_comparison_{args.snr_text}{args.only_seg_text}{args.vorbin_text}_Zbranch-{args.Zbranch}_AGNdiag_{args.AGN_diag}{args.exclude_text}_upto_{extent_text}_glassver_{args.glass_version}.csv'
 
     if not os.path.exists(output_dfname) or args.clobber:
         # ---------setting up the dataframe---------------
