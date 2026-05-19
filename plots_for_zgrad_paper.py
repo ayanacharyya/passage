@@ -2053,7 +2053,8 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_spectra=Fa
     # ----------annotating and saving figure--------------
     fig.text(0.05, 0.98, f'{field}: ID {objid}', fontsize=args.fontsize, c='k', ha='left', va='top')
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'{field}_{objid}_example_upto_{extent_text}.png'
+    glass_version_text = f'_glassver_{args.glass_version}' if 'glass' in field else ''
+    figname = f'{field}_{objid}_example_upto_{extent_text}{glass_version_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2473,12 +2474,15 @@ def plot_metallicity_fig_single(objid, field, Zdiag, args, fontsize=10, do_mcmc=
         connect2 = ConnectionPatch(xyA=(limit, -limit), xyB=(axes[1].get_xlim()[0], axes[1].get_ylim()[0]), coordsA='data', coordsB='data', axesA=axes[0], axesB=axes[1], color='r', lw=0.5)
         axes[1].add_artist(connect1)
         axes[1].add_artist(connect2)
-        
-    # -----------saving figure------------
     axes[2].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[2].transAxes)
+        
+    # -----------saving figure------------    
+    Zbranch_text = '' if Zdiag in ['NB', 'P25'] else f'-{args.Zbranch}'
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     C25_text = '_wC25' if args.use_C25 and 'NB' not in Zdiag else ''
-    figname = f'metallicity_{objid:05d}_upto_{extent_text}{C25_text}.png'
+    dered_text = '_dered' if args.dered_in_NB and 'NB' in Zdiag else ''
+    glass_version_text = f'_glassver_{args.glass_version}' if 'glass' in field else ''
+    figname = f'metallicity_{objid:05d}{args.vorbin_text}_Zdiag_{Zdiag}{Zbranch_text}_upto_{extent_text}{C25_text}{dered_text}{glass_version_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2763,7 +2767,8 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     axes[1].text(0.05, 0.9, f'ID #{objid}', fontsize=args.fontsize / args.fontfactor, c='k', ha='left', va='top', transform=axes[1].transAxes)
     debug_text = '_debug' if args.debug_Zsfr else ''
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'metallicity-sfr_{objid:05d}{debug_text}_upto_{extent_text}.png'
+    glass_version_text = f'_glassver_{args.glass_version}' if 'glass' in field else ''
+    figname = f'metallicity-sfr_{objid:05d}{debug_text}_upto_{extent_text}{glass_version_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2943,7 +2948,8 @@ def plot_metallicity_sfr_radial_profile_fig_single(objid, field, Zdiag, args, fo
 
     # -----------saving figure------------
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'metallicity-sfr_radial_profile_{objid:05d}_upto_{extent_text}.png'
+    glass_version_text = f'_glassver_{args.glass_version}' if 'glass' in field else ''
+    figname = f'metallicity-sfr_radial_profile_{objid:05d}_upto_{extent_text}{glass_version_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -3908,10 +3914,10 @@ if __name__ == "__main__":
     #Par28_objects = [2171] + Par28_objects
 
     if args.glass_version == 'pjw_extractions_v4':
-        glass_objects_for_bpt = [2128, 1991, 1721, 1983, 1333]
+        glass_objects_for_bpt = [2128, 1991, 1983, 1333, 1721]
         glass_objects = [2128, 1991, 1721] # after removing 1983 and 1333
     elif args.glass_version == 'pjw_ngdeep_custom':
-        glass_objects_for_bpt = [2128, 1991, 1721, 1983, 1333]
+        glass_objects_for_bpt = [2128, 1991, 1983, 1333, 1721]
         glass_objects = [2128, 1991, 1721, 1333] # after removing 1983
     elif args.glass_version == 'pjw_multiregion_analysis_v9':
         glass_objects_for_bpt = [2128, 1991, 1983, 1333]
@@ -3959,7 +3965,8 @@ if __name__ == "__main__":
     #plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10)#, exclude_ids=[1303])
 
     # ---------single galaxy plot: Z map and gradient----------------------
-    #plot_metallicity_fig_single(300, 'Par028', primary_Zdiag, args, fontsize=10, do_mcmc=False) # zgrad plot
+    #plot_metallicity_fig_single(300, 'Par028', primary_Zdiag, args, fontsize=10, do_mcmc=True) # zgrad plot
+    #plot_metallicity_fig_single(300, 'Par028', 'R23', args, fontsize=10, do_mcmc=True) # zgrad plot
     #plot_metallicity_fig_single(1333, 'glass-a2744', primary_Zdiag, args, fontsize=10, do_mcmc=False) # zgrad plot
     #plot_metallicity_fit_tests(2867, 'Par028', primary_Zdiag, args, fontsize=10)
     
@@ -4003,7 +4010,7 @@ if __name__ == "__main__":
     #df_agn = plot_AGN_demarcation_figure_integrated(df, args, fontsize=15)
     #plot_SFMS(df, args, mass_col='lp_mass', sfr_col='log_SFR', fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col='logOH_slope_mcmc_NB', fontsize=15)
-    plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
+    #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_mcmc_R23_low', 'logOH_slope_mcmc_R23_C25_low'], fontsize=15)
     #plot_MZgrad(df, args, mass_col='lp_mass', zgrad_col=['logOH_slope_mcmc_NB', 'logOH_slope_lenstronomy_NB'], fontsize=15) # this did not make it into the paper
     #plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', fontsize=15)#, colorcol=None)
     #plot_MZR(df, args, mass_col='lp_mass', z_col='logOH_sum_NB', colorcol='logOH_slope_mcmc_NB', fontsize=15) # this did not make it into the paper
