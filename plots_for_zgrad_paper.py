@@ -193,7 +193,7 @@ def get_sfr_df(objlist, args, Zdiag, Zdiag_branch='low', survey='passage', sum=T
     Loads and returns a dataframe that holds all the sfr-related properties for a given list of objects
     Returns dataframe
     '''
-    filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits.csv'
+    filename = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits{args.vorbin_text}.csv'
     
     if os.path.exists(filename):
         df = pd.DataFrame({'field': np.array(objlist)[:, 0], 'objid': np.array(objlist)[:, 1].astype(int)})
@@ -401,7 +401,7 @@ def make_master_df(objlist, args, sum=True):
 
         # -------getting redshift and integrated line flux info: looping through objects--------------
         line_list = ['OIII', 'Hb', 'Ha', 'NeIII-3867', 'OII', 'SII']
-        new_cols = np.hstack([['RA', 'Dec', 'redshift', 'EB_V'], np.hstack([[f'{line}', f'{line}_u'] for line in line_list])])
+        new_cols = np.hstack([['RA', 'Dec', 'redshift', 'EB_V'], np.hstack([[f'{line}', f'{line}_u', f'{line}_EW', f'{line}_EW_u'] for line in line_list])])
         for col in new_cols: df[col] = np.nan # creating provision for the new columns
 
         for index, row in df.iterrows():
@@ -422,11 +422,13 @@ def make_master_df(objlist, args, sum=True):
 
             args.only_integrated = True
             for line in line_list:
-                try: _, _, line_int, line_sum, _ = get_emission_line_map(line, full_hdu, args, silent=False)
+                try: _, _, line_int, line_sum, line_ew = get_emission_line_map(line, full_hdu, args, silent=False)
                 except UnboundLocalError: line_int, line_sum = ufloat(np.nan, np.nan), ufloat(np.nan, np.nan)
                 if not sum: line_sum = line_int # choose the grizli reported integrated values
                 df.loc[index, f'{line}'] = line_sum.n
                 df.loc[index, f'{line}_u'] = line_sum.s  
+                df.loc[index, f'{line}_EW'] = line_ew.n
+                df.loc[index, f'{line}_EW_u'] = line_ew.s  
             args.only_integrated = False
 
         # -------writing out dataframe--------------
@@ -971,7 +973,7 @@ def plot_MZsfr(df, args, mass_col='lp_mass', zgrad_col='logZ_logSFR_slope', colo
     ax.legend(fontsize=args.fontsize, loc='upper left')
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'MZsfr_colorby_Z_upto_{extent_text}_glassver_{args.glass_version}.png'
+    figname = f'MZsfr_colorby_Z_upto_{extent_text}_glassver_{args.glass_version}{args.vorbin_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -1076,17 +1078,18 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
 
     # ----------plotting----------
     for index, method in enumerate(mgas_methods):
-        # ----------discarding negative mixing times, before plotting, if any------
-        quant = f'{ycol}_{method}'[4:] if 'log_' in f'{ycol}_{method}' else f'{ycol}_{method}'
-        bad = df[quant] < 0
-        if bad.sum() > 0:
-            print(f'\nDiscarding {bad.sum()} objects (IDs: {df[bad]["objid"].values}) before plotting as they had negative mixing timescales..\n')
-            df = df[~bad]
-        
         # ---------making log columns---------
         if 'log_' in f'{ycol}_{method}' and f'{ycol}_{method}' not in df and f'{ycol}_{method}'[4:] in df:
             df = df[df[f'{ycol}_{method}'[4:]] > 0]
             df = break_column_into_uncertainty(df, f'{ycol}_{method}'[4:], make_log=True)
+
+            # ----------discarding negative mixing times, before plotting, if any------
+            quant = f'{ycol}_{method}'[4:] if 'log_' in f'{ycol}_{method}' else f'{ycol}_{method}'
+            bad = df[quant] < 0
+            if bad.sum() > 0:
+                print(f'\nDiscarding {bad.sum()} objects (IDs: {df[bad]["objid"].values}) before plotting as they had negative mixing timescales..\n')
+                df = df[~bad]
+        
 
         # ---------------plotting-------------
         for index2, m in enumerate(pd.unique(df['marker'])):
@@ -1125,15 +1128,15 @@ def plot_Mtmix(df, args, mass_col='lp_mass', ycol='t_mix', fontsize=10, mgas_met
     if mgas_method is None or mgas_method == 'C23':
         ax.set_ylim(-0.7, 4.3)
     elif mgas_method == 'my':
-        if 'log_' in ycol: ax.set_ylim(1.8, 3.7) # (None, None) #
-        else: ax.set_ylim(-100, 1100) #(None, None) #
+        if 'log_' in ycol: ax.set_ylim(2.2, 3.7) # (None, None) #
+        else: ax.set_ylim(-500, 4000) #(None, None) #
     else:
         ax.set_ylim(-0.5, 0.6)
 
     ax.legend(fontsize=args.fontsize, loc='upper right')
 
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'M_tmix_colorby_{colorcol}_{mgas_method}_upto_{extent_text}_glassver_{args.glass_version}.png' if mgas_method is not None else f'M_tmix_upto_{extent_text}_glassver_{args.glass_version}.png'
+    figname = f'M_tmix_colorby_{colorcol}_{mgas_method}_upto_{extent_text}_glassver_{args.glass_version}{args.vorbin_text}.png' if mgas_method is not None else f'M_tmix_upto_{extent_text}_glassver_{args.glass_version}{args.vorbin_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -1239,11 +1242,21 @@ def get_line_labels(lines, omit_lambda=False):
     '''
     Returns a list of nice labels including latex math mode for a givenlist line name
     '''
-    label_dict = smart_dict({'OIII': r'[O III] $\lambda$5007', 'OIII5007': r'[O III] $\lambda$5007', \
-                            'NeIII-3867': r'[Ne III]  $\lambda$3869', 'NeIII': r'[Ne III] $\lambda$3869', 'NeIII3869': r'[Ne III] $\lambda$3869', \
-                            'OII': r'[O II] $\lambda$3727,29', 'OII3726_29': r'[O II] $\lambda$3727,29', 'OII3727_29': r'[O II] $\lambda$3727,29', \
-                            'Hbeta': r'H$\beta$', 'Hb': r'H$\beta$', \
-                            'Halpha': r'H$\alpha$', 'Ha': r'H$\alpha$'})
+    label_dict = smart_dict({'OIII': r'[O III] $\lambda$5007',
+                             'OIII5007': r'[O III] $\lambda$5007',
+                            'NeIII-3867': r'[Ne III]  $\lambda$3869', 
+                            'NeIII': r'[Ne III] $\lambda$3869', 
+                            'NeIII3869': r'[Ne III] $\lambda$3869',
+                            'OII_EW': r'[O II] $\lambda$3727,29$_{EW}$', 
+                            'OII': r'[O II] $\lambda$3727,29', 
+                            'OII3726_29': r'[O II] $\lambda$3727,29', 
+                            'OII3727_29': r'[O II] $\lambda$3727,29',
+                            'Hbeta': r'H$\beta$', 
+                            'Hb': r'H$\beta$',
+                            'Hb_EW': r'H$\beta_{EW}$',
+                            'Halpha': r'H$\alpha$',
+                            'Ha': r'H$\alpha$',
+                            })
     lines = np.atleast_1d(lines)
     labels = ['+'.join([remove_lambda_from_label(label_dict[item]) if omit_lambda else label_dict[item] for item in line.split(',')]) for line in lines]
 
@@ -1282,9 +1295,6 @@ def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False
     fig, ax = plt.subplots(figsize=(8, 6))
     fig.subplots_adjust(left=0.13, right=0.98, bottom=0.1, top=0.95, wspace=0.2)
 
-    # --------plot the model ratios---------------
-    ax, xratio_name, yratio_name = plot_ratio_grid(df, ax, args, color1='seagreen', color2='cornflowerblue', color3='slategray')
-
     # -------over-plot the AGN grid----------------
     if show_AGN_grid:
         print(f'Over-plotting NLR photoionisation model grid..')
@@ -1293,6 +1303,9 @@ def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False
         if ratio_x not in df_agn: df_agn[ratio_x] = df_agn[line_label_dict[args.xnum_line]] / df_agn[line_label_dict[args.xden_line]]
         if ratio_y not in df_agn: df_agn[ratio_y] = df_agn[line_label_dict[args.ynum_line]] / df_agn[line_label_dict[args.yden_line]]
         ax, xratio_name, yratio_name = plot_ratio_grid(df_agn, ax, args, color1='orange', color2='crimson', color3='k')
+
+    # --------plot the model ratios---------------
+    ax, xratio_name, yratio_name = plot_ratio_grid(df, ax, args, color1='seagreen', color2='cornflowerblue', color3='slategray')
 
     # ---------over-plot observed data--------------------
     if df_data is not None:
@@ -1328,7 +1341,7 @@ def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False
 
     df = df[(df[xratio_name] > 0) & (df[yratio_name] > 0)] # to avoid math errors later while taking log
     xmin = args.xmin if args.xmin is not None else -3.5
-    xmax = args.xmax if args.xmax is not None else 2.0
+    xmax = args.xmax if args.xmax is not None else 1.5
     ymin = args.ymin if args.ymin is not None else -4.2
     ymax = args.ymax if args.ymax is not None else 1.7
 
@@ -1357,7 +1370,8 @@ def plot_photoionisation_model_grid(ratio_x, ratio_y, args, fit_y_envelope=False
     # ---------saving figure--------------
     if args.phot_models.lower() in ['mappings', 'map']: phot_model_text = 'mappings'
     elif args.phot_models.lower() in ['nebulabayes', 'nb']: phot_model_text = 'NebulaBayes'
-    figname = f'{phot_model_text}_grid_{yratio_name.replace("/", "-")}_vs_{xratio_name.replace("/", "-")}.png'
+    data_text = '_wdata' if df_data is not None else ''
+    figname = f'{phot_model_text}_grid_{yratio_name.replace("/", "-")}_vs_{xratio_name.replace("/", "-")}{data_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2015,7 +2029,7 @@ def plot_galaxy_example_fig(objid, field, args, fontsize=10, show_log_spectra=Fa
     # ----------loading the full.fits and 1D.fits files--------------
     full_hdu = load_full_fits(objid, field, args)
     od_hdu = load_1d_fits(objid, field, args)
-    args = load_object_specific_args(full_hdu, args, field=field)
+    args = load_object_specific_args(full_hdu, args, field=field, skip_psf=True)
 
     # ----------plotting direct image--------------
     ax_dirimg, _ = plot_rgb_image(full_hdu, ['F200W', 'F150W', 'F115W'], ax_dirimg, args)
@@ -2173,7 +2187,7 @@ def plot_AGN_demarcation_figure_single(objid, field, args, fontsize=10):
 
     # --------loading the data-------------------------
     full_hdu = load_full_fits(objid, field, args)
-    args = load_object_specific_args(full_hdu, args, field=field)
+    args = load_object_specific_args(full_hdu, args, field=field, skip_psf=True)
  
     # --------plotting the data-------------------------
     ax, scatter_plot_handle, ax_inset = plot_AGN_demarcation_object(full_hdu, args, ax, marker='o' if 'Par' in field else 's', size=50, fontsize=fontsize)
@@ -2254,11 +2268,11 @@ def plot_AGN_demarcation_figure_integrated(df_input, args, fontsize=10):
         ax.set_xlim(-3.5, 2)
         ax.set_ylim(-4.2, 1.7)
     elif args.AGN_diag == 'O2Hb':
-        ax.set_xlim(-0.5, 2.)
+        ax.set_xlim(-0.5, 1.)
         ax.set_ylim(-0.5, 2.)
         
     ax.set_xlabel(f'Log {get_ratio_labels("NeIII-3867/OII")}' if args.AGN_diag == 'Ne3O2' else f'Log {get_ratio_labels("SII/NII,Ha")}' if args.AGN_diag == 'H21' else f'Log {get_ratio_labels(f"{args.xnum_line}/{args.xden_line}")}', fontsize=args.fontsize)
-    ax.set_ylabel(f'Log {get_ratio_labels("OIII/Hb")}', fontsize=args.fontsize)
+    ax.set_ylabel(f'Log {get_ratio_labels("OIII/Hb")}' if args.AGN_diag == 'Ne3O2' else f'Log {get_ratio_labels(f"{args.ynum_line}/{args.yden_line}")}', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     # ---------adding literature AGN demarcation lines----------
@@ -2301,7 +2315,7 @@ def plot_AGN_demarcation_figure_multiple(objlist, args, fontsize=10, exclude_ids
     
         # --------loading the data-------------------------
         full_hdu = load_full_fits(objid, field, args)
-        args = load_object_specific_args(full_hdu, args, field=field)
+        args = load_object_specific_args(full_hdu, args, field=field, skip_psf=True)
     
         # --------plotting the data-------------------------
         ax, scatter_plot_handle, ax_inset = plot_AGN_demarcation_object(full_hdu, args, ax, marker='o' if 'Par' in field else 's', size=20, fontsize=fontsize)
@@ -2691,7 +2705,7 @@ def append_to_sfr_fit_df(field, objid, sfr_int, sfr_sum, linefit, Zdiag, args):
     '''
     if 'Par' in field: survey = 'passage'
     elif 'glass' in field: survey = 'glass'
-    output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits.csv'
+    output_dfname = args.root_dir / f'{survey}_output/' / f'{args.version_dict[survey]}' / 'catalogs' / f'logOH_sfr_fits{args.vorbin_text}.csv'
 
     df_Zsfr_fit = pd.DataFrame({'field': field, 'objid': objid, 'SFR_int': sfr_int.n, 'SFR_int_u': sfr_int.s, 'SFR_sum': sfr_sum.n, 'SFR_sum_u': sfr_sum.s, 'logZ_logSFR_cen': linefit[1].n, \
                                 'logZ_logSFR_cen_u': linefit[1].s, 'logZ_logSFR_slope': linefit[0].n, 'logZ_logSFR_slope_u': linefit[0].s, 'Zdiag': Zdiag, 'Zdiag_branch': args.Zbranch, 'AGN_diag': args.AGN_diag, \
@@ -2711,10 +2725,10 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
         
     # -----------loading the data---------------
     full_hdu = load_full_fits(objid, field, args)
-    args = load_object_specific_args(full_hdu, args, field=field)
+    args = load_object_specific_args(full_hdu, args, field=field, skip_psf=True)
     logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
     Zlim = [6.8, 9.6]
-    log_sfr_lim = [-2, 0.8]
+    log_sfr_lim = [-2.2, 0.8]
 
     # --------setting up the figure------------
     fig, axes = plt.subplots(3 if args.debug_Zsfr else 1, 2, figsize=(5.7, 7) if args.debug_Zsfr else (7, 3))
@@ -2768,7 +2782,7 @@ def plot_metallicity_sfr_fig_single(objid, field, Zdiag, args, fontsize=10):
     debug_text = '_debug' if args.debug_Zsfr else ''
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
     glass_version_text = f'_glassver_{args.glass_version}' if 'glass' in field else ''
-    figname = f'metallicity-sfr_{objid:05d}{debug_text}_upto_{extent_text}{glass_version_text}.png'
+    figname = f'metallicity-sfr_{objid:05d}{debug_text}_upto_{extent_text}{glass_version_text}{args.vorbin_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2783,7 +2797,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
     print(f'Plotting metallicity-SFR figure for {len(objlist)} objects..')
 
     Zlim = [6.4, 9.6]
-    log_sfr_lim = [-2, 0.8]
+    log_sfr_lim = [-2.2, 0.8]
 
    # -------setting up the figure--------------------
     ncol = 2
@@ -2804,7 +2818,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
 
         # -----------loading the data---------------
         full_hdu = load_full_fits(objid, field, args)
-        args = load_object_specific_args(full_hdu, args, field=field)
+        args = load_object_specific_args(full_hdu, args, field=field, skip_psf=True)
         logOH_map, logOH_int, logOH_sum = load_metallicity_map(field, objid, Zdiag, args)
 
         # ----------getting the SFR maps------------------
@@ -2853,7 +2867,7 @@ def plot_metallicity_sfr_fig_multiple(objlist, Zdiag, args, fontsize=10, exclude
     
      # -----------saving figure------------
     extent_text = f'{args.arcsec_limit}arcsec' if args.re_limit is None else f'{args.re_limit}re'
-    figname = f'metallicity-sfr_multi_panel_upto_{extent_text}_glassver_{args.glass_version}.png'
+    figname = f'metallicity-sfr_multi_panel_upto_{extent_text}_glassver_{args.glass_version}{args.vorbin_text}.png'
     save_fig(fig, figname, args)
 
     return
@@ -2994,7 +3008,7 @@ def plot_metallicity_comparison_fig(objlist, Zdiag_arr, args, Zbranch='low', fon
         field = obj[0]
         objid = obj[1]
         full_hdu = load_full_fits(objid, field, args)
-        args = load_object_specific_args(full_hdu, args, field=field)
+        args = load_object_specific_args(full_hdu, args, field=field, skip_psf=True)
         markersize = 80
         marker='o' if 'Par' in field else 's'
 
@@ -3081,7 +3095,7 @@ def plot_nb_comparison_sii(objlist, args, fontsize=10):
         field = obj[0]
         objid = obj[1]
         full_hdu = load_full_fits(objid, field, args)
-        args = load_object_specific_args(full_hdu, args, field=field)
+        args = load_object_specific_args(full_hdu, args, field=field, skip_psf=True)
         markersize = 80
         marker='o' if 'Par' in field else 's'
 
@@ -3170,7 +3184,7 @@ def get_line_ratio_df(objlist, ratios, args):
     
             # ---------loading the data--------------
             full_hdu = load_full_fits(objid, field, args)
-            args = load_object_specific_args(full_hdu, args, field=field)
+            args = load_object_specific_args(full_hdu, args, field=field, skip_psf=True)
 
             # -------loop over all ratios---------------
             ratios = np.atleast_1d(ratios)
@@ -3914,15 +3928,16 @@ if __name__ == "__main__":
     #Par28_objects = [2171] + Par28_objects
 
     if args.glass_version == 'pjw_extractions_v4':
-        glass_objects_for_bpt = [2128, 1991, 1983, 1333, 1721]
-        glass_objects = [2128, 1991, 1721] # after removing 1983 and 1333
+        glass_objects_for_bpt = [1991, 1983, 1333, 1721]
+        glass_objects = [1991, 1983, 1333, 1721] # after removing 1983 and 1333
     elif args.glass_version == 'pjw_ngdeep_custom':
-        glass_objects_for_bpt = [2128, 1991, 1983, 1333, 1721]
-        glass_objects = [2128, 1991, 1721, 1333] # after removing 1983
+        glass_objects_for_bpt = [1991, 1983, 1333, 1721]
+        glass_objects = [1991, 1721, 1333] # after removing 1983
     elif args.glass_version == 'pjw_multiregion_analysis_v9':
-        glass_objects_for_bpt = [2128, 1991, 1983, 1333]
-        glass_objects = [2128, 1991, 1983, 1333]
+        glass_objects_for_bpt = [ 1991, 1983, 1333]
+        glass_objects = [1991, 1983, 1333]
     #glass_objects = glass_objects_for_bpt # use this for computing a certain parameter or plot for ALL objects irrespective of AGN vs SF, and comment it out for discarding AGN objects
+    #glass_objects = glass_objects + [2128] # removed this object because of -ve tmix
 
     obj_segid_dict = {300:288, 1303:1321, 1849:1862, 2867:2801}
     if 'pjw' in args.drv: Par28_objects = [obj_segid_dict[item] for item in Par28_objects]

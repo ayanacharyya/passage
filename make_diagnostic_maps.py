@@ -2854,7 +2854,7 @@ def get_AGN_func_methods(args):
     elif args.AGN_diag == 'O2O3':
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'OII', 'OIII', []
     elif args.AGN_diag == 'O2Hb':
-        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'OII', 'Hb', ['L10']
+        args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'OII_EW', 'Hb_EW', ['L10']
     elif args.AGN_diag == 'Ne3O2':
         args.ynum_line, args.yden_line, args.xnum_line, args.xden_line, theoretical_lines = 'OIII', 'Hb', 'NeIII-3867', 'OII', ['NB', 'F24', 'B22_Ne3O2']
     else:
