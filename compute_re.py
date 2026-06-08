@@ -87,8 +87,8 @@ if __name__ == "__main__":
             print(f'\tCommencing ({index2 + 1}/{len(id_arr)}) ID {args.id}..')
 
             # ------determining directories and filenames---------
-            full_fits_file = product_dir / 'full' / f'{args.field}_{args.id:05d}.full.fits'
-            maps_fits_file = product_dir / 'maps' / f'{args.field}_{args.id:05d}.maps.fits'
+            full_fits_file = product_dir / 'full_psf_matched' / f'{args.field}_{args.id:05d}.full.fits'
+            maps_fits_file = product_dir / 'maps_psf_matched' / f'{args.field}_{args.id:05d}.maps.fits'
 
             if os.path.exists(maps_fits_file): # if the fits files are in maps/
                 full_filename = maps_fits_file

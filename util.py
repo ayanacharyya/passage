@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument('--keep', dest='keep', action='store_true', default=False, help='Keep existing plot windows open? Default is no.')
     parser.add_argument('--forpaper', dest='forpaper', action='store_true', default=False, help='Format plots to paper quality? Default is no.')
     parser.add_argument('--fortalk', dest='fortalk', action='store_true', default=False, help='Format plots suitable for putting in talks? Default is no.')
-    parser.add_argument('--drv', metavar='drv', type=str, action='store', default='v0.5', help='Which data reduction version? Default v0.5')
+    parser.add_argument('--drv', metavar='drv', type=str, action='store', default='v0.6', help='Which data reduction version? Default v0.6')
     parser.add_argument('--fontsize', metavar='fontsize', type=int, action='store', default=15, help='fontsize of plot labels, etc.; default is 15')
 
     parser.add_argument('--field', metavar='field', type=str, action='store', default='Par3', help='Which passage field? Default is Par50')
