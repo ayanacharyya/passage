@@ -28,6 +28,7 @@ import itertools
 import h5py
 import io
 import colorsys
+import gc
 
 from datetime import datetime, timedelta
 from collections import defaultdict

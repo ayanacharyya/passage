@@ -143,7 +143,7 @@ if __name__ == "__main__":
             id_arr = df['id'].values
         else:
             id_arr = args.id
-                
+ 
         # ------------looping over the objects-----------------------
         for index2, this_id in enumerate(id_arr):
             args.id = this_id
@@ -169,34 +169,37 @@ if __name__ == "__main__":
                 continue
 
             # ------------read in maps files--------------------------------
-            full_hdu = fits.open(full_filename)
+            with fits.open(full_filename, memmap=True) as full_hdu:
+                # ----------determining object parameters------------
+                args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
+                args.available_lines = np.array(['OIII' if item == 'OIII-5007' else item for item in args.available_lines]) # replace 'OIII-5007' with 'OIII'
+                args.pix_size_arcsec = full_hdu[5].header['PIXASEC']
+                args.z = full_hdu[0].header['REDSHIFT']
+                args.ra = full_hdu[0].header['RA']
+                args.dec = full_hdu[0].header['DEC']
+                
+                # --------determining true center of object---------------------
+                args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter=filter_for_re)
 
-            # ----------determining object parameters------------
-            args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
-            args.available_lines = np.array(['OIII' if item == 'OIII-5007' else item for item in args.available_lines]) # replace 'OIII-5007' with 'OIII'
-            args.pix_size_arcsec = full_hdu[5].header['PIXASEC']
-            args.z = full_hdu[0].header['REDSHIFT']
-            args.ra = full_hdu[0].header['RA']
-            args.dec = full_hdu[0].header['DEC']
+                # -----------determine PSFs for PSF matching-----------------
+                if get_target_psf:
+                    fov_pixels = 2 * args.arcsec_limit / args.pix_size_arcsec
+                    target_psf = get_niriss_psf(target_psf_wave, fov_pixels=fov_pixels)
+                    get_target_psf = False
+
+                # --------compute PSF-matched maps---------------------
+                try:
+                    new_hdul = process_fits_extensions(full_hdu, target_psf, args)
+                    new_hdul.writeto(outfilename, overwrite=True)
+                    print(f'\n\t\tSuccessfully saved matched FITS to: {outfilename}')
+                
+                except Exception as e:
+                    print(f'\t\tCould not produce PSF-matched fits file for object {args.id} due to {e}. Skipping this object.')
+                    continue
             
-            # --------determining true center of object---------------------
-            args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter=filter_for_re)
-
-            # -----------determine PSFs for PSF matching-----------------
-            if get_target_psf:
-                fov_pixels = 2 * args.arcsec_limit / args.pix_size_arcsec
-                target_psf = get_niriss_psf(target_psf_wave, fov_pixels=fov_pixels)
-                get_target_psf = False
-
-            # --------compute PSF-matched maps---------------------
-            try:
-                new_hdul = process_fits_extensions(full_hdu, target_psf, args)
-                new_hdul.writeto(outfilename, overwrite=True)
-                print(f'\n\t\tSuccessfully saved matched FITS to: {outfilename}')
-            
-            except Exception as e:
-                print(f'\t\tCould not produce PSF-matched fits file for object {args.id} due to {e}. Skipping this object.')
-                continue
+                del full_hdu
+                del new_hdul
+                gc.collect()
             
         print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
     
