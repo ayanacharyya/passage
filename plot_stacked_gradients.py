@@ -461,7 +461,7 @@ label_dict = {'minor_logOH_grad': 'Minor\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
                 'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack',
                 }
 lim_dict = {'minor_logOH_grad': [-1, 1],\
-                'major_logOH_grad': [-1.5, 1.5],\
+                'major_logOH_grad': [-1., 1.],\
                 'radial_logOH_grad': [-1, 1],\
                 'logOH_int': [6.8, 9.5],\
                 'delta_sfms_median': [-0.6, 0.6],\
@@ -503,7 +503,7 @@ if __name__ == "__main__":
         diverging_cmap = 'RdBu'
 
         fig, axes = plt.subplots(len(quant_y_list), 1, figsize=(6, 7), sharex=True)
-        fig.subplots_adjust(left=0.15, right=0.83, top=0.95, bottom=0.1, wspace=0., hspace=0.)
+        fig.subplots_adjust(left=0.18, right=0.83, top=0.95, bottom=0.1, wspace=0., hspace=0.)
 
     # -----------making bins in various ways---------------------
     for index, method in enumerate(methods):
