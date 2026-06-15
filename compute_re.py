@@ -125,7 +125,9 @@ if __name__ == "__main__":
             
             # -------appending to dataframe--------------
             df_re.loc[len(df_re)] = [args.field, args.id, args.z, re_kpc, re_arcsec]
-        
+            
+            del full_hdu
+            gc.collect()        
 
         print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
 

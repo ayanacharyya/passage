@@ -896,8 +896,8 @@ n_sfh_bins = 10 # number of bins in SFH parameter, adaptive, so that each bin co
 z_lim = [1.15, 2.35] # for having OII and OIII and Ha
 #z_lim = None # no redshift cut
 
-# passage_catalog = 'SED_fits_v1.0.2_cosmosweb.fits'
-passage_catalog = 'SED_fits_v1.0.3_best.fits'
+passage_catalog = 'SED_fits_v1.0.2_cosmosweb.fits'
+# passage_catalog = 'SED_fits_v1.0.3_best.fits'
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":

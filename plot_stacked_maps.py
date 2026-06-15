@@ -14,6 +14,7 @@
              run plot_stacked_maps.py --field Par28 --Zdiag R23 --use_C25 --plot_radial_profiles
              run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --plot_radial_profiles --adaptive_bins --bin_by_distance --fold_maps
              run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --plot_line_and_metallicity --plot_radial_profiles --adaptive_bins --bin_by_distance_mass --fold_maps
+             run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag NB --plot_line_and_metallicity --plot_radial_profiles --adaptive_bins --bin_by_distance_mass --fold_maps
              run plot_stacked_maps.py --system ssd --do_all_fields --plot_line_and_bpt --AGN_diag Ne3O2 --adaptive_bins --bin_by_distance_mass --fold_maps
 '''
 

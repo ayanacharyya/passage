@@ -663,7 +663,11 @@ if __name__ == "__main__":
                             
                         print(f'\t\t\tFound {nlines_good} lines for {args.id}')
                         if nlines_good > 0: nobj_good += 1
-                
+                        
+                        del full_hdu
+                        del od_hdu
+                        gc.collect()
+                    
                     # -------------removing unused rows-------------------------
                     for r in range(n_useful_rows_in_page, args.max_gal_per_page):
                         for c in range(n_lines):
