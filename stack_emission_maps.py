@@ -411,7 +411,6 @@ if __name__ == "__main__":
     scaling_line = 'OIII'
 
     for index2, this_mass_sfr_bin in enumerate(bin_list):
-        if args.debug_bin and nbin_good > 0: break
         start_time3 = datetime.now()
         if args.bin_by_distance:
             bin_text = f'delta_sfms_bin_{this_mass_sfr_bin.left}-{this_mass_sfr_bin.right}'

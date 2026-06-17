@@ -42,7 +42,7 @@ from venn import venn, pseudovenn, generate_petal_labels, draw_venn, generate_co
 from reproject import reproject_interp, reproject_adaptive
 from scipy.stats import mode as sci_mode
 from scipy.interpolate import NearestNDInterpolator, interp1d
-from scipy.ndimage import gaussian_filter1d
+from scipy.ndimage import gaussian_filter1d, rotate
 from scipy.optimize import curve_fit, brentq
 from scipy import ndimage
 from scipy.optimize import minimize
@@ -80,8 +80,6 @@ from astropy.convolution import convolve, interpolate_replace_nans, Gaussian1DKe
 from astropy.visualization import make_lupton_rgb, MinMaxInterval, ManualInterval, LogStretch, LinearStretch, SqrtStretch
 from astropy.modeling.models import Sersic2D
 
-from photutils.psf import matching
-
 # grizli stuff
 import grizli
 from grizli import utils, multifit, fitting, prep, model, jwst_utils, grismconf
@@ -89,7 +87,7 @@ from grizli.pipeline import auto_script
 from grizli.multifit import MultiBeam
 from grizli.aws import visit_processor
 from grizli.pipeline.auto_script import get_yml_parameters
-from grizli.utils import GTable
+from grizli.utils import GTable, get_wcs_pscale, transform_wcs
 
 import datashader as dsh
 from datashader.mpl_ext import dsshow

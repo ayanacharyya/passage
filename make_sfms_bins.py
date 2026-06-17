@@ -608,7 +608,7 @@ def read_passage_sed_catalog(filename):
         full_df = full_df[full_df['mass_50'] > 0].reset_index(drop=True) # to get only those sources that have stellar mass measured
         full_df = full_df.drop('id', axis=1)
 
-    full_df.drop('cosmoswebid_1', axis=1, inplace=True)
+    if 'cosmoswebid_1' in full_df: full_df.drop('cosmoswebid_1', axis=1, inplace=True)
     full_df.rename(columns={'Par':'field', 'passage_id':'id', 'id_photcat':'id', 'objid':'id', 'field_id':'id', 'z_best':'redshift', 
                             'zbest':'redshift', 'mass_50':'log_mass', 'stellar_mass_50':'log_mass', 'ssfr_50':'log_ssfr', 'sfr_50':'sfr', 
                             'ra_obj':'ra', 'dec_obj':'dec', 'cosmoswebid_2': 'cosmoswebid'}, inplace=True)
@@ -840,7 +840,7 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
             df = pd.merge(df, df_master_photcat, on=['field', 'id'], how='inner')
 
         # --------------curtailiug bins for debugging-------------------
-        if args.debug_bin: bin_list = bin_list[1:2]
+        if args.debug_bin: bin_list = bin_list[:1]
         # if args.debug_bin: bin_list = bin_list[25:26]
         # if args.debug_bin: bin_list = bin_list[7:8]
         #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
@@ -876,8 +876,8 @@ methods = [
             # 'adaptive_nmax', \
             # 'adaptive_voronoi', \
             # 'adaptive_distance', \
-            'adaptive_distance_mass', \
-            # 'adaptive_sfh', \
+            # 'adaptive_distance_mass', \
+            'adaptive_sfh', \
             # 'linear', \
             # 'linear_distance', \
             # 'linear_distance_mass', \
@@ -898,6 +898,7 @@ z_lim = [1.15, 2.35] # for having OII and OIII and Ha
 
 passage_catalog = 'SED_fits_v1.0.2_cosmosweb.fits'
 # passage_catalog = 'SED_fits_v1.0.3_best.fits'
+# passage_catalog = 'SED_fits_v1.2.0_best.fits'
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
