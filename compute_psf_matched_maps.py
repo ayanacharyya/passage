@@ -19,7 +19,7 @@ import tempfile
 import gc
 import subprocess
 import pandas as pd
-from scipy.ndimage import rotate
+from scipy.ndimage import rotate, shift
 from astropy.io import fits
 from drizzlepac.astrodrizzle import adrizzle
 from grizli.utils import get_wcs_pscale, transform_wcs
@@ -27,6 +27,7 @@ from astropy.convolution import convolve, Box2DKernel
 from astropy.table import Table
 from astropy.time import Time
 from astropy import wcs as pywcs
+from astropy import units as u
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from pathlib import Path
@@ -75,7 +76,7 @@ def parse_args():
 
     parser.add_argument('--pixscale', metavar='pixscale', type=float, action='store', default=0.04, help='Pixel scale (in arcsec/pixel) of the thumbnails produced; default is 0.04')
 
-    parser.add_argument('--arcsec_limit', metavar='arcsec_limit', type=float, action='store', default=1.0, help='Half box size (in arcsec) of the thumbnails to plot; default is 1.5')
+    parser.add_argument('--arcsec_limit', metavar='arcsec_limit', type=float, action='store', default=-99, help='Half box size (in arcsec) of the thumbnails to plot; default is 1.5')
     parser.add_argument('--re_limit', metavar='re_limit', type=float, action='store', default=None, help='Effective radius to limit all analysis to; default is None (uses arcsec_limit)')
     parser.add_argument('--only_seg', dest='only_seg', action='store_true', default=False, help='Cut out the emission line plots corresponding to the grizli segmentation map? Default is no.')
     parser.add_argument('--test_cutout', dest='test_cutout', action='store_true', default=False, help='Plot the cutout 2D clear image as a testing phase? Default is no.')
@@ -86,6 +87,7 @@ def parse_args():
 
     parser.add_argument('--debug_offset', dest='debug_offset', action='store_true', default=False, help='Do extra plots and prints for debugging offset calculation from center? Default is no.')
     parser.add_argument('--debug_psf', dest='debug_psf', action='store_true', default=False, help='Debug the PSF-matching step? Default is no.')
+    parser.add_argument('--plot_psf', dest='plot_psf', action='store_true', default=False, help='Save plots for the PSF-matching step? Default is no.')
     parser.add_argument('--do_all_fields', dest='do_all_fields', action='store_true', default=False, help='Include ALL available fields? Default is no.')
     parser.add_argument('--do_all_obj', dest='do_all_obj', action='store_true', default=False, help='Reduce spectra and make beam files for ALL detected objects? Default is no.')
 
@@ -129,6 +131,12 @@ def parse_args():
     args.output_dir = Path(args.output_dir)
     args.code_dir = Path(args.code_dir)
 
+    if args.arcsec_limit == -99: # i.e. it has not been explicitly set by the user
+        if args.debug_psf:
+            args.arcsec_limit = 0.2
+        else:
+            args.arcsec_limit = 1.0 # default value
+
     return args
 
 # ----------------------------------------------------------------
@@ -143,6 +151,19 @@ def setup_plot_style():
     plt.rcParams['ytick.right'] = True
     plt.rcParams['xtick.direction'] = 'in'
     plt.rcParams['xtick.top'] = True
+
+# --------------------------------------------------------------------------------------------------------------------
+def save_fig(fig, fig_dir, figname, args, dpi=100):
+    '''
+    Saves a given figure handle as a given output filename
+    '''
+    fig_dir.mkdir(exist_ok=True, parents=True)
+    figname = fig_dir / figname
+    fig.savefig(figname, transparent=False, dpi=dpi)
+    print(f'\t\tSaved figure as {figname}')
+    plt.show(block=False)
+
+    return
 
 # --------------------------------------------------------------------------------------------------------------------
 def read_passage_sed_catalog(filename):
@@ -226,6 +247,8 @@ def read_direct_image_from_extension(full_hdu, args, filter='F150W', for_offset=
                         filter = 'CLEAR'
                     except:
                         dir_img = None
+
+    dir_img = trim_image(dir_img, args, skip_re_trim=True)
 
     return dir_img, filter
 
@@ -324,6 +347,38 @@ def get_offsets_from_center(full_hdu, args, filter='F200W', silent=False):
     return ndelta_xpix, ndelta_ypix
 
 # --------------------------------------------------------------------------------------------------------------------
+def get_obs_params_from_drz_img(filter_name, args, keywords_to_extract=['EXPSTART', 'PA_APER']):
+    '''
+    Extracts observation parameters (e.g. observing time and PA_APER) keywords from the header of the drz image file 
+    of corresponding filter
+    Returns keyword values
+    '''
+    keyword_values_list = []
+    drz_filename = full_filename.parent.parent / f'{args.field}_{filter_name.lower()}-gr150r_drz_sci.fits'
+    with fits.open(drz_filename, memmap=True) as beams_hdu:
+        drz_header = beams_hdu[0].header
+        for kwd in keywords_to_extract:
+            if 'BEG' in kwd or 'START' in kwd: # this is a Time value
+                value = Time(drz_header[kwd], format='mjd')  # + 'T' + header['TIME-OBS'])
+            else:
+                value = drz_header[kwd]
+            keyword_values_list.append(value)
+    del drz_header
+
+    return keyword_values_list
+
+# --------------------------------------------------------------------------------------------------------------------
+def find_filter(wavelength, filter_dict):
+    """
+    Returns the first filter name where the wavelength falls inside the range.
+    Returns None if no match is found.
+    """
+    for filt, (w_min, w_max) in filter_dict.items():
+        if w_min <= wavelength <= w_max:
+            return filt
+    return None
+
+# --------------------------------------------------------------------------------------------------------------------
 def match_pypher(obs_psf_hdu, target_psf_hdu, reg=0.01, angle_source=0, angle_target=0):
     """
     Calls the pypher CLI from within Python to generate the kernel.
@@ -341,7 +396,7 @@ def match_pypher(obs_psf_hdu, target_psf_hdu, reg=0.01, angle_source=0, angle_ta
 
         # run pypher
         cmd = ['pypher', obs_psf_path, target_psf_path, output_kernel_path, '-r', str(reg), '-s', str(angle_source), '-t', str(angle_target)]
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
     
         # loading the resulting FITS file
         kernel = fits.getdata(output_kernel_path)
@@ -349,117 +404,133 @@ def match_pypher(obs_psf_hdu, target_psf_hdu, reg=0.01, angle_source=0, angle_ta
     return kernel
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_niriss_psf(filter_name, fov_pixels, supersampling_factor=1, is_target_psf=False, axes=None):
+def get_niriss_psf(filter_name, args, supersampling_factor=1, is_target_psf=False, axes=None, img_wcs=None):
     '''
     Computes NIRISS PSF in a given filter
     Returns 2D array
     Borrowed in part from PJW
     '''
+    fov_pixels = 2 * args.arcsec_limit / args.pix_size_arcsec
     if fov_pixels % 2 == 0: fov_pixels += 1
     niriss = stpsf.NIRISS()
 
     if is_target_psf: 
         pa_angle = 0
     else:
-        niriss.load_wss_opd_by_date(args.obs_date, verbose=False, plot=False, choice='closest')
         pa_angle = args.pa_aper
+        niriss.load_wss_opd_by_date(args.obs_date, verbose=False, plot=False, choice='closest')
     
     if type(filter_name) == str:
-        print(f'\n\t\tCreating PSF at wavelength {filter_name} filter with fov_pixels={fov_pixels}..')
+        print(f'\t\tCreating PSF at wavelength {filter_name} filter with fov_pixels={fov_pixels}..\n')
         niriss.filter = filter_name    
         psf = niriss.calc_psf(fov_pixels=fov_pixels, oversample=supersampling_factor)
     elif type(filter_name) == np.float64 or type(filter_name) == float: # here 'filter' is actually the observed wavelength in microns, not the filter
-        print(f'\n\t\tCreating PSF at wavelength {filter_name} microns with fov_pixels={fov_pixels}..')
+        print(f'\t\tCreating PSF at wavelength {filter_name} microns with fov_pixels={fov_pixels}..\n')
         psf = niriss.calc_psf(monochromatic=filter_name * 1e-6, fov_pixels=fov_pixels, oversample=supersampling_factor)
     else:
         sys.exit(f'Unrecognised data type for filter_name={filter_name}; it can only be str or float')
 
-    psf_data  = psf['DET_DIST'].data # choose from 'OVERSAMP', 'DET_SAMP', 'DETDIST', 'DET_DIST'
-    psf_wcs = pywcs.WCS(psf['DET_DIST'])
+    psf_hdu  = psf['DET_DIST'] # choose from 'OVERSAMP', 'DET_SAMP', 'DETDIST', 'DET_DIST'
+    psf_data = psf_hdu.data
+    psf_wcs = pywcs.WCS(psf_hdu)
 
     # plots for testing/debugging
     if axes is not None:
-        axes[0] = myimshow(psf_data.data, axes[0], contour=args.segmentation_map != args.id, label='Base PSF', cmap='viridis', col='w')
+        axes[0] = myimshow(psf_data, axes[0], contour=args.segmentation_map != args.id, label='Base PSF', cmap='viridis', col='w')
 
     # -------rotating the PSF-------------
-    psf_data = rotate(psf_data, pa_angle, reshape=False)
-    '''
-    psf_wcs.wcs.crpix = (np.asarray(psf_data.shape) + 1) / 2
-    psf_wcs.wcs.crval = [args.ra, args.dec]
-    rotation_angle_rad = np.radians(pa_angle - 360)
-    psf_wcs.wcs.cd = (np.array([
-                [np.cos(rotation_angle_rad), -np.sin(rotation_angle_rad)],
-                [np.sin(rotation_angle_rad), np.cos(rotation_angle_rad)],])
-        * (niriss.pixelscale * u.arcsec).to(u.deg).value)
-    psf_wcs.wcs.ctype = ['RA---TAN', 'DEC--TAN']
+    if img_wcs is not None:
+        '''
+        psf_data = rotate(psf_data, pa_angle, reshape=False)
+        '''
+        psf_wcs.wcs.crpix = (np.asarray(psf_data.shape) + 1) / 2
+        psf_wcs.wcs.crval = [args.ra, args.dec]
+        rotation_angle_rad = np.radians(pa_angle - 360)
+        psf_wcs.wcs.cd = (np.array([
+                    [np.cos(rotation_angle_rad), -np.sin(rotation_angle_rad)],
+                    [np.sin(rotation_angle_rad), np.cos(rotation_angle_rad)],])
+            * (niriss.pixelscale * u.arcsec).to(u.deg).value)
+        psf_wcs.wcs.ctype = ['RA---TAN', 'DEC--TAN']
 
-    psf_wcs.pscale = get_wcs_pscale(psf_wcs)
-    img_wcs.pscale = get_wcs_pscale(img_wcs)
-    if img_wcs._naxis[0] % 2 == 0:
-        img_wcs = transform_wcs(img_wcs, translation=(0.5, 0.5))
-        img_wcs._naxis = np.asarray(img_wcs._naxis) + 1
+        psf_wcs.pscale = get_wcs_pscale(psf_wcs)
+        img_wcs.pscale = get_wcs_pscale(img_wcs)
+        if img_wcs._naxis[0] % 2 == 0:
+            img_wcs = transform_wcs(img_wcs, translation=(0.5, 0.5))
+            img_wcs._naxis = np.asarray(img_wcs._naxis) + 1
 
-    out_sci = np.zeros(img_wcs._naxis, dtype=np.float32)
-    out_wht = np.zeros(img_wcs._naxis, dtype=np.float32)
-    out_ctx = np.zeros(img_wcs._naxis, dtype=np.int32)
+        out_sci = np.zeros(img_wcs._naxis, dtype=np.float32)
+        out_wht = np.zeros(img_wcs._naxis, dtype=np.float32)
+        out_ctx = np.zeros(img_wcs._naxis, dtype=np.int32)
 
-    adrizzle.do_driz(
-        psf_data.astype(np.float32),
-        psf_wcs,
-        np.ones_like(psf_data, dtype=np.float32),
-        img_wcs,
-        outsci=out_sci,
-        outwht=out_wht,
-        outcon=out_ctx,
-        expin=1.0,
-        in_units="cps",
-        wt_scl=1,
-        stepsize=1,
-    )
-    '''
-
-    # plots for testing/debugging
-    if axes is not None:
-        axes[1] = myimshow(psf_data.data, axes[1], contour=args.segmentation_map != args.id, label=f'Rotated PSF by {pa_angle:.1f} deg', cmap='viridis', col='w')
-
+        adrizzle.do_driz(
+            psf_data.astype(np.float32),
+            psf_wcs,
+            np.ones_like(psf_data, dtype=np.float32),
+            img_wcs,
+            outsci=out_sci,
+            outwht=out_wht,
+            outcon=out_ctx,
+            expin=1.0,
+            in_units="cps",
+            wt_scl=1,
+            stepsize=1,
+        )
+        psf_data = out_sci
+    
     psf_hdu = fits.PrimaryHDU(data=psf_data, header=psf_wcs.to_header() )
     psf_hdu.header['PIXASEC'] = float(args.pix_size_arcsec)
     psf_hdu.header['PRSCALE'] = float(args.pix_size_arcsec)
 
+    # plots for testing/debugging
+    if axes is not None:
+        psf_data_to_plot = trim_image(psf_data, args, skip_re_trim=True)
+        axes[1] = myimshow(psf_data_to_plot, axes[1], contour=args.segmentation_map != args.id, label=f'Rotated PSF by {pa_angle:.1f} deg', cmap='viridis', col='w')
+
     return psf_hdu
 
 # --------------------------------------------------------------------------------------------------------------------
-def match_to_psf(image, obs_wave, psf_cache, target_psf_hdu, args, supersampling_factor=2, label=''):
+def match_to_psf(image, obs_wave, psf_cache, target_psf_hdu, args, supersampling_factor=2, label='', img_wcs=None):
     '''
     Function to match a given 2D image from a given source PSF to taget_PSF of F200W
     Returns convolved image fo same shape
     '''
-    fov_pixels = 2 * args.arcsec_limit / args.pix_size_arcsec
-
+    lines_to_plot = ['OIII', 'Ha']
+    make_psf_plot = args.debug_psf or (args.plot_psf and label.endswith('LINE') and any(line in label for line in lines_to_plot))
     if type(obs_wave) == np.float64 or type(obs_wave) == float:
         obs_wave = np.round(obs_wave, 3)
 
     # plots for testing/debugging
-    if args.debug_psf:
-        fig, axes = plt.subplots(1, 5, figsize=(14,3.5), layout='constrained')
-        axes[0] = myimshow(image, axes[0], contour=args.segmentation_map != args.id, label=f'Original {label}', cmap='cividis', col='w')
+    if make_psf_plot:
+        image_to_plot = trim_image(image, args, skip_re_trim=True)
+        target_psf_to_plot = trim_image(target_psf_hdu.data, args, skip_re_trim=True)
+        
+        fig, axes = plt.subplots(2, 3, figsize=(8, 6), layout='constrained')
+        axes[0][0] = myimshow(image_to_plot, axes[0][0], contour=args.segmentation_map != args.id, label=f'Original {label}', cmap='cividis', col='w')
+        axes[0][1] = myimshow(target_psf_to_plot, axes[0][1], contour=args.segmentation_map != args.id, label='Target PSF', cmap='viridis', col='w')
 
     if obs_wave in psf_cache:
         obs_psf_hdu = psf_cache[obs_wave]
     else:
-        obs_psf_hdu = get_niriss_psf(obs_wave, fov_pixels, supersampling_factor=supersampling_factor, axes=axes[1:3] if args.debug_psf else None)
+        obs_psf_hdu = get_niriss_psf(obs_wave, args, supersampling_factor=supersampling_factor, axes=[axes[0][2], axes[1][0]] if make_psf_plot else None, img_wcs=img_wcs)
         psf_cache[obs_wave] = obs_psf_hdu
 
     psf_kernel = match_pypher(obs_psf_hdu, target_psf_hdu, angle_target=0, angle_source=args.pa_aper)
     psf_matched_image = convolve(image, psf_kernel, boundary='extend')
 
     # plots for testing/debugging
-    if args.debug_psf:
-        axes[3] = myimshow(psf_kernel, axes[3], contour=args.segmentation_map != args.id, label='matched kernel', cmap='viridis', col='w')
-        axes[4] = myimshow(psf_matched_image, axes[4], contour=args.segmentation_map != args.id, label=f'PSF-matched {label}', cmap='cividis', col='w')
+    if make_psf_plot:
+        psf_kernel_to_plot = trim_image(psf_kernel, args, skip_re_trim=True)
+        psf_matched_image_to_plot = trim_image(psf_matched_image, args, skip_re_trim=True)
+
+        axes[1][1] = myimshow(psf_kernel_to_plot, axes[1][1], contour=args.segmentation_map != args.id, label='matched kernel', cmap='viridis', col='w')
+        axes[1][2] = myimshow(psf_matched_image_to_plot, axes[1][2], contour=args.segmentation_map != args.id, label=f'PSF-matched {label}', cmap='cividis', col='w')
         fig.text(0.01, 0.98, f'{args.field}: {args.id}', ha='left', va='top', fontsize=args.fontsize, color='k')
-        plt.show(block=False)
-        sys.exit(f'Stopping here since you used --debug_psf; remove that option to go through')
+        save_fig(fig, args.input_dir / args.field / 'figs', f'{args.field}_{args.id:05d}_{label.replace(" ", "_")}_PSF_matching.png', args)
+        
+        if args.debug_psf:
+            sys.exit(f'Stopping here since you used --debug_psf; remove that option to go through')
+        else:
+            plt.close('all')
 
     return psf_matched_image, psf_cache
     
@@ -469,26 +540,32 @@ def process_fits_extensions(full_hdu, target_psf_hdu, args):
     Processes each extension of a given fits file and PSF-matches it to a given target PSF
     Returns hdu list of new modified fits file, which can then be written to disk
     '''
-    #match_list = ['DSCI', 'DWHT', 'LINE', 'CONTAM', 'CONTINUUM']
     match_list = ['LINE', 'LINEWHT', 'CONTAM', 'CONTINUUM']
     new_hdul = fits.HDUList()
 
     psf_cache = {}
 
+    # -------looping over extensions---------------
     for index, ext in enumerate(full_hdu):
-        if args.debug_psf and "EXTVER" in ext.header and ext.header["EXTVER"] != 'Ha':
+        if args.debug_psf and "EXTVER" in ext.header and not (ext.header["EXTVER"] == 'Ha' and 'LINE' in ext.name.upper()):
             print(f'\tSkipping {ext.header["EXTVER"]} {ext_name} ({index + 1}/{len(full_hdu)}) because of the --debug_psf mode')
             continue
         ext_name = ext.name.upper()
         if any(substring in ext_name for substring in match_list):
             print(f'\tPSF-matching extension: {ext.header["EXTVER"]} {ext_name} ({index + 1}/{len(full_hdu)})')
             data_to_match = ext.data.copy()
+            data_wcs = pywcs.WCS(ext)
 
-            if args.debug_psf:
-                data_to_match = trim_image(data_to_match, args, skip_re_trim=True)
-            
             # ----------re-center line map-----------
-            #data_to_match = ndimage.shift(data_to_match, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
+            data_to_match = shift(data_to_match, [args.ndelta_xpix, args.ndelta_ypix], order=0, cval=np.nan)
+
+            # ----------determining filter for this extension----------
+            obs_line_wave = ext.header['WAVELEN'] / 1e4 # to get wavelength in microns
+            filt = find_filter(obs_line_wave, filter_waverange_dict)
+            if filt is None:
+                sys.exit(f'Deb526: filter is determined to None, based on obswave={obs_line_wave} mu')
+            else:
+                args.obs_date, args.pa_aper = get_obs_params_from_drz_img(filt, args, keywords_to_extract=['EXPSTART', 'PA_APER'])                    
 
             # ------account for LINEWHT----------------
             if ext_name.endswith('WHT'):
@@ -496,8 +573,7 @@ def process_fits_extensions(full_hdu, target_psf_hdu, args):
                 data_to_match = 1. / np.sqrt(data_to_match)
 
             # -----------PSF-matching-------------
-            obs_line_wave = ext.header['WAVELEN'] / 1e4 # to get wavelength in microns
-            psf_mached_image, psf_cache = match_to_psf(data_to_match, obs_line_wave, psf_cache, target_psf_hdu, args, label=f'{ext.header["EXTVER"]} {ext_name}')
+            psf_mached_image, psf_cache = match_to_psf(data_to_match, obs_line_wave, psf_cache, target_psf_hdu, args, label=f'{ext.header["EXTVER"]} {ext_name}', img_wcs=data_wcs)
 
             # ------account for LINEWHT----------------
             if ext_name.endswith('WHT'):
@@ -506,17 +582,23 @@ def process_fits_extensions(full_hdu, target_psf_hdu, args):
 
             new_ext = fits.ImageHDU(data=psf_mached_image, header=ext.header, name=ext_name)            
         else:
-            print(f'\t\tCopying untouched: {ext_name} ({index + 1}/{len(full_hdu)})')
+            print(f'\tCopying untouched: {ext_name} ({index + 1}/{len(full_hdu)})')
             if isinstance(ext, fits.PrimaryHDU):
                 new_ext = fits.PrimaryHDU(data=ext.data, header=ext.header)
+                new_ext.header['PSF_MATCHED_TO_MICRON'] = target_psf_wave
             elif isinstance(ext, fits.BinTableHDU):
                 new_ext = fits.BinTableHDU(data=ext.data, header=ext.header, name=ext_name)
             else:
                 new_ext = fits.ImageHDU(data=ext.data, header=ext.header, name=ext_name)
+                new_ext.header['PSF_MATCHED_TO_MICRON'] = target_psf_wave
 
         new_hdul.append(new_ext)
     
     return new_hdul
+
+# --------------------------------------------------------------------------------------------------------------------
+# Below: NIRISS filter data taken from Table 1 in https://jwst-docs.stsci.edu/jwst-near-infrared-imager-and-slitless-spectrograph/niriss-instrumentation/niriss-filters#gsc.tab=0
+filter_waverange_dict = {'F115W': [1.0, 1.3], 'F150W': [1.31, 1.7], 'F200W': [1.71, 2.3]}  # microns
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -594,24 +676,19 @@ if __name__ == "__main__":
                 args.ra = full_hdu[0].header['RA']
                 args.dec = full_hdu[0].header['DEC']
 
-                if args.debug_psf:
+                if args.plot_psf or args.debug_psf:
                     args.segmentation_map = full_hdu['SEG'].data
                     args.segmentation_map = trim_image(args.segmentation_map, args, skip_re_trim=True)
 
-                # ----------getting keywords from beams file----------
-                beams_filename = full_filename.parent.parent.parent / 'beams' / f'{args.field}_{args.id:05d}.beams.fits'
-                with fits.open(beams_filename, memmap=True) as beams_hdu:
-                    beams_header = beams_hdu['SCI'].header
-                    args.obs_date = Time(beams_header['MJD-BEG'], format='mjd')  # + 'T' + header['TIME-OBS'])
-                    args.pa_aper = beams_header['PA_APER']
-
-                # --------determining true center of object---------------------
+               # --------determining true center of object---------------------
                 args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter=filter_for_re)
 
                 # -----------determine PSFs for PSF matching-----------------
                 if get_target_psf:
-                    fov_pixels = 3 * args.arcsec_limit / args.pix_size_arcsec
-                    target_psf_hdu = get_niriss_psf(target_psf_wave, fov_pixels=fov_pixels)
+                    # ----------getting observation keywords from drz file----------
+                    args.obs_date, args.pa_aper = get_obs_params_from_drz_img('F200W', args, keywords_to_extract=['EXPSTART', 'PA_APER'])
+                    img_wcs = pywcs.WCS(full_hdu['LINE'])                  
+                    target_psf_hdu = get_niriss_psf(target_psf_wave, args)#, img_wcs=img_wcs) # not providing img_wcs to create target_psf becaus etarget_psf should not depend on the object/extension
                     get_target_psf = False
 
                 # --------compute PSF-matched maps---------------------
@@ -627,11 +704,13 @@ if __name__ == "__main__":
                         print(f'\t\tCould not produce PSF-matched fits file for object {args.id} due to {e}. Skipping this object.')
                         continue
                 
-                del beams_hdu
                 del full_hdu
                 del new_hdul
                 gc.collect()
             
         print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
+        
+        if not args.debug:
+            plt.close('all')
     
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
