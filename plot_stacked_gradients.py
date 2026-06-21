@@ -12,6 +12,8 @@
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --overplot_passage --fold_maps --plot_minor_major_profile
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --fold_maps
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --fold_maps --plot_sfms_vs_grad
+             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag NB --adaptive_bins --bin_by_distance_mass --fold_maps --plot_minor_major
+             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag NB --adaptive_bins --bin_by_distance_mass --fold_maps --plot_sfms_vs_grad
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag NB --do_all_stacks --fold_maps --plot_sfms_vs_grad
 '''
 

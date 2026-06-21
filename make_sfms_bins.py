@@ -876,8 +876,8 @@ methods = [
             # 'adaptive_nmax', \
             # 'adaptive_voronoi', \
             # 'adaptive_distance', \
-            # 'adaptive_distance_mass', \
-            'adaptive_sfh', \
+            'adaptive_distance_mass', \
+            # 'adaptive_sfh', \
             # 'linear', \
             # 'linear_distance', \
             # 'linear_distance_mass', \

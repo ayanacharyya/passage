@@ -374,7 +374,7 @@ def find_filter(wavelength, filter_dict):
     Returns None if no match is found.
     """
     for filt, (w_min, w_max) in filter_dict.items():
-        if w_min <= wavelength <= w_max:
+        if w_min <= wavelength < w_max:
             return filt
     return None
 
@@ -598,7 +598,7 @@ def process_fits_extensions(full_hdu, target_psf_hdu, args):
 
 # --------------------------------------------------------------------------------------------------------------------
 # Below: NIRISS filter data taken from Table 1 in https://jwst-docs.stsci.edu/jwst-near-infrared-imager-and-slitless-spectrograph/niriss-instrumentation/niriss-filters#gsc.tab=0
-filter_waverange_dict = {'F115W': [1.0, 1.3], 'F150W': [1.31, 1.7], 'F200W': [1.71, 2.3]}  # microns
+filter_waverange_dict = {'F115W': [0.9, 1.3], 'F150W': [1.3, 1.7], 'F200W': [1.7, 2.5]}  # microns
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -710,7 +710,7 @@ if __name__ == "__main__":
             
         print(f'Completed field {field} in {timedelta(seconds=(datetime.now() - start_time2).seconds)}, {len(field_list) - index - 1} to go!')
         
-        if not args.debug:
+        if not args.debug_psf:
             plt.close('all')
     
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
