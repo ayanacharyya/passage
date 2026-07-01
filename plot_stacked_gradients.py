@@ -12,14 +12,15 @@
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --overplot_passage --fold_maps --plot_minor_major_profile
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --overplot_literature --fold_maps
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --fold_maps --plot_sfms_vs_grad
+             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag NB --do_all_stacks --fold_maps --plot_sfms_vs_grad
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag NB --adaptive_bins --bin_by_distance_mass --fold_maps --plot_minor_major
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag NB --adaptive_bins --bin_by_distance_mass --fold_maps --plot_sfms_vs_grad
-             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag NB --do_all_stacks --fold_maps --plot_sfms_vs_grad
+             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag NB --adaptive_bins --bin_by_sfh_mass --fold_maps --plot_sfms_vs_grad --skip_deproject
 '''
 
 from header import *
 from util import *
-from make_sfms_bins import log_mass_bins, log_sfr_bins, get_stacking_sample, get_binned_df, get_sfms_func, sfms, z_lim, passage_catalog
+from make_sfms_bins import log_mass_bins, log_sfr_bins, get_stacking_sample, get_binned_df, get_sfms_func, sfms, required_lines, passage_catalog
 from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_SFMS_PASSAGE
 
 start_time = datetime.now()
@@ -32,7 +33,7 @@ def read_stacked_df(filename):
     '''
     df = Table.read(filename).to_pandas()
     print(f'Reading in {filename}..')
-    for thiscol in ['log_mass_bin', 'log_sfr_bin', 'delta_sfms_bin']:
+    for thiscol in ['log_mass_bin', 'log_sfr_bin', 'delta_sfms_bin', 'tform_ratio_bin']:
         if thiscol in df:
             df[thiscol] = df[thiscol].str.decode('utf-8')
             df[thiscol] = pd.IntervalIndex.from_tuples(df[thiscol].apply(lambda x: pd.to_numeric(x.strip('()[]').split(', '))).map(tuple), closed='right')
@@ -460,7 +461,8 @@ label_dict = {'minor_logOH_grad': 'Minor\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
                 'radial_logOH_grad': r'$\nabla$Z$_r$ [dex/R$_e$]',\
                 'logOH_int': r'$\log$(O/H) + 12',\
                 'delta_sfms_median': r'<$\delta$ SFMS> [dex]',\
-                'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack',
+                'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack',\
+                'tform_ratio_median': r'$\Delta t_{form,90-50}$ / $\Delta t_{form,50-10}$',\
                 }
 lim_dict = {'minor_logOH_grad': [-1, 1],\
                 'major_logOH_grad': [-1., 1.],\
@@ -468,6 +470,7 @@ lim_dict = {'minor_logOH_grad': [-1, 1],\
                 'logOH_int': [6.8, 9.5],\
                 'delta_sfms_median': [-0.6, 0.6],\
                 'log_mass_median': [7.0, 10.0],\
+                'tform_ratio_median': [0, 1],\
                 }    
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -492,12 +495,16 @@ if __name__ == "__main__":
     
     # ---------reading in the master SED catalog----------------
     passage_catalog_filename = args.output_dir / 'catalogs' / passage_catalog
-    df_input = get_stacking_sample(passage_catalog_filename, args, z_lim=z_lim, sfms=sfms)
+    df_input = get_stacking_sample(passage_catalog_filename, args, required_lines=required_lines, sfms=sfms)
 
     # ----------setting up master figure (for args.plot_sfms_vs_grad--------------------
     if args.plot_sfms_vs_grad:
-        #quant_x, colorby_col = 'delta_sfms_median', 'log_mass_median'
-        quant_x, colorby_col = 'log_mass_median', 'delta_sfms_median'
+        if args.bin_by_distance_mass:
+            #quant_x, colorby_col = 'delta_sfms_median', 'log_mass_median'
+            quant_x, colorby_col = 'log_mass_median', 'delta_sfms_median'
+        elif args.bin_by_sfh_mass:
+            #quant_x, colorby_col = 'log_mass_median', 'tform_ratio_median'
+            quant_x, colorby_col = 'tform_ratio_median', 'log_mass_median'
         quant_y = 'logOH'
         quant_y_list = [f'{quant_y}_int', f'radial_{quant_y}_grad', f'minor_{quant_y}_grad', f'major_{quant_y}_grad']
         marker_arr = ['o', 's', 'd', 'P', 'X', '^']
@@ -516,6 +523,7 @@ if __name__ == "__main__":
 
             if method.startswith('adaptive'): args.adaptive_bins = True
             if 'voronoi' in method: args.voronoi_bins = True
+            elif 'sfh_mass' in method: args.bin_by_sfh_mass = True
             elif 'sfh' in method: args.bin_by_sfh = True
             elif 'distance_mass' in method: args.bin_by_distance_mass = True
             elif 'distance' in method: args.bin_by_distance = True
@@ -524,7 +532,7 @@ if __name__ == "__main__":
         # ------------reading and binning dataframe-------------
         interval_cols = ['delta_sfms_bin', 'log_mass_bin', 'log_sfr_bin', 'mass_interval', 'mass_intervals', 'bin_intervals', 'sfr_interval', 'sfr_intervals']
         df = df_input.copy()
-        df, bin_list, args = get_binned_df(args, df=df, skip_stacking=True, z_lim=z_lim, sfms=sfms)
+        df, bin_list, args = get_binned_df(args, df=df, skip_stacking=True, required_lines=required_lines, sfms=sfms)
         for col in interval_cols:
             if col in df: 
                 try: df[col] = fix_interval_precision(df[col], precision=3)
@@ -545,6 +553,10 @@ if __name__ == "__main__":
             df2 = df.rename(columns={'bin_intervals':'delta_sfms_bin'})
             df2 = df2.groupby(['delta_sfms_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()
             df_grad = pd.merge(df_grad, df2, on=['delta_sfms_bin'], how='left').reset_index(drop=True)
+        elif args.bin_by_sfh_mass:
+            df2 = df.rename(columns={'mass_interval':'log_mass_bin', 'mass_intervals':'log_mass_bin', 'bin_intervals':'tform_ratio_bin'})
+            df2 = df2.groupby(['tform_ratio_bin', 'log_mass_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), tform_ratio_median=('delta_tform_ratio', 'median')).reset_index()
+            df_grad = pd.merge(df_grad, df2, on=['tform_ratio_bin', 'log_mass_bin'], how='left').reset_index(drop=True)
         else:
             df2 = df.rename(columns={'mass_interval':'log_mass_bin', 'mass_intervals':'log_mass_bin', 'sfr_intervals':'log_sfr_bin', 'sfr_interval':'log_sfr_bin'})
             df2 = df2.groupby(['log_mass_bin', 'log_sfr_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()

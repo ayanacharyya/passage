@@ -12,14 +12,15 @@
              run stack_emission_maps.py --system ssd --field Par28 --do_all_obj --adaptive_bins --bin_by_distance_mass
              run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --adaptive_bins --bin_by_distance
              run stack_emission_maps.py --system ssd --field Par28 --id 1982 --clobber --debug_bin --debug_align --adaptive_bins --bin_by_distance_mass
-             run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --clobber --adaptive_bins --bin_by_distance_mass
+             run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --adaptive_bins --bin_by_distance_mass
+             run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --adaptive_bins --bin_by_sfh_mass --skip_deproject
 '''
 
 from header import *
 from util import *
 setup_plot_style()
 from make_diagnostic_maps import trim_image, get_dereddened_flux, myimshow, get_offsets_from_center, get_cutout
-from make_sfms_bins import get_binned_df, z_lim, sfms
+from make_sfms_bins import get_binned_df, required_lines, sfms
 
 start_time = datetime.now()
 
@@ -400,7 +401,7 @@ if __name__ == "__main__":
     cmin, cmax, cmap = -3.4, -1.4, 'cividis'
     
     # ------------reading and binning dataframe-------------
-    df, bin_list, args = get_binned_df(args, z_lim=z_lim, sfms=sfms)
+    df, bin_list, args = get_binned_df(args, required_lines=required_lines, sfms=sfms)
     n_lines = len(args.line_list) + 1 # one additional column for the direct image
 
     if args.id is not None: df = df[df['id'].isin(args.id)]
@@ -418,6 +419,10 @@ if __name__ == "__main__":
             this_delta_sfms_bin = this_mass_sfr_bin[0]
             this_mass_bin = this_mass_sfr_bin[1]
             bin_text = f'delta_sfms_bin_{this_delta_sfms_bin.left}-{this_delta_sfms_bin.right}_mass_bin_{this_mass_bin.left}-{this_mass_bin.right}'
+        elif args.bin_by_sfh_mass:
+            this_delta_sfms_bin = this_mass_sfr_bin[0]
+            this_mass_bin = this_mass_sfr_bin[1]
+            bin_text = f'tform_ratio_bin_{this_delta_sfms_bin.left}-{this_delta_sfms_bin.right}_mass_bin_{this_mass_bin.left}-{this_mass_bin.right}'
         else:
             bin_text = f'logmassbin_{this_mass_sfr_bin[0].left}-{this_mass_sfr_bin[0].right}_logsfrbin_{this_mass_sfr_bin[1].left}-{this_mass_sfr_bin[1].right}'
         print(f'\tStarting bin ({index2 + 1}/{len(bin_list)}) {bin_text}..', end=' ')
@@ -446,7 +451,7 @@ if __name__ == "__main__":
             nobj_no_scale_line = 0
         else:
             # --------determine which objects fall in this bin----------
-            if args.bin_by_distance_mass:
+            if args.bin_by_distance_mass or args.bin_by_sfh_mass:
                 mask = (df['bin_intervals'] == this_delta_sfms_bin) & (df['mass_intervals'] == this_mass_bin)
             else:
                 mask = df['bin_intervals'] == this_mass_sfr_bin

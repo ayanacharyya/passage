@@ -267,7 +267,8 @@ def parse_args():
     # ---- args added for stack_emission_maps.py ------------
     parser.add_argument('--debug_align', dest='debug_align', action='store_true', default=False, help='Debug the alignment, deprojection, rotation of emission line maps? Default is no.')
     parser.add_argument('--npix_side', metavar='npix_side', type=int, action='store', default=20, help='Size of the stacked emission maps in pixels? Default is 20')
-    parser.add_argument('--bin_by_sfh', dest='bin_by_sfh', action='store_true', default=False, help='Compute the stellar mass-SFR bins based on the SFH parameterisation? Default is no.')
+    parser.add_argument('--bin_by_sfh', dest='bin_by_sfh', action='store_true', default=False, help='Compute the bins based on the SFH parameterisation? Default is no.')
+    parser.add_argument('--bin_by_sfh_mass', dest='bin_by_sfh_mass', action='store_true', default=False, help='Compute the bins based on the SFH parameterisation and stellar mass? Default is no.')
     parser.add_argument('--bin_by_distance', dest='bin_by_distance', action='store_true', default=False, help='Compute the stellar mass-SFR bins based on the distance from the SFMS? Default is no.')
     parser.add_argument('--bin_by_distance_mass', dest='bin_by_distance_mass', action='store_true', default=False, help='Compute the stellar mass-SFR bins based on the distance from the SFMS as well as stellar mass? Default is no.')
     parser.add_argument('--adaptive_bins', dest='adaptive_bins', action='store_true', default=False, help='Compute the stellar mass-SFR bins in an adaptive way? Default is no.')
@@ -304,8 +305,11 @@ def parse_args():
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
-    if args.line_list != 'all': args.line_list = [item for item in args.line_list.split(',')]
-
+    if args.line_list == 'all':
+        args.line_list = ['Lya', 'OII', 'NeIII-3867', 'Hb', 'OIII-4363', 'OIII', 'Ha', 'NII','Ha+NII', 'SII', 'ArIII-7138', 'SIII', 'PaD','PaG','PaB','HeI-1083','PaA']
+    else:
+        args.line_list = [item for item in args.line_list.split(',')]
+        
     args.field_arr = args.field.split(',')
     for index in range(len(args.field_arr)):
         if 'Par' in args.field_arr[index]: args.field_arr[index] = f'Par{int(args.field_arr[index].split("Par")[1]):03d}'
@@ -318,7 +322,6 @@ def parse_args():
 
     if args.system == 'hd' and not os.path.exists('/Volumes/Elements/'): args.system = 'local'
     if args.system == 'ssd' and not os.path.exists('/Volumes/Ayan_SSD/'): args.system = 'local'
-    if args.line_list == 'all': args.line_list = ['Lya', 'OII', 'NeIII-3867', 'Hb', 'OIII-4363', 'OIII', 'Ha', 'NII','Ha+NII', 'SII', 'ArIII-7138', 'SIII', 'PaD','PaG','PaB','HeI-1083','PaA']
 
     if 'local' in args.system: root_dir =  '/Users/acharyya/Work/astro/passage'
     elif 'hd' in args.system: root_dir = '/Volumes/Elements/acharyya_backup/Work/astro/passage'

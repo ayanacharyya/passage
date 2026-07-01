@@ -11,6 +11,7 @@
 from header import *
 from util import *
 from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_SFMS_PASSAGE, get_SFMS_Popesso23, get_SFMS_Shivaei15, get_SFMS_Whitaker14, get_SFMS_PASSAGE
+from plot_passage_pie import read_passage_spreadsheet
 
 start_time = datetime.now()
 
@@ -21,11 +22,18 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
     Returns axis handle
     '''
     if 'm_min' not in df:
-        df['m_min'] = df[xcolname].array.left
-        df['m_max'] = df[xcolname].array.right
+        try:
+            df['m_min'] = df[xcolname].array.left
+            df['m_max'] = df[xcolname].array.right
 
-        df['s_min'] = df[ycolname].array.left
-        df['s_max'] = df[ycolname].array.right
+            df['s_min'] = df[ycolname].array.left
+            df['s_max'] = df[ycolname].array.right
+        except:
+            df['m_min'] = pd.IntervalIndex(df[xcolname]).left
+            df['m_max'] = pd.IntervalIndex(df[xcolname]).right
+
+            df['s_min'] = pd.IntervalIndex(df[ycolname]).left
+            df['s_max'] = pd.IntervalIndex(df[ycolname]).right
     
     # -----------defining vertices for bins-------------
     patches, values = [], []
@@ -44,7 +52,7 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
         if row[quant] > 0:
             cx = (row['m_min'] + row['m_max']) / 2
             cy = (row['s_min'] + row['s_max']) / 2
-            ax.text(cx, cy, int(row[quant]), color='k' if int(row[quant]) > 30 else 'w', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold')
+            ax.text(cx, cy, int(row[quant]), color='k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold')
     
     # --------annotating axis borders-----------------
     ax.set_xlim(df['m_min'].min() -0.2, df['m_max'].max() + 0.2)
@@ -59,7 +67,10 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
     if hide_yaxis:
         ax.tick_params(axis='y', which='major', labelsize=args.fontsize, labelleft=False)
     else:
-        ax.set_ylabel(r'$\log$ SFR [M$_\odot$/yr]', fontsize=args.fontsize)
+        if args.bin_by_sfh or args.bin_by_sfh_mass:
+            ax.set_ylabel(r'$\Delta t_{form,90-50}$ / $\Delta t_{form,50-10}$', fontsize=args.fontsize)
+        else:
+            ax.set_ylabel(r'$\log$ SFR [M$_\odot$/yr]', fontsize=args.fontsize)            
         ax.tick_params(axis='y', which='major', labelsize=args.fontsize, labelleft=True)
 
     # ---------annotating colorbar------------
@@ -265,7 +276,7 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
     Makes a nice heatmap (with patches) of stacked integrated metallicities and metallicity gradients
     Returns figure handle
     '''
-    cmap, cmin, cmax, ncbins, clabel ='viridis', 10, 50, 4, 'Number of galaxies'
+    cmap, cmin, cmax, ncbins, clabel ='viridis', 0, 20, 4, 'Number of galaxies'
     ncol = len(methods)
     
     # -----------------setup the figure---------------
@@ -276,8 +287,16 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
     for index, method in enumerate(methods):
         if 'voronoi' in method:
             axes[index] = make_heatmap_vorbin(axes[index], df, bin_summary, centers_scaled, scaling, 'n_galaxies', args, method_text=method_texts[index], cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
+        elif 'sfh_mass' in method:
+            groupby_cols = [f'bin_intervals{method_texts[index]}', f'mass_intervals{method_texts[index]}']
+            df_sub = df.groupby(groupby_cols).agg(n_galaxies=('log_mass', 'size'), log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median')).reset_index()
+            df_sub = df_sub.dropna(subset=groupby_cols)
+            df_sub = df_sub[df_sub['n_galaxies'] > 0]
+            axes[index] = make_heatmap_patches(axes[index], df_sub, 'n_galaxies', args, xcolname=f'mass_intervals{method_texts[index]}', ycolname=f'bin_intervals{method_texts[index]}', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
         elif 'sfh' in method:
-            axes[index] = make_scattermap_sfh(axes[index], df, args, method_text=method_texts[index], cmap=cmap, hide_cbar=False, hide_yaxis=index)
+            df_sub = df.groupby(f'bin_intervals{method_texts[index]}').agg(n_galaxies=('log_mass', 'size'), log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median')).reset_index()
+            df_sub = df_sub[df_sub['n_galaxies'] > 0]
+            axes[index] = make_heatmap_patches(axes[index], df_sub, 'n_galaxies', args, xcolname=f'mass_intervals{method_texts[index]}', ycolname=f'bin_intervals{method_texts[index]}', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
         elif 'distance_mass' in method:
             groupby_cols = [f'bin_intervals{method_texts[index]}', f'mass_intervals{method_texts[index]}']
             df_sub = df.groupby(groupby_cols).agg(n_galaxies=('log_mass', 'size'), log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median')).reset_index()
@@ -325,7 +344,7 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
     return fig
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=50, z_lim=None):
+def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=50):
     '''
     Plots the mass-excitation diagram given a dataframe with list of objects and properties
     Returns figure handle
@@ -336,7 +355,7 @@ def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=50, z_lim=None):
     fig.subplots_adjust(left=0.18, right=0.95, bottom=0.11, top=0.95)
 
     # ---------making plot--------------
-    p = ax.scatter(df[mass_col], df['O3Hb'], c=df['redshift'], marker='o', s=size, edgecolor='k', lw=0.5, cmap='viridis', vmin=z_lim[0] if z_lim is not None else None, vmax=z_lim[1] if z_lim is not None else None)
+    p = ax.scatter(df[mass_col], df['O3Hb'], c=df['redshift'], marker='o', s=size, edgecolor='k', lw=0.5, cmap='viridis', vmin=None, vmax=None)
     ax.errorbar(df[mass_col], df['O3Hb'], yerr=df['O3Hb_u'], c='gray', fmt='none', lw=1, alpha=0.8)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df['O3Hb'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 
@@ -577,7 +596,7 @@ def bin_SFMS_distance_mass(df, method_text = '_distance_mass', delta_bin=0.2, n_
     return df, bin_list
 
 # --------------------------------------------------------------------------------------------------------------------
-def bin_SFMS_sfh(df, method_text = '_sfh', delta_sfh=0.2, n_sfh_bins=None, bin_by_col='delta_tform_90_10'):
+def bin_SFMS_sfh(df, method_text = '_sfh', delta_sfh=0.2, n_sfh_bins=None, bin_by_col='delta_tform_ratio'):
     '''
     Bins in SFMS plane in an adaptive (or, optionally, regular) way based on a SFH parameter
     Returns dataframe with additional columns containing method_text, and list of unique bins
@@ -592,6 +611,74 @@ def bin_SFMS_sfh(df, method_text = '_sfh', delta_sfh=0.2, n_sfh_bins=None, bin_b
     bin_list = list(pd.unique(df[f'bin_intervals{method_text}']))
 
     return df, bin_list
+
+# --------------------------------------------------------------------------------------------------------------------
+def bin_SFMS_sfh_mass(df, method_text = '_sfh', delta_sfh=0.2, n_sfh_bins=None, n_mass_bins=4, bin_by_col='delta_tform_ratio'):
+    '''
+    Bins in SFMS plane in an adaptive (or, optionally, regular) way based on a SFH parameter
+    Returns dataframe with additional columns containing method_text, and list of unique bins
+    '''
+
+    if n_sfh_bins is None: # make uniform width bins of width delta_sfh
+        bin_edges = np.arange(np.round(df[bin_by_col].min(), 2), np.round(df[bin_by_col].max(), 2) + delta_sfh, delta_sfh)
+        df[f'bin_intervals{method_text}'] = pd.cut(df[bin_by_col], bins=bin_edges)
+        df[f'mass_intervals{method_text}'] = pd.cut(df['log_mass'], bins=n_mass_bins) # make n_mass_bins of equal widths
+    else:
+        df[f'bin_intervals{method_text}'], bin_edges = pd.qcut(df[bin_by_col], q=n_sfh_bins, retbins=True)
+        df[f'mass_intervals{method_text}'] = df.groupby(f'bin_intervals{method_text}')['log_mass'].apply(lambda x: pd.qcut(x, q=n_mass_bins)).reset_index(level=0, drop=True) # make n_mass_bins of widths decided to have roughly equal galaxies in each bin
+
+    
+    unique_bins_df = df[[f'bin_intervals{method_text}', f'mass_intervals{method_text}']].drop_duplicates().sort_values([f'bin_intervals{method_text}', f'mass_intervals{method_text}'])
+    bin_list = list(unique_bins_df.to_records(index=False))
+
+    return df, bin_list
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_field_waverange(args):
+    '''
+    Determines the min and max observed wavelength range for each PASSAGE field
+    Saves on to a csv file
+    Returns dataframe
+    '''
+    output_filename = args.input_dir / 'field_wave_ranges.csv'
+
+    if not os.path.exists(output_filename):
+        print(f'Creating new field wave range file..')
+
+        # read in PASSAGE obs spreadsheet
+        df = read_passage_spreadsheet(args=args)
+        df = df[~(df['Mode'].str.contains('DIRECT'))][['Par#', 'Filter', 'Mode']]
+        df = df.drop_duplicates(['Par#', 'Filter', 'Mode'])
+        df = df.groupby(['Par#', 'Filter']).agg('count').reset_index()
+        df = df.pivot_table(index=['Par#', 'Mode'], values=['Filter'], aggfunc=lambda x: ','.join(x)).reset_index()
+        df = df.rename(columns={'Par#': 'field', 'Mode': 'nPA', 'Filter': 'filters'})
+
+        reference_rows = []
+
+        for _, row in df.iterrows():
+            filters = [f.strip() for f in row['filters'].split(',')]
+            
+            mins = [filter_waverange_dict[f][0] for f in filters if f in filter_waverange_dict]
+            maxes = [filter_waverange_dict[f][1] for f in filters if f in filter_waverange_dict]
+            
+            if mins and maxes:
+                reference_rows.append({
+                    'field': row['field'],
+                    'nPA': row['nPA'],
+                    'filters': row['filters'],
+                    'obs_min': min(mins),
+                    'obs_max': max(maxes)
+                })
+
+        df = pd.DataFrame(reference_rows)
+        df.to_csv(output_filename, index=False)
+        print(f'Written field wave range file as {output_filename}')
+    else:
+        print(f'Reading from existing waverange file: {output_filename}')
+    
+    df = pd.read_csv(output_filename)
+
+    return df
 
 # --------------------------------------------------------------------------------------------------------------------
 def read_passage_sed_catalog(filename):
@@ -619,9 +706,10 @@ def read_passage_sed_catalog(filename):
     full_df['delta_tform_50_10'] = full_df['tform50_50'] - full_df['tform10_50']
     full_df['delta_tform_90_50'] = full_df['tform90_50'] - full_df['tform50_50']
     full_df['delta_tform_90_10'] = full_df['tform90_50'] - full_df['tform10_50']
+    full_df['delta_tform_ratio'] = full_df['delta_tform_90_50'] / full_df['delta_tform_50_10']
 
     # --------extracting relevant columns-----------
-    columns_to_extract = ['field', 'id', 'redshift', 'log_mass', 'log_sfr', 'log_ssfr', 'cosmoswebid', 'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10']
+    columns_to_extract = ['field', 'id', 'redshift', 'log_mass', 'log_sfr', 'log_ssfr', 'cosmoswebid', 'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10', 'delta_tform_ratio']
     df = full_df[columns_to_extract]
     df['field'] = df['field'].astype(str)
     nobj1 = len(df)
@@ -633,12 +721,14 @@ def read_passage_sed_catalog(filename):
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_stacking_sample(passage_catalog_filename, args, z_lim=None, sfms='Popesso23'):
+def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms='Popesso23'):
     '''
     Read the combined master catalog from PASSAGE SED fits, rename a few columns, and only keep the mass and SFR columns
     Return pandas dataframe
     '''
     df = read_passage_sed_catalog(passage_catalog_filename)
+    df_field_waverange = get_field_waverange(args)
+    
     if not args.do_all_fields:
         df = df[df['field'] == args.field]        
     nobj1 = len(df)
@@ -652,9 +742,18 @@ def get_stacking_sample(passage_catalog_filename, args, z_lim=None, sfms='Popess
     print(f'Out of the {nobj1} objects, {len(df)} had delta sfms computable..', end='')
 
     # ------------cut by redshift------------------
-    if z_lim is not None:
-        df = df[df['redshift'].between(z_lim[0], z_lim[1])]
-        print(f'..out of which {len(df)} made the redshift cut zlim={z_lim}..', end='')
+    if len(required_lines) > 0:
+        df = df.merge(df_field_waverange[['field', 'obs_min', 'obs_max']], on='field', how='left')
+
+        target_rest_waves = [rest_wave_dict[line] / 1e3 for line in required_lines] # rest_wave_dict is in nm, converting it to microns
+        min_rest_wave = min(target_rest_waves)
+        max_rest_wave = max(target_rest_waves)
+
+        min_obs_waves = min_rest_wave * (1 + df['redshift'])
+        max_obs_waves = max_rest_wave * (1 + df['redshift'])
+
+        df = df[(df['obs_min'] <= min_obs_waves) & (max_obs_waves <= df['obs_max'])]
+        print(f'..out of which {len(df)} made the redshift cut for required lines {required_lines}..', end='')
 
     # --------curtailing to desired SFR-mass limits--------------
     df = df[(df['log_sfr'].between(log_sfr_bins.min(), log_sfr_bins.max())) & (df['log_mass'].between(log_mass_bins.min(), log_mass_bins.max()))]
@@ -730,29 +829,96 @@ def get_stacking_sample(passage_catalog_filename, args, z_lim=None, sfms='Popess
 
     print(f'\nOut of the {nobj} objects, {len(df_agn)} are above MEx line, so they are removed; final sample is {len(df)} galaxies.')
     
-    if args.plot_mex:
-        fig = plot_MEx(df_temp, args, df_agn=df_agn, z_lim=z_lim)
-        if args.do_all_fields: fig_dir = args.output_dir / 'stacking'
-        else: fig_dir = args.output_dir / args.field / 'stacking'
-        save_fig(fig, fig_dir, 'mass_excitation_colorby_redshift.png', args)
+    args.required_lines_text = '_lines_' + ','.join(required_lines) if len(required_lines) > 0 else ''
+
+    # --------------saving MEx----------------
+    if args.do_all_fields: root_dir = args.output_dir
+    else: root_dir = args.output_dir / args.field
+    args.stacking_dir = root_dir / f'stacking{args.required_lines_text}'
+
+    fig = plot_MEx(df_temp, args, df_agn=df_agn)
+    save_fig(fig, args.stacking_dir, 'mass_excitation_colorby_redshift.png', args)
+    if not args.plot_mex: plt.close(fig)
 
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacking=False, z_lim=None, sfms='Popesso23'):
+def plot_inc_histogram(df, bin_col1, bin_col2, args):
+    '''
+    Plots the distribution of inclinations in each bin before stacking
+    Saves the plot
+    Returns nothing
+    '''
+    print(f'Making the inclination histogram..')
+    df['inclination'] = np.degrees(np.arccos(df['b_image'] / df['a_image']))
+    plot_df = df.dropna(subset=['inclination', bin_col1, bin_col2])
+
+    grouped = plot_df.groupby([bin_col1, bin_col2])
+    num_groups = len(grouped)
+    n_cols = 2
+    n_rows = int(np.ceil(num_groups / n_cols))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(8, 7), sharex=True, sharey=True)
+    axes_flat = axes.flatten() if num_groups > 2 else axes
+    
+    bins = np.linspace(plot_df['inclination'].min(), plot_df['inclination'].max(), 10)
+    color = 'cornflowerblue'
+
+    max_count = 0
+    for _, group in grouped:
+        counts, _ = np.histogram(group['inclination'], bins=bins)
+        max_count = max(max_count, counts.max())
+    global_y_max = max_count * 1.15
+
+    for i, ((bin_interval, mass_interval), group) in enumerate(grouped):
+        ax = axes_flat[i]
+        ax.hist(
+            group['inclination'], 
+            bins=bins, 
+            histtype='stepfilled',      # Outlines only, preventing muddy overlaps
+            linewidth=1,          # Makes the steps easier to see
+            alpha=0.8,            # Slight transparency just in case lines perfectly overlap
+            color=color,
+            edgecolor='k',
+        )
+
+        label_text = f"Bin: {bin_interval} | Mass: {mass_interval}"
+        ax.text(
+        0.05, 0.92, label_text, 
+        transform=ax.transAxes, 
+        fontsize=9,
+        verticalalignment='top',
+        bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8, edgecolor='none')
+        )
+        ax.set_xlim(0, 90)
+        ax.set_xticks([0, 15, 30, 45, 60, 75, 90])
+        ax.set_yticks([max_count])
+        ax.set_ylim(0, global_y_max)
+
+    for j in range(num_groups, n_rows * n_cols):
+        axes_flat[j].set_visible(False)
+
+    fig.supxlabel('Inclination Angle (0° = Face-on, 90° = Edge-on)', fontsize=12, y=0.01)
+    fig.supylabel('Count', fontsize=12, x=0.01)
+    
+    plt.subplots_adjust(wspace=0.0, hspace=0.0, left=0.07, right=0.97, bottom=0.07, top=0.95)
+    save_fig(fig, args.fig_dir, f'inc_distributions.png', args)
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacking=False, required_lines=[], sfms='Popesso23', plot_inc_hist=False):
     '''
     Read in the full SED dataframe and curtail and bin it as needed to produce the binned dataframe
     Returns binned pandas dataframe, bin_list, args (with added keywords)
     '''
     # ------------add new keywords to args---------------
-    # args.line_list = ['OIII', 'OII', 'NeIII-3867', 'Hb', 'OIII-4363', 'Ha', 'SII']
-    args.line_list = ['OIII', 'OII', 'NeIII-3867', 'Hb', 'Ha', 'SII']
+    if set(required_lines) == set(['Ha', 'OIII']): args.line_list = ['OIII', 'Hb', 'Ha', 'SII']
+    elif set(required_lines) == set(['Ha', 'OIII', 'OII']): args.line_list = ['OIII', 'OII', 'NeIII-3867',  'Ha', 'SII']
+    print(f'\nWill stack and compute metallicity using these {len(args.line_list)} lines: {args.line_list}.\n')
 
     args.deproject_text = '_nodeproject' if args.skip_deproject else ''
     args.rescale_text = '_norescale' if args.skip_re_scaling else ''
     args.C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
     args.fold_text = '_folded' if args.fold_maps else ''
-    args.zlim_text = '' if z_lim is None else f'_zlim_{z_lim[0]}_{z_lim[1]}'
+    args.required_lines_text = '_lines_' + ','.join(required_lines) if len(required_lines) > 0 else ''
 
     # ------------------determine fil and path names---------
     if args.do_all_fields:
@@ -760,53 +926,58 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
     # ---------curtailing to single-field----------------
     else:
         root_dir = args.output_dir / args.field
+    args.stacking_dir = root_dir / f'stacking{args.required_lines_text}'
 
     # ---------reading in the master SED catalog----------------
     if df is None:
         passage_catalog_filename = args.output_dir / 'catalogs' / passage_catalog
-        df = get_stacking_sample(passage_catalog_filename, args, z_lim=z_lim, sfms=sfms)
+        df = get_stacking_sample(passage_catalog_filename, args, required_lines=required_lines, sfms=sfms)
 
     # --------------returning unbinned dataframe and no bin_list if skip_binning=True--------------
     if skip_binning:
-        bin_list = None        
-        args.fig_dir = root_dir / 'stacking'
+        bin_list = None  
+        args.fig_dir = args.stacking_dir
         args.fig_dir.mkdir(parents=True, exist_ok=True)
+
     else:
         # -------------binning the mass-SFR plane-------------
         if args.adaptive_bins:
             if args.voronoi_bins:
                 df, bin_summary, centers_scaled, scaling = bin_SFMS_voronoi(df, method_text=method_text, target_n=target_n)
                 bin_list = [bin_summary, centers_scaled, scaling]
-                args.binby_text = f'adap_binby_voronoi_ngal_{target_n}{args.zlim_text}'
+                args.binby_text = f'adap_binby_voronoi_ngal_{target_n}'
             elif args.bin_by_sfh:
-                df, bin_list = bin_SFMS_sfh(df, method_text=method_text, n_sfh_bins=n_sfh_bins) # binning the dataframe in an adaptive way
-                args.binby_text = f'adap_binby_sfh_{n_sfh_bins}{args.zlim_text}'
+                df, bin_list = bin_SFMS_sfh(df, method_text=method_text, n_sfh_bins=n_sfh_bins, bin_by_col='delta_tform_ratio') # binning the dataframe in an adaptive way
+                args.binby_text = f'adap_binby_sfh_{n_sfh_bins}'
+            elif args.bin_by_sfh_mass:
+                df, bin_list = bin_SFMS_sfh_mass(df, method_text=method_text, n_sfh_bins=n_sfh_bins, n_mass_bins=n_mass_bins, bin_by_col='delta_tform_ratio') # binning the dataframe in an adaptive way
+                args.binby_text = f'adap_binby_sfh_{n_sfh_bins}_mass_{n_mass_bins}'
             elif args.bin_by_distance:
                 df, bin_list = bin_SFMS_distance(df, method_text=method_text, n_adaptive_bins=n_adaptive_bins)
-                args.binby_text = f'adap_binby_distance_{n_adaptive_bins}_sfms_{sfms}{args.zlim_text}'
+                args.binby_text = f'adap_binby_distance_{n_adaptive_bins}_sfms_{sfms}'
             elif args.bin_by_distance_mass:
                 df, bin_list = bin_SFMS_distance_mass(df, method_text=method_text, n_adaptive_bins=n_adaptive_bins, n_mass_bins=n_mass_bins)
-                args.binby_text = f'adap_binby_distance_{n_adaptive_bins}_sfms_{sfms}_mass_{n_mass_bins}{args.zlim_text}'
+                args.binby_text = f'adap_binby_distance_{n_adaptive_bins}_sfms_{sfms}_mass_{n_mass_bins}'
             else:
                 if args.min_gal_per_bin is not None:
                     df, bin_list = bin_SFMS_adaptive(df, method_text=method_text, min_n=args.min_gal_per_bin) # binning the dataframe in an adaptive way
-                    args.binby_text = f'adap_binby_mass_sfr_mingal_{args.min_gal_per_bin}{args.zlim_text}'
+                    args.binby_text = f'adap_binby_mass_sfr_mingal_{args.min_gal_per_bin}'
                 else:
                     df, bin_list = bin_SFMS_adaptive(df, method_text=method_text, max_n=args.max_gal_per_bin) # binning the dataframe in an adaptive way
-                    args.binby_text = f'adap_binby_mass_sfr_maxgal_{args.max_gal_per_bin}{args.zlim_text}'
+                    args.binby_text = f'adap_binby_mass_sfr_maxgal_{args.max_gal_per_bin}'
         else:
             if args.bin_by_sfh:
                 df, bin_list = bin_SFMS_sfh(df, method_text=method_text, delta_sfh=delta_sfh) # binning the dataframe in an adaptive way
-                args.binby_text = f'lin_binby_sfh_delta_sfh_{delta_sfh}{args.zlim_text}'
+                args.binby_text = f'lin_binby_sfh_delta_sfh_{delta_sfh}'
             elif args.bin_by_distance:
                 df, bin_list = bin_SFMS_distance(df, method_text=method_text, delta_bin=delta_sfms_bin)
-                args.binby_text = f'lin_binby_distance_delta_bin_{delta_sfms_bin}_sfms_{sfms}{args.zlim_text}'
+                args.binby_text = f'lin_binby_distance_delta_bin_{delta_sfms_bin}_sfms_{sfms}'
             elif args.bin_by_distance_mass:
                 df, bin_list = bin_SFMS_distance_mass(df, method_text=method_text, delta_bin=delta_sfms_bin, n_mass_bins=n_mass_bins)
-                args.binby_text = f'lin_binby_distance_delta_bin_{delta_sfms_bin}_sfms_{sfms}_mass_{n_mass_bins}{args.zlim_text}'
+                args.binby_text = f'lin_binby_distance_delta_bin_{delta_sfms_bin}_sfms_{sfms}_mass_{n_mass_bins}'
             else:
                 df, bin_list = bin_SFMS_linear(df, method_text=method_text) # -binning the dataframe uniformly by mass and SFR bins
-                args.binby_text = f'lin_binby_mass_sfr_delta_mass_{delta_log_mass}_delta_sfr_{delta_log_sfr}{args.zlim_text}'
+                args.binby_text = f'lin_binby_mass_sfr_delta_mass_{delta_log_mass}_delta_sfr_{delta_log_sfr}'
 
         if not args.voronoi_bins:
             if args.bin_by_distance or args.bin_by_distance_mass or args.bin_by_sfh:
@@ -815,7 +986,7 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
                 bin_list.sort(key=lambda x: (x[0].left, x[1].left))
 
         # ------determining field-specific paths, etc-----------
-        output_dir = root_dir / 'stacking' / f'{args.binby_text}'
+        output_dir = args.stacking_dir / f'{args.binby_text}'
         output_dir.mkdir(parents=True, exist_ok=True)
         
         args.fig_dir = output_dir / f'plots{args.deproject_text}{args.rescale_text}'
@@ -824,7 +995,7 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
         args.fits_dir = output_dir / f'maps{args.deproject_text}{args.rescale_text}'
         args.fits_dir.mkdir(parents=True, exist_ok=True)
 
-        args.grad_filename = args.fits_dir / f'stacked_{args.binby_text}{args.fold_text}_fits_allbins_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}{args.zlim_text}.fits'
+        args.grad_filename = args.fits_dir / f'stacked_{args.binby_text}{args.fold_text}_fits_allbins_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}.fits'
 
         if not skip_stacking:
             # -------merge with all photcats by looping over fields--------------
@@ -838,6 +1009,8 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
                 df_master_photcat = pd.concat([df_master_photcat, df_phot_this_field[cols_to_extract]])
             
             df = pd.merge(df, df_master_photcat, on=['field', 'id'], how='inner')
+            if plot_inc_hist:
+                plot_inc_histogram(df, f'bin_intervals{method_text}', f'mass_intervals{method_text}', args)
 
         # --------------curtailiug bins for debugging-------------------
         if args.debug_bin: bin_list = bin_list[:1]
@@ -876,8 +1049,8 @@ methods = [
             # 'adaptive_nmax', \
             # 'adaptive_voronoi', \
             # 'adaptive_distance', \
-            'adaptive_distance_mass', \
-            # 'adaptive_sfh', \
+            # 'adaptive_distance_mass', \
+            'adaptive_sfh_mass', \
             # 'linear', \
             # 'linear_distance', \
             # 'linear_distance_mass', \
@@ -886,15 +1059,17 @@ methods = [
 
 target_n = 30 # for voronoi binning
 n_adaptive_bins = 8 # for distance (from SFMS) binning
+# n_adaptive_bins = 4 # for distance (from SFMS) binning
 n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
+# n_mass_bins = 2 # number of mass bins within each distance (from SFMS) bin
 delta_sfms_bin = 0.4 # delta in distance from SFMS in which to bin in the distance-from-SFMS method, unless binning adaptively
 sfms =  'PASSAGE' # from 'PASSAGE', 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
 delta_sfh = 0.5 # delta in tform90 - tform10 parameter (in Gyr) in which to bin, unless binning adaptively
 n_sfh_bins = 10 # number of bins in SFH parameter, adaptive, so that each bin contains approximately equal number of objects
 
-#z_lim = [0.06, 2.35] # for having OIII and Ha
-z_lim = [1.15, 2.35] # for having OII and OIII and Ha
-#z_lim = None # no redshift cut
+required_lines =['OIII', 'Ha']
+# required_lines =['OII', 'OIII', 'Ha']
+# required_lines =[]
 
 passage_catalog = 'SED_fits_v1.0.2_cosmosweb.fits'
 # passage_catalog = 'SED_fits_v1.0.3_best.fits'
@@ -909,7 +1084,7 @@ if __name__ == "__main__":
 
     # ---------reading in the master SED catalog----------------
     passage_catalog_filename = args.output_dir / 'catalogs' / passage_catalog
-    df = get_stacking_sample(passage_catalog_filename, args, z_lim=z_lim, sfms=sfms)
+    df = get_stacking_sample(passage_catalog_filename, args, required_lines=required_lines, sfms=sfms)
 
     # -----------making bins in various ways---------------------
     for method in methods:
@@ -919,12 +1094,13 @@ if __name__ == "__main__":
 
         if method.startswith('adaptive'): args.adaptive_bins = True
         if 'voronoi' in method: args.voronoi_bins = True
+        elif 'sfh_mass' in method: args.bin_by_sfh_mass = True
         elif 'sfh' in method: args.bin_by_sfh = True
         elif 'distance_mass' in method: args.bin_by_distance_mass = True
         elif 'distance' in method: args.bin_by_distance = True
         if '_nmin' in method and args.min_gal_per_bin is None: args.min_gal_per_bin = 20
 
-        df, bin_list, args = get_binned_df(args, df=df, method_text=f'_{method}', skip_stacking=True, z_lim=z_lim, sfms=sfms)
+        df, bin_list, args = get_binned_df(args, df=df, method_text=f'_{method}', required_lines=required_lines, sfms=sfms, plot_inc_hist=False, skip_stacking=False)
 
         if 'voronoi' in method:
             bin_summary, centers_scaled, scaling = bin_list

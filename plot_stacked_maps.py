@@ -16,12 +16,13 @@
              run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --plot_line_and_metallicity --plot_radial_profiles --adaptive_bins --bin_by_distance_mass --fold_maps
              run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag NB --plot_line_and_metallicity --plot_radial_profiles --adaptive_bins --bin_by_distance_mass --fold_maps
              run plot_stacked_maps.py --system ssd --do_all_fields --plot_line_and_bpt --AGN_diag Ne3O2 --adaptive_bins --bin_by_distance_mass --fold_maps
+             run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag NB --plot_line_and_metallicity --plot_radial_profiles --adaptive_bins --bin_by_sfh_mass --fold_maps --skip_deproject
 '''
 
 from header import *
 from util import *
 from make_diagnostic_maps import compute_Z_C19, compute_Z_KD02_R23, compute_Z_P25, compute_Z_Te, compute_Te, take_safe_log_ratio, take_safe_log_sum, myimshow, get_AGN_func_methods
-from make_sfms_bins import get_binned_df, z_lim, sfms
+from make_sfms_bins import get_binned_df, required_lines, sfms
 from stack_emission_maps import read_stacked_maps
 from plots_for_zgrad_paper import plot_fitted_line, wls_fit, plot_AGN_demarcation_ax, get_distance_map_from_AGN_line, get_ratio_labels, overplot_AGN_line_on_BPT
 
@@ -497,10 +498,9 @@ def get_Z_NB(line_dict, args):
                        'HeI-5877':'HeI5876', 'Hg':'Hgamma', 'Hd':'Hdelta', 'NII':'NII6583'}
     line_label_dict.update({k.upper(): v for k, v in line_label_dict.items()})
     
-    line_list = [item for item in list(line_dict.keys()) if '_nobj' not in item and '_id' not in item]
     line_map_array, line_int_array, line_label_array, line_waves_array, nobj_array = [], [], [], [], []
     
-    for line in line_list:
+    for line in args.line_list:
         line_map, line_int, nobj = get_emission_line_map(line, line_dict, args, silent=False)
         if not args.do_not_correct_flux:
             factor = 1.
@@ -834,60 +834,59 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
     '''
     # ----------getting line list from fits file-------------
     line_list = [item for item in list(line_dict.keys()) if '_nobj' not in item and '_id' not in item]
+    #line_list = args.line_list
     n_lines = len(line_list)
-    if n_lines == 0:
-        fig = None
-    else:
-        # ----------getting distance maps, in case radial profile plotting-------------
-        if args.plot_radial_profiles:
-            shape = np.shape(logOH_map)
-            if args.fold_maps:
-                center_xpix, center_ypix = (args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5 # this yields 0.5 (instead of 0) pixel offset for even-sized stacked maps, because the center of the map is in the center (and not the edge) of the first pixel
-            else:
-                center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
-            distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
-            minor_distance_map = np.array([[np.abs(j - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
-            major_distance_map = np.array([[np.abs(i - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
-            df = pd.DataFrame({'distance': distance_map.flatten(), 'minor_distance': minor_distance_map.flatten(), 'major_distance': major_distance_map.flatten()})
 
-        # -----------------setup the figure---------------
-        ncols = n_lines + 1
-        nrows = 2 if args.plot_radial_profiles else 1
-        
-        fig, axes = plt.subplots(nrows, ncols, figsize=(2.5 * ncols, 3.5 * nrows))
-        axes = np.atleast_2d(axes)
-        fig.subplots_adjust(left=0.06, right=0.94, top=0.94, bottom=0.08, wspace=0., hspace=0.2)
-        fig.text(0.05, 0.95, f'{bin_text}', fontsize=args.fontsize, c='k', ha='left', va='top')
-        
-        # -----------------plot emission line maps of this bin---------------
-        for index, this_line in enumerate(line_list):
-            this_map, _ , _= get_emission_line_map(this_line, line_dict, args)
-            nobj = line_dict[f'{this_line}_nobj']
-            if type(unp.nominal_values(this_map.data)) == np.ndarray:
-                axes[0][index] = plot_2D_map(this_map, axes[0][index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True)
-
-            if args.plot_radial_profiles:
-                this_df = df.copy()
-                this_df[f'{this_line}'] = unp.nominal_values(this_map.data).flatten()
-                this_df[f'{this_line}_u'] = unp.std_devs(this_map.data).flatten()
-                this_df = this_df.dropna(subset=[f'{this_line}', f'{this_line}_u'], axis=0)
-                this_df = this_df[this_df[f'{this_line}'] > 0] # drop negative fluxes before taking log for the radial profile plot
-                
-                axes[1][index], _, _, _ = plot_radial_profile(this_df, axes[1][index], args, ylim=[cmin, cmax], takelog=takelog, xlim=None, hide_xaxis=False, hide_yaxis=index, hide_cbar=True, skip_annotate=False, quant=this_line, skip_fitting=True)
-
-        # -----------------plot metallicity maps of this bin---------------
-        axes[0][index + 1] = plot_2D_map(logOH_map, axes[0][index + 1], f'logOH {args.Zdiag}', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', takelog=False, vmin=Zmin, vmax=Zmax, hide_yaxis=True, hide_cbar=False, cticks_integer=True)
-        
-        if args.plot_radial_profiles:
-            quant = 'log_OH'
-            logOH_df = df.copy()
-            logOH_df[f'{quant}'] = unp.nominal_values(logOH_map).flatten()
-            logOH_df[f'{quant}_u'] = unp.std_devs(logOH_map).flatten()
-            logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
-
-            axes[1][index + 1], minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(logOH_df, axes[1][index + 1], args, ylim=[Zmin, Zmax], xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant, skip_fitting=False, yaxis_on_right=True)
+    # ----------getting distance maps, in case radial profile plotting-------------
+    if args.plot_radial_profiles:
+        shape = np.shape(logOH_map)
+        if args.fold_maps:
+            center_xpix, center_ypix = (args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5 # this yields 0.5 (instead of 0) pixel offset for even-sized stacked maps, because the center of the map is in the center (and not the edge) of the first pixel
         else:
-            minor_linefit_odr, major_linefit_odr, radial_linefit_odr = None, None, None
+            center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
+        distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+        minor_distance_map = np.array([[np.abs(j - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+        major_distance_map = np.array([[np.abs(i - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+        df = pd.DataFrame({'distance': distance_map.flatten(), 'minor_distance': minor_distance_map.flatten(), 'major_distance': major_distance_map.flatten()})
+
+    # -----------------setup the figure---------------
+    ncols = n_lines + 1
+    nrows = 2 if args.plot_radial_profiles else 1
+    
+    fig, axes = plt.subplots(nrows, ncols, figsize=(2.5 * ncols, 3.5 * nrows))
+    axes = np.atleast_2d(axes)
+    fig.subplots_adjust(left=0.06, right=0.94, top=0.94, bottom=0.08, wspace=0., hspace=0.2)
+    fig.text(0.05, 0.95, f'{bin_text}', fontsize=args.fontsize, c='k', ha='left', va='top')
+    
+    # -----------------plot emission line maps of this bin---------------
+    for index, this_line in enumerate(line_list):
+        this_map, _ , _= get_emission_line_map(this_line, line_dict, args)
+        nobj = line_dict[f'{this_line}_nobj']
+        if type(unp.nominal_values(this_map.data)) == np.ndarray:
+            axes[0][index] = plot_2D_map(this_map, axes[0][index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True)
+
+        if args.plot_radial_profiles:
+            this_df = df.copy()
+            this_df[f'{this_line}'] = unp.nominal_values(this_map.data).flatten()
+            this_df[f'{this_line}_u'] = unp.std_devs(this_map.data).flatten()
+            this_df = this_df.dropna(subset=[f'{this_line}', f'{this_line}_u'], axis=0)
+            this_df = this_df[this_df[f'{this_line}'] > 0] # drop negative fluxes before taking log for the radial profile plot
+            
+            axes[1][index], _, _, _ = plot_radial_profile(this_df, axes[1][index], args, ylim=[cmin, cmax], takelog=takelog, xlim=None, hide_xaxis=False, hide_yaxis=index, hide_cbar=True, skip_annotate=False, quant=this_line, skip_fitting=True)
+
+    # -----------------plot metallicity maps of this bin---------------
+    axes[0][index + 1] = plot_2D_map(logOH_map, axes[0][index + 1], f'logOH {args.Zdiag}', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', takelog=False, vmin=Zmin, vmax=Zmax, hide_yaxis=True, hide_cbar=False, cticks_integer=True)
+    
+    if args.plot_radial_profiles:
+        quant = 'log_OH'
+        logOH_df = df.copy()
+        logOH_df[f'{quant}'] = unp.nominal_values(logOH_map).flatten()
+        logOH_df[f'{quant}_u'] = unp.std_devs(logOH_map).flatten()
+        logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
+
+        axes[1][index + 1], minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(logOH_df, axes[1][index + 1], args, ylim=[Zmin, Zmax], xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant, skip_fitting=False, yaxis_on_right=True)
+    else:
+        minor_linefit_odr, major_linefit_odr, radial_linefit_odr = None, None, None
 
     return fig, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr
 
@@ -1037,12 +1036,14 @@ if __name__ == "__main__":
     args.dered_in_NB = True
 
     # ------------reading and binning dataframe-------------
-    df, bin_list, args = get_binned_df(args, z_lim=z_lim, sfms=sfms)
+    df, bin_list, args = get_binned_df(args, required_lines=required_lines, sfms=sfms)
     
     # ------------setting up master dataframe----------------------
     common_cols = ['nobj', 'logOH_int', 'logOH_int_u', 'minor_logOH_grad', 'minor_logOH_grad_u', 'major_logOH_grad', 'major_logOH_grad_u', 'radial_logOH_grad', 'radial_logOH_grad_u']
     if args.bin_by_distance_mass:
         bin_cols = ['delta_sfms_bin', 'log_mass_bin']
+    elif args.bin_by_sfh_mass:
+        bin_cols = ['tform_ratio_bin', 'log_mass_bin']
     elif args.bin_by_distance:
         bin_cols = ['delta_sfms_bin']
     else:
@@ -1060,6 +1061,10 @@ if __name__ == "__main__":
             this_delta_sfms_bin = this_bin[0]
             this_mass_bin = this_bin[1]
             bin_text = f'delta_sfms_bin_{this_delta_sfms_bin.left}-{this_delta_sfms_bin.right}_mass_bin_{this_mass_bin.left}-{this_mass_bin.right}'
+        elif args.bin_by_sfh_mass:
+            this_delta_sfms_bin = this_bin[0]
+            this_mass_bin = this_bin[1]
+            bin_text = f'tform_ratio_bin_{this_delta_sfms_bin.left}-{this_delta_sfms_bin.right}_mass_bin_{this_mass_bin.left}-{this_mass_bin.right}'
         else:
             bin_text = f'logmassbin_{this_bin[0].left}-{this_bin[0].right}_logsfrbin_{this_bin[1].left}-{this_bin[1].right}'
         print(f'\n\tStarting ({index2 + 1}/{len(bin_list)}) {bin_text}..', end=' ')
@@ -1116,6 +1121,8 @@ if __name__ == "__main__":
                 thisrow = {'delta_sfms_bin':this_delta_sfms_bin, 'log_mass_bin':this_mass_bin}
             elif args.bin_by_distance:
                 thisrow = {'delta_sfms_bin':this_bin} 
+            elif args.bin_by_sfh_mass:
+                thisrow = {'tform_ratio_bin':this_delta_sfms_bin, 'log_mass_bin':this_mass_bin}
             else:
                 thisrow = {'log_mass_bin':this_bin[0], 'log_sfr_bin':this_bin[1]}
             
@@ -1142,7 +1149,7 @@ if __name__ == "__main__":
     
     # --------------------save master dataframe-----------------------------------
     if nbin_good > 1 and args.plot_radial_profiles:
-        for thiscol in ['log_mass_bin', 'log_sfr_bin', 'delta_sfms_bin']:
+        for thiscol in ['log_mass_bin', 'log_sfr_bin', 'delta_sfms_bin', 'tform_ratio_bin']:
             if thiscol in df_grad: df_grad[thiscol] = df_grad[thiscol].astype(str) # otherwise FITS cannot save 'Interval' datatype
 
         Table.from_pandas(df_grad).write(args.grad_filename, format='fits', overwrite=True)
