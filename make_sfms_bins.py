@@ -731,15 +731,30 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     
     if not args.do_all_fields:
         df = df[df['field'] == args.field]        
-    nobj1 = len(df)
+    
+    # ----------discard based on redshift flag--------------------------
+    if args.cut_z_flag is not None:
+        nobj1 = len(df)
+        huberty_catalog_filename = args.output_dir / 'catalogs' / 'passage_cosmos_redshift_catalog_v3_internal_with_EW.dat'
+        print(f'Reading from {huberty_catalog_filename}, to impose z_flag cuts at < {args.cut_z_flag}..')
+        df_speccat = pd.read_csv(huberty_catalog_filename)
+        df_speccat = df_speccat.drop('id', axis=1)
+        df_speccat = df_speccat.rename(columns={'field_id': 'id', 'z_best': 'redshift_huberty', 'emline_flag': 'z_flag'})
+        df_speccat = df_speccat[['field', 'id', 'redshift_huberty', 'z_flag']]
+        df_speccat['id'] = df_speccat['id'].astype(int)
 
+        df = df.merge(df_speccat, on=['field', 'id'], how='inner')
+        df = df[df['z_flag'] < args.cut_z_flag]
+        print(f'Out of the {nobj1} objects, {len(df)} had z_flag = 1..', end='')
+    
     # -------------add delta sfms column--------------------
+    nobj2 = len(df)
     sfms_func = get_sfms_func(df['log_mass'], sfms)
 
     df['log_sfr_ms_expected'] = sfms_func(df['log_mass'])
     df['delta_sfms'] = df['log_sfr'] - df['log_sfr_ms_expected']
     df = df.dropna(subset=['delta_sfms'])
-    print(f'Out of the {nobj1} objects, {len(df)} had delta sfms computable..', end='')
+    print(f'Out of the {nobj2} objects, {len(df)} had delta sfms computable..', end='')
 
     # ------------cut by redshift------------------
     if len(required_lines) > 0:
@@ -830,11 +845,12 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     print(f'\nOut of the {nobj} objects, {len(df_agn)} are above MEx line, so they are removed; final sample is {len(df)} galaxies.')
     
     args.required_lines_text = '_lines_' + ','.join(required_lines) if len(required_lines) > 0 else ''
+    args.cut_z_flag_text = f'_zflag_cut_{args.cut_z_flag}' if args.cut_z_flag is not None else ''
 
     # --------------saving MEx----------------
     if args.do_all_fields: root_dir = args.output_dir
     else: root_dir = args.output_dir / args.field
-    args.stacking_dir = root_dir / f'stacking{args.required_lines_text}'
+    args.stacking_dir = root_dir / f'stacking{args.required_lines_text}{args.cut_z_flag_text}'
 
     fig = plot_MEx(df_temp, args, df_agn=df_agn)
     save_fig(fig, args.stacking_dir, 'mass_excitation_colorby_redshift.png', args)
@@ -919,6 +935,7 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
     args.C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
     args.fold_text = '_folded' if args.fold_maps else ''
     args.required_lines_text = '_lines_' + ','.join(required_lines) if len(required_lines) > 0 else ''
+    args.cut_z_flag_text = f'_zflag_cut_{args.cut_z_flag}' if args.cut_z_flag is not None else ''
 
     # ------------------determine fil and path names---------
     if args.do_all_fields:
@@ -926,7 +943,7 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
     # ---------curtailing to single-field----------------
     else:
         root_dir = args.output_dir / args.field
-    args.stacking_dir = root_dir / f'stacking{args.required_lines_text}'
+    args.stacking_dir = root_dir / f'stacking{args.required_lines_text}{args.cut_z_flag_text}'
 
     # ---------reading in the master SED catalog----------------
     if df is None:
@@ -1049,8 +1066,8 @@ methods = [
             # 'adaptive_nmax', \
             # 'adaptive_voronoi', \
             # 'adaptive_distance', \
-            # 'adaptive_distance_mass', \
-            'adaptive_sfh_mass', \
+            'adaptive_distance_mass', \
+            # 'adaptive_sfh_mass', \
             # 'linear', \
             # 'linear_distance', \
             # 'linear_distance_mass', \
@@ -1107,8 +1124,14 @@ if __name__ == "__main__":
         else:
             bin_summary, centers_scaled, scaling = [None] * 3
 
-        # ------------plotting stacked gradients on SFMS--------------------------
+        # ------------plotting sample on SFMS--------------------------
         fig = plot_SFMS_bins(df, [method], [f'_{method}'], args, centers_scaled=centers_scaled, scaling=scaling, bin_summary=bin_summary, sfms=sfms)
         save_fig(fig, args.fig_dir, f'SFMS_binned.png', args) # saving the figure
+
+        # ------------plotting redshift distribution--------------------------
+        fig, ax = plt.subplots(1, 1, figsize=(5.2, 5.), layout='constrained')
+        ax.hist(df['redshift'], histtype='stepfilled', bins=25, )
+        ax = annotate_axes(ax, 'Redshift', 'No. of galaxies', label=f'Total = {len(df)}', labelx=0.7, args=args)
+        save_fig(fig, args.stacking_dir, f'redshift_distribution.png', args) # saving the figure
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

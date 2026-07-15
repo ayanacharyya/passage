@@ -136,7 +136,7 @@ def plot_ratio_grid_fig(df_ratios, args):
         for index in range(len(id_obs)): ax.text(xratio_obs[index], yratio_obs[index], id_obs[index], fontsize=args.fontsize/1.5, c='r', ha='left', va='top')
 
     # ---------overplotting SDSS and KBSS loci from Garg+2022 (just for testing)-----------
-    plot_loci = True
+    plot_loci = False
     if plot_loci and 'NII' in xratio_name and 'Ha' in xratio_name and 'OIII' in yratio_name and 'Hb' in yratio_name:
         xarr = np.linspace(-1.5, -0.4, 20)
         yarr_sdss = 0.61 / (xarr + 0.08) + 1.10 # Eq 1 of Garg+22
@@ -367,7 +367,9 @@ if __name__ == "__main__":
         df_grid['log q'] = np.round(df_grid['log U'] + np.log10(3e10), 1)
 
         quant_names_dict = {'Z':'12 + log O/H', 'log(q)':'log q', 'log(P/k)':'log P/k', 'log(U)':'log U'}
-        line_label_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'SII': 'SII6716_31', 'NeIII': 'NeIII3869', 'NeIII,HeI': 'NeIII3869_HeI3889'})
+        line_label_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 
+                                      'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'Ha,NII': 'Halpha,NII6583', 
+                                      'SII': 'SII6716_31', 'NeIII': 'NeIII3869', 'NeIII,HeI': 'NeIII3869_HeI3889'})
 
         quant_names = [quant_names_dict[quant] for quant in [args.quantity1, args.quantity2, args.quantity3]]
         df_ratios = df_grid[quant_names].sort_values(by=quant_names)
