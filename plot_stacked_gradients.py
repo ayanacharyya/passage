@@ -464,9 +464,9 @@ label_dict = {'minor_logOH_grad': 'Minor\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
                 'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack',\
                 'tform_ratio_median': r'$\Delta t_{form,90-50}$ / $\Delta t_{form,50-10}$',\
                 }
-lim_dict = {'minor_logOH_grad': [-1, 1],\
-                'major_logOH_grad': [-1., 1.],\
-                'radial_logOH_grad': [-1, 1],\
+lim_dict = {'minor_logOH_grad': [-1.2, 1.2],\
+                'major_logOH_grad': [-1.2, 1.2],\
+                'radial_logOH_grad': [-1.2, 1.2],\
                 'logOH_int': [6.8, 9.5],\
                 'delta_sfms_median': [-0.6, 0.6],\
                 'log_mass_median': [7.0, 10.0],\
@@ -497,7 +497,7 @@ if __name__ == "__main__":
     passage_catalog_filename = args.output_dir / 'catalogs' / passage_catalog
     df_input = get_stacking_sample(passage_catalog_filename, args, required_lines=required_lines, sfms=sfms)
 
-    # ----------setting up master figure (for args.plot_sfms_vs_grad--------------------
+    # ----------setting up master figure (for args.plot_sfms_vs_grad)--------------------
     if args.plot_sfms_vs_grad:
         if args.bin_by_distance_mass:
             #quant_x, colorby_col = 'delta_sfms_median', 'log_mass_median'

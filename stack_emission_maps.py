@@ -608,7 +608,8 @@ if __name__ == "__main__":
                                 continue
                             try:
                                 # -----------extracting the emission line map----------------
-                                line_map, line_map_err, _ = get_emission_line_map(this_line, full_hdu, args, dered=True, silent=True)
+                                #line_map, line_map_err, _ = get_emission_line_map(this_line, full_hdu, args, dered=True, silent=True)
+                                line_map, line_map_err, _ = get_emission_line_map(this_line, full_hdu, args, dered=False, silent=True) # stacking before dereddening because NebulaBayes will do dereddening internally
 
                                 # ----------performing flux-scaling on line map------------------
                                 line_map /= integrated_scaling_flux

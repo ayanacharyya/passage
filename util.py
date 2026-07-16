@@ -1549,7 +1549,7 @@ def plotline(id, path='/Users/acharyya/Work/astro/passage/passage_data/v0.5/Par0
      return fig
 
 # --------------------------------------------------------------------------------------------------------------------
-def annotate_axes(ax, xlabel, ylabel, xlim=None, ylim=None, args=None, fontsize=10, fontfactor=1, label='', labelx=0.05, labely=0.9, clabel='', hide_xaxis=False, hide_yaxis=False, hide_cbar=True, p=None, hide_cbar_ticks=False, cticks_integer=True, yaxis_on_right=False):
+def annotate_axes(ax, xlabel, ylabel, xlim=None, ylim=None, args=None, fontsize=10, fontfactor=1, label='', labelx=0.05, labely=0.9, clabel='', hide_xaxis=False, hide_yaxis=False, hide_cbar=True, cbar_width=5, p=None, hide_cbar_ticks=False, cticks_integer=True, yaxis_on_right=False):
     '''
     Annotates the axis of a given 2D image
     Returns the axis handle
@@ -1580,7 +1580,7 @@ def annotate_axes(ax, xlabel, ylabel, xlim=None, ylim=None, args=None, fontsize=
             ax.tick_params(axis='y', which='major', labelsize=fontsize, labelleft=True)
 
     if not hide_cbar and p is not None:
-        cax = inset_axes(ax, width="5%", height="100%", loc='right', bbox_to_anchor=(0.05, 0, 1, 1), bbox_transform=ax.transAxes, borderpad=0)
+        cax = inset_axes(ax, width=f"{cbar_width}%", height="100%", loc='right', bbox_to_anchor=(0.05, 0, 1, 1), bbox_transform=ax.transAxes, borderpad=0)
         cbar = plt.colorbar(p, cax=cax, orientation='vertical')
         cbar.set_label(clabel, fontsize=fontsize)
 

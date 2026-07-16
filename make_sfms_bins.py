@@ -188,7 +188,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='_distance', cm
         ax.fill_between(m_grid, sfms_line + interval.left, sfms_line + interval.right, color=color, alpha=0.8, edgecolor='k', lw=0.5)
         
         s_center = sfms_func(row['log_mass_median']) + (interval.left + interval.right) / 2
-        ax.text(row['log_mass_median'], s_center, int(row[quant]), color='k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
+        #ax.text(row['log_mass_median'], s_center, int(row[quant]), color='k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
  
     # --------annotating axis borders-----------------
     ax.set_xlim(log_mass_bins.min() -0.2, log_mass_bins.max() + 0.2)
@@ -1127,11 +1127,21 @@ if __name__ == "__main__":
         # ------------plotting sample on SFMS--------------------------
         fig = plot_SFMS_bins(df, [method], [f'_{method}'], args, centers_scaled=centers_scaled, scaling=scaling, bin_summary=bin_summary, sfms=sfms)
         save_fig(fig, args.fig_dir, f'SFMS_binned.png', args) # saving the figure
-
+        '''
         # ------------plotting redshift distribution--------------------------
         fig, ax = plt.subplots(1, 1, figsize=(5.2, 5.), layout='constrained')
-        ax.hist(df['redshift'], histtype='stepfilled', bins=25, )
-        ax = annotate_axes(ax, 'Redshift', 'No. of galaxies', label=f'Total = {len(df)}', labelx=0.7, args=args)
+        ax.hist(df['redshift'], histtype='stepfilled', bins=20)
+        ax = annotate_axes(ax, 'Redshift', 'No. of galaxies', label=f'Total = {len(df)}', labelx=0.7, args=args, xlim=[0.9,2.5])
         save_fig(fig, args.stacking_dir, f'redshift_distribution.png', args) # saving the figure
+        '''
+        # ------------plotting redshift and mass distribution--------------------------
+        fig, axes = plt.subplots(1, 2, figsize=(8.2, 5.), layout='constrained')
+        axes[0].hist(df['redshift'], histtype='stepfilled', bins=20)
+        axes[0] = annotate_axes(axes[0], 'Redshift', 'No. of galaxies', label=f'Total = {len(df)}', labelx=0.7, args=args, xlim=[0.9,2.5])
+
+        axes[1].hist(df['log_mass'], histtype='stepfilled', bins=20)
+        axes[1] = annotate_axes(axes[1], r'$\log{(M_*/M_\odot)}$', 'No. of galaxies', args=args)#, xlim=[0.9,2.5])
+
+        save_fig(fig, args.stacking_dir, f'redshift_mass_distribution.png', args) # saving the figure
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
