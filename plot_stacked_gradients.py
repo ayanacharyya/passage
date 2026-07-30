@@ -300,7 +300,7 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
         else:
             if abs(row[quant]) < 0.3: text_color = 'k'
             else: text_color = 'w'
-        if row['nobj'] > 0: ax.text(m_min + width/2, s_min + height/2, int(row['nobj']), ha='center', va='center', fontsize=args.fontsize / args.fontfactor, color=text_color)
+        if row['nobj'] > 0 and args.annotate_bins: ax.text(m_min + width/2, s_min + height/2, int(row['nobj']), ha='center', va='center', fontsize=args.fontsize / args.fontfactor, color=text_color)
 
     # --------annotating axis borders-----------------
     ax.set_xlabel(r'$\log$ Stellar Mass [M$_\odot$]', fontsize=args.fontsize)
@@ -342,7 +342,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='', cmap='virid
         ax.fill_between(m_grid, sfms_line + interval.left, sfms_line + interval.right, color=color, alpha=0.8, edgecolor='w' if args.fortalk else 'k', lw=0.5)
         
         s_center = sfms_func(row['log_mass_median']) + (interval.left + interval.right) / 2
-        if ~np.isnan(row['nobj']): ax.text(row['log_mass_median'], s_center, int(row['nobj']), color='w' if args.fortalk else 'k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
+        if ~np.isnan(row['nobj']) and args.annotate_bins: ax.text(row['log_mass_median'], s_center, int(row['nobj']), color='w' if args.fortalk else 'k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
     
     # --------annotating axis borders-----------------
     ax.set_xlim(log_mass_bins.min() -0.2, log_mass_bins.max() + 0.2)

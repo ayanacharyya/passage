@@ -52,7 +52,7 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
         if row[quant] > 0:
             cx = (row['m_min'] + row['m_max']) / 2
             cy = (row['s_min'] + row['s_max']) / 2
-            ax.text(cx, cy, int(row[quant]), color='k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold')
+            if args.annotate_bins: ax.text(cx, cy, int(row[quant]), color='k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold')
     
     # --------annotating axis borders-----------------
     ax.set_xlim(df['m_min'].min() -0.2, df['m_max'].max() + 0.2)
@@ -127,7 +127,7 @@ def make_heatmap_vorbin(ax, df, bin_summary, centers_scaled, scaling, quant, arg
             
             patches.append(Polygon(verts, closed=True))
             values.append(bin_summary.iloc[index][quant])
-            ax.text(row['m_center'], row['s_center'], int(row[quant]), color='k' if int(row[quant]) > 30 else 'w', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold') # Annotate: Place text at the physical center of the bin
+            if args.annotate_bins: ax.text(row['m_center'], row['s_center'], int(row[quant]), color='k' if int(row[quant]) > 30 else 'w', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold') # Annotate: Place text at the physical center of the bin
         else:
             pass    
     
@@ -188,7 +188,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='_distance', cm
         ax.fill_between(m_grid, sfms_line + interval.left, sfms_line + interval.right, color=color, alpha=0.8, edgecolor='k', lw=0.5)
         
         s_center = sfms_func(row['log_mass_median']) + (interval.left + interval.right) / 2
-        #ax.text(row['log_mass_median'], s_center, int(row[quant]), color='k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
+        if args.annotate_bins: ax.text(row['log_mass_median'], s_center, int(row[quant]), color='k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
  
     # --------annotating axis borders-----------------
     ax.set_xlim(log_mass_bins.min() -0.2, log_mass_bins.max() + 0.2)
@@ -317,7 +317,10 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
 
         # ----------over-plotting data and theoretical diagrams----------
         if args.overplot_passage:
-            axes[index].scatter(df['log_mass'], df['log_sfr'], s=5, c='w', lw=1, edgecolors='sienna', label='Huberty+26' if args.do_all_fields else f'{args.field}') # overplot PASSAGE galaxies (integrated stellar mass-SFR)
+            if 'sfh' in method:
+                axes[index].scatter(df['log_mass'], df['delta_tform_ratio'], s=5, c='w', lw=1, edgecolors='sienna', label='Huberty+26' if args.do_all_fields else f'{args.field}') # overplot PASSAGE galaxies (integrated stellar mass-SFR)            
+            else:
+                axes[index].scatter(df['log_mass'], df['log_sfr'], s=5, c='w', lw=1, edgecolors='sienna', label='Huberty+26' if args.do_all_fields else f'{args.field}') # overplot PASSAGE galaxies (integrated stellar mass-SFR)
             if index == 0: axes[index].legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
 
         if args.overplot_literature:
@@ -1075,8 +1078,8 @@ methods = [
             ]
 
 target_n = 30 # for voronoi binning
-n_adaptive_bins = 8 # for distance (from SFMS) binning
-# n_adaptive_bins = 4 # for distance (from SFMS) binning
+#n_adaptive_bins = 8 # for distance (from SFMS) binning
+n_adaptive_bins = 4 # for distance (from SFMS) binning
 n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
 # n_mass_bins = 2 # number of mass bins within each distance (from SFMS) bin
 delta_sfms_bin = 0.4 # delta in distance from SFMS in which to bin in the distance-from-SFMS method, unless binning adaptively
