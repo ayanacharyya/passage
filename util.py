@@ -212,8 +212,8 @@ def parse_args():
     parser.add_argument('--res', metavar='res', type=str, action='store', default='0.2', help='Resolution element to convolve toy model by, as a fraction of the full radial extent; default is 0.2')
     parser.add_argument('--num_line', metavar='num_line', type=str, action='store', default='sii', help='Which line to be used as the numerator? Default SII')
     parser.add_argument('--den_line', metavar='den_line', type=str, action='store', default='ha', help='Which line to be used as the denominator? Default Ha')
-    parser.add_argument('--num_snr', metavar='num_snr', type=float, action='store', default=1e5, help='SNR with which to add noise for the numerator line profile; default is 1e5 i.e., basically no noise')
-    parser.add_argument('--den_snr', metavar='den_snr', type=float, action='store', default=1e5, help='SNR with which to add noise for the denominator line profile; default is 1e5 i.e., basically no noise')
+    parser.add_argument('--num_snr', metavar='num_snr', type=float, action='store', default=None, help='SNR with which to add noise for the numerator line profile; default is no noise')
+    parser.add_argument('--den_snr', metavar='den_snr', type=float, action='store', default=None, help='SNR with which to add noise for the denominator line profile; default is no noise')
 
     # ------- args added for make_mappings_grid.py ------------------------------
     parser.add_argument('--ynum_line', metavar='ynum_line', type=str, action='store', default='OIII', help='Which line to be used as the numerator on y-axis? Default OIII')
@@ -264,6 +264,7 @@ def parse_args():
     # ---- args added for make_sfms_bins.py ------------
     parser.add_argument('--plot_mex', dest='plot_mex', action='store_true', default=False, help='Plot the Mass excitation diagram for the passage sample? Default is no.')
     parser.add_argument('--cut_z_flag', metavar='cut_z_flag', type=int, action='store', default=None, help='Restricts the sample to z_flag (from Huberty+26) < cut_z_flag. Default is None, i.e., no cut')
+    parser.add_argument('--annotate_bins', dest='annotate_bins', action='store_true', default=False, help='Annotate the number of galaxies in each bin? Default is no.')
 
     # ---- args added for stack_emission_maps.py ------------
     parser.add_argument('--debug_align', dest='debug_align', action='store_true', default=False, help='Debug the alignment, deprojection, rotation of emission line maps? Default is no.')
