@@ -56,6 +56,44 @@ def plot_MZR_literature(ax):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
+def plot_stacked_MZR(df, args, xcol='log_mass_median', ycol='logOH_int', colorcol=None, cmap='RdBu', qualifiers=''):
+    '''
+    Plots the stacked mass-metallicity relation, overplotted with relations from the literature
+    Saves the figure
+    Returns figure handle
+    '''
+    # ------setup figure----------
+    fig, ax = plt.subplots(1, 1, figsize = (10, 5))
+    fig.subplots_adjust(left=0.1, right=0.87, top=0.95, bottom=0.12, wspace=0., hspace=0.)
+
+    # ------plot data-----------
+    if colorcol is None:
+        color = 'cornflowerblue'
+        cmin, cmax = None, None
+        cmap = None
+    else:
+        color = df[colorcol]
+        cmin, cmax = lim_dict[colorcol][0], lim_dict[colorcol][1]
+        cmap = cmap
+    
+    p = ax.scatter(df[xcol], df[ycol], s=100, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker='o')
+    if f'{ycol}_u' in df:
+        ax.errorbar(df[xcol], df[ycol], yerr=df[f'{ycol}_u'], c='grey', lw=0.7, fmt='none', alpha=1)
+
+    # -----plot literature---------
+    ax = plot_MZR_literature(ax)
+    ax.legend(fontsize=args.fontsize / args.fontfactor, loc='best')
+
+    # -------annotate and save fig--------
+    ax = annotate_axes(ax, label_dict[xcol], label_dict[ycol], xlim=lim_dict[xcol], ylim=lim_dict[ycol], args=args, 
+                       clabel=label_dict[colorcol] if colorcol is not None else '', hide_cbar=colorcol is None, cbar_width=2,
+                       p=p, hide_cbar_ticks=False, cticks_integer=False)    
+    figname = f'MZR_{qualifiers}.png'
+    save_fig(fig, args.fig_dir, figname, args)
+
+    return fig
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_MZGR_literature(ax, this_work_legend=[], skip_legend=False):
     '''
     Overplots literature values of MZGR (in units of dex/re only) on a given axis handle
@@ -137,45 +175,7 @@ def plot_MZGR_literature(ax, this_work_legend=[], skip_legend=False):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_stacked_MZR(df, args, xcol='log_mass_median', ycol='logOH_int', colorcol=None, qualifiers=''):
-    '''
-    Plots the stacked mass-metallicity relation, overplotted with relations from the literature
-    Saves the figure
-    Returns figure handle
-    '''
-    # ------setup figure----------
-    fig, ax = plt.subplots(1, 1, figsize = (10, 5))
-    fig.subplots_adjust(left=0.1, right=0.87, top=0.95, bottom=0.12, wspace=0., hspace=0.)
-
-    # ------plot data-----------
-    if colorcol is None:
-        color = 'cornflowerblue'
-        cmin, cmax = None, None
-        cmap = None
-    else:
-        color = df[colorcol]
-        cmin, cmax = lim_dict[colorcol][0], lim_dict[colorcol][1]
-        cmap = 'PRGn'
-    
-    p = ax.scatter(df[xcol], df[ycol], s=100, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker='o')
-    if f'{ycol}_u' in df:
-        ax.errorbar(df[xcol], df[ycol], yerr=df[f'{ycol}_u'], c='grey', lw=0.7, fmt='none', alpha=1)
-
-    # -----plot literature---------
-    ax = plot_MZR_literature(ax)
-    ax.legend(fontsize=args.fontsize / args.fontfactor, loc='best')
-
-    # -------annotate and save fig--------
-    ax = annotate_axes(ax, label_dict[xcol], label_dict[ycol], xlim=lim_dict[xcol], ylim=lim_dict[ycol], args=args, 
-                       clabel=label_dict[colorcol] if colorcol is not None else '', hide_cbar=colorcol is None, cbar_width=2,
-                       p=p, hide_cbar_ticks=False, cticks_integer=False)    
-    figname = f'MZR_{qualifiers}.png'
-    save_fig(fig, args.fig_dir, figname, args)
-
-    return fig
-
-# --------------------------------------------------------------------------------------------------------------------
-def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=None, qualifiers=''):
+def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=None, cmap='RdBu', qualifiers=''):
     '''
     Plots the stacked mass-metallicity gradient relation (both radial and minor-major gradients), overplotted with relations from the literature
     Saves the figure
@@ -195,7 +195,7 @@ def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad'
     else:
         color = df[colorcol]
         cmin, cmax = lim_dict[colorcol][0], lim_dict[colorcol][1]
-        cmap = 'PRGn'
+        cmap = cmap
     
     # -------plot radial gradient------------
     axes[0].plot(df[xcol], df[ycol], lw=0.7, c='k', ls='dashed')
@@ -244,7 +244,7 @@ def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad'
     return fig
 
 # -------------------------------NOT USED------------------------------------------------------------------
-def plot_stacked_MZGR_minor_major(df, args, xcol='log_mass_median', ycol1='minor_logOH_grad', ycol2='major_logOH_grad', colorcol=None, qualifiers=''):
+def plot_stacked_MZGR_minor_major(df, args, xcol='log_mass_median', ycol1='minor_logOH_grad', ycol2='major_logOH_grad', colorcol=None, cmap='RdBu', qualifiers=''):
     '''
     Plots the stacked mass-metallicity gradient relation (gradient along major and minor axes), overplotted with relations from the literature
     Saves the figure
@@ -264,7 +264,7 @@ def plot_stacked_MZGR_minor_major(df, args, xcol='log_mass_median', ycol1='minor
     else:
         color = df[colorcol]
         cmin, cmax = lim_dict[colorcol][0], lim_dict[colorcol][1]
-        cmap = 'PRGn'
+        cmap = cmap
     
     # -------plot minor major gradient------------
     ycol_arr = [ycol1, ycol2]
@@ -341,10 +341,13 @@ if __name__ == "__main__":
 
     # ------------plotting stacked MZR and MZGR--------------------------
     qualifiers = f'{args.binby_text}{args.fold_text}_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}'
-    colorcol = 'delta_sfms_median' if args.bin_by_distance_mass else 'tform_ratio_median'
+    if args.bin_by_distance_mass:
+        colorcol, cmap = 'delta_sfms_median', 'PRGn' # diverging cmap
+    else:
+        colorcol, cmap = 'tform_ratio_median', 'viridis' # sequential cmap
     
-    #fig_mzr = plot_stacked_MZR(df_grad, args, xcol='log_mass_median', ycol='logOH_int', colorcol=colorcol, qualifiers=qualifiers)
-    fig_mzgr = plot_stacked_MZGR(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=colorcol, qualifiers=qualifiers)
-    #fig_mzgr_minmaj = plot_stacked_MZGR_minor_major(df_grad, args, xcol='log_mass_median', ycol1='minor_logOH_grad', ycol2='major_logOH_grad', colorcol=colorcol, qualifiers=qualifiers)
+    fig_mzr = plot_stacked_MZR(df_grad, args, xcol='log_mass_median', ycol='logOH_int', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
+    #fig_mzgr = plot_stacked_MZGR(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
+    #fig_mzgr_minmaj = plot_stacked_MZGR_minor_major(df_grad, args, xcol='log_mass_median', ycol1='minor_logOH_grad', ycol2='major_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
