@@ -13,7 +13,7 @@
              run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --adaptive_bins --bin_by_distance
              run stack_emission_maps.py --system ssd --field Par28 --id 1982 --clobber --debug_bin --debug_align --adaptive_bins --bin_by_distance_mass
              run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --adaptive_bins --bin_by_distance_mass
-             run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --adaptive_bins --bin_by_sfh_mass --skip_deproject
+             run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --cut_z_flag 4 --adaptive_bins --bin_by_sfh_mass --skip_deproject
 '''
 
 from header import *

@@ -265,6 +265,7 @@ def parse_args():
     parser.add_argument('--plot_mex', dest='plot_mex', action='store_true', default=False, help='Plot the Mass excitation diagram for the passage sample? Default is no.')
     parser.add_argument('--cut_z_flag', metavar='cut_z_flag', type=int, action='store', default=None, help='Restricts the sample to z_flag (from Huberty+26) < cut_z_flag. Default is None, i.e., no cut')
     parser.add_argument('--annotate_bins', dest='annotate_bins', action='store_true', default=False, help='Annotate the number of galaxies in each bin? Default is no.')
+    parser.add_argument('--nocolorbar', dest='nocolorbar', action='store_true', default=False, help='Hide the colorbar in the plots? Default is no.')
 
     # ---- args added for stack_emission_maps.py ------------
     parser.add_argument('--debug_align', dest='debug_align', action='store_true', default=False, help='Debug the alignment, deprojection, rotation of emission line maps? Default is no.')

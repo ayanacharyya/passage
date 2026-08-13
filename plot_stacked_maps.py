@@ -16,7 +16,7 @@
              run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --plot_line_and_metallicity --plot_radial_profiles --adaptive_bins --bin_by_distance_mass --fold_maps
              run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag NB --plot_line_and_metallicity --plot_radial_profiles --adaptive_bins --bin_by_distance_mass --fold_maps
              run plot_stacked_maps.py --system ssd --do_all_fields --plot_line_and_bpt --AGN_diag Ne3O2 --adaptive_bins --bin_by_distance_mass --fold_maps
-             run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag NB --plot_line_and_metallicity --plot_radial_profiles --adaptive_bins --bin_by_sfh_mass --fold_maps --skip_deproject
+             run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag NB --plot_line_and_metallicity --plot_radial_profiles --cut_z_flag 4 --adaptive_bins --bin_by_sfh_mass --fold_maps --skip_deproject
 '''
 
 from header import *

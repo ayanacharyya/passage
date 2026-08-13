@@ -6,6 +6,7 @@
     Example: run make_sfms_bins.py --field Par028 --overplot_literature --overplot_passage
              run make_sfms_bins.py --field Par028
              run make_sfms_bins.py --system ssd --do_all_fields
+             run make_sfms_bins.py --system ssd --do_all_fields --cut_z_flag 4 --overplot_passage --overplot_literature --nocolorbar
 '''
 
 from header import *
@@ -42,9 +43,12 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
         patches.append(Polygon(vertices, closed=True))
         values.append(row[quant])
 
-    p = PatchCollection(patches, cmap=cmap, edgecolors='w', alpha=0.8)
-    p.set_array(np.array(values))
-    p.set_clim(vmin=cmin, vmax=cmax)
+    if args.nocolorbar:
+        p = PatchCollection(patches, facecolor='lightgrey', edgecolor='w', alpha=0.8)
+    else:
+        p = PatchCollection(patches, cmap=cmap, edgecolors='w', alpha=0.8)
+        p.set_array(np.array(values))
+        p.set_clim(vmin=cmin, vmax=cmax)
     ax.add_collection(p)
 
     # --------annotate at the center of each patch------------
@@ -74,7 +78,7 @@ def make_heatmap_patches(ax, df, quant, args, xcolname='log_mass_bin', ycolname=
         ax.tick_params(axis='y', which='major', labelsize=args.fontsize, labelleft=True)
 
     # ---------annotating colorbar------------
-    if not hide_cbar:
+    if not hide_cbar and not args.nocolorbar:
         if cmin is None: cmin = df[quant].min()
         if cmax is None: cmax = df[quant].max()
         norm = mplcolors.Normalize(vmin=cmin, vmax=cmax)
@@ -184,7 +188,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='_distance', cm
         m_grid = np.linspace(row['log_mass_min'], row['log_mass_max'], 50)
         sfms_line = sfms_func(m_grid)
         
-        color = sm.to_rgba(row[quant])
+        color = 'lightgrey' if args.nocolorbar else sm.to_rgba(row[quant])
         ax.fill_between(m_grid, sfms_line + interval.left, sfms_line + interval.right, color=color, alpha=0.8, edgecolor='k', lw=0.5)
         
         s_center = sfms_func(row['log_mass_median']) + (interval.left + interval.right) / 2
@@ -207,7 +211,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='_distance', cm
         ax.tick_params(axis='y', which='major', labelsize=args.fontsize, labelleft=True)
 
     # ---------annotating colorbar------------
-    if not hide_cbar:
+    if not hide_cbar and not args.nocolorbar:
         if cmin is None: cmin = df[quant].min()
         if cmax is None: cmax = df[quant].max()
         norm = mplcolors.Normalize(vmin=cmin, vmax=cmax)
@@ -312,7 +316,7 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
             df_sub = df.groupby(f'bin_intervals{method_texts[index]}').size().reset_index(name='n_galaxies')
             df_sub[['log_mass_bin', 'log_sfr_bin']] = pd.DataFrame(df_sub[f'bin_intervals{method_texts[index]}'].tolist(), index=df_sub.index)
             axes[index] = make_heatmap_patches(axes[index], df_sub, 'n_galaxies', args, xcolname=f'log_mass_bin', ycolname=f'log_sfr_bin', cmap=cmap, hide_cbar=True, hide_yaxis=index, cmin=cmin, cmax=cmax)
-        axes[index].text(0.05, 0.95, f'{method}', ha='left', va='top', c='k', fontsize=args.fontsize, transform=axes[index].transAxes)
+        #axes[index].text(0.05, 0.95, f'{method}', ha='left', va='top', c='k', fontsize=args.fontsize, transform=axes[index].transAxes)
         axes[index].set_aspect('auto')
 
         # ----------over-plotting data and theoretical diagrams----------
@@ -333,14 +337,15 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
             if index == 0: axes[index].legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
 
     # ---------annotating colorbar------------
-    norm = mplcolors.Normalize(vmin=cmin, vmax=cmax)
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    if not args.nocolorbar:
+        norm = mplcolors.Normalize(vmin=cmin, vmax=cmax)
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
 
-    cbar = fig.colorbar(sm, ax=axes, location='top', shrink=0.95, pad=0.01, aspect=60)
-    cbar.set_label(clabel, fontsize=args.fontsize, labelpad=5)    
-    cbar.ax.tick_params(labelsize=args.fontsize)
-    cbar.locator = ticker.MaxNLocator(integer=False, nbins=ncbins)#, prune='both')
-    cbar.update_ticks()
+        cbar = fig.colorbar(sm, ax=axes, location='top', shrink=0.95, pad=0.01, aspect=60)
+        cbar.set_label(clabel, fontsize=args.fontsize, labelpad=5)    
+        cbar.ax.tick_params(labelsize=args.fontsize)
+        cbar.locator = ticker.MaxNLocator(integer=False, nbins=ncbins)#, prune='both')
+        cbar.update_ticks()
 
     plt.show(block=False)
 
@@ -1081,9 +1086,8 @@ methods = [
 
 target_n = 30 # for voronoi binning
 n_adaptive_bins = 8 # for distance (from SFMS) binning
-# n_adaptive_bins = 4 # for distance (from SFMS) binning
+#n_adaptive_bins = 4 # for distance (from SFMS) binning
 n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
-# n_mass_bins = 2 # number of mass bins within each distance (from SFMS) bin
 delta_sfms_bin = 0.4 # delta in distance from SFMS in which to bin in the distance-from-SFMS method, unless binning adaptively
 sfms =  'PASSAGE' # from 'PASSAGE', 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
 delta_sfh = 0.5 # delta in tform90 - tform10 parameter (in Gyr) in which to bin, unless binning adaptively

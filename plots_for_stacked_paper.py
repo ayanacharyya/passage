@@ -5,7 +5,7 @@
     Created: 16-07-26
     Example: run plots_for_stacked_paper.py --system ssd --do_all_fields --Zdiag R23 --use_C25 --adaptive_bins --bin_by_distance_mass --fold_maps --skip_deproject --cut_z_flag 4
              run plots_for_stacked_paper.py --system ssd --do_all_fields --Zdiag NB --adaptive_bins --bin_by_distance_mass --fold_maps --skip_deproject --cut_z_flag 4
-             run plots_for_stacked_paper.py --system ssd --do_all_fields --Zdiag NB --adaptive_bins --bin_by_sfh_mass --fold_maps --skip_deproject
+             run plots_for_stacked_paper.py --system ssd --do_all_fields --Zdiag NB --adaptive_bins --bin_by_sfh_mass --fold_maps --skip_deproject --cut_z_flag 4
 '''
 
 from header import *
@@ -54,10 +54,38 @@ def plot_MZR_literature(ax):
         xarr = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 20)
         ax.plot(xarr, zahid_func(xarr, zahid_data['Z0'][i], zahid_data['M0'][i], zahid_data['gamma'][i]), color=col_ar[i], lw=2, ls=zahid_data['linestyle'][i], label= 'z = '+str(zahid_data['Redshift'][i]) + '; ' + zahid_data['Sample'][i], zorder=-5)
 
-    # Nedkova+26 MZR
-    N26_coeff = unp.uarray([-0.046, 0.992, 3.085], [0.012, 0.204, 0.863]) # from eq 1 of Nedkova+26
-    ax.plot(xarr, np.poly1d(unp.nominal_values(N26_coeff))(xarr), color='red', lw=2, ls='--', label='1.7 < z < 3.4; N26')
-    #ax.fill_between(xarr, np.poly1d(unp.nominal_values(N26_coeff) - unp.std_devs(N26_coeff))(xarr), np.poly1d(unp.nominal_values(N26_coeff) + unp.std_devs(N26_coeff))(xarr), color='salmon', alpha=0.5)
+    # -------------Nedkova+26 MZR--------------------------
+    #N26_coeff = unp.uarray([-0.046, 0.992, 3.085], [0.012, 0.204, 0.863]) # from eq 1 of Nedkova+26
+    N26_coeff = unp.uarray([-0.038, 0.856, 3.669], [0.021, 0.372, 1.613]) # from Kalina's slack msg
+    logOH_mid = np.poly1d(unp.nominal_values(N26_coeff))(xarr)
+    ax.plot(xarr, logOH_mid, color='red', lw=2, ls='--', label='1.7 < z < 3.4; N26')
+    '''
+    # -------this is my attempt to propagate errors---------------
+    logOH_low = np.poly1d(unp.nominal_values(N26_coeff) - unp.std_devs(N26_coeff))(xarr)
+    logOH_high = np.poly1d(unp.nominal_values(N26_coeff) + unp.std_devs(N26_coeff))(xarr)
+    '''
+    # --------the following is code from Kalina--------------
+    # Covariance matrix extracted from the MCMC chains (accounting for correlation); Order of parameters: [a, b, c]
+    cov_matrix = np.array([
+        [ 0.00046, -0.00790,  0.03360],
+        [-0.00790,  0.13840, -0.59600],
+        [ 0.03360, -0.59600,  2.60100]
+    ])
+
+    # Correctly propagate errors to find the 1-sigma range *around* the curve; Using: sigma_y^2 = J^T * Cov * J  where J is the Jacobian matrix [x^2, x, 1]
+    y_fit_err = np.zeros_like(xarr)
+    for i, x in enumerate(xarr):
+        jacobian = np.array([x**2, x, 1.0])
+        # Compute local model variance at this specific x coordinate
+        variance = np.dot(jacobian, np.dot(cov_matrix, jacobian))
+        y_fit_err[i] = np.sqrt(variance)
+
+    # Define the true 1-sigma upper and lower bounds flanking the best fit
+    logOH_low = logOH_mid - y_fit_err
+    logOH_high = logOH_mid + y_fit_err
+    
+    # -------plotting shaded region--------
+    ax.fill_between(xarr, logOH_low, logOH_high, color='salmon', alpha=0.5)
 
     return ax
 
