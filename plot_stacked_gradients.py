@@ -16,10 +16,12 @@
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag NB --adaptive_bins --bin_by_distance_mass --fold_maps --plot_minor_major
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag NB --adaptive_bins --bin_by_distance_mass --fold_maps --plot_sfms_vs_grad
              run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag NB --adaptive_bins --bin_by_sfh_mass --fold_maps --plot_sfms_vs_grad --skip_deproject
+             run plot_stacked_gradients.py --system ssd --do_all_fields --Zdiag NB --adaptive_bins --bin_by_distance_mass --fold_maps --plot_minor_major --skip_deproject --cut_z_flag 4 --overplot_literature
 '''
 
 from header import *
 from util import *
+setup_plot_style()
 from make_sfms_bins import log_mass_bins, log_sfr_bins, get_stacking_sample, get_binned_df, get_sfms_func, sfms, required_lines, passage_catalog
 from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_SFMS_PASSAGE
 
@@ -329,6 +331,8 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='', cmap='virid
     '''
     # ---------obtaining sfms function and color mappable---------
     sfms_func = get_sfms_func(log_mass_bins, sfms)
+    cmap = plt.colormaps[cmap].copy()
+    cmap.set_bad(color='none') # to get transparent bins for NaNs
     norm = mplcolors.Normalize(vmin=cmin, vmax=cmax)
     sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
 
@@ -339,7 +343,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='', cmap='virid
         sfms_line = sfms_func(m_grid)
         
         color = sm.to_rgba(row[quant])
-        ax.fill_between(m_grid, sfms_line + interval.left, sfms_line + interval.right, color=color, alpha=0.8, edgecolor='w' if args.fortalk else 'k', lw=0.5)
+        ax.fill_between(m_grid, sfms_line + interval.left, sfms_line + interval.right, color=color, alpha=None if np.isnan(row[quant]) else 0.8, edgecolor='w' if args.fortalk else 'k', lw=0.5)
         
         s_center = sfms_func(row['log_mass_median']) + (interval.left + interval.right) / 2
         if ~np.isnan(row['nobj']) and args.annotate_bins: ax.text(row['log_mass_median'], s_center, int(row['nobj']), color='w' if args.fortalk else 'k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
@@ -390,18 +394,18 @@ def plot_SFMS_heatmap_patches(df, args, quant='logOH'):
     # ---------plot the heatmaps-------------------
     if args.bin_by_distance_mass or args.bin_by_distance:
         if args.plot_minor_major_profile:
-            axes[0] = make_heatmap_distance(axes[0], df, sfms, f'minor_{quant}_grad', args, cmap='coolwarm', clabel=r'Minor $\nabla$Z$_r$ [dex/R$_e$]', cmin=-2.5, cmax=2.5, ncbins=4) # plot integrated metallicity heatmap
-            axes[1] = make_heatmap_distance(axes[1], df, sfms, f'major_{quant}_grad', args, cmap='coolwarm', clabel=r'Major $\nabla$Z$_r$ [dex/R$_e$]', cmin=-2.5, cmax=2.5, ncbins=4) # plot metallicity gradient heatmap
+            axes[0] = make_heatmap_distance(axes[0], df, sfms, f'minor_{quant}_grad', args, cmap='coolwarm', clabel=label_dict[f'minor_{quant}_grad'], cmin=lim_dict[f'minor_{quant}_grad'][0], cmax=lim_dict[f'minor_{quant}_grad'][1], ncbins=4) # plot integrated metallicity heatmap
+            axes[1] = make_heatmap_distance(axes[1], df, sfms, f'major_{quant}_grad', args, cmap='coolwarm', clabel=label_dict[f'major_{quant}_grad'], cmin=lim_dict[f'major_{quant}_grad'][0], cmax=lim_dict[f'major_{quant}_grad'][1], ncbins=4) # plot metallicity gradient heatmap
         else:
-            axes[0] = make_heatmap_distance(axes[0], df, sfms, f'{quant}_int', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', cmin=7.1, cmax=9.1, ncbins=5) # plot integrated metallicity heatmap
-            axes[1] = make_heatmap_distance(axes[1], df, sfms, f'radial_{quant}_grad', args, cmap='coolwarm', clabel=r'$\nabla$Z$_r$ [dex/R$_e$]', cmin=-2.5, cmax=2.5, ncbins=4) # plot metallicity gradient heatmap
+            axes[0] = make_heatmap_distance(axes[0], df, sfms, f'{quant}_int', args, cmap='plasma', clabel=label_dict[f'{quant}_int'], cmin=lim_dict[f'{quant}_int'][0], cmax=lim_dict[f'{quant}_int'][1], ncbins=5) # plot integrated metallicity heatmap
+            axes[1] = make_heatmap_distance(axes[1], df, sfms, f'radial_{quant}_grad', args, cmap='coolwarm', clabel=label_dict[f'radial_{quant}_grad'], cmin=lim_dict[f'radial_{quant}_grad'][0], cmax=lim_dict[f'radial_{quant}_grad'][1], ncbins=4) # plot metallicity gradient heatmap
     else:
         if args.plot_minor_major_profile:
-            axes[0] = make_heatmap_patches(axes[0], df, f'minor_{quant}_grad', args, cmap='coolwarm', clabel=r'Minor $\nabla$Z$_r$ [dex/R$_e$]', cmin=-2.5, cmax=2.5, ncbins=4) # plot minor metallicity gradient heatmap
-            axes[1] = make_heatmap_patches(axes[1], df, f'major_{quant}_grad', args, cmap='coolwarm', clabel=r'Major $\nabla$Z$_r$ [dex/R$_e$]', cmin=-2.5, cmax=2.5, ncbins=4) # plot major metallicity gradient heatmap
+            axes[0] = make_heatmap_patches(axes[0], df, f'minor_{quant}_grad', args, cmap='coolwarm', clabel=label_dict[f'minor_{quant}_grad'], cmin=lim_dict[f'minor_{quant}_grad'][0], cmax=lim_dict[f'minor_{quant}_grad'][1], ncbins=4) # plot minor metallicity gradient heatmap
+            axes[1] = make_heatmap_patches(axes[1], df, f'major_{quant}_grad', args, cmap='coolwarm', clabel=label_dict[f'major_{quant}_grad'], cmin=lim_dict[f'major_{quant}_grad'][0], cmax=lim_dict[f'major_{quant}_grad'][1], ncbins=4) # plot major metallicity gradient heatmap
         else:
-            axes[0] = make_heatmap_patches(axes[0], df, f'{quant}_int', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', cmin=7.1, cmax=9.1, ncbins=5) # plot integrated metallicity heatmap
-            axes[1] = make_heatmap_patches(axes[1], df, f'radial_{quant}_grad', args, cmap='coolwarm', clabel=r'$\nabla$Z$_r$ [dex/R$_e$]', cmin=-2.5, cmax=2.5, ncbins=4) # plot metallicity gradient heatmap
+            axes[0] = make_heatmap_patches(axes[0], df, f'{quant}_int', args, cmap='plasma', clabel=label_dict[f'{quant}_int'], cmin=lim_dict[f'{quant}_int'][0], cmax=lim_dict[f'{quant}_int'][1], ncbins=5) # plot integrated metallicity heatmap
+            axes[1] = make_heatmap_patches(axes[1], df, f'radial_{quant}_grad', args, cmap='coolwarm', clabel=label_dict[f'radial_{quant}_grad'], cmin=lim_dict[f'radial_{quant}_grad'][0], cmax=lim_dict[f'radial_{quant}_grad'][1], ncbins=4) # plot metallicity gradient heatmap
 
     # ---------overplot PASSAGE galaxies (integrated stellar mass-SFR)--------------------
     if args.overplot_passage:            
@@ -456,18 +460,18 @@ def fix_interval_precision(series, precision=3):
                                               closed=x.closed) if pd.notnull(x) else x)
 
 # ----------------------------global dicts-------------------------------------------------------------------
-label_dict = {'minor_logOH_grad': 'Minor\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
-                'major_logOH_grad': 'Major\n' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
+label_dict = {'minor_logOH_grad': 'Minor' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
+                'major_logOH_grad': 'Major' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
                 'radial_logOH_grad': r'$\nabla$Z$_r$ [dex/R$_e$]',\
                 'logOH_int': r'$\log$(O/H) + 12',\
                 'delta_sfms_median': r'<$\delta$ SFMS> [dex]',\
                 'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack',\
                 'tform_ratio_median': r'$\Delta t_{form,90-50}$ / $\Delta t_{form,50-10}$',\
                 }
-lim_dict = {'minor_logOH_grad': [-1.2, 1.2],\
-                'major_logOH_grad': [-1.2, 1.2],\
-                'radial_logOH_grad': [-1.2, 1.2],\
-                'logOH_int': [6.8, 9.5],\
+lim_dict = {'minor_logOH_grad': [-1., 1.],\
+                'major_logOH_grad': [-1., 1.],\
+                'radial_logOH_grad': [-1., 1.],\
+                'logOH_int': [7.0, 9.0],\
                 'delta_sfms_median': [-0.6, 0.6],\
                 'log_mass_median': [7.0, 10.0],\
                 'tform_ratio_median': [0, 1],\

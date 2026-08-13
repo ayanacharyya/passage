@@ -21,6 +21,7 @@
 
 from header import *
 from util import *
+setup_plot_style()
 from make_diagnostic_maps import compute_Z_C19, compute_Z_KD02_R23, compute_Z_P25, compute_Z_Te, compute_Te, take_safe_log_ratio, take_safe_log_sum, myimshow, get_AGN_func_methods
 from make_sfms_bins import get_binned_df, required_lines, sfms
 from stack_emission_maps import read_stacked_maps
@@ -435,7 +436,18 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
 
             if len(line_labels) > 1:
                 # -------setting up NB parameters----------
-                dered = 'Hbeta' in line_labels and 'Halpha' in line_labels and args.dered_in_NB
+                if 'Hbeta' in line_labels and 'Halpha' in line_labels: # dered within NB only if that option is turned on, and the Ha/Hb ratio is above the Case-B recombination limit
+                    Ha_flux = obs_fluxes[np.where(np.array(line_labels) == 'Halpha')[0][0]]
+                    Hb_flux = obs_fluxes[np.where(np.array(line_labels) == 'Hbeta')[0][0]]
+                    balm_dec = Ha_flux / Hb_flux
+                    if balm_dec >= 2.86: # case B recombination limit
+                        dered = args.dered_in_NB
+                    else:
+                        dered = False
+                else:
+                    dered = False
+                    balm_dec = -99
+                
                 norm_line = 'Hbeta' if 'Hbeta' in line_labels else 'OIII5007' if 'OIII5007' in line_labels else 'NII6583_Halpha' if 'NII6583_Halpha' in line_labels else 'Halpha' if 'Halpha' in line_labels else line_labels[0]
                 kwargs = {'prior_plot': os.path.join(out_dir, 'prior_plots', f'{this_ID}_HII_prior_plot.pdf'),
                         'likelihood_plot': os.path.join(out_dir, 'likelihood_plots', f'{this_ID}_HII_likelihood_plot.pdf'),
@@ -450,7 +462,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
                         }
 
                 # -------running NB--------------
-                print(f'\n\tDeb450: binID {this_ID}: nlines={len(obs_fluxes)}, {dict(zip(line_labels, obs_fluxes))}, norm_line = {norm_line}, dereddening on the fly? {dered}') ##
+                print(f'\n\tDeb450: binID {this_ID}: nlines={len(obs_fluxes)}, {dict(zip(line_labels, obs_fluxes))}, norm_line = {norm_line}, balmer decrement (if available) = {balm_dec}, dereddening on the fly? {dered}') ##
                 Result = NB_Model_HII(obs_fluxes, obs_errs, line_labels, **kwargs)
 
                 # -------estimating the resulting logOH, and associated uncertainty-----------
@@ -527,8 +539,9 @@ def get_Z_NB(line_dict, args):
             line_waves_array.append(rest_wave_dict[line] * 10) # factor of 10 to convert from nm to Angstroms
 
     # ----------calling NB----------------------
-    logOH_map = compute_Z_NB(line_label_array, line_waves_array, line_map_array)
     logOH_int = compute_Z_NB(line_label_array, line_waves_array, line_int_array)
+    #sys.exit(f'logOH_int = {logOH_int}; exiting here for test') ###
+    logOH_map = compute_Z_NB(line_label_array, line_waves_array, line_map_array)
 
     return logOH_map, logOH_int, line_label_array, np.min(nobj_array)
 

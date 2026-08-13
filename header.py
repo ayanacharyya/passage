@@ -154,6 +154,8 @@ from skimage.restoration import richardson_lucy
 
 from matplotlib import pyplot as plt
 
+import pingouin as pg
+
 HOME = Path.home()
 
 rest_wave_dict = {'Lya': 121.6, 'OII': 372.7, 'NeIII-3867':386.9, 'Hd': 434.0, 'OIII-4363': 436.3, 'Hb': 486.1, 'OIII': 500.7,

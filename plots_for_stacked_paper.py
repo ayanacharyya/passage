@@ -10,9 +10,10 @@
 
 from header import *
 from util import *
+setup_plot_style()
 from make_sfms_bins import log_mass_bins, log_sfr_bins, get_stacking_sample, get_binned_df, get_sfms_func, sfms, required_lines, passage_catalog
 from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_SFMS_PASSAGE
-from plot_stacked_gradients import read_stacked_df, label_dict, lim_dict, fix_interval_precision
+from plot_stacked_gradients import read_stacked_df, label_dict, fix_interval_precision
 
 start_time = datetime.now()
 
@@ -53,6 +54,11 @@ def plot_MZR_literature(ax):
         xarr = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 20)
         ax.plot(xarr, zahid_func(xarr, zahid_data['Z0'][i], zahid_data['M0'][i], zahid_data['gamma'][i]), color=col_ar[i], lw=2, ls=zahid_data['linestyle'][i], label= 'z = '+str(zahid_data['Redshift'][i]) + '; ' + zahid_data['Sample'][i], zorder=-5)
 
+    # Nedkova+26 MZR
+    N26_coeff = unp.uarray([-0.046, 0.992, 3.085], [0.012, 0.204, 0.863]) # from eq 1 of Nedkova+26
+    ax.plot(xarr, np.poly1d(unp.nominal_values(N26_coeff))(xarr), color='red', lw=2, ls='--', label='1.7 < z < 3.4; N26')
+    #ax.fill_between(xarr, np.poly1d(unp.nominal_values(N26_coeff) - unp.std_devs(N26_coeff))(xarr), np.poly1d(unp.nominal_values(N26_coeff) + unp.std_devs(N26_coeff))(xarr), color='salmon', alpha=0.5)
+
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -63,9 +69,18 @@ def plot_stacked_MZR(df, args, xcol='log_mass_median', ycol='logOH_int', colorco
     Returns figure handle
     '''
     # ------setup figure----------
-    fig, ax = plt.subplots(1, 1, figsize = (10, 5))
-    fig.subplots_adjust(left=0.1, right=0.87, top=0.95, bottom=0.12, wspace=0., hspace=0.)
-
+    fig, ax = plt.subplots(1, 1, figsize = (6., 5))
+    fig.subplots_adjust(left=0.14, right=0.82, top=0.95, bottom=0.12, wspace=0., hspace=0.)
+    
+    print_sr_corr(df, xcol, ycol, xcol2=colorcol)
+    log_mass_cut_low, log_mass_cut_high = 8.5, 8.5
+    df_low = df[df[xcol] < log_mass_cut_low]
+    df_high = df[df[xcol] > log_mass_cut_high]
+    print(f'\nAfter log_mass < {log_mass_cut_low}..')
+    print_sr_corr(df_low, xcol, ycol, xcol2=colorcol)
+    print(f'\nAfter log_mass > {log_mass_cut_high}..')
+    print_sr_corr(df_high, xcol, ycol, xcol2=colorcol)
+    
     # ------plot data-----------
     if colorcol is None:
         color = 'cornflowerblue'
@@ -75,13 +90,14 @@ def plot_stacked_MZR(df, args, xcol='log_mass_median', ycol='logOH_int', colorco
         color = df[colorcol]
         cmin, cmax = lim_dict[colorcol][0], lim_dict[colorcol][1]
         cmap = cmap
-    
+            
     p = ax.scatter(df[xcol], df[ycol], s=100, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker='o')
     if f'{ycol}_u' in df:
         ax.errorbar(df[xcol], df[ycol], yerr=df[f'{ycol}_u'], c='grey', lw=0.7, fmt='none', alpha=1)
 
     # -----plot literature---------
     ax = plot_MZR_literature(ax)
+    args.fontfactor *= 1.3
     ax.legend(fontsize=args.fontsize / args.fontfactor, loc='best')
 
     # -------annotate and save fig--------
@@ -175,6 +191,25 @@ def plot_MZGR_literature(ax, this_work_legend=[], skip_legend=False):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
+def print_sr_corr(df, xcol, ycol, xcol2=None):
+    '''
+    Prints out the partial (if ycol2 is not None) Spearman Rank correlation coefficients
+    '''
+    p_corr_xcol = pg.corr(df[xcol], df[ycol], method='spearman')
+    print(f'\nSpearman Rank correlation of {ycol} vs {xcol} is r={p_corr_xcol.loc["spearman", "r"]:.2f}, p-val={p_corr_xcol.loc["spearman", "p-val"]:.2f}')
+    
+    if xcol2 is not None:
+        p_corr_ccol = pg.corr(df[xcol2], df[ycol], method='spearman')
+        print(f'Spearman Rank correlation of {ycol} vs {xcol2} is r={p_corr_ccol.loc["spearman", "r"]:.2f}, p-val={p_corr_ccol.loc["spearman", "p-val"]:.2f}')
+
+        p_corr_xcol = pg.partial_corr(data=df, x=xcol, y=ycol, covar=xcol2, method='spearman')
+        p_corr_ccol = pg.partial_corr(data=df, x=xcol2, y=ycol, covar=xcol, method='spearman')
+        print(f'Parial Spearman Rank correlation of {ycol} vs {xcol} (keeping {xcol2} fixed) is r={p_corr_xcol.loc["spearman", "r"]:.2f}, p-val={p_corr_xcol.loc["spearman", "p-val"]:.2f}')
+        print(f'Parial Spearman Rank correlation of {ycol} vs {xcol2} (keeping {xcol} fixed) is r={p_corr_ccol.loc["spearman", "r"]:.2f}, p-val={p_corr_ccol.loc["spearman", "p-val"]:.2f}')
+
+    return
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=None, cmap='RdBu', qualifiers=''):
     '''
     Plots the stacked mass-metallicity gradient relation (both radial and minor-major gradients), overplotted with relations from the literature
@@ -187,6 +222,15 @@ def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad'
 
     # ------prepare plotting attributes-----------
     df = df.sort_values(by=xcol)
+    print_sr_corr(df, xcol, ycol, xcol2=colorcol)
+
+    log_mass_cut_low, log_mass_cut_high = 8.5, 8.5
+    df_low = df[df[xcol] < log_mass_cut_low]
+    df_high = df[df[xcol] > log_mass_cut_high]
+    print(f'\nAfter log_mass < {log_mass_cut_low}..')
+    print_sr_corr(df_low, xcol, ycol, xcol2=colorcol)
+    print(f'\nAfter log_mass > {log_mass_cut_high}..')
+    print_sr_corr(df_high, xcol, ycol, xcol2=colorcol)
 
     if colorcol is None:
         color = 'cornflowerblue'
@@ -196,7 +240,7 @@ def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad'
         color = df[colorcol]
         cmin, cmax = lim_dict[colorcol][0], lim_dict[colorcol][1]
         cmap = cmap
-    
+
     # -------plot radial gradient------------
     axes[0].plot(df[xcol], df[ycol], lw=0.7, c='k', ls='dashed')
     p = axes[0].scatter(df[xcol], df[ycol], s=100, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker='o', zorder=20, label=f'This Work (azimuthally averaged)')
@@ -214,12 +258,25 @@ def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad'
                        clabel=label_dict[colorcol] if colorcol is not None else '', hide_cbar=colorcol is None, cbar_width=2,
                        p=p, hide_cbar_ticks=False, cticks_integer=False, hide_xaxis=True)    
 
+    vline_col = 'sienna'
+    log_mass_cut = log_mass_cut_low
+    axes[0].axvline(log_mass_cut, ls='dotted', lw=1., c=vline_col)
+    axes[0].text(log_mass_cut - 0.1, axes[0].get_ylim()[1] * 0.95, 'Lower mass regime', c=vline_col, fontsize=args.fontsize / args.fontfactor, ha='right', va='top')
+    axes[0].text(log_mass_cut + 0.1, axes[0].get_ylim()[1] * 0.95, 'Higher mass regime', c=vline_col, fontsize=args.fontsize / args.fontfactor, ha='left', va='top')
+    axes[1].axvline(log_mass_cut, ls='dotted', lw=1., c=vline_col)
+
     # -------plot minor major gradient------------
     ycol_arr = [ycol.replace('radial', 'minor'), ycol.replace('radial', 'major')]
     marker_arr = ['s', 'D']
     ls_arr = ['solid', 'dashed']
 
     for index, ycol in enumerate(ycol_arr):
+        print_sr_corr(df, xcol, ycol, xcol2=colorcol)
+        print(f'\nAfter log_mass < {log_mass_cut_low}..')
+        print_sr_corr(df_low, xcol, ycol, xcol2=colorcol)
+        print(f'\nAfter log_mass > {log_mass_cut_high}..')
+        print_sr_corr(df_high, xcol, ycol, xcol2=colorcol)
+        
         axes[1].plot(df[xcol], df[ycol], lw=0.7, c='k', ls=ls_arr[index])
         p = axes[1].scatter(df[xcol], df[ycol], s=70, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker=marker_arr[index], zorder=20, label=f'This work ({ycol.split("_")[0]} axis)')
         if f'{ycol}_u' in df:
@@ -243,58 +300,15 @@ def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad'
 
     return fig
 
-# -------------------------------NOT USED------------------------------------------------------------------
-def plot_stacked_MZGR_minor_major(df, args, xcol='log_mass_median', ycol1='minor_logOH_grad', ycol2='major_logOH_grad', colorcol=None, cmap='RdBu', qualifiers=''):
-    '''
-    Plots the stacked mass-metallicity gradient relation (gradient along major and minor axes), overplotted with relations from the literature
-    Saves the figure
-    Returns figure handle
-    '''
-    # ------setup figure----------
-    fig, ax = plt.subplots(1, 1, figsize = (10, 5))
-    fig.subplots_adjust(left=0.1, right=0.87, top=0.8, bottom=0.12, wspace=0., hspace=0.)
-
-    # ------plot data-----------
-    df = df.sort_values(by=xcol)
-
-    if colorcol is None:
-        color = 'cornflowerblue'
-        cmin, cmax = None, None
-        cmap = None
-    else:
-        color = df[colorcol]
-        cmin, cmax = lim_dict[colorcol][0], lim_dict[colorcol][1]
-        cmap = cmap
-    
-    # -------plot minor major gradient------------
-    ycol_arr = [ycol1, ycol2]
-    marker_arr = ['s', 'D']
-    ls_arr = ['solid', 'dashed']
-    this_work_legend = []
-    
-    for index, ycol in enumerate(ycol_arr):
-        ax.plot(df[xcol], df[ycol], lw=0.7, c='k', ls=ls_arr[index])
-        p = ax.scatter(df[xcol], df[ycol], s=70, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker=marker_arr[index], zorder=20, label=f'This work ({ycol.split("_")[0]} axis)')
-        if f'{ycol}_u' in df:
-            ax.errorbar(df[xcol], df[ycol], yerr=df[f'{ycol}_u'], c='grey', lw=0.7, fmt='none', alpha=1)
-        this_work_legend.append(p)
-
-    ax.axhline(0, ls='dashed', lw=0.5, c='k')
-
-    # -----plot literature---------
-    ax = plot_MZGR_literature(ax, this_work_legend=this_work_legend)
-
-    # -------annotate and save fig--------
-    ycol = ycol1.replace('minor', 'radial').replace('major', 'radial')
-    ax = annotate_axes(ax, label_dict[xcol], label_dict[ycol], xlim=lim_dict[xcol], ylim=lim_dict[ycol], args=args, 
-                       clabel=label_dict[colorcol] if colorcol is not None else '', hide_cbar=colorcol is None, cbar_width=2,
-                       p=p, hide_cbar_ticks=False, cticks_integer=False)
-    
-    figname = f'MZGR_minor_major_{qualifiers}.png'
-    save_fig(fig, args.fig_dir, figname, args)
-
-    return fig
-
+# --------------------------------------------------------------------------------------------------------------------
+lim_dict = {'minor_logOH_grad': [-1.2, 1.2],\
+                'major_logOH_grad': [-1.2, 1.2],\
+                'radial_logOH_grad': [-1.2, 1.2],\
+                'logOH_int': [7.0, 9.0],\
+                'delta_sfms_median': [-0.6, 0.6],\
+                'log_mass_median': [7.0, 10.0],\
+                'tform_ratio_median': [0, 1],\
+                }  
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
@@ -348,6 +362,5 @@ if __name__ == "__main__":
     
     fig_mzr = plot_stacked_MZR(df_grad, args, xcol='log_mass_median', ycol='logOH_int', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
     #fig_mzgr = plot_stacked_MZGR(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
-    #fig_mzgr_minmaj = plot_stacked_MZGR_minor_major(df_grad, args, xcol='log_mass_median', ycol1='minor_logOH_grad', ycol2='major_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

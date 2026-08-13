@@ -186,7 +186,7 @@ def plot_SFMS_PASSAGE(ax, color='salmon'):
     '''
 
     log_mass, log_SFR = get_SFMS_PASSAGE(ax.get_xlim()[0], ax.get_xlim()[1])
-    ax.plot(log_mass, log_SFR, ls='solid', c=color, lw=2, label=f'This sample (Huberty+26)')
+    ax.plot(log_mass, log_SFR, ls='solid', c=color, lw=2, label=f'This sample (Huberty+26)', zorder=-5)
 
     return ax
 

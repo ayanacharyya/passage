@@ -369,7 +369,8 @@ if __name__ == "__main__":
         quant_names_dict = {'Z':'12 + log O/H', 'log(q)':'log q', 'log(P/k)':'log P/k', 'log(U)':'log U'}
         line_label_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 
                                       'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'Ha,NII': 'Halpha,NII6583', 
-                                      'SII': 'SII6716_31', 'NeIII': 'NeIII3869', 'NeIII,HeI': 'NeIII3869_HeI3889'})
+                                      'SII': 'SII6716_31', 'NeIII': 'NeIII3869', 'NeIII,HeI': 'NeIII3869_HeI3889',
+                                      'NeIII155000':'[NeIII]155000', 'NeII128000':'[NeII]128000'})
 
         quant_names = [quant_names_dict[quant] for quant in [args.quantity1, args.quantity2, args.quantity3]]
         df_ratios = df_grid[quant_names].sort_values(by=quant_names)

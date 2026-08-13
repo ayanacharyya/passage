@@ -359,7 +359,7 @@ def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=50):
 
     # ---------making plot--------------
     p = ax.scatter(df[mass_col], df['O3Hb'], c=df['redshift'], marker='o', s=size, edgecolor='k', lw=0.5, cmap='viridis', vmin=None, vmax=None)
-    ax.errorbar(df[mass_col], df['O3Hb'], yerr=df['O3Hb_u'], c='gray', fmt='none', lw=1, alpha=0.8)
+    ax.errorbar(df[mass_col], df['O3Hb'], yerr=df['O3Hb_u'], c='gray', fmt='none', lw=1, alpha=0.8, zorder=-5)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df['O3Hb'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 
     if df_agn is not None:
@@ -1033,7 +1033,9 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
                 plot_inc_histogram(df, f'bin_intervals{method_text}', f'mass_intervals{method_text}', args)
 
         # --------------curtailiug bins for debugging-------------------
-        if args.debug_bin: bin_list = bin_list[:1]
+        # if args.debug_bin: bin_list = bin_list[:1]
+        #if args.debug_bin: bin_list = bin_list[15:16]
+        if args.debug_bin: bin_list = bin_list[10:11]
         # if args.debug_bin: bin_list = bin_list[25:26]
         # if args.debug_bin: bin_list = bin_list[7:8]
         #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
@@ -1078,8 +1080,8 @@ methods = [
             ]
 
 target_n = 30 # for voronoi binning
-#n_adaptive_bins = 8 # for distance (from SFMS) binning
-n_adaptive_bins = 4 # for distance (from SFMS) binning
+n_adaptive_bins = 8 # for distance (from SFMS) binning
+# n_adaptive_bins = 4 # for distance (from SFMS) binning
 n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
 # n_mass_bins = 2 # number of mass bins within each distance (from SFMS) bin
 delta_sfms_bin = 0.4 # delta in distance from SFMS in which to bin in the distance-from-SFMS method, unless binning adaptively
