@@ -43,7 +43,7 @@ from reproject import reproject_interp, reproject_adaptive
 from scipy.stats import mode as sci_mode
 from scipy.interpolate import NearestNDInterpolator, interp1d
 from scipy.ndimage import gaussian_filter1d, rotate
-from scipy.optimize import curve_fit, brentq
+from scipy.optimize import curve_fit, brentq, root_scalar
 from scipy import ndimage
 from scipy.optimize import minimize
 from scipy.odr import ODR, Model, RealData
@@ -130,6 +130,7 @@ import matplotlib.ticker as ticker
 from matplotlib.patches import ConnectionPatch, Polygon
 import matplotlib.patches as patches
 from matplotlib.collections import PatchCollection
+import matplotlib.patheffects as path_effects
 
 import logging
 logging.getLogger('matplotlib').setLevel(logging.WARNING)

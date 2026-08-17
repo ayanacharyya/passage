@@ -143,7 +143,7 @@ def parse_args():
     parser.add_argument('--use_variable_N2Ha', dest='use_variable_N2Ha', action='store_true', default=False, help='Use variable Ha/(NII + Ha) ratio across the face of the galaxy, to compute the Ha for the x-axis of BPT diagram, instead of constant 0.82? Default is no.')
     parser.add_argument('--no_text_on_plot', dest='no_text_on_plot', action='store_true', default=False, help='Skip putting text annotations on plot2D? Default is no.')
     parser.add_argument('--plot_models', dest='plot_models', action='store_true', default=False, help='Overplot MAPPINGS photoionisation models on the BPT diagram? Default is no.')
-    parser.add_argument('--plot_DIG', dest='plot_DIG', action='store_true', default=False, help='Plot DIG diagnostics? Default is no.')
+    parser.add_argument('--plot_DIG', '--plot_dig', dest='plot_dig', action='store_true', default=False, help='Plot DIG diagnostics? Default is no.')
     parser.add_argument('--output_subdir', metavar='output_subdir', type=str, action='store', default=None, help='Any specific subdirectory (with output_dir) to put output files in; default is None (i.e. files will be put in output_dir)')
     parser.add_argument('--use_original_NB_grid', dest='use_original_NB_grid', action='store_true', default=False, help='Use the original, unmodified NebulaBayes grid? Default is no.')
     parser.add_argument('--exclude_lines', metavar='exclude_lines', type=str, action='store', default='', help='Which lines to be excluded for metallicity measurement with NB? Default is empty string, i.e., use all available lines')
@@ -305,6 +305,9 @@ def parse_args():
     # ---- args added for read_line_maps.py ------------
     parser.add_argument('--mask_arcsec', metavar='mask_arcsec', type=float, action='store', default=None, help='Mask everything outside radius of specified arcsecond? Default is None, i.e., do not mask')
     parser.add_argument('--plot_met_sfr', dest='plot_met_sfr', action='store_true', default=False, help='Plot the metallicity + SFR maps instead of the full diagnostic figure? Default is no.')
+
+    # ---- args added for plot_stacked_dig.py ------------
+    parser.add_argument('--plot_quant', metavar='plot_quant', type=str, action='store', default='sfr', help='Radial profile of which quantity to plot? Choose between sfr, logOH and cdig, default is sfr')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()

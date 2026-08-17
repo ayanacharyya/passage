@@ -598,7 +598,7 @@ def write_metallicity_map(logOH_map, logOH_int, outfilename, args, nobj=None):
     print(f'Saved metallicity maps in {outfilename}')
 
 # --------------------------------------------------------------------------------------------------------------------
-def read_metallicity_map(infilename):
+def read_metallicity_map(infilename, args):
     '''
     Reads the 2D metallicity map and the integrated metallicity (and uncertainties) from a fits file
     '''
@@ -684,8 +684,10 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     ax.set_aspect('auto') 
 
     # --------annotating axis--------------
-    if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)' if args.re_limit is None else r'Radius (R$_e$)', label_dict[quant], args=args, xlim=xlim, ylim=ylim, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, yaxis_on_right=yaxis_on_right)
-    
+    if 'OIII' in quant: ylabel = 'Log line flux' if takelog else 'Line flux'
+    else: ylabel = label_dict[quant]
+    if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)' if args.re_limit is None else r'Radius (R$_e$)', ylabel, args=args, xlim=xlim, ylim=ylim, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, yaxis_on_right=yaxis_on_right)
+
     return ax, minor_linefit_odr, major_linefit_odr, radial_linefit_odr
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -868,7 +870,7 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
     
     fig, axes = plt.subplots(nrows, ncols, figsize=(2.5 * ncols, 3.5 * nrows))
     axes = np.atleast_2d(axes)
-    fig.subplots_adjust(left=0.06, right=0.94, top=0.94, bottom=0.08, wspace=0., hspace=0.2)
+    fig.subplots_adjust(left=0.07, right=0.94, top=0.94, bottom=0.08, wspace=0., hspace=0.2)
     fig.text(0.05, 0.95, f'{bin_text}', fontsize=args.fontsize, c='k', ha='left', va='top')
     
     # -----------------plot emission line maps of this bin---------------
@@ -1116,7 +1118,7 @@ if __name__ == "__main__":
                 else:
                     write_metallicity_map(logOH_map, logOH_int, metallicity_map_fits_file, args, nobj=nobj) # saving the metallicity maps as fits files
             
-            logOH_map, logOH_int, nobj = read_metallicity_map(metallicity_map_fits_file)
+            logOH_map, logOH_int, nobj = read_metallicity_map(metallicity_map_fits_file, args)
         
         # -----------------plot metallicity maps of this bin---------------
         if args.plot_metallicity:
