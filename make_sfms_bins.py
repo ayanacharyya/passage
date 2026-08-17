@@ -1038,9 +1038,9 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
                 plot_inc_histogram(df, f'bin_intervals{method_text}', f'mass_intervals{method_text}', args)
 
         # --------------curtailiug bins for debugging-------------------
-        # if args.debug_bin: bin_list = bin_list[:1]
-        #if args.debug_bin: bin_list = bin_list[15:16]
-        if args.debug_bin: bin_list = bin_list[10:11]
+        if args.debug_bin: bin_list = bin_list[:1]
+        # if args.debug_bin: bin_list = bin_list[15:16]
+        # if args.debug_bin: bin_list = bin_list[10:11]
         # if args.debug_bin: bin_list = bin_list[25:26]
         # if args.debug_bin: bin_list = bin_list[7:8]
         #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
