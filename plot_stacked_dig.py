@@ -172,7 +172,9 @@ def plot_stacked_rad_profiles(df_list, args, quant_arr=['dig']):
     colorcol_arr = ['mass_intervals', 'bin_intervals']
     cmap_arr = ['viridis', 'RdBu']
     clim_dict = {'mass_intervals': [7, 11], 'bin_intervals': [-1, 1]}
-    clabel_dict = {'mass_intervals': r'$\log{(M_*/M_{\odot})}$', 'bin_intervals': r'$\delta_{SFMS}$', 'sfr': r'SFR [M$_\odot$/yr]', 'cdig': 'DIG contribution', 'logOH': r'$\log{(O/H)}$ + 12'}
+    clabel_dict = {'mass_intervals': r'$\log{(M_*/M_{\odot})}$', 'bin_intervals': r'$\delta_{SFMS}$', 
+                   'sfr': r'SFR [M$_\odot$/yr]', 'cdig': 'DIG contribution', 'logOH': r'$\log{(O/H)}$ + 12',
+                   'uncorr_sfr': r'Uncorrected SFR [M$_\odot$/yr]'}
 
     # -------looping over quants-------------
     for quant in quant_arr:
@@ -238,7 +240,7 @@ def plot_stacked_rad_profiles(df_list, args, quant_arr=['dig']):
                     line.set_path_effects([path_effects.Stroke(linewidth=3, foreground='black'), path_effects.Normal()])
 
                     #if quant == 'sfr': axes[r][c].set_yscale('log')
-                    axes[r][c] = annotate_axes(axes[r][c], '', '', label= f'{xcol}' if c == 0 else '', labelx=0.6, xlim=[0, 2], ylim=None, args=args, clabel='', hide_xaxis=r < len(xcol_arr) - 1, hide_yaxis=c > 0, hide_cbar=True)
+                    axes[r][c] = annotate_axes(axes[r][c], '', '', label= f'{xcol}' if c == 0 else '', labelx=0.6, xlim=[0, 2], ylim=[-1e14, 3.5e15] if 'sfr' in quant else None, args=args, clabel='', hide_xaxis=r < len(xcol_arr) - 1, hide_yaxis=c > 0, hide_cbar=True)
 
             # ---------annotating colorbar------------
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
@@ -347,9 +349,9 @@ if __name__ == "__main__":
             axes[1][0] = plot_2D_map(logOH_map_R3, axes[1][0], rf'$\log$(O/H) + 12: {args.Zdiag}', args, cmap='plasma', takelog=False, vmin=Zmin, vmax=Zmax, hide_cbar=True, cticks_integer=True)
 
             # ---------------correct for NII/Ha based on R3 metallicity---------------------
-            corrected_ha_map = line_dict['HA'].data
+            orig_ha_map = line_dict['HA'].data
             factor = 0.823 # from James et al. 2023
-            nii_plus_ha_map = corrected_ha_map / factor # undoing the correction applied in stack_emission_maps.py
+            nii_plus_ha_map = orig_ha_map / factor # undoing the correction applied in stack_emission_maps.py
 
             nii_map, ha_map = deblend_nii_ha_maps(nii_plus_ha_map, logOH_map_R3, args)
             line_dict['NII'] = np.ma.masked_array(nii_map, mask=line_dict['HA'].mask)
@@ -377,11 +379,15 @@ if __name__ == "__main__":
             mean_redshift = df_thisbin.redshift.mean()
             distance = cosmo.luminosity_distance(mean_redshift)
             sfr_map = compute_SFR(line_dict['HA'], distance)
+            uncorr_sfr_map = compute_SFR(orig_ha_map, distance)
 
             axes[1][3] = plot_2D_map(sfr_map, axes[1][3], f'SFR', args, cmap='Blues', takelog=False, vmin=None, vmax=None, hide_cbar=False, hide_yaxis=True)
 
             this_df[f'sfr'] = unp.nominal_values(sfr_map.data).flatten()
             this_df[f'sfr_u'] = unp.std_devs(sfr_map.data).flatten()
+
+            this_df[f'uncorr_sfr'] = unp.nominal_values(uncorr_sfr_map.data).flatten()
+            this_df[f'uncorr_sfr_u'] = unp.std_devs(uncorr_sfr_map.data).flatten()
 
             # ---------------plot DIG maps of this bin---------------------
             dig_map = compute_dig_contribution(line_dict, logOH_map_R3, args)
