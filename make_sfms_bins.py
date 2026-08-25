@@ -598,11 +598,11 @@ def bin_SFMS_distance_mass(df, method_text = '_distance_mass', delta_bin=0.2, n_
         df[f'bin_intervals{method_text}'] = pd.cut(df['delta_sfms'], bins=bin_edges)
         df[f'mass_intervals{method_text}'] = pd.cut(df['log_mass'], bins=n_mass_bins) # make n_mass_bins of equal widths
     else: # make n_adaptive_bins of non-uniform width
-        df[f'bin_intervals{method_text}'], bin_edges = pd.qcut(df['delta_sfms'], q=n_adaptive_bins, retbins=True)
-        df[f'mass_intervals{method_text}'] = df.groupby(f'bin_intervals{method_text}')['log_mass'].apply(lambda x: pd.qcut(x, q=n_mass_bins)).reset_index(level=0, drop=True) # make n_mass_bins of widths decided to have roughly equal galaxies in each bin
+        #df[f'bin_intervals{method_text}'], bin_edges = pd.qcut(df['delta_sfms'], q=n_adaptive_bins, retbins=True)
+        #df[f'mass_intervals{method_text}'] = df.groupby(f'bin_intervals{method_text}')['log_mass'].apply(lambda x: pd.qcut(x, q=n_mass_bins)).reset_index(level=0, drop=True) # make n_mass_bins of widths decided to have roughly equal galaxies in each bin
 
-        #df[f'bin_intervals{method_text}'], sfms_bin_edges = pd.qcut(df['delta_sfms'], q=n_adaptive_bins, retbins=True)
-        #df[f'mass_intervals{method_text}'], mass_bin_edges = pd.qcut(df['log_mass'], q=n_mass_bins, retbins=True)
+        df[f'bin_intervals{method_text}'], sfms_bin_edges = pd.qcut(df['delta_sfms'], q=n_adaptive_bins, retbins=True)
+        df[f'mass_intervals{method_text}'], mass_bin_edges = pd.qcut(df['log_mass'], q=n_mass_bins, retbins=True)
 
     unique_bins_df = df[[f'bin_intervals{method_text}', f'mass_intervals{method_text}']].drop_duplicates().sort_values([f'bin_intervals{method_text}', f'mass_intervals{method_text}'])
     bin_list = list(unique_bins_df.to_records(index=False))
@@ -865,7 +865,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     df_temp['O3Hb'] = unp.nominal_values(quant)
     df_temp['O3Hb_u'] = unp.std_devs(quant)
     df_temp['O3Hb_J14_lim'] = df_temp['log_mass'].map(lambda x: np.piecewise(x, [x <= 10, x > 10], [lambda x: (0.375 / (x - 10.5)) + 1.14, lambda x: np.poly1d([410.24, -109.333, 9.71731, -0.288244][::-1])(x)])) # J14 eq 1
-    #df_temp['O3Hb_J14_lim'] += 0.75 # raising demarcation by 0.75 dex for high-z, Coil+15
+    df_temp['O3Hb_J14_lim'] += 0.75 # raising demarcation by 0.75 dex for high-z, Coil+15
 
     df_agn = df_temp[df_temp['O3Hb'] - df_temp['O3Hb_u'] > df_temp['O3Hb_J14_lim']]
 
@@ -1109,8 +1109,8 @@ methods = [
             ]
 
 target_n = 30 # for voronoi binning
-n_adaptive_bins = 8 # for distance (from SFMS) binning
-#n_adaptive_bins = 3 # for distance (from SFMS) binning
+#n_adaptive_bins = 8 # for distance (from SFMS) binning
+n_adaptive_bins = 3 # for distance (from SFMS) binning
 n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
 delta_sfms_bin = 0.4 # delta in distance from SFMS in which to bin in the distance-from-SFMS method, unless binning adaptively
 sfms =  'PASSAGE' # from 'PASSAGE', 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
@@ -1119,8 +1119,8 @@ n_sfh_bins = 10 # number of bins in SFH parameter, adaptive, so that each bin co
 
 # required_lines =['Hb', 'OIII', 'Ha', 'SII']
 # required_lines =['OIII', 'Ha', 'SII']
-required_lines =['OIII', 'Ha']
-#required_lines =['Hb', 'OIII', 'Ha']
+#required_lines =['OIII', 'Ha']
+required_lines =['Hb', 'OIII', 'Ha']
 # required_lines =['OII', 'OIII', 'Ha']
 # required_lines =[]
 

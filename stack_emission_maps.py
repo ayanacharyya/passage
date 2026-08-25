@@ -74,6 +74,25 @@ def get_direct_image(full_hdu, filter, args):
     return image, exptime
 
 # --------------------------------------------------------------------------------------------------------------------
+def correct_ha_F18(N2_plus_Ha_map, args):
+    '''
+    Extract the H-alpha flux from the N2+Halpha compund, following F18 N2/Ha calibration
+    '''
+    def F18_func(x, redshift, log_mass): # Eq 3 of Faisst+2018
+        psi = x + 0.138 - 0.042 * (1 + redshift) **2 
+        solve = 3.696 * psi + 3.236 * psi**(-1) + 0.729 * psi ** (-2) + 14.928 + 0.156 * (1 + redshift)**2 - log_mass
+        return solve
+
+    log_N2Ha = brentq(F18_func, -2, 0, args=(args.z, args.log_mass))
+    N2Ha = 10 ** log_N2Ha
+    Ha_map = N2_plus_Ha_map / (1 + 1.333 * N2Ha) # 1.333 factor is because F18 consider BOTH NII components, assuming NII 6548 = N II 6584 / 3
+
+    if hasattr(N2_plus_Ha_map, "__len__"): # if it is an array
+        Ha_map[Ha_map==0] = np.nan
+
+    return Ha_map
+
+# --------------------------------------------------------------------------------------------------------------------
 def get_emission_line_map(line, full_hdu, args, dered=True, silent=True):
     '''
     Retrieve the emission map for a given line from the HDU
@@ -100,9 +119,14 @@ def get_emission_line_map(line, full_hdu, args, dered=True, silent=True):
             factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
             if not silent: print(f'Correcting OIII for 4959 component, by factor of {factor:.3f}')
         elif line == 'Ha': # special treatment for Ha line, in order to account for and remove the NII component
+            '''
             factor = 0.823 # from James et al. 2023?
             if not silent: print(f'Correcting Ha for NII component, by factor of {factor:.3f}')
-
+            '''
+            line_map = correct_ha_F18(line_map, args) # correcting based on the galaxy's mass and redshift
+            line_map_err = correct_ha_F18(line_map_err, args)
+            if not silent: print(f'Correcting Ha for NII component, using Faisst+2018 calibration based on galaxy mass and redshift')
+            
     line_map = line_map * factor
     line_map_err = line_map_err * factor
 
@@ -410,6 +434,7 @@ if __name__ == "__main__":
     nbin_good = 0
     nobj_total_binned = 0
     scaling_line = 'OIII'
+    scaling_data = []
 
     for index2, this_mass_sfr_bin in enumerate(bin_list):
         start_time3 = datetime.now()
@@ -520,7 +545,6 @@ if __name__ == "__main__":
 
                         # ------------read in maps files--------------------------------
                         full_hdu = fits.open(full_filename)
-                        od_hdu = fits.open(od_filename)
 
                         # ----------determining object parameters------------
                         args.available_lines = np.array(full_hdu[0].header['HASLINES'].split(' '))
@@ -536,6 +560,7 @@ if __name__ == "__main__":
                         args.semi_minor = obj['b_image']
                         args.pa = obj['theta_image']
                         args.re_kpc, args.re_arcsec = obj['re_kpc'], obj['re_arcsec']
+                        args.log_mass = obj['log_mass']
                         
                         # --------determining true center of object rom direct image---------------------
                         args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter='F150W', silent=not args.debug_align)
@@ -554,6 +579,8 @@ if __name__ == "__main__":
                         if scaling_line in args.available_lines:
                             _, _, line_int = get_emission_line_map(scaling_line, full_hdu, args, dered=False, silent=True)
                             integrated_scaling_flux = line_int.n
+                            #integrated_scaling_flux = obj[f'flux_{scaling_line}']
+                            scaling_data.append({'field': args.field, 'id': args.id, 'scaling_flux_sum': line_int.n, 'scaling_flux_speccat': obj[f'flux_{scaling_line}']})
                             if integrated_scaling_flux > 0:
                                 print(f'Scaling all line fluxes of {args.id} by {scaling_line} flux = {integrated_scaling_flux}')
                             else:
@@ -564,7 +591,7 @@ if __name__ == "__main__":
                             print(f'Since {scaling_line} not available for {args.id}, not putting this in stack')
                             nobj_no_scale_line += 1
                             continue
-                        
+
                         # ---------------direct image---------------
                         filter = 'F200W'             
                         direct_image, exptime = get_direct_image(full_hdu, filter, args) # this is already offset corrected and trimmed
@@ -670,7 +697,6 @@ if __name__ == "__main__":
                         if nlines_good > 0: nobj_good += 1
                         
                         del full_hdu
-                        del od_hdu
                         gc.collect()
                     
                     # -------------removing unused rows-------------------------
@@ -729,6 +755,9 @@ if __name__ == "__main__":
         nobj_total_binned += nobj_good
         print(f'\nCompleted bin {bin_text} ({nobj_good} / {ngal_this_bin} objects, {nobj_no_scale_line} skipped due to lack of {scaling_line}) in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
         if nobj_good > 1: nbin_good += 1
+
+    df_scaling = pd.DataFrame(scaling_data)
+    df_scaling.to_csv(args.fits_dir / f'scaling_data{args.deproject_text}{args.rescale_text}_{bin_text}.csv', index=False)
 
     print(f'\nBinned total ({nobj_total_binned} / {len(df)}) objects, into {len(bin_list)} bins.')
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
