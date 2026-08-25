@@ -173,8 +173,8 @@ def plot_stacked_rad_profiles(df_list, args, quant_arr=['dig']):
     cmap_arr = ['viridis', 'RdBu']
     clim_dict = {'mass_intervals': [7, 11], 'bin_intervals': [-1, 1]}
     clabel_dict = {'mass_intervals': r'$\log{(M_*/M_{\odot})}$', 'bin_intervals': r'$\delta_{SFMS}$', 
-                   'sfr': r'SFR [M$_\odot$/yr]', 'cdig': 'DIG contribution', 'logOH': r'$\log{(O/H)}$ + 12',
-                   'uncorr_sfr': r'Uncorrected SFR [M$_\odot$/yr]'}
+                   'sfr': r'$\Sigma_{SFR}$ [M$_\odot$ yr$^{-1}$ kpc$^{-2}$]', 'cdig': 'DIG contribution', 'logOH': r'$\log{(O/H)}$ + 12',
+                   'uncorr_sfr': r'Uncorrected $\Sigma_{SFR}$ [M$_\odot$ yr$^{-1}$ kpc$^{-2}$]'}
 
     # -------looping over quants-------------
     for quant in quant_arr:

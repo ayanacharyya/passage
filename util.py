@@ -1276,16 +1276,16 @@ def move_field_after_download(field_arr, args=None):
 
         try:
             if args is None: destination_dir = Path('/Volumes/Ayan_SSD/Ayan_macbook/Users/aacharyya/Work/astro/passage/passage_data/v0.5')
-            else: destination_dir = args.input_dir / 'v0.5'
+            else: destination_dir = args.input_dir
             unzip_and_delete(origin_dir / f'{field}.zip', destination_dir)
             
             product_dir = destination_dir / field / 'Products'
             product_dir.mkdir(exist_ok=True, parents=True)
 
-            unzip_and_delete(destination_dir / field / f'{field}_spec1D_fixz.tar.gz', product_dir)
-            unzip_and_delete(destination_dir / field / f'{field}_spec2D_fixz.tar.gz', product_dir)
-            unzip_and_delete(destination_dir / field / f'{field}_plots.tar.gz', product_dir)
-            unzip_and_delete(destination_dir / field / f'{field}_maps.tar.gz', product_dir)
+            unzip_and_delete(destination_dir / field / f'{field}_spec1D*.tar.gz', product_dir)
+            unzip_and_delete(destination_dir / field / f'{field}_spec2D*.tar.gz', product_dir)
+            unzip_and_delete(destination_dir / field / f'{field}_plots*.tar.gz', product_dir)
+            unzip_and_delete(destination_dir / field / f'{field}_maps*.tar.gz', product_dir)
 
             for foldername in ['spec1D_fixz', 'spec2D_fixz']:
                 if os.path.exists(product_dir / foldername):

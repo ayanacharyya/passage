@@ -185,7 +185,8 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='_distance', cm
     # -----------defining vertices, for annotating and color-coding the bins-------------
     for index, row in df.iterrows():
         interval = row[f'bin_intervals{method_text}']
-        m_grid = np.linspace(row['log_mass_min'], row['log_mass_max'], 50)
+        #m_grid = np.linspace(row['log_mass_min'], row['log_mass_max'], 50)
+        m_grid = np.linspace(row[f'mass_intervals{method_text}'].left, row[f'mass_intervals{method_text}'].right, 50)
         sfms_line = sfms_func(m_grid)
         
         color = 'lightgrey' if args.nocolorbar else sm.to_rgba(row[quant])
@@ -325,6 +326,7 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
                 axes[index].scatter(df['log_mass'], df['delta_tform_ratio'], s=5, c='w', lw=1, edgecolors='sienna', label='Huberty+26' if args.do_all_fields else f'{args.field}') # overplot PASSAGE galaxies (integrated stellar mass-SFR)            
             else:
                 axes[index].scatter(df['log_mass'], df['log_sfr'], s=5, c='w', lw=1, edgecolors='sienna', label='Huberty+26' if args.do_all_fields else f'{args.field}') # overplot PASSAGE galaxies (integrated stellar mass-SFR)
+                axes[index].errorbar(df['log_mass'], df['log_sfr'], yerr=df['log_sfr_u'], xerr=df['log_mass_u'], fmt='none', c='k', lw=1, zorder=-5) # overplot PASSAGE galaxies (integrated stellar mass-SFR)
             if index == 0: axes[index].legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
 
         if args.overplot_literature:
@@ -352,7 +354,7 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
     return fig
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=50):
+def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=20):
     '''
     Plots the mass-excitation diagram given a dataframe with list of objects and properties
     Returns figure handle
@@ -378,7 +380,7 @@ def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=50):
     # ---------annotate axes and save figure-------
     plt.legend(fontsize=args.fontsize)
     ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
-    ax.set_ylabel(r'log O III/H$\beta$', fontsize=args.fontsize)
+    ax.set_ylabel(r'log [O III] $\lambda$5007/H$\beta$', fontsize=args.fontsize)
     ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
 
     ax.set_xlim(log_mass_bins.min() - 0.2, log_mass_bins.max() + 0.2)
@@ -388,6 +390,7 @@ def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=50):
     x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
     y_up = np.piecewise(x, [x <= 10, x > 10], [lambda x: (0.375 / (x - 10.5)) + 1.14, lambda x: np.poly1d([410.24, -109.333, 9.71731, -0.288244][::-1])(x)]) # J14 eq 1
     y_lo = np.piecewise(x, [x <= 9.6, x > 9.6], [lambda x: (0.375 / (x - 10.5)) + 1.14, lambda x: np.poly1d([352.066, -93.8249, 8.32651, -0.246416][::-1])(x)]) # J14 eq 2
+    ax.plot(x, y_up + 0.75, c='k', ls='solid', lw=2, label='Juneau+2014 + 0.75 dex (Coil+2015)')
     ax.plot(x, y_up, c='k', ls='dashed', lw=2, label='Juneau+2014')
     ax.plot(x, y_lo, c='brown', ls='dashed', lw=2)
     plt.legend()
@@ -597,7 +600,10 @@ def bin_SFMS_distance_mass(df, method_text = '_distance_mass', delta_bin=0.2, n_
     else: # make n_adaptive_bins of non-uniform width
         df[f'bin_intervals{method_text}'], bin_edges = pd.qcut(df['delta_sfms'], q=n_adaptive_bins, retbins=True)
         df[f'mass_intervals{method_text}'] = df.groupby(f'bin_intervals{method_text}')['log_mass'].apply(lambda x: pd.qcut(x, q=n_mass_bins)).reset_index(level=0, drop=True) # make n_mass_bins of widths decided to have roughly equal galaxies in each bin
-    
+
+        #df[f'bin_intervals{method_text}'], sfms_bin_edges = pd.qcut(df['delta_sfms'], q=n_adaptive_bins, retbins=True)
+        #df[f'mass_intervals{method_text}'], mass_bin_edges = pd.qcut(df['log_mass'], q=n_mass_bins, retbins=True)
+
     unique_bins_df = df[[f'bin_intervals{method_text}', f'mass_intervals{method_text}']].drop_duplicates().sort_values([f'bin_intervals{method_text}', f'mass_intervals{method_text}'])
     bin_list = list(unique_bins_df.to_records(index=False))
 
@@ -709,7 +715,14 @@ def read_passage_sed_catalog(filename):
                             'ra_obj':'ra', 'dec_obj':'dec', 'cosmoswebid_2': 'cosmoswebid'}, inplace=True)
     
     # -----------computing new columns------------
-    full_df['log_sfr'] = np.log10(full_df['sfr'])
+    if 'stellar_mass_84' in full_df: full_df['log_mass_u'] = (full_df['stellar_mass_84'] - full_df['stellar_mass_16']) / 2 # mass is already in log scale in the catalog
+    else: full_df['log_mass_u'] = (full_df['mass_84'] - full_df['mass_16']) / 2
+    full_df['log_ssfr_u'] = (full_df['ssfr_84'] - full_df['ssfr_16']) / 2 # ssfr is already in log scale in the catalog
+
+    sfr_quant = unp.uarray(full_df['sfr'], (full_df['sfr_84'] - full_df['sfr_16']) / 2)
+    log_sfr_quant = unp.log10(sfr_quant)
+    full_df['log_sfr'] = unp.nominal_values(log_sfr_quant)
+    full_df['log_sfr_u'] = unp.std_devs(log_sfr_quant)
     
     full_df['delta_tform_50_10'] = full_df['tform50_50'] - full_df['tform10_50']
     full_df['delta_tform_90_50'] = full_df['tform90_50'] - full_df['tform50_50']
@@ -717,7 +730,7 @@ def read_passage_sed_catalog(filename):
     full_df['delta_tform_ratio'] = full_df['delta_tform_90_50'] / full_df['delta_tform_50_10']
 
     # --------extracting relevant columns-----------
-    columns_to_extract = ['field', 'id', 'redshift', 'log_mass', 'log_sfr', 'log_ssfr', 'cosmoswebid', 'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10', 'delta_tform_ratio']
+    columns_to_extract = ['field', 'id', 'redshift', 'log_mass', 'log_mass_u', 'log_sfr', 'log_sfr_u', 'log_ssfr', 'log_ssfr_u', 'cosmoswebid', 'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10', 'delta_tform_ratio']
     df = full_df[columns_to_extract]
     df['field'] = df['field'].astype(str)
     nobj1 = len(df)
@@ -753,7 +766,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
 
         df = df.merge(df_speccat, on=['field', 'id'], how='inner')
         df = df[df['z_flag'] < args.cut_z_flag]
-        print(f'Out of the {nobj1} objects, {len(df)} had z_flag = 1..', end='')
+        print(f'Out of the {nobj1} objects, {len(df)} had z_flag < {args.cut_z_flag}', end='')
     
     # -------------add delta sfms column--------------------
     nobj2 = len(df)
@@ -763,8 +776,8 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     df['delta_sfms'] = df['log_sfr'] - df['log_sfr_ms_expected']
     df = df.dropna(subset=['delta_sfms'])
     print(f'Out of the {nobj2} objects, {len(df)} had delta sfms computable..', end='')
-
-    # ------------cut by redshift------------------
+    '''
+    # ------------cut by presence of required lines------------------
     if len(required_lines) > 0:
         df = df.merge(df_field_waverange[['field', 'obs_min', 'obs_max']], on='field', how='left')
 
@@ -777,7 +790,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
 
         df = df[(df['obs_min'] <= min_obs_waves) & (max_obs_waves <= df['obs_max'])]
         print(f'..out of which {len(df)} made the redshift cut for required lines {required_lines}..', end='')
-
+    '''
     # --------curtailing to desired SFR-mass limits--------------
     df = df[(df['log_sfr'].between(log_sfr_bins.min(), log_sfr_bins.max())) & (df['log_mass'].between(log_mass_bins.min(), log_mass_bins.max()))]
     print(f'..out of which {len(df)} made the extreme mass-sfr cut: log mass within ({log_mass_bins.min()}, {log_mass_bins.max()}) amd log sfr within ({log_sfr_bins.min()}, {log_sfr_bins.max()})..', end='')
@@ -806,7 +819,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     print(f'\nCombining all speccats to one file before merging to df, might take a few seconds..')
     fields = pd.unique(df['field'])
     df_master_speccat = pd.DataFrame()
-    lines_to_extract = ['OIII', 'Hb']
+    lines_to_extract = list(set(required_lines) | set(['OIII', 'Hb']))
     linecols = np.hstack([[f'flux_{item}', f'err_{item}', f'sn_{item}'] for item in lines_to_extract])
     cols_to_extract = np.hstack([['field', 'id', 'redshift_grizli'], linecols])
     multi_dim_cols = ['cdf_z']
@@ -824,8 +837,8 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     huberty_catalog_filename = args.output_dir / 'catalogs' / 'passage_cosmos_redshift_catalog_v3_internal_with_EW.dat'
     df_speccat = pd.read_csv(huberty_catalog_filename)
     df_speccat = df_speccat.drop('id', axis=1)
-    df_speccat = df_speccat.rename(columns={'field_id': 'id', 'z_best': 'redshift_huberty', 'o3_4959_5007_flux': 'flux_OIII', 'hb_4863_flux': 'flux_Hb', 'snr_OIII': 'sn_OIII', 'snr_Hb': 'sn_Hb'})
-    lines_to_extract = ['OIII', 'Hb']
+    df_speccat = df_speccat.rename(columns={'field_id': 'id', 'z_best': 'redshift_huberty', 'o3_4959_5007_flux': 'flux_OIII', 'hb_4863_flux': 'flux_Hb', 'snr_OIII': 'sn_OIII', 'snr_Hb': 'sn_Hb', 'ha_6565_flux': 'flux_Ha', 'snr_Ha': 'sn_Ha'})
+    lines_to_extract = list(set(required_lines) | set(['OIII', 'Hb']))
     for line in lines_to_extract:
         df_speccat[f'err_{line}'] = df_speccat[f'flux_{line}'] / df_speccat[f'sn_{line}']
     linecols = np.hstack([[f'flux_{item}', f'err_{item}', f'sn_{item}'] for item in lines_to_extract])
@@ -834,6 +847,14 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
 
     df = pd.merge(df, df_speccat, on=['field', 'id'], how='inner')
     '''
+    
+    # ------------cut by presence of required lines------------------
+    if len(required_lines) > 0:
+        nobj3 = len(df)
+        target_cols = [f'flux_{line}' for line in required_lines]
+        df = df[(df[target_cols] > 0).all(axis=1)]
+        print(f'Out of the {nobj3} objects, {len(df)} made the redshift cut for required lines {required_lines}..', end='')
+    
     # ----------------removing AGNs---------------------
     nobj = len(df)
     df_temp = df.copy()
@@ -844,7 +865,8 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     df_temp['O3Hb'] = unp.nominal_values(quant)
     df_temp['O3Hb_u'] = unp.std_devs(quant)
     df_temp['O3Hb_J14_lim'] = df_temp['log_mass'].map(lambda x: np.piecewise(x, [x <= 10, x > 10], [lambda x: (0.375 / (x - 10.5)) + 1.14, lambda x: np.poly1d([410.24, -109.333, 9.71731, -0.288244][::-1])(x)])) # J14 eq 1
-    
+    #df_temp['O3Hb_J14_lim'] += 0.75 # raising demarcation by 0.75 dex for high-z, Coil+15
+
     df_agn = df_temp[df_temp['O3Hb'] - df_temp['O3Hb_u'] > df_temp['O3Hb_J14_lim']]
 
     df = df.merge(df_agn[['field', 'id']], on=['field', 'id'], how='left', indicator=True)
@@ -935,6 +957,7 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
     '''
     # ------------add new keywords to args---------------
     if set(required_lines) == set(['Ha', 'OIII']): args.line_list = ['OIII', 'Hb', 'Ha', 'SII']
+    elif set(required_lines) == set(['Ha', 'OIII', 'Hb']): args.line_list = ['OIII', 'Hb', 'Ha', 'SII']
     elif set(required_lines) == set(['Ha', 'OIII', 'OII']): args.line_list = ['OIII', 'OII', 'NeIII-3867',  'Ha', 'SII']
     print(f'\nWill stack and compute metallicity using these {len(args.line_list)} lines: {args.line_list}.\n')
 
@@ -1038,11 +1061,12 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
                 plot_inc_histogram(df, f'bin_intervals{method_text}', f'mass_intervals{method_text}', args)
 
         # --------------curtailiug bins for debugging-------------------
-        if args.debug_bin: bin_list = bin_list[:1]
-        # if args.debug_bin: bin_list = bin_list[15:16]
+        # if args.debug_bin: bin_list = bin_list[:1]
+        if args.debug_bin: bin_list = bin_list[7:8]
         # if args.debug_bin: bin_list = bin_list[10:11]
+        # if args.debug_bin: bin_list = bin_list[15:16]
         # if args.debug_bin: bin_list = bin_list[25:26]
-        # if args.debug_bin: bin_list = bin_list[7:8]
+        # if args.debug_bin: bin_list = bin_list[29:30]
         #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
 
         # ------determining field-specific paths, etc-----------
@@ -1086,14 +1110,17 @@ methods = [
 
 target_n = 30 # for voronoi binning
 n_adaptive_bins = 8 # for distance (from SFMS) binning
-#n_adaptive_bins = 4 # for distance (from SFMS) binning
+#n_adaptive_bins = 3 # for distance (from SFMS) binning
 n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
 delta_sfms_bin = 0.4 # delta in distance from SFMS in which to bin in the distance-from-SFMS method, unless binning adaptively
 sfms =  'PASSAGE' # from 'PASSAGE', 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
 delta_sfh = 0.5 # delta in tform90 - tform10 parameter (in Gyr) in which to bin, unless binning adaptively
 n_sfh_bins = 10 # number of bins in SFH parameter, adaptive, so that each bin contains approximately equal number of objects
 
+# required_lines =['Hb', 'OIII', 'Ha', 'SII']
+# required_lines =['OIII', 'Ha', 'SII']
 required_lines =['OIII', 'Ha']
+#required_lines =['Hb', 'OIII', 'Ha']
 # required_lines =['OII', 'OIII', 'Ha']
 # required_lines =[]
 

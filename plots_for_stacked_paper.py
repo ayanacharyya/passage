@@ -99,16 +99,12 @@ def plot_stacked_MZR(df, args, xcol='log_mass_median', ycol='logOH_int', colorco
     # ------setup figure----------
     fig, ax = plt.subplots(1, 1, figsize = (6., 5))
     fig.subplots_adjust(left=0.14, right=0.82, top=0.95, bottom=0.12, wspace=0., hspace=0.)
-    
-    print_sr_corr(df, xcol, ycol, xcol2=colorcol)
-    log_mass_cut_low, log_mass_cut_high = 8.5, 8.5
-    df_low = df[df[xcol] < log_mass_cut_low]
-    df_high = df[df[xcol] > log_mass_cut_high]
-    print(f'\nAfter log_mass < {log_mass_cut_low}..')
-    print_sr_corr(df_low, xcol, ycol, xcol2=colorcol)
-    print(f'\nAfter log_mass > {log_mass_cut_high}..')
-    print_sr_corr(df_high, xcol, ycol, xcol2=colorcol)
-    
+
+    log_mass_cut = 8.5
+
+    results_dict = {'full': {}, 'low': {}, 'high': {}}
+    results_dict = record_and_print_stats(results_dict, df, xcol, ycol, colorcol=colorcol, log_xcol_cut=log_mass_cut) # just getting in the stats for integrated metallicity too
+
     # ------plot data-----------
     if colorcol is None:
         color = 'cornflowerblue'
@@ -135,7 +131,7 @@ def plot_stacked_MZR(df, args, xcol='log_mass_median', ycol='logOH_int', colorco
     figname = f'MZR_{qualifiers}.png'
     save_fig(fig, args.fig_dir, figname, args)
 
-    return fig
+    return fig, results_dict
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_MZGR_literature(ax, this_work_legend=[], skip_legend=False):
@@ -222,23 +218,38 @@ def plot_MZGR_literature(ax, this_work_legend=[], skip_legend=False):
 def print_sr_corr(df, xcol, ycol, xcol2=None):
     '''
     Prints out the partial (if ycol2 is not None) Spearman Rank correlation coefficients
+    Returns a dictionary of the results
     '''
-    p_corr_xcol = pg.corr(df[xcol], df[ycol], method='spearman')
-    print(f'\nSpearman Rank correlation of {ycol} vs {xcol} is r={p_corr_xcol.loc["spearman", "r"]:.2f}, p-val={p_corr_xcol.loc["spearman", "p-val"]:.2f}')
+    corr_xcol = pg.corr(df[xcol], df[ycol], method='spearman')
+    corr_xcol_r, corr_xcol_p = corr_xcol.loc["spearman", "r"], corr_xcol.loc["spearman", "p-val"]
+    print(f'\nSpearman Rank correlation of {ycol} vs {xcol} is r={corr_xcol_r:.2f}, p-val={corr_xcol_p:.2f}')
     
     if xcol2 is not None:
-        p_corr_ccol = pg.corr(df[xcol2], df[ycol], method='spearman')
-        print(f'Spearman Rank correlation of {ycol} vs {xcol2} is r={p_corr_ccol.loc["spearman", "r"]:.2f}, p-val={p_corr_ccol.loc["spearman", "p-val"]:.2f}')
+        corr_ccol = pg.corr(df[xcol2], df[ycol], method='spearman')
+        corr_ccol_r, corr_ccol_p = corr_ccol.loc["spearman", "r"], corr_ccol.loc["spearman", "p-val"]
+        print(f'Spearman Rank correlation of {ycol} vs {xcol2} is r={corr_ccol_r:.2f}, p-val={corr_ccol_p:.2f}')
 
-        p_corr_xcol = pg.partial_corr(data=df, x=xcol, y=ycol, covar=xcol2, method='spearman')
-        p_corr_ccol = pg.partial_corr(data=df, x=xcol2, y=ycol, covar=xcol, method='spearman')
-        print(f'Parial Spearman Rank correlation of {ycol} vs {xcol} (keeping {xcol2} fixed) is r={p_corr_xcol.loc["spearman", "r"]:.2f}, p-val={p_corr_xcol.loc["spearman", "p-val"]:.2f}')
-        print(f'Parial Spearman Rank correlation of {ycol} vs {xcol2} (keeping {xcol} fixed) is r={p_corr_ccol.loc["spearman", "r"]:.2f}, p-val={p_corr_ccol.loc["spearman", "p-val"]:.2f}')
+        pcorr_xcol = pg.partial_corr(data=df, x=xcol, y=ycol, covar=xcol2, method='spearman')
+        pcorr_xcol_r, pcorr_xcol_p = pcorr_xcol.loc["spearman", "r"], pcorr_xcol.loc["spearman", "p-val"]
+        print(f'Partial Spearman Rank correlation of {ycol} vs {xcol} (keeping {xcol2} fixed) is r={pcorr_xcol_r:.2f}, p-val={pcorr_xcol_p:.2f}')
 
-    return
+        pcorr_ccol = pg.partial_corr(data=df, x=xcol2, y=ycol, covar=xcol, method='spearman')
+        pcorr_ccol_r, pcorr_ccol_p = pcorr_ccol.loc["spearman", "r"], pcorr_ccol.loc["spearman", "p-val"]
+        print(f'Partial Spearman Rank correlation of {ycol} vs {xcol2} (keeping {xcol} fixed) is r={pcorr_ccol_r:.2f}, p-val={pcorr_ccol_p:.2f}')
+    else:
+        corr_ccol_r, corr_ccol_p, pcorr_xcol_r, pcorr_xcol_p, pcorr_ccol_r, pcorr_ccol_p = np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
+
+    results = {
+        'corr_x_r': corr_xcol_r, 'corr_x_p': corr_xcol_p,
+        'corr_c_r': corr_ccol_r, 'corr_c_p': corr_ccol_p,
+        'pcorr_x_r': pcorr_xcol_r, 'pcorr_x_p': pcorr_xcol_p,
+        'pcorr_c_r': pcorr_ccol_r, 'pcorr_c_p': pcorr_ccol_p,
+    }
+
+    return results
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=None, cmap='RdBu', qualifiers=''):
+def plot_stacked_MZGR_old(df, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=None, cmap='RdBu', qualifiers=''):
     '''
     Plots the stacked mass-metallicity gradient relation (both radial and minor-major gradients), overplotted with relations from the literature
     Saves the figure
@@ -329,6 +340,229 @@ def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad'
     return fig
 
 # --------------------------------------------------------------------------------------------------------------------
+def format_latex_cell(r, p):
+    '''
+    Formats correlation coefficient r and p-value into a LaTeX shortstack string with significance bolding.
+    '''
+    if np.isnan(r) or np.isnan(p):
+        return r"\shortstack{N/A}"
+    
+    direction = "positive" if r > 0 else "negative"
+    abs_r = abs(r)
+    
+    # Qualitative classification
+    if np.round(p, 2) > 0.10:
+        qual = "No sig. correlation"
+    elif 0.05 < np.round(p, 2) <= 0.10:
+        qual = f"Marginal {direction}"
+    else:
+        if abs_r >= 0.65:
+            qual = f"Strong {direction}"
+        elif abs_r >= 0.30:
+            qual = f"Moderate {direction}"
+        else:
+            qual = f"Weak {direction}"
+            
+    p_str = "p < 0.001" if p < 0.001 else (f"p = {p:.2f}" if p >= 0.01 else f"p = {p:.3f}")
+    
+    # Bold significant results (p <= 0.05)
+    if np.round(p, 2) <= 0.05:
+        return "\\shortstack{\\textbf{" + qual + "}\\\\ (\\textbf{$r = " + f"{r:.2f}, {p_str}" + "$})}"
+    else:
+        return "\\shortstack{" + qual + "\\\\ ($r = " + f"{r:.2f}, {p_str}" + "$)}"
+
+# --------------------------------------------------------------------------------------------------------------------
+def generate_latex_table(results_dict, outfilename):
+    '''
+    Constructs LaTeX tabular code from collected correlation statistics and prints/saves it
+    '''
+    
+    header = (
+        "\\begin{tabular}{l|c|c||c|c}\n"
+        "\\toprule\n"
+        "& \\multicolumn{2}{c||}{Stellar mass ($\\log{(M_*/M_\\odot)}$)} & \\multicolumn{2}{c}{Offset from SFMS ($\\delta_{\\rm SFMS}$)} \\\\\n"
+        "\\cmidrule(lr){2-3} \\cmidrule(lr){4-5}\n"
+        "Quantity & Zero-Order & Partial\\tnote{a} & Zero-Order & Partial\\tnote{a} \\\\\n"
+        "\\midrule\n"
+    )
+    
+    body = ""
+    sections = [
+        ('full', r"\multicolumn{5}{l}{\textit{Full mass range ($7 \lesssim \log{(M_*/M_\odot)} \lesssim 11$)}} \\[5pt]"),
+        ('low', r"\multicolumn{5}{l}{\textit{Lower-mass regime ($\log{(M_*/M_\odot)} < 8.5$)}} \\[5pt]"),
+        ('high', r"\multicolumn{5}{l}{\textit{Higher-mass regime ($\log{(M_*/M_\odot)} > 8.5$)}} \\[5pt]")
+    ]
+    
+    labels = {
+        'logOH_int': 'Integrated metallicity',
+        'radial_logOH_grad': 'Radial gradient',
+        'minor_logOH_grad': 'Minor-axis gradient',
+        'major_logOH_grad': 'Major-axis gradient'
+    }
+    
+    for sec_key, sec_title in sections:
+        if sec_key not in results_dict or not results_dict[sec_key]:
+            continue
+            
+        body += f"{sec_title}\n"
+        rows = results_dict[sec_key]
+        
+        if sec_key == 'full': quants_in_this_section = ['logOH_int']
+        else: quants_in_this_section = ['radial_logOH_grad', 'minor_logOH_grad', 'major_logOH_grad']
+
+        for q_key in quants_in_this_section:
+            if q_key not in rows:
+                continue
+                
+            q_label = labels[q_key]
+            stats = rows[q_key]
+            
+            c1 = format_latex_cell(stats['x_zero'][0], stats['x_zero'][1])
+            c2 = format_latex_cell(stats['x_partial'][0], stats['x_partial'][1])
+            c3 = format_latex_cell(stats['c_zero'][0], stats['c_zero'][1])
+            c4 = format_latex_cell(stats['c_partial'][0], stats['c_partial'][1])
+            
+            spacing = "\\\\[12pt]\n" if q_key != list(rows.keys())[-1] else "\\\\[8pt]\n"
+            body += f"{q_label}\n  & {c1}\n  & {c2}\n  & {c3}\n  & {c4} {spacing}"
+            
+        body += "\\midrule\n" if sec_key != 'high' else ""
+
+    footer = "\\bottomrule\n\\end{tabular}\n"
+    latex_str = header + body + footer
+        
+    with open(outfilename, 'w') as f:
+        f.write(latex_str)
+    print(f'LaTeX table saved as {outfilename}\n')
+        
+    return latex_str
+
+# ----------------------------------------------------------------------------------------------------------------
+def record_and_print_stats(results_dict, df, xcol, ycol, colorcol=None, log_xcol_cut=8.5):
+    '''
+    Computes SR correlations, prints them, and adds the result to a given dictionary for later LaTeX table generation
+    Returns the dictionary
+    '''
+    print(f"\nDoing correlations for {ycol}...")
+
+    df_low = df[df[xcol] < log_xcol_cut]
+    df_high = df[df[xcol] > log_xcol_cut]
+
+    # Full mass range
+    print(f'\nFor full range of {xcol}..')
+    results = print_sr_corr(df, xcol, ycol, xcol2=colorcol)
+    results_dict['full'][ycol] = {'x_zero': [results['corr_x_r'], results['corr_x_p']],
+                                    'c_zero': [results['corr_c_r'], results['corr_c_p']],
+                                    'x_partial': [results['pcorr_x_r'], results['pcorr_x_p']],
+                                    'c_partial': [results['pcorr_c_r'], results['pcorr_c_p']]
+                                    }
+    
+    # Lower mass range
+    print(f'\nAfter slicing to {xcol} < {log_xcol_cut}..')
+    results = print_sr_corr(df_low, xcol, ycol, xcol2=colorcol)
+    results_dict['low'][ycol] = {'x_zero': [results['corr_x_r'], results['corr_x_p']], 
+                                    'c_zero': [results['corr_c_r'], results['corr_c_p']],
+                                    'x_partial': [results['pcorr_x_r'], results['pcorr_x_p']],
+                                    'c_partial': [results['pcorr_c_r'], results['pcorr_c_p']]
+                                    }
+    
+    # Higher mass range
+    print(f'\nAfter slicing to {xcol} > {log_xcol_cut}..')
+    results = print_sr_corr(df_high, xcol, ycol, xcol2=colorcol)
+    results_dict['high'][ycol] = {'x_zero': [results['corr_x_r'], results['corr_x_p']],
+                                    'c_zero': [results['corr_c_r'], results['corr_c_p']],
+                                    'x_partial': [results['pcorr_x_r'], results['pcorr_x_p']],
+                                    'c_partial': [results['pcorr_c_r'], results['pcorr_c_p']]
+                                    }
+
+    return results_dict
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=None, cmap='RdBu', qualifiers=''):
+    '''
+    Plots the stacked mass-metallicity gradient relation (both radial and minor-major gradients), overplotted with relations from the literature.
+    Computes Spearman correlations and automatically outputs a LaTeX table.
+    '''
+    # ------setup figure----------
+    fig, axes = plt.subplots(2, 1, figsize=(10, 7.6), sharex=True)
+    fig.subplots_adjust(left=0.1, right=0.87, top=0.88, bottom=0.08, wspace=0., hspace=0.04)
+
+    # ------storing correlations-----------
+    df = df.sort_values(by=xcol)
+    log_mass_cut = 8.5
+
+    results_dict = {'full': {}, 'low': {}, 'high': {}}
+    results_dict = record_and_print_stats(results_dict, df, xcol, 'logOH_int', colorcol=colorcol, log_xcol_cut=log_mass_cut) # just getting in the stats for integrated metallicity too
+    results_dict = record_and_print_stats(results_dict, df, xcol, ycol, colorcol=colorcol, log_xcol_cut=log_mass_cut)
+
+    # ------prepare plotting attributes-----------
+    if colorcol is None:
+        color = 'cornflowerblue'
+        cmin, cmax = None, None
+        cmap = None
+    else:
+        color = df[colorcol]
+        cmin, cmax = lim_dict[colorcol][0], lim_dict[colorcol][1]
+        cmap = cmap
+
+    # -------plot radial gradient------------
+    axes[0].plot(df[xcol], df[ycol], lw=0.7, c='k', ls='dashed')
+    p = axes[0].scatter(df[xcol], df[ycol], s=100, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker='o', zorder=20, label='This Work (azimuthally averaged)')
+    if f'{ycol}_u' in df:
+        axes[0].errorbar(df[xcol], df[ycol], yerr=df[f'{ycol}_u'], c='grey', lw=0.7, fmt='none', alpha=1)
+    this_work_legend = [p]
+
+    axes[0].axhline(0, ls='dashed', lw=0.5, c='k')
+
+    # -----plot literature---------
+    axes[0] = plot_MZGR_literature(axes[0], skip_legend=True)
+
+    # -------annotate axis--------
+    axes[0] = annotate_axes(axes[0], label_dict[xcol], label_dict[ycol], xlim=lim_dict[xcol], ylim=lim_dict[ycol], args=args, 
+                       clabel=label_dict[colorcol] if colorcol is not None else '', hide_cbar=colorcol is None, cbar_width=2,
+                       p=p, hide_cbar_ticks=False, cticks_integer=False, hide_xaxis=True)    
+
+    vline_col = 'sienna'
+    axes[0].axvline(log_mass_cut, ls='dotted', lw=1., c=vline_col)
+    axes[0].text(log_mass_cut - 0.1, axes[0].get_ylim()[1] * 0.95, 'Lower mass regime', c=vline_col, fontsize=args.fontsize / args.fontfactor, ha='right', va='top')
+    axes[0].text(log_mass_cut + 0.1, axes[0].get_ylim()[1] * 0.95, 'Higher mass regime', c=vline_col, fontsize=args.fontsize / args.fontfactor, ha='left', va='top')
+    axes[1].axvline(log_mass_cut, ls='dotted', lw=1., c=vline_col)
+
+    # -------plot minor & major gradient------------
+    ycol_arr = [ycol.replace('radial', 'minor'), ycol.replace('radial', 'major')]
+    marker_arr = ['s', 'D']
+    ls_arr = ['solid', 'dashed']
+
+    for index, curr_ycol in enumerate(ycol_arr):
+        results_dict = record_and_print_stats(results_dict, df, xcol, curr_ycol, colorcol=colorcol, log_xcol_cut=log_mass_cut)
+        
+        axes[1].plot(df[xcol], df[curr_ycol], lw=0.7, c='k', ls=ls_arr[index])
+        p = axes[1].scatter(df[xcol], df[curr_ycol], s=70, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker=marker_arr[index], zorder=20, label=f'This work ({curr_ycol.split("_")[0]} axis)')
+        if f'{curr_ycol}_u' in df:
+            axes[1].errorbar(df[xcol], df[curr_ycol], yerr=df[f'{curr_ycol}_u'], c='grey', lw=0.7, fmt='none', alpha=1)
+        this_work_legend.append(p)
+
+    axes[1].axhline(0, ls='dashed', lw=0.5, c='k')
+
+    # -----plot literature---------
+    axes[1] = plot_MZGR_literature(axes[1], this_work_legend=this_work_legend)
+
+    # -------annotate axis--------
+    ycol_rad = ycol.replace('minor', 'radial').replace('major', 'radial')
+    axes[1] = annotate_axes(axes[1], label_dict[xcol], label_dict[ycol_rad], xlim=lim_dict[xcol], ylim=lim_dict[ycol_rad], args=args, 
+                       clabel=label_dict[colorcol] if colorcol is not None else '', hide_cbar=colorcol is None, cbar_width=2,
+                       p=p, hide_cbar_ticks=False, cticks_integer=False)    
+
+    # -------generate LaTeX Table----------
+    tex_filename = os.path.join(args.fig_dir, f'MZGR_{qualifiers}_stats_table.tex')
+    generate_latex_table(results_dict, tex_filename)
+
+    # -------save fig--------
+    figname = f'MZGR_{qualifiers}.png'
+    save_fig(fig, args.fig_dir, figname, args)
+
+    return fig, results_dict
+
+# --------------------------------------------------------------------------------------------------------------------
 lim_dict = {'minor_logOH_grad': [-1.2, 1.2],\
                 'major_logOH_grad': [-1.2, 1.2],\
                 'radial_logOH_grad': [-1.2, 1.2],\
@@ -388,7 +622,7 @@ if __name__ == "__main__":
     else:
         colorcol, cmap = 'tform_ratio_median', 'viridis' # sequential cmap
     
-    fig_mzr = plot_stacked_MZR(df_grad, args, xcol='log_mass_median', ycol='logOH_int', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
-    #fig_mzgr = plot_stacked_MZGR(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
+    #fig_mzr, results_dict = plot_stacked_MZR(df_grad, args, xcol='log_mass_median', ycol='logOH_int', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
+    fig_mzgr, results_dict = plot_stacked_MZGR(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

@@ -842,7 +842,7 @@ def fold_image_to_quadrant(data_map, args, line=''):
     return folded_quadrant
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin=None, cmax=None, Zmin=None, Zmax=None, takelog=True):
+def plot_line_and_metallicity_maps_old(line_dict, logOH_map, args, bin_text='', cmin=None, cmax=None, Zmin=None, Zmax=None, takelog=True):
     '''
     Makes a nice plot of all emission lines present in a given list of stacked line maps along with the metallicity map
     Returns figure handle and the list of lines plotted
@@ -900,6 +900,85 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
         logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
 
         axes[1][index + 1], minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(logOH_df, axes[1][index + 1], args, ylim=[Zmin, Zmax], xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant, skip_fitting=False, yaxis_on_right=True)
+    else:
+        minor_linefit_odr, major_linefit_odr, radial_linefit_odr = None, None, None
+
+    return fig, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin=None, cmax=None, Zmin=None, Zmax=None, takelog=True):
+    '''
+    Makes a nice plot of all emission lines present in a given list of stacked line maps along with the metallicity map
+    Returns figure handle and the list of lines plotted
+    '''
+    # ----------getting line list from fits file-------------
+    line_list = [item for item in list(line_dict.keys()) if '_nobj' not in item and '_id' not in item]
+    n_lines = len(line_list)
+
+    # ----------getting distance maps, in case radial profile plotting-------------
+    if args.plot_radial_profiles:
+        shape = np.shape(logOH_map)
+        if args.fold_maps:
+            center_xpix, center_ypix = (args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5
+        else:
+            center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
+        distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size
+        minor_distance_map = np.array([[np.abs(j - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size
+        major_distance_map = np.array([[np.abs(i - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size
+        df = pd.DataFrame({'distance': distance_map.flatten(), 'minor_distance': minor_distance_map.flatten(), 'major_distance': major_distance_map.flatten()})
+
+    # -----------------setup the figure with GridSpec---------------
+    nrows = 2 if args.plot_radial_profiles else 1
+    
+    # Figure width scales with (n_lines + metallicity panel + colorbar gap)
+    fig = plt.figure(figsize=(2.5 * (n_lines + 1.4), 3.5 * nrows))
+    
+    # Outer GridSpec: [Line panels block] | [Line Colorbar Gap] | [Metallicity Panel block]
+    outer_gs = fig.add_gridspec(1, 2, width_ratios=[n_lines, 1.0], wspace=0.3, left=0.07, right=0.93, top=0.92, bottom=0.08)
+    gs_lines = outer_gs[0, 0].subgridspec(nrows, n_lines, wspace=0.0, hspace=0.2)
+    #gs_cbar  = outer_gs[0, 1].subgridspec(nrows, 1, hspace=0.2)
+    gs_Z     = outer_gs[0, 1].subgridspec(nrows, 1, hspace=0.2)
+
+    axes_lines = np.empty((nrows, n_lines), dtype=object)
+    for r in range(nrows):
+        for c in range(n_lines):
+            axes_lines[r, c] = fig.add_subplot(gs_lines[r, c])
+
+    axes_Z = np.empty((nrows, 1), dtype=object)
+    for r in range(nrows):
+        axes_Z[r, 0] = fig.add_subplot(gs_Z[r, 0])
+
+    fig.text(0.05, 0.96, f'{bin_text}', fontsize=args.fontsize, c='k', ha='left', va='top')
+    
+    # -----------------plot emission line maps and radial profiles of this bin---------------
+    for index, this_line in enumerate(line_list):
+        this_map, _ , _ = get_emission_line_map(this_line, line_dict, args)
+        nobj = line_dict[f'{this_line}_nobj']
+        
+        if type(unp.nominal_values(this_map.data)) == np.ndarray:
+            axes_lines[0, index] = plot_2D_map(this_map, axes_lines[0, index], f'{this_line}: {nobj}', args, cmap='cividis', clabel=r'$\log\,\mathrm{Line\ Flux}$' if takelog else 'Line Flux', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=index < n_lines - 1, hide_cbar_ticks=False, cticks_integer=True)
+
+        if args.plot_radial_profiles:
+            this_df = df.copy()
+            this_df[f'{this_line}'] = unp.nominal_values(this_map.data).flatten()
+            this_df[f'{this_line}_u'] = unp.std_devs(this_map.data).flatten()
+            this_df = this_df.dropna(subset=[f'{this_line}', f'{this_line}_u'], axis=0)
+            this_df = this_df[this_df[f'{this_line}'] > 0]
+            
+            axes_lines[1, index], _, _, _ = plot_radial_profile(this_df, axes_lines[1, index], args, ylim=[cmin, cmax], takelog=takelog, xlim=None, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=True, skip_annotate=False, quant=this_line, skip_fitting=True)
+
+    # -----------------plot metallicity map & profile---------------
+    axes_Z[0, 0] = plot_2D_map(logOH_map, axes_Z[0, 0], f'logOH {args.Zdiag}', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', takelog=False, vmin=Zmin, vmax=Zmax, hide_yaxis=False, hide_cbar=False, cticks_integer=True)
+    
+    if args.plot_radial_profiles:
+        quant = 'log_OH'
+        logOH_df = df.copy()
+        logOH_df[f'{quant}'] = unp.nominal_values(logOH_map).flatten()
+        logOH_df[f'{quant}_u'] = unp.std_devs(logOH_map).flatten()
+        logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
+
+        # Set yaxis_on_right=False so Y-axis labels sit on the left (in the gap)
+        axes_Z[1, 0], minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(logOH_df, axes_Z[1, 0], args, ylim=[Zmin, Zmax], xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant, skip_fitting=False)
     else:
         minor_linefit_odr, major_linefit_odr, radial_linefit_odr = None, None, None
 
@@ -1104,7 +1183,7 @@ if __name__ == "__main__":
 
         # ---------------plot emission line maps of this bin---------------------
         if args.plot_line_maps:
-            fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=-2)
+            fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=-1)
             save_fig(fig_em, args.fig_dir, f'stacked{args.fold_text}_line_maps{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -----------------computing metallicity maps of this bin---------------
@@ -1127,7 +1206,7 @@ if __name__ == "__main__":
 
         # -----------------plot line maps and metallicity maps of this bin---------------
         if args.plot_line_and_metallicity:
-            fig_met, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=-2, Zmin=None, Zmax=None)
+            fig_met, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=-1, Zmin=None, Zmax=None)
             save_fig(fig_met, args.fig_dir, f'stacked{args.fold_text}_line_and_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -------------save fit results to dataframe-----------------------
