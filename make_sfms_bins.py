@@ -6,7 +6,7 @@
     Example: run make_sfms_bins.py --field Par028 --overplot_literature --overplot_passage
              run make_sfms_bins.py --field Par028
              run make_sfms_bins.py --system ssd --do_all_fields
-             run make_sfms_bins.py --system ssd --do_all_fields --cut_z_flag 4 --overplot_passage --overplot_literature --nocolorbar
+             run make_sfms_bins.py --system ssd --do_all_fields --cut_z_flag 4 --overplot_passage --overplot_literature --nocolorbar --include_cosmos2020
 '''
 
 from header import *
@@ -695,7 +695,7 @@ def get_field_waverange(args):
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
-def read_passage_sed_catalog(filename):
+def read_passage_sed_catalog(filename, include_cosmos2020=False):
     '''
     Read the combined master catalog from PASSAGE SED fits, rename a few columns, and only keep the mass and SFR columns
     Return pandas dataframe
@@ -709,6 +709,29 @@ def read_passage_sed_catalog(filename):
         full_df = full_df[full_df['mass_50'] > 0].reset_index(drop=True) # to get only those sources that have stellar mass measured
         full_df = full_df.drop('id', axis=1)
 
+    # -------merging with COSMOS2020 catalog--------------------
+    filename2 = Path(str(filename).replace('web', '2020'))
+    if os.path.exists(filename2) and include_cosmos2020:
+        if Path(filename2).suffix == '.fits':
+            print(f'Also reading master PASSAGE SED catalog from {filename2}..')
+            full_df2 = Table.read(filename2).to_pandas()
+        else:
+            print(f'Also reading PASSAGE line finding catalog from {filename2}..')
+            full_df2 = pd.read_csv(filename2, header=0, sep='\t')
+            full_df2 = full_df2[full_df2['mass_50'] > 0].reset_index(drop=True) # to get only those sources that have stellar mass measured
+            full_df2 = full_df.drop('id', axis=1)
+
+        index_cols = ['field', 'id_photcat']
+        target_cols = ['stellar_mass_50', 'stellar_mass_16', 'stellar_mass_84',
+                          'sfr_50', 'sfr_16', 'sfr_84',
+                          'ssfr_50', 'ssfr_16', 'ssfr_84'] # check if these columns are empty (nan) in the cosmosweb df, and if so, then draw their values from the cosmos2020 df
+        df1_idx = full_df.set_index(index_cols)
+        df2_idx = full_df2.drop_duplicates(subset=index_cols).set_index(index_cols)
+
+        for thiscol in target_cols:
+            full_df[thiscol] = df1_idx[thiscol].fillna(df2_idx[thiscol]).values
+
+    # ------renaming columns---------
     if 'cosmoswebid_1' in full_df: full_df.drop('cosmoswebid_1', axis=1, inplace=True)
     full_df.rename(columns={'Par':'field', 'passage_id':'id', 'id_photcat':'id', 'objid':'id', 'field_id':'id', 'z_best':'redshift', 
                             'zbest':'redshift', 'mass_50':'log_mass', 'stellar_mass_50':'log_mass', 'ssfr_50':'log_ssfr', 'sfr_50':'sfr', 
@@ -747,7 +770,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     Read the combined master catalog from PASSAGE SED fits, rename a few columns, and only keep the mass and SFR columns
     Return pandas dataframe
     '''
-    df = read_passage_sed_catalog(passage_catalog_filename)
+    df = read_passage_sed_catalog(passage_catalog_filename, include_cosmos2020=args.include_cosmos2020)
     df_field_waverange = get_field_waverange(args)
     
     if not args.do_all_fields:

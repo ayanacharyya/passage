@@ -434,7 +434,6 @@ if __name__ == "__main__":
     nbin_good = 0
     nobj_total_binned = 0
     scaling_line = 'OIII'
-    scaling_data = []
 
     for index2, this_mass_sfr_bin in enumerate(bin_list):
         start_time3 = datetime.now()
@@ -578,9 +577,8 @@ if __name__ == "__main__":
                         # -----------extracting integrated OIII line flux, for scaling----------------
                         if scaling_line in args.available_lines:
                             _, _, line_int = get_emission_line_map(scaling_line, full_hdu, args, dered=False, silent=True)
-                            integrated_scaling_flux = line_int.n
-                            #integrated_scaling_flux = obj[f'flux_{scaling_line}']
-                            scaling_data.append({'field': args.field, 'id': args.id, 'scaling_flux_sum': line_int.n, 'scaling_flux_speccat': obj[f'flux_{scaling_line}']})
+                            #integrated_scaling_flux = line_int.n
+                            integrated_scaling_flux = obj[f'flux_{scaling_line}']
                             if integrated_scaling_flux > 0:
                                 print(f'Scaling all line fluxes of {args.id} by {scaling_line} flux = {integrated_scaling_flux}')
                             else:
@@ -755,9 +753,6 @@ if __name__ == "__main__":
         nobj_total_binned += nobj_good
         print(f'\nCompleted bin {bin_text} ({nobj_good} / {ngal_this_bin} objects, {nobj_no_scale_line} skipped due to lack of {scaling_line}) in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
         if nobj_good > 1: nbin_good += 1
-
-    df_scaling = pd.DataFrame(scaling_data)
-    df_scaling.to_csv(args.fits_dir / f'scaling_data{args.deproject_text}{args.rescale_text}_{bin_text}.csv', index=False)
 
     print(f'\nBinned total ({nobj_total_binned} / {len(df)}) objects, into {len(bin_list)} bins.')
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

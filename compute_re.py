@@ -6,7 +6,7 @@
     Example: run compute_re.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28 --write_file
              run compute_re.py --field Par28 --id 2822 --clobber
              run compute_re.py --field Par28 --do_all_obj --clobber --write_file
-             run compute_re.py --system ssd --do_all_fields --do_all_obj --clobber --write_file
+             run compute_re.py --system ssd --do_all_fields --do_all_obj --clobber --write_file --include_cosmos2020
 '''
 
 from header import *
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     output_dir = args.output_dir / 'catalogs'
 
     passage_catalog_filename = output_dir / 'SED_fits_v1.0.2_cosmosweb.fits'
-    df_sed = read_passage_sed_catalog(passage_catalog_filename)
+    df_sed = read_passage_sed_catalog(passage_catalog_filename, include_cosmos2020=args.include_cosmos2020)
 
     if args.do_all_fields:
         #field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par[0-9][0-9][0-9]') + '/')]

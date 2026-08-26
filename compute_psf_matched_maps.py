@@ -7,7 +7,7 @@
     Example: run compute_psf_matched_maps.py --input_dir /Users/acharyya/Work/astro/passage/passage_data/ --output_dir /Users/acharyya/Work/astro/passage/passage_output/ --field Par28
              run compute_psf_matched_maps.py --system ssd --field Par28 --id 2865 --clobber --debug_psf
              run compute_psf_matched_maps.py --system ssd --field Par28 --do_all_obj --clobber
-             run compute_psf_matched_maps.py --system ssd --do_all_fields --do_all_obj --clobber
+             run compute_psf_matched_maps.py --system ssd --do_all_fields --do_all_obj --include_cosmos2020
 '''
 
 import os
@@ -31,6 +31,7 @@ from astropy import units as u
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from pathlib import Path
+from uncertainties import unumpy as unp
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -90,6 +91,7 @@ def parse_args():
     parser.add_argument('--plot_psf', dest='plot_psf', action='store_true', default=False, help='Save plots for the PSF-matching step? Default is no.')
     parser.add_argument('--do_all_fields', dest='do_all_fields', action='store_true', default=False, help='Include ALL available fields? Default is no.')
     parser.add_argument('--do_all_obj', dest='do_all_obj', action='store_true', default=False, help='Reduce spectra and make beam files for ALL detected objects? Default is no.')
+    parser.add_argument('--include_cosmos2020', dest='include_cosmos2020', action='store_true', default=False, help='Include SED fit results from COSMOS2020 in addition to COSMOSWeb? Default is no.')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()
@@ -166,7 +168,7 @@ def save_fig(fig, fig_dir, figname, args, dpi=100):
     return
 
 # --------------------------------------------------------------------------------------------------------------------
-def read_passage_sed_catalog(filename):
+def read_passage_sed_catalog(filename, include_cosmos2020=False):
     '''
     Read the combined master catalog from PASSAGE SED fits, rename a few columns, and only keep the mass and SFR columns
     Return pandas dataframe
@@ -180,20 +182,51 @@ def read_passage_sed_catalog(filename):
         full_df = full_df[full_df['mass_50'] > 0].reset_index(drop=True) # to get only those sources that have stellar mass measured
         full_df = full_df.drop('id', axis=1)
 
+    # -------merging with COSMOS2020 catalog--------------------
+    filename2 = Path(str(filename).replace('web', '2020'))
+    if os.path.exists(filename2) and include_cosmos2020:
+        if Path(filename2).suffix == '.fits':
+            print(f'Also reading master PASSAGE SED catalog from {filename2}..')
+            full_df2 = Table.read(filename2).to_pandas()
+        else:
+            print(f'Also reading PASSAGE line finding catalog from {filename2}..')
+            full_df2 = pd.read_csv(filename2, header=0, sep='\t')
+            full_df2 = full_df2[full_df2['mass_50'] > 0].reset_index(drop=True) # to get only those sources that have stellar mass measured
+            full_df2 = full_df.drop('id', axis=1)
+
+        index_cols = ['field', 'id_photcat']
+        target_cols = ['stellar_mass_50', 'stellar_mass_16', 'stellar_mass_84',
+                          'sfr_50', 'sfr_16', 'sfr_84',
+                          'ssfr_50', 'ssfr_16', 'ssfr_84'] # check if these columns are empty (nan) in the cosmosweb df, and if so, then draw their values from the cosmos2020 df
+        df1_idx = full_df.set_index(index_cols)
+        df2_idx = full_df2.drop_duplicates(subset=index_cols).set_index(index_cols)
+
+        for thiscol in target_cols:
+            full_df[thiscol] = df1_idx[thiscol].fillna(df2_idx[thiscol]).values
+
+    # ------renaming columns---------
     if 'cosmoswebid_1' in full_df: full_df.drop('cosmoswebid_1', axis=1, inplace=True)
     full_df.rename(columns={'Par':'field', 'passage_id':'id', 'id_photcat':'id', 'objid':'id', 'field_id':'id', 'z_best':'redshift', 
                             'zbest':'redshift', 'mass_50':'log_mass', 'stellar_mass_50':'log_mass', 'ssfr_50':'log_ssfr', 'sfr_50':'sfr', 
                             'ra_obj':'ra', 'dec_obj':'dec', 'cosmoswebid_2': 'cosmoswebid'}, inplace=True)
     
     # -----------computing new columns------------
-    full_df['log_sfr'] = np.log10(full_df['sfr'])
+    if 'stellar_mass_84' in full_df: full_df['log_mass_u'] = (full_df['stellar_mass_84'] - full_df['stellar_mass_16']) / 2 # mass is already in log scale in the catalog
+    else: full_df['log_mass_u'] = (full_df['mass_84'] - full_df['mass_16']) / 2
+    full_df['log_ssfr_u'] = (full_df['ssfr_84'] - full_df['ssfr_16']) / 2 # ssfr is already in log scale in the catalog
+
+    sfr_quant = unp.uarray(full_df['sfr'], (full_df['sfr_84'] - full_df['sfr_16']) / 2)
+    log_sfr_quant = unp.log10(sfr_quant)
+    full_df['log_sfr'] = unp.nominal_values(log_sfr_quant)
+    full_df['log_sfr_u'] = unp.std_devs(log_sfr_quant)
     
     full_df['delta_tform_50_10'] = full_df['tform50_50'] - full_df['tform10_50']
     full_df['delta_tform_90_50'] = full_df['tform90_50'] - full_df['tform50_50']
     full_df['delta_tform_90_10'] = full_df['tform90_50'] - full_df['tform10_50']
+    full_df['delta_tform_ratio'] = full_df['delta_tform_90_50'] / full_df['delta_tform_50_10']
 
     # --------extracting relevant columns-----------
-    columns_to_extract = ['field', 'id', 'redshift', 'log_mass', 'log_sfr', 'log_ssfr', 'cosmoswebid', 'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10']
+    columns_to_extract = ['field', 'id', 'redshift', 'log_mass', 'log_mass_u', 'log_sfr', 'log_sfr_u', 'log_ssfr', 'log_ssfr_u', 'cosmoswebid', 'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10', 'delta_tform_ratio']
     df = full_df[columns_to_extract]
     df['field'] = df['field'].astype(str)
     nobj1 = len(df)
@@ -609,7 +642,7 @@ if __name__ == "__main__":
     # ---------determining list of fields----------------
     output_dir = args.output_dir / 'catalogs'
     passage_catalog_filename = output_dir / 'SED_fits_v1.0.2_cosmosweb.fits'
-    df_sed = read_passage_sed_catalog(passage_catalog_filename)
+    df_sed = read_passage_sed_catalog(passage_catalog_filename, include_cosmos2020=args.include_cosmos2020)
 
     if not args.do_all_fields:
         df_sed = df_sed[df_sed['field'].isin(args.field_arr)]

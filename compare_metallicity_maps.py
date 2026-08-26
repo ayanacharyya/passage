@@ -41,15 +41,18 @@ if __name__ == "__main__":
     limits = [-18, -15]
     
     # ------------determining directory and files-------------
+    df_scaling1 = pd.read_csv(args.output_dir / f'stacking_lines_OIII,Ha_zflag_cut_4/scaling_data.csv')
     folder1 = args.output_dir / 'stacking_with_halpha_correction_by_constant' / f'stacking_lines_OIII,Ha_zflag_cut_4' / 'adap_binby_distance_8_sfms_PASSAGE_mass_4' / 'maps_nodeproject'
     files1 = glob.glob(str(folder1) + f'/stacked_folded_metallicity_map_NB_nodeproject_delta_sfms_bin_*_mass_bin_*.fits')
     all_sorted_files1 = sorted(files1, key=parse_bin_intervals)
-    df_scaling1 = pd.read_csv(args.output_dir / f'stacking_lines_OIII,Ha_zflag_cut_4/scaling_data.csv')
 
+    df_scaling2 = pd.read_csv(args.output_dir / f'stacking_lines_OIII,Ha_zflag_cut_4/scaling_data_oldlinecut.csv')
     folder2 = args.output_dir / 'stacking_with_halpha_correction_by_constant' / f'stacking_lines_OIII,Ha_zflag_cut_4_oldlinecut' / 'adap_binby_distance_8_sfms_PASSAGE_mass_4' / 'maps_nodeproject'
+    #df_scaling2 = pd.read_csv(args.output_dir / f'stacking_lines_OIII,Ha_zflag_cut_4/scaling_data.csv')
+    #folder2 = args.output_dir / f'stacking_lines_OIII,Ha_zflag_cut_4' / 'adap_binby_distance_8_sfms_PASSAGE_mass_4' / 'maps_nodeproject'
+
     files2 = glob.glob(str(folder2) + f'/stacked_folded_metallicity_map_NB_nodeproject_delta_sfms_bin_*_mass_bin_*.fits')
     all_sorted_files2 = sorted(files2, key=parse_bin_intervals)
-    df_scaling2 = pd.read_csv(args.output_dir / f'stacking_lines_OIII,Ha_zflag_cut_4/scaling_data_oldlinecut.csv')
 
     df_scaling_arr = [df_scaling1, df_scaling2]
 
