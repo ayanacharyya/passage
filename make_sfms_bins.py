@@ -694,6 +694,88 @@ def get_field_waverange(args):
 
     return df
 
+# ----------------------------------------------------------------------------------------------------------------
+def compute_phi50_from_sed(df, n_bins=7, dsfr_prefix='contvz:dsfr', tform50_in_gyr=True):
+    '''
+    Computes per-galaxy physical SFR at t50 and delta_log_sfr / delta_log_mass with 
+    uncertainty propagation.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Updated DataFrame with 4 additional columns:
+        - `sfr_t50_50`: Median SFR at t50 [M_sun/yr]
+        - `sfr_t50_err`: 1-sigma uncertainty on SFR at t50
+        - `delta_log_sfr_delta_log_mass_50`: Median (log SFR_curr - log SFR_t50) / log(2)
+        - `delta_log_sfr_delta_log_mass_err`: 1-sigma uncertainty on the ratio
+    '''
+    df_out = df.copy()
+    log_sfr_t50_val, log_sfr_t50_err = [], []
+    dlog_ratio_val, dlog_ratio_err = [], []
+
+    for idx, row in df_out.iterrows():
+        bin_edges = np.array([row[f"bin_edge_{b}"] for b in range(n_bins + 1)], dtype=float)  # in Myr           
+        bin_widths = np.diff(bin_edges * 1e6)          # in years
+
+        # Parse dsfr/dsfh values as ufloats with 1-sigma symmetric error
+        dsfr_ufloats = []
+        for k in range(1, n_bins):
+            val_50 = row[f"{dsfr_prefix}{k}_50"]
+            val_err = (row[f"{dsfr_prefix}{k}_84"] - row[f"{dsfr_prefix}{k}_16"]) / 2.0
+            dsfr_ufloats.append(ufloat(val_50, val_err))
+
+        # Parse formed mass as ufloat
+        log_mass_current = ufloat(row[f"log_mass"], row[f"log_mass_u"])
+        log_mass_formed = ufloat(row[f"formed_mass_50"], (row[f"formed_mass_84"] - row[f"formed_mass_16"]) / 2.0)
+        linear_mass_formed = 10**log_mass_formed
+
+        # Reconstruct physical SFRs for each bin as correlated ufloats
+        cum_dsfr = [ufloat(0, 0)]
+        running_sum = ufloat(0, 0)
+        for d in dsfr_ufloats:
+            running_sum = running_sum + d
+            cum_dsfr.append(running_sum)
+
+        rel_sfrs = [10**(-cd) for cd in cum_dsfr]
+        rel_formed_mass = sum(r * w for r, w in zip(rel_sfrs, bin_widths))
+        
+        # SFR of youngest bin (bin 0: 0-30 Myr)
+        sfr_0 = linear_mass_formed / rel_formed_mass
+        sfr_bins = [sfr_0 * r for r in rel_sfrs]
+
+        # Identify bin containing tform50
+        t50_nom = row['tform50_50']
+        t50_myr = t50_nom * 1000.0 if tform50_in_gyr else t50_nom
+        
+        bin_idx = np.searchsorted(bin_edges, t50_myr, side='right') - 1
+        bin_idx = int(np.clip(bin_idx, 0, n_bins - 1))
+
+        log_sfr_t50 = unp.log10(sfr_bins[bin_idx])
+        log_sfr_curr = unp.log10(sfr_0)  # Current SFR (youngest bin)
+        #log_sfr_curr = unp.ufloat(row['log_sfr'], row['log_sfr_u'])
+
+        # Compute Delta log SFR / Delta log Mass
+        dlog_ratio = (log_sfr_curr - log_sfr_t50) / (log_mass_current - unp.log10(linear_mass_formed / 2))
+
+        # Store nominal values and propagated uncertainties
+        log_sfr_t50_val.append(unp.nominal_values(log_sfr_t50))
+        log_sfr_t50_err.append(unp.std_devs(log_sfr_t50))
+        
+        dlog_ratio_val.append(unp.nominal_values(dlog_ratio))
+        dlog_ratio_err.append(unp.std_devs(dlog_ratio))
+
+    # Add columns to DataFrame
+    df_out['log_sfr_t50'] = log_sfr_t50_val
+    df_out['log_sfr_t50_u'] = log_sfr_t50_err
+    df_out['ratio_delta_sfr_mass'] = dlog_ratio_val
+    df_out['ratio_delta_sfr_mass_u'] = dlog_ratio_err
+
+    phi50 = unp.degrees(unp.tan(unp.uarray(dlog_ratio_val, dlog_ratio_err)))
+    df_out['phi50'] = np.clip(unp.nominal_values(phi50), -90.0, 90.0)
+    df_out['phi50_u'] = unp.std_devs(phi50)
+
+    return df_out
+
 # --------------------------------------------------------------------------------------------------------------------
 def read_passage_sed_catalog(filename, include_cosmos2020=False):
     '''
@@ -752,8 +834,14 @@ def read_passage_sed_catalog(filename, include_cosmos2020=False):
     full_df['delta_tform_90_10'] = full_df['tform90_50'] - full_df['tform10_50']
     full_df['delta_tform_ratio'] = full_df['delta_tform_90_50'] / full_df['delta_tform_50_10']
 
+    full_df = compute_phi50_from_sed(full_df)
+
     # --------extracting relevant columns-----------
-    columns_to_extract = ['field', 'id', 'redshift', 'log_mass', 'log_mass_u', 'log_sfr', 'log_sfr_u', 'log_ssfr', 'log_ssfr_u', 'cosmoswebid', 'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10', 'delta_tform_ratio']
+    columns_to_extract = ['field', 'id', 'cosmoswebid', 'redshift', 
+                          'log_mass', 'log_mass_u', 'log_sfr', 'log_sfr_u', 'log_ssfr', 'log_ssfr_u', 
+                          'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10', 'delta_tform_ratio',
+                          'log_sfr_t50', 'log_sfr_t50_u', 'ratio_delta_sfr_mass', 'ratio_delta_sfr_mass_u', 
+                          'phi50', 'phi50_u']
     df = full_df[columns_to_extract]
     df['field'] = df['field'].astype(str)
     nobj1 = len(df)
@@ -1123,8 +1211,8 @@ methods = [
             # 'adaptive_nmax', \
             # 'adaptive_voronoi', \
             # 'adaptive_distance', \
-            'adaptive_distance_mass', \
-            # 'adaptive_sfh_mass', \
+            #'adaptive_distance_mass', \
+             'adaptive_sfh_mass', \
             # 'linear', \
             # 'linear_distance', \
             # 'linear_distance_mass', \
