@@ -339,7 +339,8 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='', cmap='virid
     # -----------defining vertices, for annotating and color-coding the bins-------------
     for index, row in df.iterrows():
         interval = row['delta_sfms_bin']
-        m_grid = np.linspace(row['log_mass_min'], row['log_mass_max'], 50)
+        #m_grid = np.linspace(row['log_mass_min'], row['log_mass_max'], 50)
+        m_grid = np.linspace(row[f'log_mass_bin'].left, row[f'log_mass_bin'].right, 50)
         sfms_line = sfms_func(m_grid)
         
         color = sm.to_rgba(row[quant])

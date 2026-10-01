@@ -100,11 +100,6 @@ def plot_stacked_MZR(df, args, xcol='log_mass_median', ycol='logOH_int', colorco
     fig, ax = plt.subplots(1, 1, figsize = (6., 5))
     fig.subplots_adjust(left=0.14, right=0.82, top=0.95, bottom=0.12, wspace=0., hspace=0.)
 
-    log_mass_cut = 8.5
-
-    results_dict = {'full': {}, 'low': {}, 'high': {}}
-    results_dict = record_and_print_stats(results_dict, df, xcol, ycol, colorcol=colorcol, log_xcol_cut=log_mass_cut) # just getting in the stats for integrated metallicity too
-
     # ------plot data-----------
     if colorcol is None:
         color = 'cornflowerblue'
@@ -131,7 +126,7 @@ def plot_stacked_MZR(df, args, xcol='log_mass_median', ycol='logOH_int', colorco
     figname = f'MZR_{qualifiers}.png'
     save_fig(fig, args.fig_dir, figname, args)
 
-    return fig, results_dict
+    return fig
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_MZGR_literature(ax, this_work_legend=[], skip_legend=False):
@@ -263,7 +258,7 @@ def plot_stacked_MZGR_old(df, args, xcol='log_mass_median', ycol='radial_logOH_g
     df = df.sort_values(by=xcol)
     print_sr_corr(df, xcol, ycol, xcol2=colorcol)
 
-    log_mass_cut_low, log_mass_cut_high = 8.5, 8.5
+    log_mass_cut_low, log_mass_cut_high = log_mass_cut, log_mass_cut
     df_low = df[df[xcol] < log_mass_cut_low]
     df_high = df[df[xcol] > log_mass_cut_high]
     print(f'\nAfter log_mass < {log_mass_cut_low}..')
@@ -298,7 +293,6 @@ def plot_stacked_MZGR_old(df, args, xcol='log_mass_median', ycol='radial_logOH_g
                        p=p, hide_cbar_ticks=False, cticks_integer=False, hide_xaxis=True)    
 
     vline_col = 'sienna'
-    log_mass_cut = log_mass_cut_low
     axes[0].axvline(log_mass_cut, ls='dotted', lw=1., c=vline_col)
     axes[0].text(log_mass_cut - 0.1, axes[0].get_ylim()[1] * 0.95, 'Lower mass regime', c=vline_col, fontsize=args.fontsize / args.fontfactor, ha='right', va='top')
     axes[0].text(log_mass_cut + 0.1, axes[0].get_ylim()[1] * 0.95, 'Higher mass regime', c=vline_col, fontsize=args.fontsize / args.fontfactor, ha='left', va='top')
@@ -477,22 +471,41 @@ def record_and_print_stats(results_dict, df, xcol, ycol, colorcol=None, log_xcol
     return results_dict
 
 # --------------------------------------------------------------------------------------------------------------------
+def compute_correlations(df, args, xcol='log_mass_median', ycol='radial_logOH_grad', qualifiers=''):
+    '''
+    Computes Spearman correlations and automatically outputs a LaTeX table.
+    '''
+    # ------storing correlations-----------
+    df = df.sort_values(by=xcol)
+    results_dict = {'full': {}, 'low': {}, 'high': {}}
+
+    # -------for integrated metallicity------------
+    results_dict = record_and_print_stats(results_dict, df, xcol, 'logOH_int', colorcol=colorcol, log_xcol_cut=log_mass_cut) # just getting in the stats for integrated metallicity too
+
+    # -------for radial gradient------------
+    results_dict = record_and_print_stats(results_dict, df, xcol, ycol, colorcol=colorcol, log_xcol_cut=log_mass_cut)
+
+    # -------for minor & major gradient------------
+    results_dict = record_and_print_stats(results_dict, df, xcol, ycol.replace('radial', 'minor'), colorcol=colorcol, log_xcol_cut=log_mass_cut)
+    results_dict = record_and_print_stats(results_dict, df, xcol, ycol.replace('radial', 'major'), colorcol=colorcol, log_xcol_cut=log_mass_cut)
+
+    # -------generate LaTeX Table----------
+    tex_filename = os.path.join(args.fig_dir, f'MZGR_{qualifiers}_stats_table.tex')
+    generate_latex_table(results_dict, tex_filename)
+
+    return results_dict
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=None, cmap='RdBu', qualifiers=''):
     '''
     Plots the stacked mass-metallicity gradient relation (both radial and minor-major gradients), overplotted with relations from the literature.
-    Computes Spearman correlations and automatically outputs a LaTeX table.
+    Returns figure handle
     '''
     # ------setup figure----------
     fig, axes = plt.subplots(2, 1, figsize=(10, 7.6), sharex=True)
     fig.subplots_adjust(left=0.1, right=0.87, top=0.88, bottom=0.08, wspace=0., hspace=0.04)
 
-    # ------storing correlations-----------
     df = df.sort_values(by=xcol)
-    log_mass_cut = 8.5
-
-    results_dict = {'full': {}, 'low': {}, 'high': {}}
-    results_dict = record_and_print_stats(results_dict, df, xcol, 'logOH_int', colorcol=colorcol, log_xcol_cut=log_mass_cut) # just getting in the stats for integrated metallicity too
-    results_dict = record_and_print_stats(results_dict, df, xcol, ycol, colorcol=colorcol, log_xcol_cut=log_mass_cut)
 
     # ------prepare plotting attributes-----------
     if colorcol is None:
@@ -532,9 +545,7 @@ def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad'
     marker_arr = ['s', 'D']
     ls_arr = ['solid', 'dashed']
 
-    for index, curr_ycol in enumerate(ycol_arr):
-        results_dict = record_and_print_stats(results_dict, df, xcol, curr_ycol, colorcol=colorcol, log_xcol_cut=log_mass_cut)
-        
+    for index, curr_ycol in enumerate(ycol_arr):        
         axes[1].plot(df[xcol], df[curr_ycol], lw=0.7, c='k', ls=ls_arr[index])
         p = axes[1].scatter(df[xcol], df[curr_ycol], s=70, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker=marker_arr[index], zorder=20, label=f'This work ({curr_ycol.split("_")[0]} axis)')
         if f'{curr_ycol}_u' in df:
@@ -552,15 +563,220 @@ def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad'
                        clabel=label_dict[colorcol] if colorcol is not None else '', hide_cbar=colorcol is None, cbar_width=2,
                        p=p, hide_cbar_ticks=False, cticks_integer=False)    
 
-    # -------generate LaTeX Table----------
-    tex_filename = os.path.join(args.fig_dir, f'MZGR_{qualifiers}_stats_table.tex')
-    generate_latex_table(results_dict, tex_filename)
-
     # -------save fig--------
     figname = f'MZGR_{qualifiers}.png'
     save_fig(fig, args.fig_dir, figname, args)
 
-    return fig, results_dict
+    return fig
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_correlation_summary_hatched_old(results_dict, args, qualifiers=''):
+    '''
+    Plots Spearman rank correlation coefficients (r) across integrated metallicity
+    and metallicity gradient quantities in a single-panel grouped bar chart.
+
+    - Bar Fill Color: Red (p <= 0.05) vs. Grey (p > 0.05)
+    - Bar Hatching: Solid (Full Mass), '//' (Low Mass), '\\\\' (High Mass)
+    - Annotations: Displays r and p values above/below each bar.
+    '''
+    # Define quantities and correlation types for x-axis items
+    # Format: (results_dict ykey, correlation_type, x_tick_label)
+    items = [
+        ('logOH_int', 'x_zero', r'Integrated $Z$' + '\n' + r'vs $\log{M_*}$'),
+        ('logOH_int', 'c_zero', r'Integrated $Z$' + '\n' + r'vs $\delta_{\rm SFMS}$'),
+        ('radial_logOH_grad', 'x_zero', r'Radial Grad' + '\n' + r'vs $\log{M_*}$'),
+        ('radial_logOH_grad', 'c_zero', r'Radial Grad' + '\n' + r'vs $\delta_{\rm SFMS}$'),
+        ('minor_logOH_grad', 'x_zero', r'Minor Grad' + '\n' + r'vs $\log{M_*}$'),
+        ('minor_logOH_grad', 'c_zero', r'Minor Grad' + '\n' + r'vs $\delta_{\rm SFMS}$'),
+        ('major_logOH_grad', 'x_zero', r'Major Grad' + '\n' + r'vs $\log{M_*}$'),
+        ('major_logOH_grad', 'c_zero', r'Major Grad' + '\n' + r'vs $\delta_{\rm SFMS}$'),
+    ]
+
+    regimes = ['full', 'low', 'high']
+    regime_labels = ['Full Mass Range', rf'Low Mass ($\log M_* <{log_mass_cut}$)', rf'High Mass ($\log M_* > {log_mass_cut}$)']
+    regime_hatches = ['', '//', '\\\\']
+
+    # -------color palette for statistical significance---------
+    sig_color = 'brown'    # Coral Red for p <= 0.05
+    nonsig_color = 'lightgrey' # Light Grey for p > 0.05
+
+    # ------setting up figure--------------
+    fig, ax = plt.subplots(figsize=(13, 5.5))
+    fig.subplots_adjust(left=0.05, right=0.98, top=0.98, bottom=0.10)
+
+    x = np.arange(len(items))
+    width = 0.25  # Bar width
+
+    # -----------looping through each mass regime to plot grouped bars-----------
+    for i, (reg, r_label, hatch) in enumerate(zip(regimes, regime_labels, regime_hatches)):
+        r_vals, p_vals = [], []
+        
+        for q_key, corr_type, _ in items:
+            stat = results_dict.get(reg, {}).get(q_key, {}).get(corr_type, [np.nan, np.nan])
+            r_vals.append(stat[0])
+            p_vals.append(stat[1])
+        
+        pos = x + (i - 1) * width
+        
+        # ------color per bar depending on p-value--------
+        colors = [sig_color if (p is not np.nan and not np.isnan(p) and p <= 0.05) else nonsig_color for p in p_vals]
+        bars = ax.bar(pos, r_vals, width, color=colors, hatch=hatch, edgecolor='black', linewidth=0.8, alpha=0.9, zorder=3)
+        
+        # --------annotating r and p values above/below bars-------
+        for bar, r, p in zip(bars, r_vals, p_vals):
+            #if np.isnan(r) or np.isnan(p):
+            if np.isnan(r) or np.isnan(p) or p > 0.05: # only print p-values when significant
+                continue
+            height = bar.get_height()
+            va = 'bottom' if height >= 0 else 'top'
+            offset = 0.03 if height >= 0 else -0.03
+            
+            p_str = f"p<{0.01:.2f}" if p < 0.01 else f"p={p:.2f}"
+            fontweight = 'bold' if p <= 0.05 else 'normal'
+            
+            ax.text(bar.get_x() + bar.get_width() / 2.0, height + offset, f"r={r:.2f}\n({p_str})", ha='center', va=va, fontsize=7.5, fontweight=fontweight, color='black', zorder=4)
+
+    # --------annotate plot------------------
+    ax.axhline(0, color='black', linewidth=1.0, zorder=2)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([item[2] for item in items], fontsize=args.fontsize / args.fontfactor)
+    ax.set_ylabel(r'Spearman Rank Correlation Coefficient ($r$)', fontsize=args.fontsize / args.fontfactor)
+    ax.set_ylim(-1.2, 1.2)
+    ax.grid(axis='y', linestyle=':', alpha=0.6, zorder=0)
+
+    # --------making significance legend (left)---------
+    legend_sig = [patches.Patch(facecolor=sig_color, edgecolor='black', label=r'$p \leq 0.05$ (Significant)'), patches.Patch(facecolor=nonsig_color, edgecolor='black', label=r'$p > 0.05$ (Not Significant)')]
+    leg1 = ax.legend(handles=legend_sig, loc='upper left', frameon=True, fontsize=args.fontsize / args.fontfactor)
+    ax.add_artist(leg1)
+
+    # -------making mass legend (right)-------------------
+    legend_regime = [patches.Patch(facecolor='white', edgecolor='black', hatch=h, label=lbl)for h, lbl in zip(regime_hatches, regime_labels)]
+    ax.legend(handles=legend_regime, loc='upper right', frameon=True, fontsize=args.fontsize / args.fontfactor)
+
+    # -------save fig--------
+    figname = f'correlation_summary_{qualifiers}.png'
+    save_fig(fig, args.fig_dir, figname, args)
+
+    return fig
+
+# --------------------------------------------------------------------------------------------------------------------
+def plot_correlation_summary_hatched(results_dict, args, qualifiers=''):
+    '''
+    Plots Spearman rank correlation coefficients (r) across integrated metallicity
+    and metallicity gradient quantities in a 2-panel grouped bar chart:
+    - Top Panel: Zeroth-order correlations
+    - Bottom Panel: Partial correlations (controlling for the second variable)
+
+    - Bar Fill Color: Brown (p <= 0.05) vs. Light Grey (p > 0.05)
+    - Bar Hatching: Solid (Full Mass), '//' (Low Mass), '\\\\' (High Mass)
+    - Annotations: Displays r and p values above/below significant bars.
+    '''
+    # Define quantities and correlation types for zeroth-order (top) and partial (bottom)
+    items_zero = [
+        ('logOH_int', 'x_zero', r'Integrated $Z$' + '\n' + r'vs $\log{M_*}$'),
+        ('logOH_int', 'c_zero', r'Integrated $Z$' + '\n' + r'vs $\delta_{\rm SFMS}$'),
+        ('radial_logOH_grad', 'x_zero', r'Radial Grad' + '\n' + r'vs $\log{M_*}$'),
+        ('radial_logOH_grad', 'c_zero', r'Radial Grad' + '\n' + r'vs $\delta_{\rm SFMS}$'),
+        ('minor_logOH_grad', 'x_zero', r'Minor Grad' + '\n' + r'vs $\log{M_*}$'),
+        ('minor_logOH_grad', 'c_zero', r'Minor Grad' + '\n' + r'vs $\delta_{\rm SFMS}$'),
+        ('major_logOH_grad', 'x_zero', r'Major Grad' + '\n' + r'vs $\log{M_*}$'),
+        ('major_logOH_grad', 'c_zero', r'Major Grad' + '\n' + r'vs $\delta_{\rm SFMS}$'),
+    ]
+
+    items_partial = [
+        ('logOH_int', 'x_partial', r'Integrated $Z$' + '\n' + r'vs $\log{M_*}$'),
+        ('logOH_int', 'c_partial', r'Integrated $Z$' + '\n' + r'vs $\delta_{\rm SFMS}$'),
+        ('radial_logOH_grad', 'x_partial', r'Radial Grad' + '\n' + r'vs $\log{M_*}$'),
+        ('radial_logOH_grad', 'c_partial', r'Radial Grad' + '\n' + r'vs $\delta_{\rm SFMS}$'),
+        ('minor_logOH_grad', 'x_partial', r'Minor Grad' + '\n' + r'vs $\log{M_*}$'),
+        ('minor_logOH_grad', 'c_partial', r'Minor Grad' + '\n' + r'vs $\delta_{\rm SFMS}$'),
+        ('major_logOH_grad', 'x_partial', r'Major Grad' + '\n' + r'vs $\log{M_*}$'),
+        ('major_logOH_grad', 'c_partial', r'Major Grad' + '\n' + r'vs $\delta_{\rm SFMS}$'),
+    ]
+
+    regimes = ['full', 'low', 'high']
+    regime_labels = ['Full Mass Range', rf'Low Mass ($\log M_*/M_\odot <{log_mass_cut}$)', rf'High Mass ($\log M_*/M_\odot > {log_mass_cut}$)']
+    regime_hatches = ['', '//', '\\\\']
+
+    # -------color palette for statistical significance---------
+    sig_color = 'brown'    # for p <= 0.05
+    nonsig_color = 'lightgrey' # for p > 0.05
+
+    # ------setting up figure with shared x-axis and small panel spacing--------------
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 7.5), sharex=True)
+    fig.subplots_adjust(left=0.07, right=0.99, top=0.99, bottom=0.07, hspace=0.02)
+
+    x = np.arange(len(items_zero))
+    width = 0.25  # Bar width
+
+    panels = [
+        (ax1, items_zero, r'Zeroth-Order Spearman ($r$)', 'Zeroth-Order Correlations'),
+        (ax2, items_partial, r'Partial Spearman ($r_{\partial}$)', r'Partial Correlations (controlling for $\delta_{\rm SFMS}$ or $\log M_*$)')
+    ]
+
+    for ax, items, ylabel_str, panel_title in panels:
+        # -----------looping through each mass regime to plot grouped bars-----------
+        for i, (reg, r_label, hatch) in enumerate(zip(regimes, regime_labels, regime_hatches)):
+            r_vals, p_vals = [], []
+            
+            for q_key, corr_type, _ in items:
+                stat = results_dict.get(reg, {}).get(q_key, {}).get(corr_type, [np.nan, np.nan])
+                r_vals.append(stat[0])
+                p_vals.append(stat[1])
+            
+            pos = x + (i - 1) * width
+            
+            # ------color per bar depending on p-value--------
+            colors = [sig_color if (p is not np.nan and not np.isnan(p) and p <= 0.05) else nonsig_color for p in p_vals]
+            bars = ax.bar(pos, r_vals, width, color=colors, hatch=hatch, edgecolor='black', linewidth=0.8, alpha=0.9, zorder=3)
+            
+            # --------annotating r and p values above/below bars-------
+            for bar, r, p in zip(bars, r_vals, p_vals):
+                if np.isnan(r) or np.isnan(p) or p > 0.05: # only print p-values when significant
+                    continue
+                height = bar.get_height()
+                va = 'bottom' if height >= 0 else 'top'
+                offset = 0.03 if height >= 0 else -0.03
+                
+                p_str = f"p<{0.01:.2f}" if p < 0.01 else f"p={p:.2f}"
+                fontweight = 'bold' if p <= 0.05 else 'normal'
+                
+                ax.text(bar.get_x() + bar.get_width() / 2.0, height + offset, f"r={r:.2f}\n({p_str})", ha='center', va=va, fontsize=7.5, fontweight=fontweight, color='black', zorder=4)
+
+        # --------annotate plot------------------
+        ax.axhline(0, color='black', linewidth=1.0, zorder=2)
+        ax.set_ylabel(ylabel_str, fontsize=args.fontsize)
+        ax.set_ylim(-1.25, 1.25)
+        ax.grid(axis='y', linestyle=':', alpha=0.6, zorder=0)
+
+        # Title text positioned directly inside top of axis
+        ax.text(0.5, 0.03, panel_title, transform=ax.transAxes, ha='center', va='bottom', fontsize=args.fontsize / args.fontfactor, fontweight='bold', zorder=5)
+        ax.tick_params(axis='y', which='both', labelsize=args.fontsize)
+
+    # -------shared x-axis tick marks & labels---------
+    # Top panel: show tick marks, but hide tick text labels
+    ax1.tick_params(axis='x', which='both', bottom=True, labelbottom=False)
+    
+    # Bottom panel: show both tick marks and text labels
+    ax2.tick_params(axis='x', which='both', bottom=True, labelbottom=True)
+    ax2.set_xticks(x)
+    ax2.set_xticklabels([item[2] for item in items_partial], fontsize=args.fontsize)
+
+    # --------making significance legend (left on top panel)---------
+    legend_sig = [patches.Patch(facecolor=sig_color, edgecolor='black', label=r'$p \leq 0.05$ (Significant)'), patches.Patch(facecolor=nonsig_color, edgecolor='black', label=r'$p > 0.05$ (Not Significant)')]
+    leg1 = ax1.legend(handles=legend_sig, loc='upper left', frameon=True, fontsize=args.fontsize / args.fontfactor)
+    ax1.add_artist(leg1)
+
+    # -------making mass legend (right on top panel)-------------------
+    legend_regime = [patches.Patch(facecolor='white', edgecolor='black', hatch=h, label=lbl) for h, lbl in zip(regime_hatches, regime_labels)]
+    ax1.legend(handles=legend_regime, loc='upper right', frameon=True, fontsize=args.fontsize / args.fontfactor)
+
+    # -------save fig--------
+    figname = f'correlation_summary_{qualifiers}.png'
+    save_fig(fig, args.fig_dir, figname, args)
+
+    return fig
 
 # --------------------------------------------------------------------------------------------------------------------
 lim_dict = {'minor_logOH_grad': [-1.2, 1.2],\
@@ -571,12 +787,14 @@ lim_dict = {'minor_logOH_grad': [-1.2, 1.2],\
                 'log_mass_median': [7.0, 10.0],\
                 'tform_ratio_median': [0, 1],\
                 }  
+log_mass_cut = 9.0
+
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     args = parse_args()
     if not args.keep: plt.close('all')
     if args.re_limit is None: args.re_limit = 2.
-    args.fontfactor = 1.2
+    args.fontfactor = 1.4
     
     # ---------reading in the master SED catalog----------------
     passage_catalog_filename = args.output_dir / 'catalogs' / passage_catalog
@@ -622,7 +840,10 @@ if __name__ == "__main__":
     else:
         colorcol, cmap = 'tform_ratio_median', 'viridis' # sequential cmap
     
-    #fig_mzr, results_dict = plot_stacked_MZR(df_grad, args, xcol='log_mass_median', ycol='logOH_int', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
-    fig_mzgr, results_dict = plot_stacked_MZGR(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
+    results_dict = compute_correlations(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', qualifiers=qualifiers)
+    
+    #fig_mzr = plot_stacked_MZR(df_grad, args, xcol='log_mass_median', ycol='logOH_int', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
+    #fig_mzgr = plot_stacked_MZGR(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
+    fig_corr = plot_correlation_summary_hatched(results_dict, args, qualifiers=qualifiers)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

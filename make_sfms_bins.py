@@ -7,6 +7,8 @@
              run make_sfms_bins.py --field Par028
              run make_sfms_bins.py --system ssd --do_all_fields
              run make_sfms_bins.py --system ssd --do_all_fields --cut_z_flag 4 --overplot_passage --overplot_literature --nocolorbar --include_cosmos2020
+             run make_sfms_bins.py --system ssd --do_all_fields --cut_z_flag 4 --overplot_passage --overplot_literature --annotate_bins
+             run make_sfms_bins.py --system ssd --do_all_fields --cut_z_flag 4 --overplot_passage --overplot_literature --annotate_bins --zcut 1,1.65
 '''
 
 from header import *
@@ -190,7 +192,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='_distance', cm
         sfms_line = sfms_func(m_grid)
         
         color = 'lightgrey' if args.nocolorbar else sm.to_rgba(row[quant])
-        ax.fill_between(m_grid, sfms_line + interval.left, sfms_line + interval.right, color=color, alpha=0.8, edgecolor='k', lw=0.5)
+        ax.fill_between(m_grid, sfms_line + interval.left, sfms_line + interval.right, color=color, alpha=0.6, edgecolor='k', lw=0.5)
         
         s_center = sfms_func(row['log_mass_median']) + (interval.left + interval.right) / 2
         if args.annotate_bins: ax.text(row['log_mass_median'], s_center, int(row[quant]), color='k', ha='center', va='center', fontsize=args.fontsize / args.fontfactor, fontweight='bold', rotation=45)
@@ -281,7 +283,7 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
     Makes a nice heatmap (with patches) of stacked integrated metallicities and metallicity gradients
     Returns figure handle
     '''
-    cmap, cmin, cmax, ncbins, clabel ='viridis', 0, 20, 4, 'Number of galaxies'
+    cmap, cmin, cmax, ncbins, clabel ='viridis', 0, 50, 4, 'Number of galaxies'
     ncol = len(methods)
     
     # -----------------setup the figure---------------
@@ -330,6 +332,7 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
             if index == 0: axes[index].legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
 
         if args.overplot_literature:
+            axes[index] = plot_SFMS_Shivaei15(axes[index], color='royalblue')
             if sfms == 'Whitaker14': axes[index] = plot_SFMS_Whitaker14(axes[index], 2, color='crimson')
             elif sfms == 'Shivaei15': axes[index] = plot_SFMS_Shivaei15(axes[index], color='royalblue')
             elif sfms == 'Popesso23': axes[index] = plot_SFMS_Popesso23(axes[index], 2, color='darkgoldenrod')
@@ -392,7 +395,7 @@ def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=20):
     y_lo = np.piecewise(x, [x <= 9.6, x > 9.6], [lambda x: (0.375 / (x - 10.5)) + 1.14, lambda x: np.poly1d([352.066, -93.8249, 8.32651, -0.246416][::-1])(x)]) # J14 eq 2
     ax.plot(x, y_up + 0.75, c='k', ls='solid', lw=2, label='Juneau+2014 + 0.75 dex (Coil+2015)')
     ax.plot(x, y_up, c='k', ls='dashed', lw=2, label='Juneau+2014')
-    ax.plot(x, y_lo, c='brown', ls='dashed', lw=2)
+    #ax.plot(x, y_lo, c='brown', ls='dashed', lw=2)
     plt.legend()
 
     plt.show(block=False)
@@ -863,7 +866,14 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     
     if not args.do_all_fields:
         df = df[df['field'] == args.field]        
-    
+
+    # ----------discard based on redshift--------------------------
+    if args.zcut is not None:
+        zcut = [float(item) for item in args.zcut.split(',')]
+        nobj0 = len(df)
+        df = df[df['redshift'].between(zcut[0], zcut[1])]
+        print(f'Out of the {nobj0} objects, {len(df)} had {zcut[0]:.2f} < z < {zcut[1]:.2f}\t', end='')
+
     # ----------discard based on redshift flag--------------------------
     if args.cut_z_flag is not None:
         nobj1 = len(df)
@@ -986,7 +996,8 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     print(f'\nOut of the {nobj} objects, {len(df_agn)} are above MEx line, so they are removed; final sample is {len(df)} galaxies.')
     
     args.required_lines_text = '_lines_' + ','.join(required_lines) if len(required_lines) > 0 else ''
-    args.cut_z_flag_text = f'_zflag_cut_{args.cut_z_flag}' if args.cut_z_flag is not None else ''
+    args.zcut_text = f'_zcut_{args.zcut}' if args.zcut is not None else ''
+    args.cut_z_flag_text = f'_zflag_cut_{args.cut_z_flag}{args.zcut_text}' if args.cut_z_flag is not None else f'{args.zcut_text}'
 
     # --------------saving MEx----------------
     if args.do_all_fields: root_dir = args.output_dir
@@ -1076,8 +1087,10 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
     args.rescale_text = '_norescale' if args.skip_re_scaling else ''
     args.C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
     args.fold_text = '_folded' if args.fold_maps else ''
+    args.scaling_line_text = f'_scaleby_{args.scaling_line}'
     args.required_lines_text = '_lines_' + ','.join(required_lines) if len(required_lines) > 0 else ''
-    args.cut_z_flag_text = f'_zflag_cut_{args.cut_z_flag}' if args.cut_z_flag is not None else ''
+    args.zcut_text = f'_zcut_{args.zcut}' if args.zcut is not None else ''
+    args.cut_z_flag_text = f'_zflag_cut_{args.cut_z_flag}{args.zcut_text}' if args.cut_z_flag is not None else f'{args.zcut_text}'
 
     # ------------------determine fil and path names---------
     if args.do_all_fields:
@@ -1104,7 +1117,7 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
             if args.voronoi_bins:
                 df, bin_summary, centers_scaled, scaling = bin_SFMS_voronoi(df, method_text=method_text, target_n=target_n)
                 bin_list = [bin_summary, centers_scaled, scaling]
-                args.binby_text = f'adap_binby_voronoi_ngal_{target_n}'
+                args.binby_text = f'adap_binby_voronoi_ngal_{target_n}args.scaling_line_text'
             elif args.bin_by_sfh:
                 df, bin_list = bin_SFMS_sfh(df, method_text=method_text, n_sfh_bins=n_sfh_bins, bin_by_col='delta_tform_ratio') # binning the dataframe in an adaptive way
                 args.binby_text = f'adap_binby_sfh_{n_sfh_bins}'
@@ -1137,6 +1150,8 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
             else:
                 df, bin_list = bin_SFMS_linear(df, method_text=method_text) # -binning the dataframe uniformly by mass and SFR bins
                 args.binby_text = f'lin_binby_mass_sfr_delta_mass_{delta_log_mass}_delta_sfr_{delta_log_sfr}'
+
+        args.binby_text += f'{args.scaling_line_text}'
 
         if not args.voronoi_bins:
             if args.bin_by_distance or args.bin_by_distance_mass or args.bin_by_sfh:
@@ -1173,7 +1188,8 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
 
         # --------------curtailiug bins for debugging-------------------
         # if args.debug_bin: bin_list = bin_list[:1]
-        if args.debug_bin: bin_list = bin_list[7:8]
+        # if args.debug_bin: bin_list = bin_list[7:8]
+        if args.debug_bin: bin_list = bin_list[12:13]
         # if args.debug_bin: bin_list = bin_list[10:11]
         # if args.debug_bin: bin_list = bin_list[15:16]
         # if args.debug_bin: bin_list = bin_list[25:26]
@@ -1211,8 +1227,8 @@ methods = [
             # 'adaptive_nmax', \
             # 'adaptive_voronoi', \
             # 'adaptive_distance', \
-            #'adaptive_distance_mass', \
-             'adaptive_sfh_mass', \
+            'adaptive_distance_mass', \
+            # 'adaptive_sfh_mass', \
             # 'linear', \
             # 'linear_distance', \
             # 'linear_distance_mass', \
@@ -1221,7 +1237,7 @@ methods = [
 
 target_n = 30 # for voronoi binning
 #n_adaptive_bins = 8 # for distance (from SFMS) binning
-n_adaptive_bins = 3 # for distance (from SFMS) binning
+n_adaptive_bins = 4 # for distance (from SFMS) binning
 n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
 delta_sfms_bin = 0.4 # delta in distance from SFMS in which to bin in the distance-from-SFMS method, unless binning adaptively
 sfms =  'PASSAGE' # from 'PASSAGE', 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
@@ -1235,7 +1251,8 @@ required_lines =['Hb', 'OIII', 'Ha']
 # required_lines =['OII', 'OIII', 'Ha']
 # required_lines =[]
 
-passage_catalog = 'SED_fits_v1.0.2_cosmosweb.fits'
+passage_catalog = 'SED_fits_v1.3.2-photonly_cosmosweb.fits'
+# passage_catalog = 'SED_fits_v1.0.2_cosmosweb.fits'
 # passage_catalog = 'SED_fits_v1.0.3_best.fits'
 # passage_catalog = 'SED_fits_v1.2.0_best.fits'
 
@@ -1284,11 +1301,12 @@ if __name__ == "__main__":
         # ------------plotting redshift and mass distribution--------------------------
         fig, axes = plt.subplots(1, 2, figsize=(8.2, 5.), layout='constrained')
         axes[0].hist(df['redshift'], histtype='stepfilled', bins=20)
-        axes[0] = annotate_axes(axes[0], 'Redshift', 'No. of galaxies', label=f'Total = {len(df)}', labelx=0.7, args=args, xlim=[0.9,2.5])
+        axes[0] = annotate_axes(axes[0], 'Redshift', 'No. of galaxies', label=f'Total = {len(df)}', labelx=0.7, args=args)#, xlim=[0.9,2.5])
 
         axes[1].hist(df['log_mass'], histtype='stepfilled', bins=20)
         axes[1] = annotate_axes(axes[1], r'$\log{(M_*/M_\odot)}$', 'No. of galaxies', args=args)#, xlim=[0.9,2.5])
 
         save_fig(fig, args.stacking_dir, f'redshift_mass_distribution.png', args) # saving the figure
+        plt.close(fig)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')

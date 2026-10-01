@@ -119,11 +119,11 @@ def plot_SFMS_Shivaei15(ax, color='salmon'):
 
     (log_mass1, log_SFR1), (log_mass2, log_SFR2), scatter = get_SFMS_Shivaei15(ax.get_xlim()[0], ax.get_xlim()[1])
 
-    ax.plot(log_mass1, log_SFR1, ls='dashed', c=color, lw=2)
-    ax.fill_between(log_mass1, log_SFR1 - scatter/2, log_SFR1 + scatter/2, alpha=0.3, facecolor=color)
+    ax.plot(log_mass1, log_SFR1, ls='dashed', c=color, lw=2, zorder=-7)
+    ax.fill_between(log_mass1, log_SFR1 - scatter/2, log_SFR1 + scatter/2, alpha=0.3, facecolor=color, zorder=-7)
     
-    ax.plot(log_mass2, log_SFR2, ls='solid', c=color, lw=2, label=f'Shivaei+15: z~2')
-    ax.fill_between(log_mass2, log_SFR2 - scatter/2, log_SFR2 + scatter/2, alpha=0.3, facecolor=color)
+    ax.plot(log_mass2, log_SFR2, ls='solid', c=color, lw=2, label=f'Shivaei+15: z~2', zorder=-7)
+    ax.fill_between(log_mass2, log_SFR2 - scatter/2, log_SFR2 + scatter/2, alpha=0.3, facecolor=color, zorder=-7)
 
     return ax
 
@@ -167,10 +167,11 @@ def plot_SFMS_Popesso23(ax, redshift, color='cornflowerblue'):
 # --------------------------------------------------------------------------------------------------------------------
 def get_SFMS_PASSAGE(log_mass_min, log_mass_max, nbins=40):
     '''
-    Overplots fitted SFMS based on PASSAGE data in Huberty+2026; based on 798 galaxies at z~2 after various filtering (see make_sfms_bins.get_stacking_sample())
+    Overplots fitted SFMS based on PASSAGE data
     Returns two lists and a float which is the scatter in the relation: log_mass, log_SFR, c
     '''
-    a, b, c = -0.0207, 1.1568, -8.1505 # np.poly1d() coefficients [a, b, c]
+    #a, b, c = -0.0207, 1.1568, -8.1505 # np.poly1d() coefficients [a, b, c] # in Huberty+2026; based on 798 galaxies at z~2 after various filtering (see make_sfms_bins.get_stacking_sample())
+    a, b, c = -0.0675, 1.9579, -11.8719 # np.poly1d() coefficients [a, b, c] # based on 460 galaxies after similar cuts as above, but using updated v1.3.2 SED catalog from Peter
 
     log_mass = np.linspace(log_mass_min, log_mass_max, nbins//2)
     log_SFR = np.polyval([a, b, c], log_mass)

@@ -83,7 +83,7 @@ def correct_ha_F18(N2_plus_Ha_map, args):
         solve = 3.696 * psi + 3.236 * psi**(-1) + 0.729 * psi ** (-2) + 14.928 + 0.156 * (1 + redshift)**2 - log_mass
         return solve
 
-    log_N2Ha = brentq(F18_func, -2, 0, args=(args.z, args.log_mass))
+    log_N2Ha = brentq(F18_func, -3, 0, args=(args.z, args.log_mass))
     N2Ha = 10 ** log_N2Ha
     Ha_map = N2_plus_Ha_map / (1 + 1.333 * N2Ha) # 1.333 factor is because F18 consider BOTH NII components, assuming NII 6548 = N II 6584 / 3
 
@@ -433,7 +433,6 @@ if __name__ == "__main__":
     # ------------looping over each bin-----------------------
     nbin_good = 0
     nobj_total_binned = 0
-    scaling_line = 'OIII'
 
     for index2, this_mass_sfr_bin in enumerate(bin_list):
         start_time3 = datetime.now()
@@ -575,23 +574,23 @@ if __name__ == "__main__":
                         rescaled_segmentation_map = rescale_line_map(deprojected_segmentation_map, args)
 
                         # -----------extracting integrated OIII line flux, for scaling----------------
-                        if scaling_line in args.available_lines:
-                            _, _, line_int = get_emission_line_map(scaling_line, full_hdu, args, dered=False, silent=True)
+                        if args.scaling_line in args.available_lines:
+                            _, _, line_int = get_emission_line_map(args.scaling_line, full_hdu, args, dered=False, silent=True)
                             #integrated_scaling_flux = line_int.n
-                            integrated_scaling_flux = obj[f'flux_{scaling_line}']
+                            integrated_scaling_flux = obj[f'flux_{args.scaling_line}']
                             if integrated_scaling_flux > 0:
-                                print(f'Scaling all line fluxes of {args.id} by {scaling_line} flux = {integrated_scaling_flux}')
+                                print(f'Scaling all line fluxes of {args.id} by {args.scaling_line} flux = {integrated_scaling_flux}')
                             else:
-                                print(f'Since integrated flux for {scaling_line} < 0 (= {integrated_scaling_flux}), for {args.id}, not putting this in stack')
+                                print(f'Since integrated flux for {args.scaling_line} < 0 (= {integrated_scaling_flux}), for {args.id}, not putting this in stack')
                                 nobj_no_scale_line += 1
                                 continue
                         else:
-                            print(f'Since {scaling_line} not available for {args.id}, not putting this in stack')
+                            print(f'Since {args.scaling_line} not available for {args.id}, not putting this in stack')
                             nobj_no_scale_line += 1
                             continue
 
                         # ---------------direct image---------------
-                        filter = 'F200W'             
+                        filter = 'F150W'             
                         direct_image, exptime = get_direct_image(full_hdu, filter, args) # this is already offset corrected and trimmed
                         rotated_direct_image = rotate_line_map(direct_image, args)
                         deprojected_direct_image = rotated_direct_image if args.skip_deproject else deproject_line_map(rotated_direct_image, args)
@@ -751,7 +750,7 @@ if __name__ == "__main__":
                 continue
 
         nobj_total_binned += nobj_good
-        print(f'\nCompleted bin {bin_text} ({nobj_good} / {ngal_this_bin} objects, {nobj_no_scale_line} skipped due to lack of {scaling_line}) in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
+        print(f'\nCompleted bin {bin_text} ({nobj_good} / {ngal_this_bin} objects, {nobj_no_scale_line} skipped due to lack of {args.scaling_line}) in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
         if nobj_good > 1: nbin_good += 1
 
     print(f'\nBinned total ({nobj_total_binned} / {len(df)}) objects, into {len(bin_list)} bins.')

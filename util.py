@@ -263,6 +263,7 @@ def parse_args():
 
     # ---- args added for make_sfms_bins.py ------------
     parser.add_argument('--plot_mex', dest='plot_mex', action='store_true', default=False, help='Plot the Mass excitation diagram for the passage sample? Default is no.')
+    parser.add_argument('--zcut', metavar='zcut', type=str, action='store', default=None, help='Restricts the sample to zlim[0] < z < zlim[1]. Default is None, i.e., no cut')
     parser.add_argument('--cut_z_flag', metavar='cut_z_flag', type=int, action='store', default=None, help='Restricts the sample to z_flag (from Huberty+26) < cut_z_flag. Default is None, i.e., no cut')
     parser.add_argument('--annotate_bins', dest='annotate_bins', action='store_true', default=False, help='Annotate the number of galaxies in each bin? Default is no.')
     parser.add_argument('--nocolorbar', dest='nocolorbar', action='store_true', default=False, help='Hide the colorbar in the plots? Default is no.')
@@ -285,6 +286,7 @@ def parse_args():
     parser.add_argument('--skip_re_scaling', dest='skip_re_scaling', action='store_true', default=False, help='Skip the step of rescaling each galaxy based on its effective radius, and rescale based on kpc instead? Default is no.')
     parser.add_argument('--kpc_limit', metavar='kpc_limit', type=float, action='store', default=5, help='Physical kpc radius to limit all analysis to, only if skip_re_rescale is True; default is 5 kpc')
     parser.add_argument('--clobber_mock', dest='clobber_mock', action='store_true', default=False, help='Overwrite the already saved mock galaxy maps? Default is no.')
+    parser.add_argument('--scaling_line', metavar='scaling_line', type=str, action='store', default='OIII', help='Which emission line flux to scale by? Perhaps choose between OIII and H-alpha Default is OIII')
 
     # ---- args added for plot_stacked_maps.py ------------
     parser.add_argument('--fold_maps', dest='fold_maps', action='store_true', default=False, help='Fold the stacked emission line maps along major and minor axis first, before computing metallicity? Default is no.')
