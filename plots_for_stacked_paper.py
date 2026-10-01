@@ -661,6 +661,21 @@ def plot_correlation_summary_hatched_old(results_dict, args, qualifiers=''):
     return fig
 
 # --------------------------------------------------------------------------------------------------------------------
+def get_p_color_binned(p):
+    '''
+    Determine the color of bars for the correlation plot; Idea is to have reddish colors for significant,
+    dark grey for kinda significant and light gray for non-significant correlations
+    '''
+    if np.isnan(p):
+        return p_value_color_config[-1]['color']
+    
+    for bin_info in p_value_color_config:
+        if p <= bin_info['max_p']:
+            return bin_info['color']
+            
+    return p_value_color_config[-1]['color']
+  
+# --------------------------------------------------------------------------------------------------------------------
 def plot_correlation_summary_hatched(results_dict, args, qualifiers=''):
     '''
     Plots Spearman rank correlation coefficients (r) across integrated metallicity
@@ -708,7 +723,7 @@ def plot_correlation_summary_hatched(results_dict, args, qualifiers=''):
     fig.subplots_adjust(left=0.07, right=0.99, top=0.99, bottom=0.07, hspace=0.02)
 
     x = np.arange(len(items_zero))
-    width = 0.25  # Bar width
+    width = 0.25  # bar width
 
     panels = [
         (ax1, items_zero, r'Zeroth-Order Spearman ($r$)', 'Zeroth-Order Correlations'),
@@ -728,12 +743,15 @@ def plot_correlation_summary_hatched(results_dict, args, qualifiers=''):
             pos = x + (i - 1) * width
             
             # ------color per bar depending on p-value--------
-            colors = [sig_color if (p is not np.nan and not np.isnan(p) and p <= 0.05) else nonsig_color for p in p_vals]
+            if args.nocolorcoding:
+                colors = [sig_color if (p is not np.nan and not np.isnan(p) and p <= 0.05) else nonsig_color for p in p_vals] # fixed colors
+            else:
+                colors = [get_p_color_binned(p) for p in p_vals] # discrete color-map
             bars = ax.bar(pos, r_vals, width, color=colors, hatch=hatch, edgecolor='black', linewidth=0.8, alpha=0.9, zorder=3)
             
             # --------annotating r and p values above/below bars-------
             for bar, r, p in zip(bars, r_vals, p_vals):
-                if np.isnan(r) or np.isnan(p) or p > 0.05: # only print p-values when significant
+                if np.isnan(r) or np.isnan(p) or (p > 0.05 and args.nocolorcoding) or p > 0.1: # only print p-values when significant
                     continue
                 height = bar.get_height()
                 va = 'bottom' if height >= 0 else 'top'
@@ -744,33 +762,33 @@ def plot_correlation_summary_hatched(results_dict, args, qualifiers=''):
                 
                 ax.text(bar.get_x() + bar.get_width() / 2.0, height + offset, f"r={r:.2f}\n({p_str})", ha='center', va=va, fontsize=7.5, fontweight=fontweight, color='black', zorder=4)
 
-        # --------annotate plot------------------
+        # --------annotating plot------------------
         ax.axhline(0, color='black', linewidth=1.0, zorder=2)
         ax.set_ylabel(ylabel_str, fontsize=args.fontsize)
-        ax.set_ylim(-1.25, 1.25)
+        ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5, prune='lower'))
+        ax.tick_params(axis='y', which='both', labelsize=args.fontsize)
+        ax.set_ylim(-1.1, 1.1)
         ax.grid(axis='y', linestyle=':', alpha=0.6, zorder=0)
 
-        # Title text positioned directly inside top of axis
-        ax.text(0.5, 0.03, panel_title, transform=ax.transAxes, ha='center', va='bottom', fontsize=args.fontsize / args.fontfactor, fontweight='bold', zorder=5)
-        ax.tick_params(axis='y', which='both', labelsize=args.fontsize)
+        ax.text(0.5, 0.98, panel_title, transform=ax.transAxes, ha='center', va='top', fontsize=args.fontsize / args.fontfactor, fontweight='bold', zorder=5)
 
     # -------shared x-axis tick marks & labels---------
-    # Top panel: show tick marks, but hide tick text labels
-    ax1.tick_params(axis='x', which='both', bottom=True, labelbottom=False)
-    
-    # Bottom panel: show both tick marks and text labels
-    ax2.tick_params(axis='x', which='both', bottom=True, labelbottom=True)
+    ax1.tick_params(axis='x', which='both', bottom=True, labelbottom=False) # Top panel
+    ax2.tick_params(axis='x', which='both', bottom=True, labelbottom=True) # Bottom panel
     ax2.set_xticks(x)
     ax2.set_xticklabels([item[2] for item in items_partial], fontsize=args.fontsize)
 
     # --------making significance legend (left on top panel)---------
-    legend_sig = [patches.Patch(facecolor=sig_color, edgecolor='black', label=r'$p \leq 0.05$ (Significant)'), patches.Patch(facecolor=nonsig_color, edgecolor='black', label=r'$p > 0.05$ (Not Significant)')]
-    leg1 = ax1.legend(handles=legend_sig, loc='upper left', frameon=True, fontsize=args.fontsize / args.fontfactor)
-    ax1.add_artist(leg1)
+    if args.nocolorcoding:
+        legend_sig = [patches.Patch(facecolor=sig_color, edgecolor='black', label=r'$p \leq 0.05$ (Significant)'), patches.Patch(facecolor=nonsig_color, edgecolor='black', label=r'$p > 0.05$ (Not Significant)')]
+    else:
+        legend_sig = [patches.Patch(facecolor=cfg['color'], edgecolor='black', label=cfg['label'])for cfg in p_value_color_config]
+    leg1 = ax1.legend(handles=legend_sig, loc='best', frameon=True, fontsize=args.fontsize / args.fontfactor)
+    #ax1.add_artist(leg1)
 
     # -------making mass legend (right on top panel)-------------------
     legend_regime = [patches.Patch(facecolor='white', edgecolor='black', hatch=h, label=lbl) for h, lbl in zip(regime_hatches, regime_labels)]
-    ax1.legend(handles=legend_regime, loc='upper right', frameon=True, fontsize=args.fontsize / args.fontfactor)
+    ax2.legend(handles=legend_regime, loc='best', frameon=True, fontsize=args.fontsize / args.fontfactor)
 
     # -------save fig--------
     figname = f'correlation_summary_{qualifiers}.png'
@@ -786,7 +804,15 @@ lim_dict = {'minor_logOH_grad': [-1.2, 1.2],\
                 'delta_sfms_median': [-0.6, 0.6],\
                 'log_mass_median': [7.0, 10.0],\
                 'tform_ratio_median': [0, 1],\
-                }  
+                }
+
+p_value_color_config = [
+    {'max_p': 0.01, 'color': '#7b241c', 'label': r'$p \leq 0.01$ (Very Significant)'},
+    {'max_p': 0.05, 'color': '#cd6155', 'label': r'$0.01 < p \leq 0.05$ (Significant)'},
+    {'max_p': 0.10, 'color': "#7b7c7d", 'label': r'$0.05 < p \leq 0.10$ (Marginally Significant)'},
+    {'max_p': 1.00, 'color': '#ebedef', 'label': r'$p > 0.10$ (Not Significant)'},
+]
+
 log_mass_cut = 9.0
 
 # --------------------------------------------------------------------------------------------------------------------
