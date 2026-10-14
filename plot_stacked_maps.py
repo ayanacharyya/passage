@@ -61,12 +61,12 @@ def plot_stacked_line_maps(line_dict, args, bin_text='', cmin=None, cmax=None, t
             if args.plot_radial_profiles:
                 shape = np.shape(this_map)
                 if args.fold_maps:
-                    center_xpix, center_ypix = (args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5 # this yields 0.5 (instead of 0) pixel offset for even-sized stacked maps, because the center of the map is in the center (and not the edge) of the first pixel
+                    center_xpix, center_ypix = 0, 0 #(args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5 # this yields 0.5 (instead of 0) pixel offset for even-sized stacked maps, because the center of the map is in the center (and not the edge) of the first pixel
                 else:
-                    center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
-                distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
-                minor_distance_map = np.array([[np.abs(j - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
-                major_distance_map = np.array([[np.abs(i - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+                    center_xpix, center_ypix = shape[1] / 2., shape[0] / 2.
+                distance_map = np.array([[np.sqrt((i - center_ypix)**2 + (j - center_xpix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+                minor_distance_map = np.array([[np.abs(j - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+                major_distance_map = np.array([[np.abs(i - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
                 this_df = pd.DataFrame({'distance': distance_map.flatten(), 'minor_distance': minor_distance_map.flatten(), 'major_distance': major_distance_map.flatten()})
 
                 this_df[f'{this_line}'] = unp.nominal_values(this_map.data).flatten()
@@ -110,19 +110,7 @@ def get_emission_line_map(line, line_dict, args, silent=True):
     line_int = get_integrated_map(line_map)
     nobj = line_dict[f'{line}_nobj']
 
-    # ----------deblending flux--------------------
-    factor = 1.0
-    if not args.do_not_correct_flux:
-        if line == 'OIII': # special treatment for OIII 5007 line, in order to account for and remove the OIII 4959 component
-            ratio_5007_to_4959 = 2.98 # from grizli source code
-            factor = ratio_5007_to_4959 / (1 + ratio_5007_to_4959)
-            if not silent: print(f'Correcting OIII for 4959 component, by factor of {factor:.3f}')
-        elif line == 'HA': # special treatment for Ha line, in order to account for and remove the NII component
-            factor = 0.823 # from James et al. 2023?
-            if not silent: print(f'Correcting Ha for NII component, by factor of {factor:.3f}')
-
-    line_map = line_map * factor
-    line_int = line_int * factor
+    # no deblending flux since it was already deblended before stacking (in stack_emission_maps.py)
     line_map = np.ma.masked_where(line_map_mask, line_map)
 
     return line_map, line_int, nobj
@@ -410,6 +398,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
     logOH_dict_unique_IDs = {}
     counter = 0
     start_time3 = datetime.now()
+    bd_reset_counter = 0
 
     for index in range(len(obs_flux_array[0])):
         this_ID = IDs_array[index]
@@ -425,7 +414,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
             # ------getting all line fluxes-------------
             obs_fluxes = obs_flux_array[:,index]
             obs_errs = obs_err_array[:, index]
-            print(f'\n\tDeb425: binID {this_ID} ({index + 1}/{len(obs_flux_array[0])}): initally nlines={len(obs_fluxes)}, {dict(zip(line_label_array, obs_fluxes))}') ##
+            print(f'\n\tDeb425: binID {this_ID} ({index + 1}/{len(obs_flux_array[0])}): initally nlines={len(obs_fluxes)}, {dict(zip(line_label_array, unp.uarray(obs_fluxes, obs_errs)))}') ##
 
             # ------discarding lines with negative fluxes-------------
             good_obs = (obs_fluxes >= 0) & (obs_errs > 0)
@@ -436,14 +425,23 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
 
             if len(line_labels) > 1:
                 # -------setting up NB parameters----------
-                if 'Hbeta' in line_labels and 'Halpha' in line_labels: # dered within NB only if that option is turned on, and the Ha/Hb ratio is above the Case-B recombination limit
+                if args.dered_in_NB and 'Hbeta' in line_labels and 'Halpha' in line_labels: # dered within NB only if that option is turned on, and the Ha/Hb ratio is above the Case-B recombination limit
                     Ha_flux = obs_fluxes[np.where(np.array(line_labels) == 'Halpha')[0][0]]
                     Hb_flux = obs_fluxes[np.where(np.array(line_labels) == 'Hbeta')[0][0]]
                     balm_dec = Ha_flux / Hb_flux
                     if balm_dec >= 2.86: # case B recombination limit
-                        dered = args.dered_in_NB
+                        dered = True
                     else:
-                        dered = False
+                        bd_reset_counter += 1
+                        if args.reset_bd:
+                            print(f'Deb435: Resetting BD from original {balm_dec} to 2.86')
+                            obs_fluxes[np.where(np.array(line_labels) == 'Hbeta')[0][0]] = Ha_flux / 2.86
+                            Hb_flux = obs_fluxes[np.where(np.array(line_labels) == 'Hbeta')[0][0]]
+                            balm_dec = Ha_flux / Hb_flux
+                            dered = True
+                        else:
+                            print(f'Deb443: BD {balm_dec} inconsistent with theoretical limit; so turning off dered knob')
+                            dered = False
                 else:
                     dered = False
                     balm_dec = -99
@@ -462,7 +460,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
                         }
 
                 # -------running NB--------------
-                print(f'\n\tDeb450: binID {this_ID}: nlines={len(obs_fluxes)}, {dict(zip(line_labels, obs_fluxes))}, norm_line = {norm_line}, balmer decrement (if available) = {balm_dec}, dereddening on the fly? {dered}') ##
+                print(f'\n\tDeb450: binID {this_ID}: finally nlines={len(obs_fluxes)}, {dict(zip(line_labels, unp.uarray(obs_fluxes, obs_errs)))}, norm_line = {norm_line}, balmer decrement (if available) = {balm_dec}, dereddening on the fly? {dered}') ##
                 Result = NB_Model_HII(obs_fluxes, obs_errs, line_labels, **kwargs)
 
                 # -------estimating the resulting logOH, and associated uncertainty-----------
@@ -473,7 +471,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
                 logOH_err = np.mean([logOH_est - logOH_low, logOH_high - logOH_est])
                 logOH = ufloat(logOH_est, logOH_err)
                 
-                print(f'Ran NB for unique ID {this_ID} ({counter + 1} out of {len(unique_IDs_array)}) with {len(obs_fluxes)} good fluxes in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
+                print(f'Derived NB logOH = {logOH} for unique ID {this_ID} ({counter + 1} out of {len(unique_IDs_array)}) with {len(obs_fluxes)} good fluxes in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
 
                 best_model_dict = Result.Posterior.best_model
                 if 'Halpha' in line_labels and 'NII6583' in line_labels:
@@ -488,7 +486,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
             logOH_dict_unique_IDs.update({this_ID: logOH}) # updating to unique ID dictionary once logOH has been calculated for this unique ID
 
         logOH_array.append(logOH)
-    print(f'\nRan NB for total {counter} unique pixels out of {len(obs_flux_array[0])}, in {timedelta(seconds=(datetime.now() - start_time3).seconds)}\n')
+    print(f'\nRan NB for total {counter} unique pixels ({bd_reset_counter} of which were below theoretical BD) out of {len(obs_flux_array[0])}, in {timedelta(seconds=(datetime.now() - start_time3).seconds)}\n')
 
     # ---------collating all the metallicities computed---------
     log_OH = np.ma.masked_where(net_mask, np.reshape(logOH_array, np.shape(line_flux_array[0])))
@@ -739,20 +737,24 @@ def plot_metallicity_map(logOH_map, args, bin_text='', Zmin=None, Zmax=None):
         quant = 'log_OH'
         shape = np.shape(logOH_map)
         if args.fold_maps:
-            center_xpix, center_ypix = (args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5 # this yields 0.5 (instead of 0) pixel offset for even-sized stacked maps, because the center of the map is in the center (and not the edge) of the first pixel
+            center_xpix, center_ypix = 0, 0 #(args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5 # this yields 0.5 (instead of 0) pixel offset for even-sized stacked maps, because the center of the map is in the center (and not the edge) of the first pixel
         else:
-            center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
+            center_xpix, center_ypix = shape[1] / 2., shape[0] / 2.
         
-        distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
-        minor_distance_map = np.array([[np.abs(j - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
-        major_distance_map = np.array([[np.abs(i - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+        distance_map = np.array([[np.sqrt((i - center_ypix)**2 + (j - center_xpix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+        minor_distance_map = np.array([[np.abs(j - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+        major_distance_map = np.array([[np.abs(i - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+
         df = pd.DataFrame({'distance': distance_map.flatten(), \
                            'minor_distance': minor_distance_map.flatten(), \
                            'major_distance': major_distance_map.flatten(), \
                            f'{quant}': unp.nominal_values(logOH_map).flatten(), \
                            f'{quant}_u': unp.std_devs(logOH_map).flatten(), \
                            })
-        df = df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
+        df = df[np.isfinite(df[f'{quant}']) & np.isfinite(df[f'{quant}_u'])] 
+        if quant == 'log_OH':
+            df = df[df[f'{quant}'].between(7.1, 9.3)] # to eliminate cases that hit NB grid boundary
+        
         axes[1], minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(df, axes[1], args, ylim=[Zmin, Zmax], xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant, skip_fitting=False)
     else:
         minor_linefit_odr, major_linefit_odr, radial_linefit_odr = None, None, None
@@ -796,7 +798,7 @@ def fold_line_map(line_map, args, line=''):
     folded_data = fold_image_to_quadrant(unp.nominal_values(line_map.data), args, line=f'{line}')
     folded_err = fold_image_to_quadrant(unp.std_devs(line_map.data), args, line=f'{line}_err')
     if np.ndim(line_map.mask) > 0:
-        folded_mask = fold_image_to_quadrant(line_map.mask, args, line=f'{line}_mask')
+        folded_mask = fold_image_to_quadrant(line_map.mask, args, line=f'{line}_mask', is_mask=True)
     else:
         folded_mask = line_map.mask
     
@@ -805,21 +807,25 @@ def fold_line_map(line_map, args, line=''):
     return folded_line_map
 
 # --------------------------------------------------------------------------------------------------------------------
-def fold_image_to_quadrant(data_map, args, line=''):
+def fold_image_to_quadrant(data_map, args, line='', is_mask=False):
     '''
     Fold a given image along vertical and horizontal axis (this assumes that the major and minor axes align with the vertical and horizontal axes, respectively)
     Returns 2D array which is a 'quarter' map
     '''
-    mid_x, mid_y = data_map.shape[0] // 2, data_map.shape[1] // 2
+    mid_x, mid_y = data_map.shape[1] // 2, data_map.shape[0] // 2
     
     # ----extract the four quadrants: Top-Right (TR), Top-Left (TL), Bottom-Left (BL), Bottom-Right (BR)---
     tr = data_map[mid_y:, mid_x:]            # Already oriented correctly
     tl = np.fliplr(data_map[mid_y:, :mid_x]) # Flip horizontally
     bl = np.flipud(np.fliplr(data_map[:mid_y, :mid_x])) # Flip both
     br = np.flipud(data_map[:mid_y, mid_x:]) # Flip vertically
-    
-    # ---------taking their median-----------
-    folded_quadrant = np.median([tr, tl, bl, br], axis=0)
+
+    if is_mask:
+        # Logical AND across quadrants: True only when all 4 are True
+        folded_quadrant = np.all(np.array([tr, tl, br, bl]), axis=0)
+    else:
+        # Use nanmedian to avoid single NaN pixels corrupting the whole stack
+        folded_quadrant = np.nanmedian(np.array([tr, tl, br, bl]), axis=0)
 
     # ----------for diagnostics------------
     if args.debug_folding:
@@ -842,70 +848,6 @@ def fold_image_to_quadrant(data_map, args, line=''):
     return folded_quadrant
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_line_and_metallicity_maps_old(line_dict, logOH_map, args, bin_text='', cmin=None, cmax=None, Zmin=None, Zmax=None, takelog=True):
-    '''
-    Makes a nice plot of all emission lines present in a given list of stacked line maps along with the metallicity map
-    Returns figure handle and the list of lines plotted
-    '''
-    # ----------getting line list from fits file-------------
-    line_list = [item for item in list(line_dict.keys()) if '_nobj' not in item and '_id' not in item]
-    #line_list = args.line_list
-    n_lines = len(line_list)
-
-    # ----------getting distance maps, in case radial profile plotting-------------
-    if args.plot_radial_profiles:
-        shape = np.shape(logOH_map)
-        if args.fold_maps:
-            center_xpix, center_ypix = (args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5 # this yields 0.5 (instead of 0) pixel offset for even-sized stacked maps, because the center of the map is in the center (and not the edge) of the first pixel
-        else:
-            center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
-        distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
-        minor_distance_map = np.array([[np.abs(j - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
-        major_distance_map = np.array([[np.abs(i - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
-        df = pd.DataFrame({'distance': distance_map.flatten(), 'minor_distance': minor_distance_map.flatten(), 'major_distance': major_distance_map.flatten()})
-
-    # -----------------setup the figure---------------
-    ncols = n_lines + 1
-    nrows = 2 if args.plot_radial_profiles else 1
-    
-    fig, axes = plt.subplots(nrows, ncols, figsize=(2.5 * ncols, 3.5 * nrows))
-    axes = np.atleast_2d(axes)
-    fig.subplots_adjust(left=0.07, right=0.94, top=0.94, bottom=0.08, wspace=0., hspace=0.2)
-    fig.text(0.05, 0.95, f'{bin_text}', fontsize=args.fontsize, c='k', ha='left', va='top')
-    
-    # -----------------plot emission line maps of this bin---------------
-    for index, this_line in enumerate(line_list):
-        this_map, _ , _= get_emission_line_map(this_line, line_dict, args)
-        nobj = line_dict[f'{this_line}_nobj']
-        if type(unp.nominal_values(this_map.data)) == np.ndarray:
-            axes[0][index] = plot_2D_map(this_map, axes[0][index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True)
-
-        if args.plot_radial_profiles:
-            this_df = df.copy()
-            this_df[f'{this_line}'] = unp.nominal_values(this_map.data).flatten()
-            this_df[f'{this_line}_u'] = unp.std_devs(this_map.data).flatten()
-            this_df = this_df.dropna(subset=[f'{this_line}', f'{this_line}_u'], axis=0)
-            this_df = this_df[this_df[f'{this_line}'] > 0] # drop negative fluxes before taking log for the radial profile plot
-            
-            axes[1][index], _, _, _ = plot_radial_profile(this_df, axes[1][index], args, ylim=[cmin, cmax], takelog=takelog, xlim=None, hide_xaxis=False, hide_yaxis=index, hide_cbar=True, skip_annotate=False, quant=this_line, skip_fitting=True)
-
-    # -----------------plot metallicity maps of this bin---------------
-    axes[0][index + 1] = plot_2D_map(logOH_map, axes[0][index + 1], f'logOH {args.Zdiag}', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', takelog=False, vmin=Zmin, vmax=Zmax, hide_yaxis=True, hide_cbar=False, cticks_integer=True)
-    
-    if args.plot_radial_profiles:
-        quant = 'log_OH'
-        logOH_df = df.copy()
-        logOH_df[f'{quant}'] = unp.nominal_values(logOH_map).flatten()
-        logOH_df[f'{quant}_u'] = unp.std_devs(logOH_map).flatten()
-        logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
-
-        axes[1][index + 1], minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(logOH_df, axes[1][index + 1], args, ylim=[Zmin, Zmax], xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant, skip_fitting=False, yaxis_on_right=True)
-    else:
-        minor_linefit_odr, major_linefit_odr, radial_linefit_odr = None, None, None
-
-    return fig, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr
-
-# --------------------------------------------------------------------------------------------------------------------
 def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin=None, cmax=None, Zmin=None, Zmax=None, takelog=True):
     '''
     Makes a nice plot of all emission lines present in a given list of stacked line maps along with the metallicity map
@@ -919,12 +861,12 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
     if args.plot_radial_profiles:
         shape = np.shape(logOH_map)
         if args.fold_maps:
-            center_xpix, center_ypix = (args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5
+            center_xpix, center_ypix = 0, 0 #(args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5
         else:
-            center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
-        distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size
-        minor_distance_map = np.array([[np.abs(j - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size
-        major_distance_map = np.array([[np.abs(i - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size
+            center_xpix, center_ypix = shape[1] / 2., shape[0] / 2.
+        distance_map = np.array([[np.sqrt((i - center_ypix)**2 + (j - center_xpix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size
+        minor_distance_map = np.array([[np.abs(j - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size
+        major_distance_map = np.array([[np.abs(i - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size
         df = pd.DataFrame({'distance': distance_map.flatten(), 'minor_distance': minor_distance_map.flatten(), 'major_distance': major_distance_map.flatten()})
 
     # -----------------setup the figure with GridSpec---------------
@@ -975,7 +917,9 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
         logOH_df = df.copy()
         logOH_df[f'{quant}'] = unp.nominal_values(logOH_map).flatten()
         logOH_df[f'{quant}_u'] = unp.std_devs(logOH_map).flatten()
-        logOH_df = logOH_df.dropna(subset=[f'{quant}', f'{quant}_u'], axis=0)
+        logOH_df = logOH_df[np.isfinite(logOH_df[f'{quant}']) & np.isfinite(logOH_df[f'{quant}_u'])] 
+        if quant == 'log_OH':
+            logOH_df = logOH_df[logOH_df[f'{quant}'].between(7.1, 9.3)] # to eliminate cases that hit NB grid boundary
 
         # Set yaxis_on_right=False so Y-axis labels sit on the left (in the gap)
         axes_Z[1, 0], minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(logOH_df, axes_Z[1, 0], args, ylim=[Zmin, Zmax], xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant, skip_fitting=False)
@@ -992,10 +936,10 @@ def plot_AGN_demarcation_ax(x_num, x_den, y_num, y_den, ax, args, color=None, ma
     '''
     shape = np.shape(y_num)
     if args.fold_maps:
-        center_xpix, center_ypix = (args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5 # this yields 0.5 (instead of 0) pixel offset for even-sized stacked maps, because the center of the map is in the center (and not the edge) of the first pixel
+        center_xpix, center_ypix = 0, 0 #(args.npix_side % 2 == 0) * 0.5, (args.npix_side % 2 == 0) * 0.5 # this yields 0.5 (instead of 0) pixel offset for even-sized stacked maps, because the center of the map is in the center (and not the edge) of the first pixel
     else:
-        center_xpix, center_ypix = shape[0] / 2., shape[1] / 2.
-    distance_map = np.array([[np.sqrt((i - center_xpix)**2 + (j - center_ypix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+        center_xpix, center_ypix = shape[1] / 2., shape[0] / 2.
+    distance_map = np.array([[np.sqrt((i - center_ypix)**2 + (j - center_xpix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
 
     df = pd.DataFrame({'xnum': unp.nominal_values(np.atleast_1d(x_num)).flatten(), \
                        'xnum_u': unp.std_devs(np.atleast_1d(x_num)).flatten(), \
@@ -1183,7 +1127,7 @@ if __name__ == "__main__":
 
         # ---------------plot emission line maps of this bin---------------------
         if args.plot_line_maps:
-            fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=-1)
+            fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-4, cmax=-0.5)
             save_fig(fig_em, args.fig_dir, f'stacked{args.fold_text}_line_maps{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -----------------computing metallicity maps of this bin---------------
@@ -1206,7 +1150,7 @@ if __name__ == "__main__":
 
         # -----------------plot line maps and metallicity maps of this bin---------------
         if args.plot_line_and_metallicity:
-            fig_met, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=-1, Zmin=None, Zmax=None)
+            fig_met, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-4, cmax=-0.5, Zmin=None, Zmax=None)
             save_fig(fig_met, args.fig_dir, f'stacked{args.fold_text}_line_and_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -------------save fit results to dataframe-----------------------

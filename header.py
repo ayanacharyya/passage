@@ -190,7 +190,7 @@ ids_to_re_extract_dict = {'Par051': [141, 159, 179, 207, 220, 239, 285, 304, 315
                2655, 2772,
                2777]} # IDs determined by visual inspection, to re-extract the spectra using wider (0.1 < z < 8) z constraints, and perhaps better choices for other parameters too
 
-fields_with_2PA = ['Par027', 'Par028', 'Par006', 'Par051', 'Par009']
+fields_with_2PA = ['Par001', 'Par002', 'Par005', 'Par006', 'Par008', 'Par009', 'Par027', 'Par028', 'Par034', 'Par050', 'Par051', 'Par052', 'Par061']
 
 passage_fields_in_cosmos = [3, 5, 6, 17, 20, 23, 24, 25, 26, 28, 29, 46, 47, 48, 49, 51, 52, 53]
 

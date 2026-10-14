@@ -42,23 +42,28 @@ def plot_MZR_literature(ax):
                                     'Z0_u':[0.001, 0.042], \
                                     'M0':[8.76, 9.93], \
                                     'gamma':[0.66, 0.88]}) # these are based on PPN2 frame already and need not be coverted
-    zahid_data_14['linestyle'] = 'solid' # because these metallicities have NOT been converted
+    zahid_data_14['linestyle'] = 'dashed' # because these metallicities have NOT been converted
 
     zahid_data = pd.concat([zahid_data_13, zahid_data_14], join='inner', ignore_index=True).reset_index(drop=True)
     zahid_data = zahid_data.sort_values(by='Redshift').reset_index(drop=True)
 
     zahid_data = zahid_data[zahid_data['Redshift'] > 1].reset_index(drop=True) # removing low-z surveys
 
-    col_ar = ['orange', 'black', 'cyan', 'seagreen', 'blue', 'salmon', 'gray']
+    col_ar = ['cornflowerblue', 'steelblue', 'blue', 'orange', 'black', 'salmon', 'gray']
     for i in range(len(zahid_data)):
         xarr = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 20)
         ax.plot(xarr, zahid_func(xarr, zahid_data['Z0'][i], zahid_data['M0'][i], zahid_data['gamma'][i]), color=col_ar[i], lw=2, ls=zahid_data['linestyle'][i], label= 'z = '+str(zahid_data['Redshift'][i]) + '; ' + zahid_data['Sample'][i], zorder=-5)
+
+    # -------------Hasan+26 MZR--------------------------
+    H26_coeff = [-0.06, 0.31, 8.21] # from Farhan's Fig 11
+    logOH_mid = np.poly1d(H26_coeff)(xarr - 9) # from Farhan's Eq 1
+    ax.plot(xarr, logOH_mid, color='orange', lw=2, ls='solid', label='1.7 < z < 3.4; H26', zorder=-5)
 
     # -------------Nedkova+26 MZR--------------------------
     #N26_coeff = unp.uarray([-0.046, 0.992, 3.085], [0.012, 0.204, 0.863]) # from eq 1 of Nedkova+26
     N26_coeff = unp.uarray([-0.038, 0.856, 3.669], [0.021, 0.372, 1.613]) # from Kalina's slack msg
     logOH_mid = np.poly1d(unp.nominal_values(N26_coeff))(xarr)
-    ax.plot(xarr, logOH_mid, color='red', lw=2, ls='--', label='1.7 < z < 3.4; N26')
+    ax.plot(xarr, logOH_mid, color='red', lw=2, ls='solid', label='1.7 < z < 3.4; N26', zorder=-5)
     '''
     # -------this is my attempt to propagate errors---------------
     logOH_low = np.poly1d(unp.nominal_values(N26_coeff) - unp.std_devs(N26_coeff))(xarr)
@@ -85,7 +90,7 @@ def plot_MZR_literature(ax):
     logOH_high = logOH_mid + y_fit_err
     
     # -------plotting shaded region--------
-    ax.fill_between(xarr, logOH_low, logOH_high, color='salmon', alpha=0.5)
+    ax.fill_between(xarr, logOH_low, logOH_high, color='salmon', alpha=0.5, zorder=-10)
 
     return ax
 
@@ -138,7 +143,7 @@ def plot_MZGR_literature(ax, this_work_legend=[], skip_legend=False):
     legend_dict = {'sami': 'SAMI', 'manga': 'MaNGA', 'califa': 'CALIFA', 'sharda_scaling1': 'S21 scaling 1', 'sharda_scaling2': 'S21 scaling 2', 'mingozzi2020_izi': 'Mingozzi+20 (IZI)', 'wang17': 'Wang+17', 'jones15': 'Jones+15', 'venturi24': 'Venturi+24', 'li25': 'Li+25', 'ju25': 'Ju+25', 'khoram25': r'Khoram+25 (T$_e$-based)', 'acharyya26': 'Acharyya+26'}
     marker_dict = {'sami': '+', 'manga': 'x', 'califa': '1', 'sharda_scaling1': 'v', 'sharda_scaling2': '^', 'mingozzi2020_izi': '<', 'wang17': 'v', 'jones15': '^', 'venturi24': '>', 'li25': 'D', 'ju25': 'd', 'khoram25': 'o', 'acharyya26': 'X'}
     ls_dict = {'sami': 'dotted', 'manga': 'dotted', 'califa': 'dotted', 'sharda_scaling1': 'solid', 'sharda_scaling2': 'dashed', 'mingozzi2020_izi': 'dotted', 'wang17': 'dotted', 'jones15': 'dotted', 'venturi24': 'dotted', 'li25': 'dotted', 'ju25': 'dotted', 'khoram25': 'dotted', 'acharyya26': 'dotted'}
-    color_dict = {'sami': 'firebrick', 'manga': 'chocolate', 'califa': 'darkgoldenrod', 'sharda_scaling1': 'k', 'sharda_scaling2': 'k', 'mingozzi2020_izi': 'peru', 'wang17': 'brown', 'jones15': 'sandybrown', 'venturi24': 'bisque', 'li25': 'grey', 'ju25': 'lightskyblue', 'khoram25': 'cornflowerblue', 'acharyya26': 'goldenrod'}
+    color_dict = {'sami': 'firebrick', 'manga': 'chocolate', 'califa': 'darkgoldenrod', 'sharda_scaling1': 'brown', 'sharda_scaling2': 'brown', 'mingozzi2020_izi': 'peru', 'wang17': 'brown', 'jones15': 'sandybrown', 'venturi24': 'bisque', 'li25': 'grey', 'ju25': 'lightskyblue', 'khoram25': 'cornflowerblue', 'acharyya26': 'goldenrod'}
  
    # --------plotting Sharda+21 data: for dex/re----------
     s21 = []
@@ -215,11 +220,18 @@ def print_sr_corr(df, xcol, ycol, xcol2=None):
     Prints out the partial (if ycol2 is not None) Spearman Rank correlation coefficients
     Returns a dictionary of the results
     '''
-    corr_xcol = pg.corr(df[xcol], df[ycol], method='spearman')
-    corr_xcol_r, corr_xcol_p = corr_xcol.loc["spearman", "r"], corr_xcol.loc["spearman", "p-val"]
-    print(f'\nSpearman Rank correlation of {ycol} vs {xcol} is r={corr_xcol_r:.2f}, p-val={corr_xcol_p:.2f}')
-    
-    if xcol2 is not None:
+    df = df.dropna(subset=[xcol, ycol])
+
+    if len(df) >= 3: # because at least 3 data points are required to compute SR correlations
+        corr_xcol = pg.corr(df[xcol], df[ycol], method='spearman')
+        corr_xcol_r, corr_xcol_p = corr_xcol.loc["spearman", "r"], corr_xcol.loc["spearman", "p-val"]
+        print(f'\nSpearman Rank correlation of {ycol} vs {xcol} is r={corr_xcol_r:.2f}, p-val={corr_xcol_p:.2f}')
+    else:
+        corr_xcol_r, corr_xcol_p = np.nan, np.nan
+
+    df = df.dropna(subset=[xcol2])
+
+    if xcol2 is not None and len(df) >= 3: # because at least 3 data points are required to compute SR correlations
         corr_ccol = pg.corr(df[xcol2], df[ycol], method='spearman')
         corr_ccol_r, corr_ccol_p = corr_ccol.loc["spearman", "r"], corr_ccol.loc["spearman", "p-val"]
         print(f'Spearman Rank correlation of {ycol} vs {xcol2} is r={corr_ccol_r:.2f}, p-val={corr_ccol_p:.2f}')
@@ -242,96 +254,6 @@ def print_sr_corr(df, xcol, ycol, xcol2=None):
     }
 
     return results
-
-# --------------------------------------------------------------------------------------------------------------------
-def plot_stacked_MZGR_old(df, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=None, cmap='RdBu', qualifiers=''):
-    '''
-    Plots the stacked mass-metallicity gradient relation (both radial and minor-major gradients), overplotted with relations from the literature
-    Saves the figure
-    Returns figure handle
-    '''
-    # ------setup figure----------
-    fig, axes = plt.subplots(2, 1, figsize = (10, 7.6), sharex=True)
-    fig.subplots_adjust(left=0.1, right=0.87, top=0.88, bottom=0.08, wspace=0., hspace=0.04)
-
-    # ------prepare plotting attributes-----------
-    df = df.sort_values(by=xcol)
-    print_sr_corr(df, xcol, ycol, xcol2=colorcol)
-
-    log_mass_cut_low, log_mass_cut_high = log_mass_cut, log_mass_cut
-    df_low = df[df[xcol] < log_mass_cut_low]
-    df_high = df[df[xcol] > log_mass_cut_high]
-    print(f'\nAfter log_mass < {log_mass_cut_low}..')
-    print_sr_corr(df_low, xcol, ycol, xcol2=colorcol)
-    print(f'\nAfter log_mass > {log_mass_cut_high}..')
-    print_sr_corr(df_high, xcol, ycol, xcol2=colorcol)
-
-    if colorcol is None:
-        color = 'cornflowerblue'
-        cmin, cmax = None, None
-        cmap = None
-    else:
-        color = df[colorcol]
-        cmin, cmax = lim_dict[colorcol][0], lim_dict[colorcol][1]
-        cmap = cmap
-
-    # -------plot radial gradient------------
-    axes[0].plot(df[xcol], df[ycol], lw=0.7, c='k', ls='dashed')
-    p = axes[0].scatter(df[xcol], df[ycol], s=100, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker='o', zorder=20, label=f'This Work (azimuthally averaged)')
-    if f'{ycol}_u' in df:
-        axes[0].errorbar(df[xcol], df[ycol], yerr=df[f'{ycol}_u'], c='grey', lw=0.7, fmt='none', alpha=1)
-    this_work_legend = [p]
-
-    axes[0].axhline(0, ls='dashed', lw=0.5, c='k')
-
-    # -----plot literature---------
-    axes[0] = plot_MZGR_literature(axes[0], skip_legend=True)
-
-    # -------annotate axis--------
-    axes[0] = annotate_axes(axes[0], label_dict[xcol], label_dict[ycol], xlim=lim_dict[xcol], ylim=lim_dict[ycol], args=args, 
-                       clabel=label_dict[colorcol] if colorcol is not None else '', hide_cbar=colorcol is None, cbar_width=2,
-                       p=p, hide_cbar_ticks=False, cticks_integer=False, hide_xaxis=True)    
-
-    vline_col = 'sienna'
-    axes[0].axvline(log_mass_cut, ls='dotted', lw=1., c=vline_col)
-    axes[0].text(log_mass_cut - 0.1, axes[0].get_ylim()[1] * 0.95, 'Lower mass regime', c=vline_col, fontsize=args.fontsize / args.fontfactor, ha='right', va='top')
-    axes[0].text(log_mass_cut + 0.1, axes[0].get_ylim()[1] * 0.95, 'Higher mass regime', c=vline_col, fontsize=args.fontsize / args.fontfactor, ha='left', va='top')
-    axes[1].axvline(log_mass_cut, ls='dotted', lw=1., c=vline_col)
-
-    # -------plot minor major gradient------------
-    ycol_arr = [ycol.replace('radial', 'minor'), ycol.replace('radial', 'major')]
-    marker_arr = ['s', 'D']
-    ls_arr = ['solid', 'dashed']
-
-    for index, ycol in enumerate(ycol_arr):
-        print_sr_corr(df, xcol, ycol, xcol2=colorcol)
-        print(f'\nAfter log_mass < {log_mass_cut_low}..')
-        print_sr_corr(df_low, xcol, ycol, xcol2=colorcol)
-        print(f'\nAfter log_mass > {log_mass_cut_high}..')
-        print_sr_corr(df_high, xcol, ycol, xcol2=colorcol)
-        
-        axes[1].plot(df[xcol], df[ycol], lw=0.7, c='k', ls=ls_arr[index])
-        p = axes[1].scatter(df[xcol], df[ycol], s=70, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker=marker_arr[index], zorder=20, label=f'This work ({ycol.split("_")[0]} axis)')
-        if f'{ycol}_u' in df:
-            axes[1].errorbar(df[xcol], df[ycol], yerr=df[f'{ycol}_u'], c='grey', lw=0.7, fmt='none', alpha=1)
-        this_work_legend.append(p)
-
-    axes[1].axhline(0, ls='dashed', lw=0.5, c='k')
-
-    # -----plot literature---------
-    axes[1] = plot_MZGR_literature(axes[1], this_work_legend=this_work_legend)
-
-    # -------annotate axis--------
-    ycol = ycol.replace('minor', 'radial').replace('major', 'radial')
-    axes[1] = annotate_axes(axes[1], label_dict[xcol], label_dict[ycol], xlim=lim_dict[xcol], ylim=lim_dict[ycol], args=args, 
-                       clabel=label_dict[colorcol] if colorcol is not None else '', hide_cbar=colorcol is None, cbar_width=2,
-                       p=p, hide_cbar_ticks=False, cticks_integer=False)    
-
-    # -------save fig--------
-    figname = f'MZGR_{qualifiers}.png'
-    save_fig(fig, args.fig_dir, figname, args)
-
-    return fig
 
 # --------------------------------------------------------------------------------------------------------------------
 def format_latex_cell(r, p):
@@ -382,9 +304,9 @@ def generate_latex_table(results_dict, outfilename):
     
     body = ""
     sections = [
-        ('full', r"\multicolumn{5}{l}{\textit{Full mass range ($7 \lesssim \log{(M_*/M_\odot)} \lesssim 11$)}} \\[5pt]"),
-        ('low', r"\multicolumn{5}{l}{\textit{Lower-mass regime ($\log{(M_*/M_\odot)} < 8.5$)}} \\[5pt]"),
-        ('high', r"\multicolumn{5}{l}{\textit{Higher-mass regime ($\log{(M_*/M_\odot)} > 8.5$)}} \\[5pt]")
+        ('full', r"\multicolumn{5}{l}{\textit{Full mass range ($7.5 \lesssim \log{(M_*/M_\odot)} \lesssim 10.5$)}} \\[5pt]"),
+        ('low', r"\multicolumn{5}{l}{\textit{Lower-mass regime ($\log{(M_*/M_\odot)} < 9$)}} \\[5pt]"),
+        ('high', r"\multicolumn{5}{l}{\textit{Higher-mass regime ($\log{(M_*/M_\odot)} > 9$)}} \\[5pt]")
     ]
     
     labels = {
@@ -802,7 +724,7 @@ lim_dict = {'minor_logOH_grad': [-1.2, 1.2],\
                 'radial_logOH_grad': [-1.2, 1.2],\
                 'logOH_int': [7.0, 9.0],\
                 'delta_sfms_median': [-0.6, 0.6],\
-                'log_mass_median': [7.0, 10.0],\
+                'log_mass_median': [7.5, 10.5],\
                 'tform_ratio_median': [0, 1],\
                 }
 
