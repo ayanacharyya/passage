@@ -369,7 +369,7 @@ def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=20):
 
     # ---------making plot--------------
     p = ax.scatter(df[mass_col], df['O3Hb'], c=df['redshift'], marker='o', s=size, edgecolor='k', lw=0.5, cmap='viridis', vmin=None, vmax=None)
-    ax.errorbar(df[mass_col], df['O3Hb'], yerr=df['O3Hb_u'], c='gray', fmt='none', lw=1, alpha=0.8, zorder=-5)
+    ax.errorbar(df[mass_col], df['O3Hb'], yerr=df['O3Hb_u'], c='gray', fmt='none', lw=1, alpha=0.8, zorder=-15)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df['O3Hb'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
 
     if df_agn is not None:
@@ -393,9 +393,12 @@ def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=20):
     x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
     y_up = np.piecewise(x, [x <= 10, x > 10], [lambda x: (0.375 / (x - 10.5)) + 1.14, lambda x: np.poly1d([410.24, -109.333, 9.71731, -0.288244][::-1])(x)]) # J14 eq 1
     y_lo = np.piecewise(x, [x <= 9.6, x > 9.6], [lambda x: (0.375 / (x - 10.5)) + 1.14, lambda x: np.poly1d([352.066, -93.8249, 8.32651, -0.246416][::-1])(x)]) # J14 eq 2
-    ax.plot(x, y_up + 0.75, c='k', ls='solid', lw=2, label='Juneau+2014 + 0.75 dex (Coil+2015)')
-    ax.plot(x, y_up, c='k', ls='dashed', lw=2, label='Juneau+2014')
+    ax.plot(x, y_up, c='k', ls='dashed', lw=1, label='Juneau+2014')
     #ax.plot(x, y_lo, c='brown', ls='dashed', lw=2)
+    
+    x_shift = -0.75
+    y_up_shifted = np.piecewise(x, [x + x_shift <= 10, x + x_shift > 10], [lambda x: (0.375 / (x + x_shift - 10.5)) + 1.14, lambda x: np.poly1d([410.24, -109.333, 9.71731, -0.288244][::-1])(x + x_shift)]) # J14 eq 1
+    ax.plot(x, y_up_shifted, c='k', ls='solid', lw=1, label='Juneau+2014 + 0.75 dex (Coil+2015)')
     plt.legend()
 
     plt.show(block=False)
@@ -851,7 +854,7 @@ def read_passage_sed_catalog(filename, include_cosmos2020=False):
 
     df = df.dropna(subset=['log_mass', 'log_sfr'])
     nobj2 = len(df)
-    print(f'\nOut of initial {nobj1} objects, {nobj2} had mass available.')
+    print(f'\n\tOut of initial {nobj1} objects, {nobj2} had mass available.')
 
     return df
 
@@ -872,7 +875,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
         zcut = [float(item) for item in args.zcut.split(',')]
         nobj0 = len(df)
         df = df[df['redshift'].between(zcut[0], zcut[1])]
-        print(f'Out of the {nobj0} objects, {len(df)} had {zcut[0]:.2f} < z < {zcut[1]:.2f}\t', end='')
+        print(f'\tOut of the {nobj0} objects, {len(df)} had {zcut[0]:.2f} < z < {zcut[1]:.2f}\t', end='')
 
     # ----------discard based on redshift flag--------------------------
     if args.cut_z_flag is not None:
@@ -887,7 +890,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
 
         df = df.merge(df_speccat, on=['field', 'id'], how='inner')
         df = df[df['z_flag'] < args.cut_z_flag]
-        print(f'Out of the {nobj1} objects, {len(df)} had z_flag < {args.cut_z_flag}', end='')
+        print(f'\tOut of the {nobj1} objects, {len(df)} had z_flag < {args.cut_z_flag}..')
     
     # -------------add delta sfms column--------------------
     nobj2 = len(df)
@@ -896,7 +899,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     df['log_sfr_ms_expected'] = sfms_func(df['log_mass'])
     df['delta_sfms'] = df['log_sfr'] - df['log_sfr_ms_expected']
     df = df.dropna(subset=['delta_sfms'])
-    print(f'Out of the {nobj2} objects, {len(df)} had delta sfms computable..', end='')
+    print(f'Out of the {nobj2} objects, {len(df)} had delta sfms computable..')
     '''
     # ------------cut by presence of required lines------------------
     if len(required_lines) > 0:
@@ -910,13 +913,13 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
         max_obs_waves = max_rest_wave * (1 + df['redshift'])
 
         df = df[(df['obs_min'] <= min_obs_waves) & (max_obs_waves <= df['obs_max'])]
-        print(f'..out of which {len(df)} made the redshift cut for required lines {required_lines}..', end='')
+        print(f'\tOut of which {len(df)} made the redshift cut for required lines {required_lines}')
     '''
     # --------curtailing to desired SFR-mass limits--------------
     df = df[(df['log_sfr'].between(log_sfr_bins.min(), log_sfr_bins.max())) & (df['log_mass'].between(log_mass_bins.min(), log_mass_bins.max()))]
-    print(f'..out of which {len(df)} made the extreme mass-sfr cut: log mass within ({log_mass_bins.min()}, {log_mass_bins.max()}) amd log sfr within ({log_sfr_bins.min()}, {log_sfr_bins.max()})..', end='')
+    print(f'\tOut of which {len(df)} made the extreme mass-sfr cut: log mass within ({log_mass_bins.min()}, {log_mass_bins.max()}) amd log sfr within ({log_sfr_bins.min()}, {log_sfr_bins.max()})')
 
-    # ------------------determine fil and path names---------
+    # ------------------determine file and path names---------
     if args.do_all_fields:
         re_catalog_filename = args.output_dir / f'catalogs/all_fields_re_list.fits'
     else:
@@ -932,7 +935,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
         df_re['field'] = df_re['field'].astype(str)
         df_re = df_re[df_re['re_kpc'] > 0]
         df = pd.merge(df, df_re, on=['field', 'id'], how='inner')
-        print(f'..out of which {len(df)} are in cosmos-web and have Re computed.')
+        print(f'\tOut of which {len(df)} are in cosmos-web and have Re computed..')
     else:
         raise FileNotFoundError(f're catalog not found at {re_catalog_filename}; please create this file first by running compute_re.py. Exiting.')
     
@@ -974,9 +977,9 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
         nobj3 = len(df)
         target_cols = [f'flux_{line}' for line in required_lines]
         df = df[(df[target_cols] > 0).all(axis=1)]
-        print(f'Out of the {nobj3} objects, {len(df)} made the redshift cut for required lines {required_lines}..', end='')
+        print(f'\tOut of the {nobj3} objects, {len(df)} made the redshift cut for required lines {required_lines}')
     
-    # ----------------removing AGNs---------------------
+    # ----------------removing AGNs based on MEx---------------------
     nobj = len(df)
     df_temp = df.copy()
     cols_to_check = ['flux_OIII', 'err_OIII', 'err_Hb', 'flux_Hb']
@@ -985,21 +988,20 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     quant = unp.log10(unp.uarray(df_temp['flux_OIII'], df_temp['err_OIII']) / unp.uarray(df_temp['flux_Hb'], df_temp['err_Hb']))
     df_temp['O3Hb'] = unp.nominal_values(quant)
     df_temp['O3Hb_u'] = unp.std_devs(quant)
-    df_temp['O3Hb_J14_lim'] = df_temp['log_mass'].map(lambda x: np.piecewise(x, [x <= 10, x > 10], [lambda x: (0.375 / (x - 10.5)) + 1.14, lambda x: np.poly1d([410.24, -109.333, 9.71731, -0.288244][::-1])(x)])) # J14 eq 1
-    df_temp['O3Hb_J14_lim'] += 0.75 # raising demarcation by 0.75 dex for high-z, Coil+15
+    x_shift = -0.75 # shifting demarcation by 0.75 dex for high-z, Coil+15
+    df_temp['O3Hb_J14_lim'] = df_temp['log_mass'].map(lambda x: np.piecewise(x, [x + x_shift <= 10, x + x_shift > 10], [lambda x: (0.375 / (x + x_shift - 10.5)) + 1.14, lambda x: np.poly1d([410.24, -109.333, 9.71731, -0.288244][::-1])(x + x_shift)])) # J14 eq 1
 
     df_agn = df_temp[df_temp['O3Hb'] - df_temp['O3Hb_u'] > df_temp['O3Hb_J14_lim']]
-
     df = df.merge(df_agn[['field', 'id']], on=['field', 'id'], how='left', indicator=True)
     df = df[df['_merge'] == 'left_only'].drop(columns='_merge').reset_index(drop=False) # keep only the rows that exist ONLY in the left dataframe (df)
 
-    print(f'\nOut of the {nobj} objects, {len(df_agn)} are above MEx line, so they are removed; final sample is {len(df)} galaxies.')
-    
+    print(f'\tOut of the {nobj} objects, {len(df_agn)} are above MEx line, so they are removed..')
+
+    # --------------saving MEx----------------
     args.required_lines_text = '_lines_' + ','.join(required_lines) if len(required_lines) > 0 else ''
     args.zcut_text = f'_zcut_{args.zcut}' if args.zcut is not None else ''
     args.cut_z_flag_text = f'_zflag_cut_{args.cut_z_flag}{args.zcut_text}' if args.cut_z_flag is not None else f'{args.zcut_text}'
 
-    # --------------saving MEx----------------
     if args.do_all_fields: root_dir = args.output_dir
     else: root_dir = args.output_dir / args.field
     args.stacking_dir = root_dir / f'stacking{args.required_lines_text}{args.cut_z_flag_text}'
@@ -1008,6 +1010,15 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     save_fig(fig, args.stacking_dir, 'mass_excitation_colorby_redshift.png', args)
     if not args.plot_mex: plt.close(fig)
 
+    # ----------------removing AGNs based on known AGN flags from COSMOS---------------------
+    df_cosmos_agns = pd.DataFrame({'field': ['Par017', 'Par025', 'Par028', 'Par052'],
+                                   'id': [334, 2898, 2038, 2518]}) # these are the objects that have agn_flag = 1 in Huberty+26 catalog (catalogs/passage_cosmos_redshift_catalog_v3_internal_with_EW.dat)
+    idx_df = pd.MultiIndex.from_frame(df[['field', 'id']])
+    idx_agns = pd.MultiIndex.from_frame(df_cosmos_agns[['field', 'id']])
+    mask = idx_df.isin(idx_agns)
+    df = df[~mask]
+    print(f'\tOut of which, {mask.sum()} are removed based on known AGN flags from COSMOS, yielding a final sample is {len(df)} galaxies.')
+    
     return df
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -1085,13 +1096,14 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
 
     args.deproject_text = '_nodeproject' if args.skip_deproject else ''
     args.rescale_text = '_norescale' if args.skip_re_scaling else ''
-    args.C25_text = '_wC25' if args.use_C25 and 'NB' not in args.Zdiag else ''
+    if 'NB' in args.Zdiag: args.C25_text = '_resetBD' if args.reset_bd else ''
+    else: args.C25_text = '_wC25' if args.use_C25 else ''
     args.fold_text = '_folded' if args.fold_maps else ''
     args.scaling_line_text = f'_scaleby_{args.scaling_line}'
     args.required_lines_text = '_lines_' + ','.join(required_lines) if len(required_lines) > 0 else ''
     args.zcut_text = f'_zcut_{args.zcut}' if args.zcut is not None else ''
     args.cut_z_flag_text = f'_zflag_cut_{args.cut_z_flag}{args.zcut_text}' if args.cut_z_flag is not None else f'{args.zcut_text}'
-
+    
     # ------------------determine fil and path names---------
     if args.do_all_fields:
         root_dir = args.output_dir
@@ -1187,14 +1199,8 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
                 plot_inc_histogram(df, f'bin_intervals{method_text}', f'mass_intervals{method_text}', args)
 
         # --------------curtailiug bins for debugging-------------------
-        # if args.debug_bin: bin_list = bin_list[:1]
-        # if args.debug_bin: bin_list = bin_list[7:8]
-        if args.debug_bin: bin_list = bin_list[12:13]
-        # if args.debug_bin: bin_list = bin_list[10:11]
-        # if args.debug_bin: bin_list = bin_list[15:16]
-        # if args.debug_bin: bin_list = bin_list[25:26]
-        # if args.debug_bin: bin_list = bin_list[29:30]
-        #if args.debug_bin: bin_list = [item for item in bin_list if (item[0].left == 9.5) & (item[0].right == 10.) & (item[1].left == 2.0) & (item[1].right == 2.5)] # to choose the mass=9.5-10.5, sfr=2-2.5 bin for debugging purposes
+        #if args.debug_bin: bin_list = bin_list[10:11]
+        if args.debug_bin: bin_list = bin_list[2:3]
 
         # ------determining field-specific paths, etc-----------
         if args.skip_re_scaling:
@@ -1203,10 +1209,11 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
             args.pix_size = (2 * args.re_limit) / args.npix_side # Re
         
         if args.fold_maps:
+            offset = args.pix_size / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
             if args.skip_re_scaling:
-                args.extent = (0, args.re_limit, 0, args.re_limit)
+                args.extent = (-offset, args.kpc_limit - offset, -offset, args.kpc_limit - offset)
             else:
-                args.extent = (0, args.re_limit, 0, args.re_limit)
+                args.extent = (-offset, args.re_limit - offset, -offset, args.re_limit - offset)
         else: 
             offset = args.pix_size / 2 # half a pixel offset to make sure cells in 2D plot are aligned with centers and not edges
             if args.skip_re_scaling:
@@ -1236,8 +1243,8 @@ methods = [
             ]
 
 target_n = 30 # for voronoi binning
-#n_adaptive_bins = 8 # for distance (from SFMS) binning
 n_adaptive_bins = 4 # for distance (from SFMS) binning
+#n_adaptive_bins = 3 # for distance (from SFMS) binning
 n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
 delta_sfms_bin = 0.4 # delta in distance from SFMS in which to bin in the distance-from-SFMS method, unless binning adaptively
 sfms =  'PASSAGE' # from 'PASSAGE', 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
@@ -1299,12 +1306,21 @@ if __name__ == "__main__":
         save_fig(fig, args.stacking_dir, f'redshift_distribution.png', args) # saving the figure
         '''
         # ------------plotting redshift and mass distribution--------------------------
-        fig, axes = plt.subplots(1, 2, figsize=(8.2, 5.), layout='constrained')
+        fig, axes = plt.subplots(1, 5, figsize=(13., 3.), layout='constrained')
         axes[0].hist(df['redshift'], histtype='stepfilled', bins=20)
-        axes[0] = annotate_axes(axes[0], 'Redshift', 'No. of galaxies', label=f'Total = {len(df)}', labelx=0.7, args=args)#, xlim=[0.9,2.5])
+        axes[0] = annotate_axes(axes[0], 'Redshift', 'No. of galaxies', label=f'Total = {len(df)}', labelx=0.5, args=args)
 
         axes[1].hist(df['log_mass'], histtype='stepfilled', bins=20)
-        axes[1] = annotate_axes(axes[1], r'$\log{(M_*/M_\odot)}$', 'No. of galaxies', args=args)#, xlim=[0.9,2.5])
+        axes[1] = annotate_axes(axes[1], r'$\log{(M_*/M_\odot)}$', '', args=args)
+
+        axes[2].hist(df['log_sfr'], histtype='stepfilled', bins=20)
+        axes[2] = annotate_axes(axes[2], r'$\log{(SFR M_\odot/yr)}$', '', args=args)
+
+        axes[3].hist(df['re_kpc'], histtype='stepfilled', bins=20)
+        axes[3] = annotate_axes(axes[3], r'R$_e$ (kpc)', '', args=args)
+
+        axes[4].hist(df['re_arcsec'], histtype='stepfilled', bins=20)
+        axes[4] = annotate_axes(axes[4], r'R$_e$ (arcseconds)', '', args=args)
 
         save_fig(fig, args.stacking_dir, f'redshift_mass_distribution.png', args) # saving the figure
         plt.close(fig)
