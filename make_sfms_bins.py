@@ -357,37 +357,34 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
     return fig
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=20):
+def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=20, df_llim=None, df_ulim=None):
     '''
     Plots the mass-excitation diagram given a dataframe with list of objects and properties
     Returns figure handle
     '''
     print(f'Plotting mass-excitation diagram...')
     # ----------setting up the diagram----------
-    fig, ax = plt.subplots(1, figsize=(5.2, 5))
-    fig.subplots_adjust(left=0.18, right=0.95, bottom=0.11, top=0.95)
+    fig, ax = plt.subplots(1, figsize=(6, 5))
+    fig.subplots_adjust(left=0.1, right=0.88, bottom=0.12, top=0.99)
 
     # ---------making plot--------------
-    p = ax.scatter(df[mass_col], df['O3Hb'], c=df['redshift'], marker='o', s=size, edgecolor='k', lw=0.5, cmap='viridis', vmin=None, vmax=None)
+    p = ax.scatter(df[mass_col], df['O3Hb'], c=df['redshift'], marker='o', s=size, edgecolor='k', lw=0.5, cmap='Greens', vmin=0.8, vmax=2.8) 
     ax.errorbar(df[mass_col], df['O3Hb'], yerr=df['O3Hb_u'], c='gray', fmt='none', lw=1, alpha=0.8, zorder=-15)
     if mass_col + '_u' in df: ax.errorbar(df[mass_col], df['O3Hb'], xerr=df[mass_col + '_u'], c='gray', fmt='none', lw=1, alpha=0.5)
+
+    if df_llim is not None:
+        ax.errorbar(df_llim[mass_col], df_llim['O3Hb'], yerr=0.15, lolims=True, fmt='none', color='k', ecolor='k', capsize=0, elinewidth=1., zorder=-3)
+
+    if df_ulim is not None:
+        ax.errorbar(df_ulim[mass_col], df_ulim['O3Hb'], yerr=0.15, uplims=True, fmt='none', color='k', ecolor='k', capsize=0, elinewidth=1., zorder=-3)
 
     if df_agn is not None:
         ax.scatter(df_agn[mass_col], df_agn['O3Hb'], c='w', marker='o', s=2 * size, edgecolor='r', lw=2, zorder=-5) # puts red circles around AGN objects
 
-    # ----------making colorbar----------
-    cbar = plt.colorbar(p, pad=0.01)
-    cbar.set_label('Redshift', fontsize=args.fontsize)
-    cbar.set_ticklabels([f'{item:.1f}' for item in cbar.get_ticks()], fontsize=args.fontsize)
-
-    # ---------annotate axes and save figure-------
-    plt.legend(fontsize=args.fontsize)
-    ax.set_xlabel(r'log M$_*$/M$_{\odot}$', fontsize=args.fontsize)
-    ax.set_ylabel(r'log [O III] $\lambda$5007/H$\beta$', fontsize=args.fontsize)
-    ax.tick_params(axis='both', which='major', labelsize=args.fontsize)
-
-    ax.set_xlim(log_mass_bins.min() - 0.2, log_mass_bins.max() + 0.2)
-    ax.set_ylim(-1.5, 3)
+   # ---------annotate axes and save figure-------
+    xlim = [log_mass_bins.min() - 0.2, log_mass_bins.max() + 0.2]
+    ylim = [-0.5, 2]
+    ax = annotate_axes(ax, r'log M$_*$/M$_{\odot}$', r'log [O III] $\lambda$5007/H$\beta$', xlim=xlim, ylim=ylim, args=args, p=p, hide_cbar=False, clabel='Redshift', hide_cbar_ticks=False)
 
     # ---------adding literature lines from Juneau+2014 (https://iopscience.iop.org/article/10.1088/0004-637X/788/1/88/pdf)----------
     x = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 100)
@@ -398,8 +395,8 @@ def plot_MEx(df, args, mass_col='log_mass', df_agn=None, size=20):
     
     x_shift = -0.75
     y_up_shifted = np.piecewise(x, [x + x_shift <= 10, x + x_shift > 10], [lambda x: (0.375 / (x + x_shift - 10.5)) + 1.14, lambda x: np.poly1d([410.24, -109.333, 9.71731, -0.288244][::-1])(x + x_shift)]) # J14 eq 1
-    ax.plot(x, y_up_shifted, c='k', ls='solid', lw=1, label='Juneau+2014 + 0.75 dex (Coil+2015)')
-    plt.legend()
+    ax.plot(x, y_up_shifted, c='k', ls='solid', lw=1, label='Juneau+2014\n+ 0.75 dex (Coil+2015)')
+    ax.legend(loc='best', fontsize=args.fontsize / args.fontfactor)
 
     plt.show(block=False)
 
@@ -982,20 +979,68 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     # ----------------removing AGNs based on MEx---------------------
     nobj = len(df)
     df_temp = df.copy()
-    cols_to_check = ['flux_OIII', 'err_OIII', 'err_Hb', 'flux_Hb']
-    df_temp = df_temp[(df_temp[cols_to_check] > 0).all(axis=1)]
+
+    snr_thresh = 3.0  # Detection threshold (e.g., 3-sigma)
+    det_OIII = (df_temp['flux_OIII'] > 0) & (df_temp['err_OIII'] > 0) & (df_temp['sn_OIII'] >= snr_thresh)
+    det_Hb = (df_temp['flux_Hb'] > 0) & (df_temp['err_Hb'] > 0) & (df_temp['sn_Hb'] >= snr_thresh)
 
     quant = unp.log10(unp.uarray(df_temp['flux_OIII'], df_temp['err_OIII']) / unp.uarray(df_temp['flux_Hb'], df_temp['err_Hb']))
     df_temp['O3Hb'] = unp.nominal_values(quant)
     df_temp['O3Hb_u'] = unp.std_devs(quant)
-    x_shift = -0.75 # shifting demarcation by 0.75 dex for high-z, Coil+15
-    df_temp['O3Hb_J14_lim'] = df_temp['log_mass'].map(lambda x: np.piecewise(x, [x + x_shift <= 10, x + x_shift > 10], [lambda x: (0.375 / (x + x_shift - 10.5)) + 1.14, lambda x: np.poly1d([410.24, -109.333, 9.71731, -0.288244][::-1])(x + x_shift)])) # J14 eq 1
+    
+    log_m_shifted = (df_temp['log_mass'] - 0.75).values # shifting demarcation by 0.75 dex for high-z, Coil+15
+    df_temp['O3Hb_J14_lim'] = np.piecewise(
+        log_m_shifted,
+        [log_m_shifted <= 10, log_m_shifted > 10],
+        [lambda x: (0.375 / (x - 10.5)) + 1.14,
+        lambda x: np.poly1d([410.24, -109.333, 9.71731, -0.288244][::-1])(x)
+        ])
+    
+    is_agn = pd.Series(False, index=df.index)
 
-    df_agn = df_temp[df_temp['O3Hb'] - df_temp['O3Hb_u'] > df_temp['O3Hb_J14_lim']]
-    df = df.merge(df_agn[['field', 'id']], on=['field', 'id'], how='left', indicator=True)
-    df = df[df['_merge'] == 'left_only'].drop(columns='_merge').reset_index(drop=False) # keep only the rows that exist ONLY in the left dataframe (df)
+    # -------Case 1: both lines detected: 1-sigma lower bound to mark AGNs-------------------------
+    mask_both_det = det_OIII & det_Hb
+    if mask_both_det.any():
+        df_both = df_temp[mask_both_det]
+        quant = unp.log10(unp.uarray(df_both['flux_OIII'], df_both['err_OIII']) / unp.uarray(df_both['flux_Hb'], df_both['err_Hb']))
+        o3hb_val = unp.nominal_values(quant)
+        o3hb_err = unp.std_devs(quant)
+        is_agn.loc[mask_both_det] = (o3hb_val - o3hb_err) > df_both['O3Hb_J14_lim']
+    else:
+        df_both = None
+
+    # -------Case 2: Hb not detected: 3-sigma lower limit on ratio used to mark AGNs-------------------------
+    mask_hb_nondet = det_OIII & (~det_Hb) & (df_temp['err_Hb'] > 0)
+    if mask_hb_nondet.any():
+        df_hb_nondet = df_temp[mask_hb_nondet]
+        hb_upper_limit_flux = snr_thresh * df_hb_nondet['err_Hb']
+        o3hb_lower_limit = np.log10(df_hb_nondet['flux_OIII'] / hb_upper_limit_flux)
+        df_hb_nondet['O3Hb'] = o3hb_lower_limit
+        df_temp.loc[mask_hb_nondet, 'O3Hb'] = o3hb_lower_limit
+        is_agn.loc[mask_hb_nondet] = o3hb_lower_limit > df_hb_nondet['O3Hb_J14_lim']
+    else:
+        df_hb_nondet = None
+
+    # -------Case 3: OIII not detected: only for visualisation-------------------------
+    mask_o3_nondet = det_Hb & (~det_OIII) & (df_temp['err_OIII'] > 0)
+    if mask_o3_nondet.any():
+        df_o3_nondet = df_temp[mask_o3_nondet]
+        o3_upper_limit_flux = snr_thresh * df_o3_nondet['err_OIII']
+        o3hb_upper_limit = np.log10(o3_upper_limit_flux / df_o3_nondet['flux_Hb'])
+        df_o3_nondet['O3Hb'] = o3hb_upper_limit
+        df_temp.loc[mask_o3_nondet, 'O3Hb'] = o3hb_upper_limit
+    else:
+        df_o3_nondet = None
+
+    # Filter out identified AGNs from original DataFrame
+    df_agn = df_temp[is_agn]
+    df = df[~is_agn].reset_index(drop=True)
 
     print(f'\tOut of the {nobj} objects, {len(df_agn)} are above MEx line, so they are removed..')
+
+    # --------additional SNR cut for test------------
+    df = df[(df['sn_OIII'] > 10) & (df['sn_Ha'] > 10)]
+    print(f'\tTEST: additional snr cut on O3 and Hb leaves {len(df)} galaxies..')
 
     # --------------saving MEx----------------
     args.required_lines_text = '_lines_' + ','.join(required_lines) if len(required_lines) > 0 else ''
@@ -1006,7 +1051,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     else: root_dir = args.output_dir / args.field
     args.stacking_dir = root_dir / f'stacking{args.required_lines_text}{args.cut_z_flag_text}'
 
-    fig = plot_MEx(df_temp, args, df_agn=df_agn)
+    fig = plot_MEx(df_both, args, df_agn=df_agn, df_ulim=df_o3_nondet, df_llim=df_hb_nondet)
     save_fig(fig, args.stacking_dir, 'mass_excitation_colorby_redshift.png', args)
     if not args.plot_mex: plt.close(fig)
 
@@ -1096,7 +1141,7 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
 
     args.deproject_text = '_nodeproject' if args.skip_deproject else ''
     args.rescale_text = '_norescale' if args.skip_re_scaling else ''
-    if 'NB' in args.Zdiag: args.C25_text = '_resetBD' if args.reset_bd else ''
+    if 'NB' in args.Zdiag: args.C25_text = '_resetBD' if args.reset_bd else '_Zprior' if args.nb_prior else ''
     else: args.C25_text = '_wC25' if args.use_C25 else ''
     args.fold_text = '_folded' if args.fold_maps else ''
     args.scaling_line_text = f'_scaleby_{args.scaling_line}'
@@ -1198,9 +1243,18 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
             if plot_inc_hist:
                 plot_inc_histogram(df, f'bin_intervals{method_text}', f'mass_intervals{method_text}', args)
 
+            # -------merge with COSMOS-Web photcat--------------
+            cweb_photcat_name = args.root_dir / 'passage_data/v0.5/COSMOS/COSMOSWeb_mastercatalog_v1_photom_primary_only_objects_in_Huberty26.fits'
+            print(f'Merging with COSMOS-Web photcat from {cweb_photcat_name}..')
+            df_cw = Table.read(cweb_photcat_name).to_pandas()
+            df_cw = df_cw.rename(columns={'id':'cosmoswebid'})
+            cols_to_extract = ['a_image', 'b_image', 'theta_image']
+            df = df.merge(df_cw[np.hstack((['cosmoswebid'], cols_to_extract))], on='cosmoswebid', suffixes=['_passage', '_cweb'], how='left')
+            df['theta_image_cweb'] = np.radians(df['theta_image_cweb']) # originally PASSAGE PAs are in radians, but COSMOSWeb PAs are in degrees
+
         # --------------curtailiug bins for debugging-------------------
-        #if args.debug_bin: bin_list = bin_list[10:11]
-        if args.debug_bin: bin_list = bin_list[2:3]
+        if args.debug_bin: bin_list = bin_list[10:11]
+        #if args.debug_bin: bin_list = bin_list[2:3]
 
         # ------determining field-specific paths, etc-----------
         if args.skip_re_scaling:

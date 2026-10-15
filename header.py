@@ -48,6 +48,7 @@ from scipy import ndimage
 from scipy.optimize import minimize
 from scipy.odr import ODR, Model, RealData
 from scipy.spatial import Voronoi, voronoi_plot_2d
+from scipy.stats import median_abs_deviation as MAD
 
 from sklearn.cluster import KMeans
 

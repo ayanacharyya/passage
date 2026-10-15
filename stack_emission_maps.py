@@ -223,44 +223,6 @@ def transform_map_single_pass(image, args, is_seg=False):
     return transformed
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_center_offsets_gemini(dir_img, args, silent=False):
-    '''
-    Accepts a 2D map, then computes the offset from the original center of image to the brightest pixel.
-    Returns two integers (offset in x and y axes).
-    '''
-    smoothing_kernel = Box2DKernel(5, mode=args.kernel_mode)
-    dir_img_smoothed = convolve(dir_img, smoothing_kernel)
-    smooth_shape = dir_img_smoothed.shape
-    ncells = 5
-    
-    cen_y, cen_x = smooth_shape[0] // 2, smooth_shape[1] // 2
-
-    y_min = max(cen_y - ncells, 0)
-    y_max = min(cen_y + ncells, smooth_shape[0])
-    x_min = max(cen_x - ncells, 0)
-    x_max = min(cen_x + ncells, smooth_shape[1])
-    
-    dir_img_smoothed_subarea = dir_img_smoothed[y_min:y_max, x_min:x_max]
-
-    # Handle cases where subarea is all NaNs gracefully
-    if np.all(np.isnan(dir_img_smoothed_subarea)):
-        if not silent: print(f'For {args.field}:{args.id}: Direct image subarea is all NaNs, returning 0 offset')
-        return 0, 0
-
-    max_idx = np.nanargmax(dir_img_smoothed_subarea)
-    rel_y, rel_x = np.unravel_index(max_idx, dir_img_smoothed_subarea.shape)
-
-    brightest_y = y_min + rel_y
-    brightest_x = x_min + rel_x
-
-    ndelta_xpix = cen_x - brightest_x
-    ndelta_ypix = cen_y - brightest_y
-
-    if not silent: print(f'For {args.field}:{args.id}: Determined x and y offsets from direct image = {ndelta_xpix}, {ndelta_ypix}')
-
-    return ndelta_xpix, ndelta_ypix
-
-# --------------------------------------------------------------------------------------------------------------------
 def get_center_offsets(dir_img, args, silent=False):
     '''
     Accepts a 2D map, then computes the offset from the original center of image to the brightest pixel
@@ -617,11 +579,13 @@ if __name__ == "__main__":
                         args.pix_size_re = (2 * args.re_limit) / args.npix_side
                         
                         args.EB_V = 0.
-                        args.semi_major = obj['a_image']
-                        args.semi_minor = obj['b_image']
-                        args.pa = obj['theta_image']
                         args.re_kpc, args.re_arcsec = obj['re_kpc'], obj['re_arcsec']
                         args.log_mass = obj['log_mass']
+
+                        survey = 'passage' # choose between 'passage' or 'cweb' to grab the morhpological parameters from 
+                        args.semi_major = obj[f'a_image_{survey}']
+                        args.semi_minor = obj[f'b_image_{survey}']
+                        args.pa = obj[f'theta_image_{survey}']
                         
                         # --------determining true center of object rom direct image---------------------
                         args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter=filter_for_direct_image, silent=not args.debug_align)

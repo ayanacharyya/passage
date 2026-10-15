@@ -49,7 +49,7 @@ def plot_MZR_literature(ax):
 
     zahid_data = zahid_data[zahid_data['Redshift'] > 1].reset_index(drop=True) # removing low-z surveys
 
-    col_ar = ['cornflowerblue', 'steelblue', 'blue', 'orange', 'black', 'salmon', 'gray']
+    col_ar = ['forestgreen', 'palegreen', 'limegreen', 'orange', 'black', 'salmon', 'gray']
     for i in range(len(zahid_data)):
         xarr = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 20)
         ax.plot(xarr, zahid_func(xarr, zahid_data['Z0'][i], zahid_data['M0'][i], zahid_data['gamma'][i]), color=col_ar[i], lw=2, ls=zahid_data['linestyle'][i], label= 'z = '+str(zahid_data['Redshift'][i]) + '; ' + zahid_data['Sample'][i], zorder=-5)
@@ -63,7 +63,7 @@ def plot_MZR_literature(ax):
     #N26_coeff = unp.uarray([-0.046, 0.992, 3.085], [0.012, 0.204, 0.863]) # from eq 1 of Nedkova+26
     N26_coeff = unp.uarray([-0.038, 0.856, 3.669], [0.021, 0.372, 1.613]) # from Kalina's slack msg
     logOH_mid = np.poly1d(unp.nominal_values(N26_coeff))(xarr)
-    ax.plot(xarr, logOH_mid, color='red', lw=2, ls='solid', label='1.7 < z < 3.4; N26', zorder=-5)
+    ax.plot(xarr, logOH_mid, color='darkgoldenrod', lw=2, ls='solid', label='1.7 < z < 3.4; N26', zorder=-5)
     '''
     # -------this is my attempt to propagate errors---------------
     logOH_low = np.poly1d(unp.nominal_values(N26_coeff) - unp.std_devs(N26_coeff))(xarr)
@@ -90,7 +90,7 @@ def plot_MZR_literature(ax):
     logOH_high = logOH_mid + y_fit_err
     
     # -------plotting shaded region--------
-    ax.fill_between(xarr, logOH_low, logOH_high, color='salmon', alpha=0.5, zorder=-10)
+    ax.fill_between(xarr, logOH_low, logOH_high, color='khaki', alpha=0.5, zorder=-10)
 
     return ax
 
@@ -143,7 +143,8 @@ def plot_MZGR_literature(ax, this_work_legend=[], skip_legend=False):
     legend_dict = {'sami': 'SAMI', 'manga': 'MaNGA', 'califa': 'CALIFA', 'sharda_scaling1': 'S21 scaling 1', 'sharda_scaling2': 'S21 scaling 2', 'mingozzi2020_izi': 'Mingozzi+20 (IZI)', 'wang17': 'Wang+17', 'jones15': 'Jones+15', 'venturi24': 'Venturi+24', 'li25': 'Li+25', 'ju25': 'Ju+25', 'khoram25': r'Khoram+25 (T$_e$-based)', 'acharyya26': 'Acharyya+26'}
     marker_dict = {'sami': '+', 'manga': 'x', 'califa': '1', 'sharda_scaling1': 'v', 'sharda_scaling2': '^', 'mingozzi2020_izi': '<', 'wang17': 'v', 'jones15': '^', 'venturi24': '>', 'li25': 'D', 'ju25': 'd', 'khoram25': 'o', 'acharyya26': 'X'}
     ls_dict = {'sami': 'dotted', 'manga': 'dotted', 'califa': 'dotted', 'sharda_scaling1': 'solid', 'sharda_scaling2': 'dashed', 'mingozzi2020_izi': 'dotted', 'wang17': 'dotted', 'jones15': 'dotted', 'venturi24': 'dotted', 'li25': 'dotted', 'ju25': 'dotted', 'khoram25': 'dotted', 'acharyya26': 'dotted'}
-    color_dict = {'sami': 'firebrick', 'manga': 'chocolate', 'califa': 'darkgoldenrod', 'sharda_scaling1': 'brown', 'sharda_scaling2': 'brown', 'mingozzi2020_izi': 'peru', 'wang17': 'brown', 'jones15': 'sandybrown', 'venturi24': 'bisque', 'li25': 'grey', 'ju25': 'lightskyblue', 'khoram25': 'cornflowerblue', 'acharyya26': 'goldenrod'}
+    #color_dict = {'sami': 'firebrick', 'manga': 'chocolate', 'califa': 'darkgoldenrod', 'sharda_scaling1': 'brown', 'sharda_scaling2': 'brown', 'mingozzi2020_izi': 'peru', 'wang17': 'brown', 'jones15': 'sandybrown', 'venturi24': 'bisque', 'li25': 'grey', 'ju25': 'lightskyblue', 'khoram25': 'cornflowerblue', 'acharyya26': 'goldenrod'}
+    color_dict = defaultdict(lambda: 'grey')
  
    # --------plotting Sharda+21 data: for dex/re----------
     s21 = []
@@ -418,7 +419,7 @@ def compute_correlations(df, args, xcol='log_mass_median', ycol='radial_logOH_gr
     return results_dict
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=None, cmap='RdBu', qualifiers=''):
+def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=None, cmap='RdBu', qualifiers='', window=5):
     '''
     Plots the stacked mass-metallicity gradient relation (both radial and minor-major gradients), overplotted with relations from the literature.
     Returns figure handle
@@ -440,13 +441,17 @@ def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad'
         cmap = cmap
 
     # -------plot radial gradient------------
-    axes[0].plot(df[xcol], df[ycol], lw=0.7, c='k', ls='dashed')
+    #axes[0].plot(df[xcol], df[ycol], lw=0.7, c='k', ls='dashed')
     p = axes[0].scatter(df[xcol], df[ycol], s=100, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker='o', zorder=20, label='This Work (azimuthally averaged)')
     if f'{ycol}_u' in df:
         axes[0].errorbar(df[xcol], df[ycol], yerr=df[f'{ycol}_u'], c='grey', lw=0.7, fmt='none', alpha=1)
     this_work_legend = [p]
-
     axes[0].axhline(0, ls='dashed', lw=0.5, c='k')
+
+    # -------running median: radial gradient------------
+    if len(df) >= window:
+        y_radial_med = df[ycol].rolling(window=window, center=True, min_periods=1).median()
+        axes[0].plot(df[xcol], y_radial_med, c='olivedrab', ls='-', lw=1.5, zorder=15)
 
     # -----plot literature---------
     axes[0] = plot_MZGR_literature(axes[0], skip_legend=True)
@@ -465,16 +470,20 @@ def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad'
     # -------plot minor & major gradient------------
     ycol_arr = [ycol.replace('radial', 'minor'), ycol.replace('radial', 'major')]
     marker_arr = ['s', 'D']
-    ls_arr = ['solid', 'dashed']
+    ls_arr = ['dotted', 'dashed']
 
     for index, curr_ycol in enumerate(ycol_arr):        
-        axes[1].plot(df[xcol], df[curr_ycol], lw=0.7, c='k', ls=ls_arr[index])
+        #axes[1].plot(df[xcol], df[curr_ycol], lw=0.7, c='k', ls=ls_arr[index])
         p = axes[1].scatter(df[xcol], df[curr_ycol], s=70, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker=marker_arr[index], zorder=20, label=f'This work ({curr_ycol.split("_")[0]} axis)')
         if f'{curr_ycol}_u' in df:
             axes[1].errorbar(df[xcol], df[curr_ycol], yerr=df[f'{curr_ycol}_u'], c='grey', lw=0.7, fmt='none', alpha=1)
         this_work_legend.append(p)
+        axes[1].axhline(0, ls='dashed', lw=0.5, c='k')
 
-    axes[1].axhline(0, ls='dashed', lw=0.5, c='k')
+        # -------running median: minor & major gradients------------
+        if len(df) >= window:
+            y_axis_med = df[curr_ycol].rolling(window=window, center=True, min_periods=1).median()
+            axes[1].plot(df[xcol], y_axis_med, c='olivedrab', ls=ls_arr[index], lw=1.5, zorder=15)
 
     # -----plot literature---------
     axes[1] = plot_MZGR_literature(axes[1], this_work_legend=this_work_legend)
@@ -784,7 +793,7 @@ if __name__ == "__main__":
     # ------------plotting stacked MZR and MZGR--------------------------
     qualifiers = f'{args.binby_text}{args.fold_text}_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}'
     if args.bin_by_distance_mass:
-        colorcol, cmap = 'delta_sfms_median', 'PRGn' # diverging cmap
+        colorcol, cmap = 'delta_sfms_median', 'coolwarm' # diverging cmap
     else:
         colorcol, cmap = 'tform_ratio_median', 'viridis' # sequential cmap
     

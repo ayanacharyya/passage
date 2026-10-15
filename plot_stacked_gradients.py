@@ -465,14 +465,14 @@ label_dict = {'minor_logOH_grad': 'Minor' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
                 'major_logOH_grad': 'Major' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
                 'radial_logOH_grad': r'$\nabla$Z$_r$ [dex/R$_e$]',\
                 'logOH_int': r'$\log$(O/H) + 12',\
-                'delta_sfms_median': r'<$\delta$ SFMS> [dex]',\
+                'delta_sfms_median': r'$\delta_{SFMS}$ [$\log$ M$_\odot$yr$^{-1}$]',\
                 'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack',\
                 'tform_ratio_median': r'$\Delta t_{form,90-50}$ / $\Delta t_{form,50-10}$',\
                 }
 lim_dict = {'minor_logOH_grad': [-1., 1.],\
                 'major_logOH_grad': [-1., 1.],\
                 'radial_logOH_grad': [-1., 1.],\
-                'logOH_int': [7.0, 9.0],\
+                'logOH_int': [None, None], # [7.0, 9.0],\
                 'delta_sfms_median': [-0.6, 0.6],\
                 'log_mass_median': [7.0, 10.0],\
                 'tform_ratio_median': [0, 1],\
@@ -505,8 +505,8 @@ if __name__ == "__main__":
     # ----------setting up master figure (for args.plot_sfms_vs_grad)--------------------
     if args.plot_sfms_vs_grad:
         if args.bin_by_distance_mass:
-            #quant_x, colorby_col = 'delta_sfms_median', 'log_mass_median'
-            quant_x, colorby_col = 'log_mass_median', 'delta_sfms_median'
+            quant_x, colorby_col = 'delta_sfms_median', 'log_mass_median'
+            #quant_x, colorby_col = 'log_mass_median', 'delta_sfms_median'
         elif args.bin_by_sfh_mass:
             #quant_x, colorby_col = 'log_mass_median', 'tform_ratio_median'
             quant_x, colorby_col = 'tform_ratio_median', 'log_mass_median'

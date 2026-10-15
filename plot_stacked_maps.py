@@ -349,6 +349,24 @@ def get_Z_C19(line_dict, args):
     return logOH_map, logOH_int, nobj
 
 # --------------------------------------------------------------------------------------------------------------------
+def custom_lower_branch_prior(DF_obs, obs_flux_arr_dict, obs_err_arr_dict, grids_dict, grid_spec, grid_rel_err):
+    '''
+    Calculates custom prior to favour the lower Z branch
+    '''
+    print(f'Using a smooth step prior that suppresses Z > 8.4')
+    param_ind = grid_spec.param_names.index('12 + log O/H')
+    all_logOH_values = grid_spec.param_values_arrs[param_ind]  # Sorted 1D array
+
+    turnover = 8.4
+    scale = 0.08  # Transition width in dex
+    logOH_1D_prior = 1.0 / (1.0 + np.exp((all_logOH_values - turnover) / scale)) # Smooth Fermi/step prior that suppresses Z > 8.4
+    slice_ND = [np.newaxis for _ in grid_spec.shape]
+    slice_ND[param_ind] = slice(None)
+    
+    prior = np.ones(grid_spec.shape) * logOH_1D_prior[tuple(slice_ND)]
+    return prior
+
+# --------------------------------------------------------------------------------------------------------------------
 def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
     '''
     Calculates and returns the NebulaBayes metallicity given a list of observed line fluxes
@@ -387,6 +405,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
     net_mask_array = net_mask.flatten()
 
     # -----loading the NB HII region model grid---------
+    print(f'Deb390: line label array = {line_label_array}') ##
     NB_Model_HII = NB_Model("HII", line_list=line_label_array)
 
     out_dir = args.fits_dir / f'{bin_text}_NB_results'
@@ -456,9 +475,10 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
                         'norm_line':norm_line,
                         'deredden': dered,
                         'propagate_dered_errors': dered,
-                        'obs_wavelengths': line_waves if dered else None
+                        'obs_wavelengths': line_waves if dered else None,
+                        'prior': custom_lower_branch_prior if args.nb_prior else 'Uniform',
                         }
-
+                
                 # -------running NB--------------
                 print(f'\n\tDeb450: binID {this_ID}: finally nlines={len(obs_fluxes)}, {dict(zip(line_labels, unp.uarray(obs_fluxes, obs_errs)))}, norm_line = {norm_line}, balmer decrement (if available) = {balm_dec}, dereddening on the fly? {dered}') ##
                 Result = NB_Model_HII(obs_fluxes, obs_errs, line_labels, **kwargs)
@@ -646,7 +666,7 @@ def plot_profile(df, ax, linefit_odr, quant_x, quant_y, col='grey', index=0, ski
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, takelog=False, quant='log_OH', skip_fitting=False, yaxis_on_right=False):
+def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, takelog=False, quant='log_OH', skip_fitting=False, yaxis_on_right=False, annotate_minor_major=False):
     '''
     Plots and fits the radial profile from a given dataframe in a given axis
     Returns the axis handle and the linefit
@@ -673,23 +693,23 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     
     radial_linefit_odr = wls_fit(df, quant_x='distance', quant_y=quant)
 
+    ax = plot_profile(df, ax, radial_linefit_odr, 'distance', quant, col='darkgoldenrod' if args.fortalk else 'grey', skip_fitting=skip_fitting)
+
     if args.plot_minor_major_profile:
         ax = plot_profile(df_minor, ax, minor_linefit_odr, 'minor_distance', quant, col='salmon', index=0, skip_fitting=skip_fitting)
         ax = plot_profile(df_major, ax, major_linefit_odr, 'major_distance', quant, col='cornflowerblue', index=1, skip_fitting=skip_fitting)
-    else:
-        ax = plot_profile(df, ax, radial_linefit_odr, 'distance', quant, col='darkgoldenrod' if args.fortalk else 'grey', skip_fitting=skip_fitting)
 
     ax.set_aspect('auto') 
 
     # --------annotating axis--------------
-    if 'OIII' in quant: ylabel = 'Log line flux' if takelog else 'Line flux'
+    if 'OIII' in quant: ylabel = 'Log (Normalised line flux)' if takelog else 'Normalised line flux'
     else: ylabel = label_dict[quant]
     if not skip_annotate: ax = annotate_axes(ax, 'Radius (kpc)' if args.re_limit is None else r'Radius (R$_e$)', ylabel, args=args, xlim=xlim, ylim=ylim, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, yaxis_on_right=yaxis_on_right)
 
     return ax, minor_linefit_odr, major_linefit_odr, radial_linefit_odr
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True):
+def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True, annotate_minor_major=False):
     '''
     Plots a given 2D image in a given axis
     Returns the axis handle
@@ -708,7 +728,7 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True,
     units = 'kpc' if args.skip_re_scaling else r'R$_e$' 
     ax = annotate_axes(ax, f'Offset ({units})', f'Offset ({units})', args=args, label=label, labelx=0.05, labely=0.92, clabel=clabel, hide_xaxis=hide_xaxis, hide_yaxis=hide_yaxis, hide_cbar=hide_cbar, p=p, hide_cbar_ticks=hide_cbar_ticks, cticks_integer=cticks_integer)
 
-    if args.plot_radial_profiles and args.plot_minor_major_profile:
+    if args.plot_minor_major_profile or annotate_minor_major:
         width = 1 if args.re_limit is None else 0.2 # 1 kpc or 0.2 Re
         if args.fold_maps:
             ax.add_patch(plt.Rectangle((0, 0), args.extent[1], width, lw=2, color='salmon', fill=False))
@@ -898,7 +918,7 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
         nobj = line_dict[f'{this_line}_nobj']
         
         if type(unp.nominal_values(this_map.data)) == np.ndarray:
-            axes_lines[0, index] = plot_2D_map(this_map, axes_lines[0, index], f'{this_line}: {nobj}', args, cmap='cividis', clabel=r'$\log\,\mathrm{Line\ Flux}$' if takelog else 'Line Flux', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=index < n_lines - 1, hide_cbar_ticks=False, cticks_integer=True)
+            axes_lines[0, index] = plot_2D_map(this_map, axes_lines[0, index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='Log (Normalised Line Flux)' if takelog else 'Normalised Line Flux', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=index < n_lines - 1, hide_cbar_ticks=False, cticks_integer=True, annotate_minor_major=index == 0)
 
         if args.plot_radial_profiles:
             this_df = df.copy()
@@ -907,7 +927,7 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
             this_df = this_df.dropna(subset=[f'{this_line}', f'{this_line}_u'], axis=0)
             this_df = this_df[this_df[f'{this_line}'] > 0]
             
-            axes_lines[1, index], _, _, _ = plot_radial_profile(this_df, axes_lines[1, index], args, ylim=[cmin, cmax], takelog=takelog, xlim=None, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=True, skip_annotate=False, quant=this_line, skip_fitting=True)
+            axes_lines[1, index], _, _, _ = plot_radial_profile(this_df, axes_lines[1, index], args, ylim=[cmin, cmax], takelog=takelog, xlim=None, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=True, skip_annotate=False, quant=this_line, skip_fitting=True, annotate_minor_major=True)
 
     # -----------------plot metallicity map & profile---------------
     axes_Z[0, 0] = plot_2D_map(logOH_map, axes_Z[0, 0], f'logOH {args.Zdiag}', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', takelog=False, vmin=Zmin, vmax=Zmax, hide_yaxis=False, hide_cbar=False, cticks_integer=True)
@@ -1127,7 +1147,7 @@ if __name__ == "__main__":
 
         # ---------------plot emission line maps of this bin---------------------
         if args.plot_line_maps:
-            fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-4, cmax=-0.5)
+            fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=0)
             save_fig(fig_em, args.fig_dir, f'stacked{args.fold_text}_line_maps{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -----------------computing metallicity maps of this bin---------------
@@ -1150,7 +1170,7 @@ if __name__ == "__main__":
 
         # -----------------plot line maps and metallicity maps of this bin---------------
         if args.plot_line_and_metallicity:
-            fig_met, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-4, cmax=-0.5, Zmin=None, Zmax=None)
+            fig_met, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=0, Zmin=None, Zmax=None)
             save_fig(fig_met, args.fig_dir, f'stacked{args.fold_text}_line_and_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -------------save fit results to dataframe-----------------------
