@@ -117,23 +117,6 @@ def plot_SFMS_Shivaei15_sns(ax, nx, ny, xmin=7, xmax=11, ymin=0, ymax=1, color='
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_SFMS_PASSAGE_sns(ax, nx, ny, xmin=7, xmax=11, ymin=0, ymax=1, color='salmon'):
-    '''
-    Overplots fitted SFMS based on PASSAGE data in Huberty+2026; based on 798 galaxies at z~2 after various filtering (see make_sfms_bins.get_stacking_sample())
-    Returns two lists and a float which is the scatter in the relation: log_mass, log_SFR, c
-    '''
-    a, b, c = -0.0207, 1.1568, -8.1505 # np.poly1d() coefficients [a, b, c]
-
-    log_mass = np.linspace(xmin, xmax, 40)
-    log_SFR = np.polyval([a, b, c], log_mass)
-
-    log_mass, log_SFR = rescale_for_seaborn(log_mass, log_SFR, nx, ny, xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
-    ax.plot(log_mass, log_SFR, ls='solid', c=color, lw=2, label=f'This sample: Huberty+2026')
-    ax.fill_between(log_mass, log_SFR - c/2, log_SFR + c/2, alpha=0.3, facecolor=color)
-
-    return ax
-
-# --------------------------------------------------------------------------------------------------------------------
 def plot_SFMS_Popesso23_sns(ax, redshift, nx, ny, xmin=7, xmax=11, ymin=0, ymax=1, color='cornflowerblue'):
     '''
     Computes an empirical SFMS based on Popesso+23 (https://arxiv.org/abs/2203.10487) Eq 10, for given redshift
@@ -221,7 +204,6 @@ def make_heatmap_sns(ax, pivot_color, pivot_annot, args, cmap='viridis', clabel=
         ax = plot_SFMS_Shivaei15_sns(ax, len(pivot_color.columns), len(pivot_color.index), xmin=log_mass_edges[0], xmax=log_mass_edges[-1], ymin=log_sfr_edges[-1], ymax=log_sfr_edges[0], color='darkgreen')
         ax = plot_SFMS_Popesso23_sns(ax, 2, len(pivot_color.columns), len(pivot_color.index), xmin=log_mass_edges[0], xmax=log_mass_edges[-1], ymin=log_sfr_edges[-1], ymax=log_sfr_edges[0], color='darkgoldenrod')
         #ax = plot_SFMS_Popesso23_sns(ax, 3, len(pivot_color.columns), len(pivot_color.index), xmin=log_mass_edges[0], xmax=log_mass_edges[-1], ymin=log_sfr_edges[-1], ymax=log_sfr_edges[0], color='royalblue')
-        ax = plot_SFMS_PASSAGE_sns(ax, len(pivot_color.columns), len(pivot_color.index), xmin=log_mass_edges[0], xmax=log_mass_edges[-1], ymin=log_sfr_edges[-1], ymax=log_sfr_edges[0], color='darkgreen')
         ax.legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
 
     return ax
@@ -424,7 +406,7 @@ def plot_SFMS_heatmap_patches(df, args, quant='logOH'):
             elif sfms == 'Shivaei15': ax = plot_SFMS_Shivaei15(ax, color='royalblue')
             elif sfms == 'Popesso23': ax = plot_SFMS_Popesso23(ax, 2, color='darkgreen')
             #elif sfms == 'Popesso23': ax = plot_SFMS_Popesso23(ax, 3, color='royalblue')
-            elif sfms == 'PASSAGE': ax = plot_SFMS_PASSAGE(ax, color='cornflowerblue')
+            elif sfms == 'PASSAGE': ax = plot_SFMS_PASSAGE(ax, args.sfms_func, color='cornflowerblue')
             else: raise ValueError(f'Method {sfms} not found in the list of available SFMS literature methods: Whitaker14, Shivaei15, Popesso23')
         axes[0].legend(fontsize=args.fontsize / args.fontfactor, loc='upper left')
 

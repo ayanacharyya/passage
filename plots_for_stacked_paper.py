@@ -12,7 +12,6 @@ from header import *
 from util import *
 setup_plot_style()
 from make_sfms_bins import log_mass_bins, log_sfr_bins, get_stacking_sample, get_binned_df, get_sfms_func, sfms, required_lines, passage_catalog
-from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_SFMS_PASSAGE
 from plot_stacked_gradients import read_stacked_df, label_dict, fix_interval_precision
 
 start_time = datetime.now()

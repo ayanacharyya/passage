@@ -13,7 +13,7 @@
 
 from header import *
 from util import *
-from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_SFMS_PASSAGE, get_SFMS_Popesso23, get_SFMS_Shivaei15, get_SFMS_Whitaker14, get_SFMS_PASSAGE
+from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_SFMS_PASSAGE, get_SFMS_Popesso23, get_SFMS_Shivaei15, get_SFMS_Whitaker14
 from plot_passage_pie import read_passage_spreadsheet
 
 start_time = datetime.now()
@@ -337,7 +337,7 @@ def plot_SFMS_bins(df, methods, method_texts, args, scaling=None, centers_scaled
             elif sfms == 'Shivaei15': axes[index] = plot_SFMS_Shivaei15(axes[index], color='royalblue')
             elif sfms == 'Popesso23': axes[index] = plot_SFMS_Popesso23(axes[index], 2, color='darkgoldenrod')
             #elif sfms == 'Popesso23': axes[index] = plot_SFMS_Popesso23(axes[index], 3, color='royalblue')
-            elif sfms == 'PASSAGE': axes[index] = plot_SFMS_PASSAGE(axes[index], color='darkgoldenrod')
+            elif sfms == 'PASSAGE': axes[index] = plot_SFMS_PASSAGE(axes[index], args.sfms_func, color='darkgoldenrod')
             else: raise ValueError(f'Method {sfms} not found in the list of available SFMS literature methods: Whitaker14, Shivaei15, Popesso23')
             if index == 0: axes[index].legend(fontsize=args.fontsize / args.fontfactor, loc='lower right')
 
