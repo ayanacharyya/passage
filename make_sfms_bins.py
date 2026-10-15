@@ -1038,9 +1038,9 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
 
     print(f'\tOut of the {nobj} objects, {len(df_agn)} are above MEx line, so they are removed..')
 
-    # --------additional SNR cut for test------------
-    df = df[(df['sn_OIII'] > 10) & (df['sn_Ha'] > 10)]
-    print(f'\tTEST: additional snr cut on O3 and Hb leaves {len(df)} galaxies..')
+    # # --------additional SNR cut for test------------
+    # df = df[(df['sn_OIII'] > 10) & (df['sn_Ha'] > 10)]
+    # print(f'\tTEST: additional snr cut on O3 and Hb leaves {len(df)} galaxies..')
 
     # --------------saving MEx----------------
     args.required_lines_text = '_lines_' + ','.join(required_lines) if len(required_lines) > 0 else ''
