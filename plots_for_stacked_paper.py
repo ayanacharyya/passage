@@ -755,7 +755,7 @@ if __name__ == "__main__":
     
     # ---------reading in the master SED catalog----------------
     passage_catalog_filename = args.output_dir / 'catalogs' / passage_catalog
-    df_input = get_stacking_sample(passage_catalog_filename, args, required_lines=required_lines, sfms=sfms)
+    df_input, args = get_stacking_sample(passage_catalog_filename, args, required_lines=required_lines, sfms=sfms)
 
     # ------------reading and binning dataframe-------------
     interval_cols = ['delta_sfms_bin', 'log_mass_bin', 'log_sfr_bin', 'mass_interval', 'mass_intervals', 'bin_intervals', 'sfr_interval', 'sfr_intervals']

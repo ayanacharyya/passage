@@ -268,6 +268,10 @@ def parse_args():
     parser.add_argument('--annotate_bins', dest='annotate_bins', action='store_true', default=False, help='Annotate the number of galaxies in each bin? Default is no.')
     parser.add_argument('--nocolorbar', dest='nocolorbar', action='store_true', default=False, help='Hide the colorbar in the plots? Default is no.')
     parser.add_argument('--include_cosmos2020', dest='include_cosmos2020', action='store_true', default=False, help='Include SED fit results from COSMOS2020 in addition to COSMOSWeb? Default is no.')
+    parser.add_argument('--sn_cut_o3', metavar='sn_cut_o3', type=float, action='store', default=None, help='Restricts the sample to sn_OIII < sn_cut_OIII. Default is None, i.e., no cut')
+    parser.add_argument('--sn_cut_ha', metavar='sn_cut_ha', type=float, action='store', default=None, help='Restricts the sample to sn_Ha < sn_cut_Ha. Default is None, i.e., no cut')
+    parser.add_argument('--sn_cut_hb', metavar='sn_cut_hb', type=float, action='store', default=None, help='Restricts the sample to sn_Hb < sn_cut_Hb. Default is None, i.e., no cut')
+    parser.add_argument('--sn_cut_all', metavar='sn_cut_all', type=float, action='store', default=None, help='Restricts the sample to S/N of ALL required lines to < sn_cut_all. Default is None, i.e., no cut')
 
     # ---- args added for stack_emission_maps.py ------------
     parser.add_argument('--debug_align', dest='debug_align', action='store_true', default=False, help='Debug the alignment, deprojection, rotation of emission line maps? Default is no.')

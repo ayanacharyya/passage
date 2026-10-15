@@ -22,7 +22,7 @@
 from header import *
 from util import *
 setup_plot_style()
-from make_sfms_bins import log_mass_bins, log_sfr_bins, get_stacking_sample, get_binned_df, get_sfms_func, sfms, required_lines, passage_catalog
+from make_sfms_bins import log_mass_bins, log_sfr_bins, get_stacking_sample, get_binned_df, sfms, required_lines, passage_catalog
 from make_passage_plots import plot_SFMS_Popesso23, plot_SFMS_Shivaei15, plot_SFMS_Whitaker14, plot_SFMS_PASSAGE
 
 start_time = datetime.now()
@@ -330,7 +330,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='', cmap='virid
     Returns axis handle
     '''
     # ---------obtaining sfms function and color mappable---------
-    sfms_func = get_sfms_func(log_mass_bins, sfms)
+    sfms_func = args.sfms_func
     cmap = plt.colormaps[cmap].copy()
     cmap.set_bad(color='none') # to get transparent bins for NaNs
     norm = mplcolors.Normalize(vmin=cmin, vmax=cmax)
@@ -500,7 +500,7 @@ if __name__ == "__main__":
     
     # ---------reading in the master SED catalog----------------
     passage_catalog_filename = args.output_dir / 'catalogs' / passage_catalog
-    df_input = get_stacking_sample(passage_catalog_filename, args, required_lines=required_lines, sfms=sfms)
+    df_input, args = get_stacking_sample(passage_catalog_filename, args, required_lines=required_lines, sfms=sfms)
 
     # ----------setting up master figure (for args.plot_sfms_vs_grad)--------------------
     if args.plot_sfms_vs_grad:

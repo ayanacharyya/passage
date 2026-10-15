@@ -180,7 +180,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='_distance', cm
     Returns axis handle
     '''
     # ---------obtaining sfms function and color mappable---------
-    sfms_func = get_sfms_func(log_mass_bins, sfms)
+    sfms_func = args.sfms_func
     norm = mplcolors.Normalize(vmin=cmin, vmax=cmax)
     sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
    
@@ -546,29 +546,31 @@ def bin_SFMS_voronoi(df, method_text='_voronoi', target_n=20):
     return df, bin_summary, kmeans.cluster_centers_, (coords_mean, coords_std)
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_sfms_func(log_mass_arr, method):
+def get_sfms_func(log_mass_arr, method, df=None):
     '''
     Compute the log_sfr_arr based on an input log_mass_arr and SFMS method
     Interpolates between the input log_mass_arr and the derived log_sfr_arr
     Returns the interpolated function
     '''
-    log_mass_min, log_mass_max = np.min(log_mass_arr), np.max(log_mass_arr)
-    redshift = 1.8 # based on the median PASSAGE redshift from Huvery+26
-
-    if method == 'Whitaker14': (log_mass1, log_SFR1), (log_mass2, log_SFR2), (z1, z2) = get_SFMS_Whitaker14(log_mass_min, log_mass_max, redshift)
-    elif method == 'Shivaei15': (log_mass1, log_SFR1), (log_mass2, log_SFR2), scatter = get_SFMS_Shivaei15(log_mass_min, log_mass_max)
-    elif method == 'Popesso23': (log_mass1, log_SFR1), (log_mass2, log_SFR2) = get_SFMS_Popesso23(log_mass_min, log_mass_max, redshift)
-    elif method == 'PASSAGE': log_mass, log_SFR = get_SFMS_PASSAGE(log_mass_min, log_mass_max)
-    else: raise ValueError(f'Method {method} not found in the list of available SFMS literature methods: Whitaker14, Shivaei15, Popesso23')
-
     if method == 'PASSAGE':
-        log_mass_arr, log_sfr_arr = log_mass, log_SFR
+        #log_mass, log_SFR = get_SFMS_PASSAGE(log_mass_min, log_mass_max)
+        coeff = np.polyfit(df['log_mass'], df['log_sfr'], deg=2) # fitting a quadratic polynomial to the data itself
+        print(f'SFMS coefficients based on current PASSAGE data ({len(df)} galaxies): {coeff}')
+        sfms_func = np.poly1d(coeff)
     else:
+        log_mass_min, log_mass_max = np.min(log_mass_arr), np.max(log_mass_arr)
+        redshift = 1.8 # based on the median PASSAGE redshift from Huvery+26
+
+        if method == 'Whitaker14': (log_mass1, log_SFR1), (log_mass2, log_SFR2), (z1, z2) = get_SFMS_Whitaker14(log_mass_min, log_mass_max, redshift)
+        elif method == 'Shivaei15': (log_mass1, log_SFR1), (log_mass2, log_SFR2), scatter = get_SFMS_Shivaei15(log_mass_min, log_mass_max)
+        elif method == 'Popesso23': (log_mass1, log_SFR1), (log_mass2, log_SFR2) = get_SFMS_Popesso23(log_mass_min, log_mass_max, redshift)
+        else: raise ValueError(f'Method {method} not found in the list of available SFMS literature methods: Whitaker14, Shivaei15, Popesso23')
+
         log_mass_arr = np.hstack([log_mass1, log_mass2])
         log_sfr_arr = np.hstack([log_SFR1, log_SFR2])
-    if type(log_sfr_arr[0]) != np.float64: log_sfr_arr = unp.nominal_values(log_sfr_arr) # if it is an uncertainties array then just take the nominal values
+        if type(log_sfr_arr[0]) != np.float64: log_sfr_arr = unp.nominal_values(log_sfr_arr) # if it is an uncertainties array then just take the nominal values
 
-    sfms_func = interp1d(log_mass_arr, log_sfr_arr, kind='linear', fill_value='extrapolate')
+        sfms_func = interp1d(log_mass_arr, log_sfr_arr, kind='linear', fill_value='extrapolate')
 
     return sfms_func
 
@@ -872,7 +874,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
         zcut = [float(item) for item in args.zcut.split(',')]
         nobj0 = len(df)
         df = df[df['redshift'].between(zcut[0], zcut[1])]
-        print(f'\tOut of the {nobj0} objects, {len(df)} had {zcut[0]:.2f} < z < {zcut[1]:.2f}\t', end='')
+        print(f'\tOut of the {nobj0} objects, {len(df)} had {zcut[0]:.2f} < z < {zcut[1]:.2f}\t')
 
     # ----------discard based on redshift flag--------------------------
     if args.cut_z_flag is not None:
@@ -889,14 +891,6 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
         df = df[df['z_flag'] < args.cut_z_flag]
         print(f'\tOut of the {nobj1} objects, {len(df)} had z_flag < {args.cut_z_flag}..')
     
-    # -------------add delta sfms column--------------------
-    nobj2 = len(df)
-    sfms_func = get_sfms_func(df['log_mass'], sfms)
-
-    df['log_sfr_ms_expected'] = sfms_func(df['log_mass'])
-    df['delta_sfms'] = df['log_sfr'] - df['log_sfr_ms_expected']
-    df = df.dropna(subset=['delta_sfms'])
-    print(f'Out of the {nobj2} objects, {len(df)} had delta sfms computable..')
     '''
     # ------------cut by presence of required lines------------------
     if len(required_lines) > 0:
@@ -976,6 +970,29 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
         df = df[(df[target_cols] > 0).all(axis=1)]
         print(f'\tOut of the {nobj3} objects, {len(df)} made the redshift cut for required lines {required_lines}')
     
+        # --------SNR cuts on some/all lines------------
+        if args.sn_cut_all is not None:
+            for line in required_lines:
+                df = df[(df[f'sn_{line}'] > args.sn_cut_all)]
+            args.snr_cut_text = f'_sn_all_{args.sn_cut_all}'
+            print(f'\tOut of which, {len(df)} objects make the SNR cut {args.sn_cut_all} for ALL {len(required_lines)} required lines..')
+        else:
+            args.snr_cut_text = ''
+            if args.sn_cut_o3 is not None:
+                df = df[(df['sn_OIII'] > args.sn_cut_o3)]
+                args.snr_cut_text += f'_sn_O3_{args.sn_cut_o3}'
+                print(f'\tOut of which, {len(df)} objects make the SNR cut {args.sn_cut_o3} for OIII..')
+            if args.sn_cut_ha is not None:
+                df = df[(df['sn_Ha'] > args.sn_cut_ha)]
+                args.snr_cut_text += f'_sn_Ha_{args.sn_cut_ha}'
+                print(f'\tOut of which, {len(df)} objects make the SNR cut {args.sn_cut_ha} for Ha..')
+            if args.sn_cut_hb is not None:
+                df = df[(df['sn_Hb'] > args.sn_cut_hb)]
+                args.snr_cut_text += f'_sn_Hb_{args.sn_cut_hb}'
+                print(f'\tOut of which, {len(df)} objects make the SNR cut {args.sn_cut_hb} for Hb..')
+    else:
+        args.snr_cut_text = ''
+
     # ----------------removing AGNs based on MEx---------------------
     nobj = len(df)
     df_temp = df.copy()
@@ -1038,10 +1055,6 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
 
     print(f'\tOut of the {nobj} objects, {len(df_agn)} are above MEx line, so they are removed..')
 
-    # # --------additional SNR cut for test------------
-    # df = df[(df['sn_OIII'] > 10) & (df['sn_Ha'] > 10)]
-    # print(f'\tTEST: additional snr cut on O3 and Hb leaves {len(df)} galaxies..')
-
     # --------------saving MEx----------------
     args.required_lines_text = '_lines_' + ','.join(required_lines) if len(required_lines) > 0 else ''
     args.zcut_text = f'_zcut_{args.zcut}' if args.zcut is not None else ''
@@ -1049,7 +1062,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
 
     if args.do_all_fields: root_dir = args.output_dir
     else: root_dir = args.output_dir / args.field
-    args.stacking_dir = root_dir / f'stacking{args.required_lines_text}{args.cut_z_flag_text}'
+    args.stacking_dir = root_dir / f'stacking{args.required_lines_text}{args.snr_cut_text}{args.cut_z_flag_text}'
 
     fig = plot_MEx(df_both, args, df_agn=df_agn, df_ulim=df_o3_nondet, df_llim=df_hb_nondet)
     save_fig(fig, args.stacking_dir, 'mass_excitation_colorby_redshift.png', args)
@@ -1063,8 +1076,17 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     mask = idx_df.isin(idx_agns)
     df = df[~mask]
     print(f'\tOut of which, {mask.sum()} are removed based on known AGN flags from COSMOS, yielding a final sample is {len(df)} galaxies.')
-    
-    return df
+
+    # -------------add delta sfms column--------------------
+    nobj2 = len(df)
+    args.sfms_func = get_sfms_func(df['log_mass'], sfms, df=df)
+
+    df['log_sfr_ms_expected'] = args.sfms_func(df['log_mass'])
+    df['delta_sfms'] = df['log_sfr'] - df['log_sfr_ms_expected']
+    df = df.dropna(subset=['delta_sfms'])
+    print(f'Out of the {nobj2} objects, {len(df)} had delta sfms computable')
+
+    return df, args
 
 # --------------------------------------------------------------------------------------------------------------------
 def plot_inc_histogram(df, bin_col1, bin_col2, args):
@@ -1145,22 +1167,37 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
     else: args.C25_text = '_wC25' if args.use_C25 else ''
     args.fold_text = '_folded' if args.fold_maps else ''
     args.scaling_line_text = f'_scaleby_{args.scaling_line}'
-    args.required_lines_text = '_lines_' + ','.join(required_lines) if len(required_lines) > 0 else ''
     args.zcut_text = f'_zcut_{args.zcut}' if args.zcut is not None else ''
     args.cut_z_flag_text = f'_zflag_cut_{args.cut_z_flag}{args.zcut_text}' if args.cut_z_flag is not None else f'{args.zcut_text}'
     
+    if len(required_lines) > 0:
+        args.required_lines_text = '_lines_' + ','.join(required_lines)
+        if args.sn_cut_all is not None:
+            args.snr_cut_text = f'_sn_all_{args.sn_cut_all}'
+        else:
+            args.snr_cut_text = ''
+            if args.sn_cut_o3 is not None:
+                args.snr_cut_text += f'_sn_O3_{args.sn_cut_o3}'
+            if args.sn_cut_ha is not None:
+                args.snr_cut_text += f'_sn_Ha_{args.sn_cut_ha}'
+            if args.sn_cut_hb is not None:
+                args.snr_cut_text += f'_sn_Hb_{args.sn_cut_hb}'
+    else:
+        args.required_lines_text = ''
+        args.snr_cut_text = ''
+
     # ------------------determine fil and path names---------
     if args.do_all_fields:
         root_dir = args.output_dir
     # ---------curtailing to single-field----------------
     else:
         root_dir = args.output_dir / args.field
-    args.stacking_dir = root_dir / f'stacking{args.required_lines_text}{args.cut_z_flag_text}'
+    args.stacking_dir = root_dir / f'stacking{args.required_lines_text}{args.snr_cut_text}{args.cut_z_flag_text}'
 
     # ---------reading in the master SED catalog----------------
     if df is None:
         passage_catalog_filename = args.output_dir / 'catalogs' / passage_catalog
-        df = get_stacking_sample(passage_catalog_filename, args, required_lines=required_lines, sfms=sfms)
+        df, args = get_stacking_sample(passage_catalog_filename, args, required_lines=required_lines, sfms=sfms)
 
     # --------------returning unbinned dataframe and no bin_list if skip_binning=True--------------
     if skip_binning:
@@ -1297,9 +1334,10 @@ methods = [
             ]
 
 target_n = 30 # for voronoi binning
-n_adaptive_bins = 4 # for distance (from SFMS) binning
-#n_adaptive_bins = 3 # for distance (from SFMS) binning
-n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
+#n_adaptive_bins = 4 # for distance (from SFMS) binning
+n_adaptive_bins = 3 # for distance (from SFMS) binning
+#n_mass_bins = 4 # number of mass bins within each distance (from SFMS) bin
+n_mass_bins = 3 # number of mass bins within each distance (from SFMS) bin
 delta_sfms_bin = 0.4 # delta in distance from SFMS in which to bin in the distance-from-SFMS method, unless binning adaptively
 sfms =  'PASSAGE' # from 'PASSAGE', 'Popesso23', 'Shivaei15' and 'Whitaker14'; for binning by distance from SFMS
 delta_sfh = 0.5 # delta in tform90 - tform10 parameter (in Gyr) in which to bin, unless binning adaptively
@@ -1326,7 +1364,7 @@ if __name__ == "__main__":
 
     # ---------reading in the master SED catalog----------------
     passage_catalog_filename = args.output_dir / 'catalogs' / passage_catalog
-    df = get_stacking_sample(passage_catalog_filename, args, required_lines=required_lines, sfms=sfms)
+    df, args = get_stacking_sample(passage_catalog_filename, args, required_lines=required_lines, sfms=sfms)
 
     # -----------making bins in various ways---------------------
     for method in methods:
