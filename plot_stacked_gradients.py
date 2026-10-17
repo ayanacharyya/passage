@@ -418,6 +418,7 @@ def plot_delta_SFMS_vs_quant(df, args, axes, quant_x='delta_sfms_median', quant_
     Plots various forms of of stacked integrated metallicities and metallicity gradients vs the distance from SFMS of each stack
     Returns figure handle
     '''
+    args.fontsize
     quant_y_list = [f'{quant_y}_int', f'radial_{quant_y}_grad', f'minor_{quant_y}_grad', f'major_{quant_y}_grad']
     # ---------plot the correlations-------------------
     for index, this_quant in enumerate(quant_y_list):
@@ -451,12 +452,12 @@ label_dict = {'minor_logOH_grad': 'Minor' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
                 'log_mass_median': r'Median $\log$ (M/M$_{\odot}$) of stack',\
                 'tform_ratio_median': r'$\Delta t_{form,90-50}$ / $\Delta t_{form,50-10}$',\
                 }
-lim_dict = {'minor_logOH_grad': [-1., 1.],\
-                'major_logOH_grad': [-1., 1.],\
-                'radial_logOH_grad': [-1., 1.],\
+lim_dict = {'minor_logOH_grad': [-0.5, 0.5],\
+                'major_logOH_grad': [-0.5, 0.5],\
+                'radial_logOH_grad': [-0.5, 0.5],\
                 'logOH_int': [None, None], # [7.0, 9.0],\
-                'delta_sfms_median': [-0.6, 0.6],\
-                'log_mass_median': [7.0, 10.0],\
+                'delta_sfms_median': [-0.5, 0.5],\
+                'log_mass_median': [7.9, 10.1],\
                 'tform_ratio_median': [0, 1],\
                 }    
 
@@ -483,23 +484,6 @@ if __name__ == "__main__":
     # ---------reading in the master SED catalog----------------
     passage_catalog_filename = args.output_dir / 'catalogs' / passage_catalog
     df_input, args = get_stacking_sample(passage_catalog_filename, args, required_lines=required_lines, sfms=sfms)
-
-    # ----------setting up master figure (for args.plot_sfms_vs_grad)--------------------
-    if args.plot_sfms_vs_grad:
-        if args.bin_by_distance_mass:
-            quant_x, colorby_col = 'delta_sfms_median', 'log_mass_median'
-            #quant_x, colorby_col = 'log_mass_median', 'delta_sfms_median'
-        elif args.bin_by_sfh_mass:
-            #quant_x, colorby_col = 'log_mass_median', 'tform_ratio_median'
-            quant_x, colorby_col = 'tform_ratio_median', 'log_mass_median'
-        quant_y = 'logOH'
-        quant_y_list = [f'{quant_y}_int', f'radial_{quant_y}_grad', f'minor_{quant_y}_grad', f'major_{quant_y}_grad']
-        marker_arr = ['o', 's', 'd', 'P', 'X', '^']
-        sequential_cmap = 'viridis'
-        diverging_cmap = 'RdBu'
-
-        fig, axes = plt.subplots(len(quant_y_list), 1, figsize=(6, 7), sharex=True)
-        fig.subplots_adjust(left=0.18, right=0.83, top=0.95, bottom=0.1, wspace=0., hspace=0.)
 
     # -----------making bins in various ways---------------------
     for index, method in enumerate(methods):
@@ -552,22 +536,43 @@ if __name__ == "__main__":
         # ------------plotting stacked gradients on SFMS--------------------------
         qualifiers = f'{args.binby_text}{args.fold_text}_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}'
         if args.plot_sfms_vs_grad:
-            axes = plot_delta_SFMS_vs_quant(df_grad, args, axes, quant_x=quant_x, quant_y=quant_y, colorby_col=colorby_col, cmap=diverging_cmap if 'sfms' in colorby_col else sequential_cmap, marker=marker_arr[index])
-            
-            if index == len(methods) - 1:
-                # --------adding common colorbar----------------
-                pos_top = axes[0].get_position()
-                pos_bottom = axes[-1].get_position()
-                cax = fig.add_axes([pos_top.x1 + 0.02, pos_bottom.y0, 0.02, pos_top.y1 - pos_bottom.y0]) # [left, bottom, width, height]
-                fig = axes[0].figure
-                im = axes[0].collections[0]
-                im.set_clim(lim_dict[colorby_col])
-                cbar = fig.colorbar(im, ax=axes, orientation='vertical', cax=cax)
-                cbar.set_label(label_dict[colorby_col], fontsize=args.fontsize)
-                cbar.ax.tick_params(labelsize=args.fontsize / args.fontfactor)
-            
-                # -----saving figure-----
-                save_fig(fig, args.fig_dir, f'{quant_x}_vs_{quant_y}_colorby_{colorby_col}_{qualifiers}.png', args) # saving the figure
+
+            # ----------setting up master figure (for args.plot_sfms_vs_grad)--------------------
+            if args.plot_sfms_vs_grad:
+                args.fontsize = 12
+                if args.bin_by_distance_mass:
+                    quant_x_list, colorby_col_list = ['log_mass_median', 'delta_sfms_median'], ['delta_sfms_median', 'log_mass_median']
+                elif args.bin_by_sfh_mass:
+                    quant_x_list, colorby_col_list = ['log_mass_median', 'tform_ratio_median'], ['tform_ratio_median', 'log_mass_median']
+                quant_y = 'logOH'
+                quant_y_list = [f'{quant_y}_int', f'radial_{quant_y}_grad', f'minor_{quant_y}_grad', f'major_{quant_y}_grad']
+                marker_arr = ['o', 's', 'd', 'P', 'X', '^']
+                sequential_cmap = 'viridis'
+                diverging_cmap = 'RdBu'
+
+            # ----------looping over quants----------------
+            for quant_x, colorby_col in zip(quant_x_list, colorby_col_list):
+                print(f'Plotting {quant_y_list} vs {quant_x} color coded by {colorby_col}..')
+                
+                fig, axes = plt.subplots(len(quant_y_list), 1, figsize=(6, 7), sharex=True)
+                fig.subplots_adjust(left=0.18, right=0.83, top=0.95, bottom=0.1, wspace=0., hspace=0.)
+
+                axes = plot_delta_SFMS_vs_quant(df_grad, args, axes, quant_x=quant_x, quant_y=quant_y, colorby_col=colorby_col, cmap=diverging_cmap if 'sfms' in colorby_col else sequential_cmap, marker=marker_arr[index])
+                
+                if index == len(methods) - 1:
+                    # --------adding common colorbar----------------
+                    pos_top = axes[0].get_position()
+                    pos_bottom = axes[-1].get_position()
+                    cax = fig.add_axes([pos_top.x1 + 0.02, pos_bottom.y0, 0.02, pos_top.y1 - pos_bottom.y0]) # [left, bottom, width, height]
+                    fig = axes[0].figure
+                    im = axes[0].collections[0]
+                    im.set_clim(lim_dict[colorby_col])
+                    cbar = fig.colorbar(im, ax=axes, orientation='vertical', cax=cax)
+                    cbar.set_label(label_dict[colorby_col], fontsize=args.fontsize)
+                    cbar.ax.tick_params(labelsize=args.fontsize / args.fontfactor)
+                
+                    # -----saving figure-----
+                    save_fig(fig, args.fig_dir, f'{quant_x}_vs_{quant_y}_colorby_{colorby_col}_{qualifiers}.png', args) # saving the figure
         else:
             if args.plot_minor_major_profile:
                 #fig = plot_SFMS_heatmap_sns(df_grad, args)
