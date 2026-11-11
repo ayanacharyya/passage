@@ -468,9 +468,11 @@ def make_master_df(objlist, args, sum=True):
     beta = 1 - 1/alpha
     B = A ** (1 / alpha)
     log_slope = unp.uarray(df['logZ_logSFR_slope'], df['logZ_logSFR_slope_u'])
-    df['pix_area'] = df['npix_in_vorbin'] * df['pix_size_arcsec'] / df['redshift'].apply(lambda x: cosmo.arcsec_per_kpc_proper(x).value) # converting arcsec to kpc
-    Sigma = unp.uarray(df['SFR'] / df['pix_area'], df['SFR_u'] / df['pix_area'])
-    t_mix = log_slope / (B * (Sigma ** beta) * (beta + log_slope)) # in yr
+    df['pix_area'] = (df['npix_in_vorbin'] * df['pix_size_arcsec'] / df['redshift'].apply(lambda x: cosmo.arcsec_per_kpc_proper(x).value)) ** 2 # converting arcsec to kpc
+    Sigma_sfr = unp.uarray(df['SFR'] / df['pix_area'], df['SFR_u'] / df['pix_area'])
+    epsilon = log_slope / (beta + log_slope) # epsilon = t_mix / t_dep
+    t_dep = 1. / (B * (Sigma_sfr ** beta)) # t_dep = Sigma_g / Sigma_SFR; in Myr (because of the unit conversion in KSR of Sigma_g from Msun/pc^2 to Msun/kpc^2)
+    t_mix =  epsilon * t_dep  # in Myr
     df['t_mix_' + method] = unp.nominal_values(t_mix)
     df['t_mix_' + method + '_u'] = unp.std_devs(t_mix)
 

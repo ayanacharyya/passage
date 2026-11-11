@@ -534,7 +534,7 @@ if __name__ == "__main__":
             df_grad = pd.merge(df_grad, df2, on=['log_mass_bin', 'log_sfr_bin'], how='left').reset_index(drop=True)
 
         # ------------plotting stacked gradients on SFMS--------------------------
-        qualifiers = f'{args.binby_text}{args.fold_text}_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}'
+        qualifiers = f'{args.binby_text}{args.binned_text}{args.fold_text}_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}'
         if args.plot_sfms_vs_grad:
 
             # ----------setting up master figure (for args.plot_sfms_vs_grad)--------------------

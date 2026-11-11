@@ -790,6 +790,7 @@ def read_passage_sed_catalog(filename, include_cosmos2020=False):
     if Path(filename).suffix == '.fits':
         print(f'Reading master PASSAGE SED catalog from {filename}..')
         full_df = Table.read(filename).to_pandas()
+        full_df['field'] = full_df['field'].astype(str)
     else:
         print(f'Reading PASSAGE line finding catalog from {filename}..')
         full_df = pd.read_csv(filename, header=0, sep='\t')
@@ -823,7 +824,7 @@ def read_passage_sed_catalog(filename, include_cosmos2020=False):
     full_df.rename(columns={'Par':'field', 'passage_id':'id', 'id_photcat':'id', 'objid':'id', 'field_id':'id', 'z_best':'redshift', 
                             'zbest':'redshift', 'mass_50':'log_mass', 'stellar_mass_50':'log_mass', 'ssfr_50':'log_ssfr', 'sfr_50':'sfr', 
                             'ra_obj':'ra', 'dec_obj':'dec', 'cosmoswebid_2': 'cosmoswebid'}, inplace=True)
-    
+
     # -----------computing new columns------------
     if 'stellar_mass_84' in full_df: full_df['log_mass_u'] = (full_df['stellar_mass_84'] - full_df['stellar_mass_16']) / 2 # mass is already in log scale in the catalog
     else: full_df['log_mass_u'] = (full_df['mass_84'] - full_df['mass_16']) / 2
@@ -842,6 +843,8 @@ def read_passage_sed_catalog(filename, include_cosmos2020=False):
     full_df = compute_phi50_from_sed(full_df)
 
     # --------extracting relevant columns-----------
+    if 'cosmoswebid' not in full_df:
+        full_df['cosmoswebid'] = np.nan
     columns_to_extract = ['field', 'id', 'cosmoswebid', 'redshift', 
                           'log_mass', 'log_mass_u', 'log_sfr', 'log_sfr_u', 'log_ssfr', 'log_ssfr_u', 
                           'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10', 'delta_tform_ratio',
@@ -853,7 +856,7 @@ def read_passage_sed_catalog(filename, include_cosmos2020=False):
 
     df = df.dropna(subset=['log_mass', 'log_sfr'])
     nobj2 = len(df)
-    print(f'\n\tOut of initial {nobj1} objects, {nobj2} had mass available.')
+    print(f'\n\tOut of initial {nobj1} objects, {nobj2} objects from {len(pd.unique(df["field"]))} fields ({pd.unique(df["field"])}) had mass available.')
 
     return df
 
@@ -864,17 +867,22 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     Return pandas dataframe
     '''
     df = read_passage_sed_catalog(passage_catalog_filename, include_cosmos2020=args.include_cosmos2020)
-    df_field_waverange = get_field_waverange(args)
     
     if not args.do_all_fields:
         df = df[df['field'] == args.field]        
+
+    # ----------discard based on redshift--------------------------
+    if args.npa == 2:
+        nobj0 = len(df)
+        df = df[df['field'].isin(fields_with_2PA)]
+        print(f'\tOut of the {nobj0} objects, {len(df)} had {args.npa:d} PAs from {len(pd.unique(df["field"]))} fields ({pd.unique(df["field"])})')
 
     # ----------discard based on redshift--------------------------
     if args.zcut is not None:
         zcut = [float(item) for item in args.zcut.split(',')]
         nobj0 = len(df)
         df = df[df['redshift'].between(zcut[0], zcut[1])]
-        print(f'\tOut of the {nobj0} objects, {len(df)} had {zcut[0]:.2f} < z < {zcut[1]:.2f}\t')
+        print(f'\tOut of the {nobj0} objects, {len(df)} had {zcut[0]:.2f} < z < {zcut[1]:.2f} from {len(pd.unique(df["field"]))} fields ({pd.unique(df["field"])})')
 
     # ----------discard based on redshift flag--------------------------
     if args.cut_z_flag is not None:
@@ -889,7 +897,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
 
         df = df.merge(df_speccat, on=['field', 'id'], how='inner')
         df = df[df['z_flag'] < args.cut_z_flag]
-        print(f'\tOut of the {nobj1} objects, {len(df)} had z_flag < {args.cut_z_flag}..')
+        print(f'\tOut of the {nobj1} objects, {len(df)} had z_flag < {args.cut_z_flag} from {len(pd.unique(df["field"]))} fields ({pd.unique(df["field"])})..')
     
     '''
     # ------------cut by presence of required lines------------------
@@ -906,6 +914,31 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
         df = df[(df['obs_min'] <= min_obs_waves) & (max_obs_waves <= df['obs_max'])]
         print(f'\tOut of which {len(df)} made the redshift cut for required lines {required_lines}')
     '''
+    # --------including pre-redshift-verified Par682 objects from separate catalog, if needed---------------
+    if args.include_par682 or args.include_hst:
+        noncosmos_catalog_filename = passage_catalog_filename.parent / 'SED_fits_v1.3.2.fits'
+        df_noncosmos = read_passage_sed_catalog(noncosmos_catalog_filename) # these objects are already in Par682 SED catalog, i.e., have 2 orients, and have reliable z
+        nobj7 = len(df_noncosmos)
+
+        # -------extracting required fields---------
+        fields_to_extract = []
+        if args.include_hst:
+            fields_to_extract += ['Par016', 'Par019', 'Par021', 'Par034', 'Par040', 'Par042', 'Par044']
+        if args.include_par682:
+            fields_to_extract += ['Par682']
+        if args.npa == 2:
+            fields_to_extract = list(set(fields_to_extract) - set(['Par019']))
+        
+        df_noncosmos = df_noncosmos[df_noncosmos['field'].isin(fields_to_extract)]
+        print(f'\tOut of the {nobj7} objects, {len(df_noncosmos)} had survived the cut for {len(fields_to_extract)} field/s..')
+
+        if args.npa == 2:
+            df_noncosmos = df_noncosmos[df_noncosmos['field'].isin(non_cosmos_fields_with_2PA)]
+            print(f'\tOut of which, {len(df_noncosmos)} had survived the cut for 2PA field/s..')
+
+        df = pd.concat([df, df_noncosmos], ignore_index=True)
+        print(f'\tUpon including non-cosmos fields, we now have {len(df)} objects from {len(pd.unique(df["field"]))} fields ({pd.unique(df["field"])})..')
+
     # --------curtailing to desired SFR-mass limits--------------
     df = df[(df['log_sfr'].between(log_sfr_bins.min(), log_sfr_bins.max())) & (df['log_mass'].between(log_mass_bins.min(), log_mass_bins.max()))]
     print(f'\tOut of which {len(df)} made the extreme mass-sfr cut: log mass within ({log_mass_bins.min()}, {log_mass_bins.max()}) amd log sfr within ({log_sfr_bins.min()}, {log_sfr_bins.max()})')
@@ -926,27 +959,86 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
         df_re['field'] = df_re['field'].astype(str)
         df_re = df_re[df_re['re_kpc'] > 0]
         df = pd.merge(df, df_re, on=['field', 'id'], how='inner')
-        print(f'\tOut of which {len(df)} are in cosmos-web and have Re computed..')
+        print(f'\tOut of which {len(df)} objects from {len(pd.unique(df["field"]))} fields ({pd.unique(df["field"])}) are have Re computed..')
     else:
         raise FileNotFoundError(f're catalog not found at {re_catalog_filename}; please create this file first by running compute_re.py. Exiting.')
-    
-    # -------merge with all speccats to get emission line fluxes by looping over fields--------------
-    print(f'\nCombining all speccats to one file before merging to df, might take a few seconds..')
+
+    # -------merge with all spec/photcats and to get emission line fluxes and morphology, by looping over fields--------------
+    df['id'] = df['id'].astype(np.int64)
+    print(f'\nCombining all speccats and photcats to one file each, before merging to df, might take a few seconds..')
     fields = pd.unique(df['field'])
+
     df_master_speccat = pd.DataFrame()
     lines_to_extract = list(set(required_lines) | set(['OIII', 'Hb']))
     linecols = np.hstack([[f'flux_{item}', f'err_{item}', f'sn_{item}'] for item in lines_to_extract])
-    cols_to_extract = np.hstack([['field', 'id', 'redshift_grizli'], linecols])
+    speccat_cols_to_extract = np.hstack([['field', 'id', 'redshift_grizli'], linecols])
     multi_dim_cols = ['cdf_z']
+
+    df_master_photcat = pd.DataFrame()
+    photcat_cols_to_extract = ['field', 'id', 'a_image', 'b_image', 'theta_image']
+    
     for this_field in fields:
-        tab_spec_this_field = GTable.read(args.input_dir / this_field / 'Products' / f'{this_field}_speccat.fits')
+        '''
+        # ------speccat from grizli: these fluxes will be used for MEx and flux scaling-----
+        speccat_filename = args.input_dir / this_field / 'Products' / f'{this_field}_speccat.fits'
+        print(f'\tReading speccat from grizli {speccat_filename.name}')
+        tab_spec_this_field = GTable.read(speccat_filename)
         tab_spec_this_field.remove_columns(multi_dim_cols)
         df_spec_this_field = tab_spec_this_field.to_pandas()
+        '''
+        # ------speccat from linefinding: these fluxes will be used for MEx and flux scaling-----
+        linefinding_catalog = args.output_dir / 'catalogs' / f'{this_field}lines_catalog_master.dat' # first, will look for 'catalog_master'
+        if not os.path.exists(linefinding_catalog): # if 'catalog_master' unavailable, will look for 'catalog_kalina'
+            linefinding_catalog = Path(str(linefinding_catalog).replace('master', 'kalina'))
+        if not os.path.exists(linefinding_catalog): # if 'catalog_kalina' unavailable, will look for 'catalog_farhan'
+            linefinding_catalog = Path(str(linefinding_catalog).replace('kalina', 'farhan'))
+        if not os.path.exists(linefinding_catalog): # if 'catalog_farhan' unavailable, skip this field
+            print(f'\tDid not find {linefinding_catalog.name}, so skipping field {this_field}; and losing out on {len(df[df["field"] == this_field])} objects')
+            df = df[~(df["field"] == this_field)]
+            continue
+        print(f'\tReading speccat from linefinding {linefinding_catalog.name}')
+        df_spec_this_field = pd.read_table(linefinding_catalog, delim_whitespace=True, comment='#')
+        df_spec_this_field = df_spec_this_field.rename(columns={'objid':'id'})
+        
+        line_labels_dict = {'OII':'o2_3727_3730', 'OIII':'o3_5007', 'Ha':'ha_6565', 'Hb':'hb_4863', 'SII':'s2_6716_6731'}
+        for this_line in lines_to_extract: # modifying column names to match that from grizli speccat
+            df_spec_this_field = df_spec_this_field.rename(columns = {f'{line_labels_dict[this_line]}_flux': f'flux_{this_line}', 
+                                                                      f'{line_labels_dict[this_line]}_error': f'err_{this_line}'})
+            df_spec_this_field[f'sn_{this_line}'] = df_spec_this_field[f'flux_{this_line}'] / df_spec_this_field[f'err_{this_line}']
+            df_spec_this_field['id'] = df_spec_this_field['id'].astype(np.int64)
+        
+        # ------merging speccat-----
         df_spec_this_field['field'] = this_field
         df_spec_this_field = df_spec_this_field.rename(columns={'redshift': 'redshift_grizli'})
-        df_master_speccat = pd.concat([df_master_speccat, df_spec_this_field[cols_to_extract]])
-    
-    df = pd.merge(df, df_master_speccat, on=['field', 'id'], how='inner')
+        df_master_speccat = pd.concat([df_master_speccat, df_spec_this_field[speccat_cols_to_extract]])
+
+        # ------merging photcat-----
+        photcat_filename = args.input_dir / this_field / 'Products' / f'{this_field}_photcat.fits'
+        print(f'\tReading photcat from grizli {photcat_filename.name}')
+        df_phot_this_field = GTable.read(photcat_filename).to_pandas()
+        df_phot_this_field['field'] = this_field
+        df_phot_this_field['id'] = df_phot_this_field['id'].astype(np.int64)
+        df_master_photcat = pd.concat([df_master_photcat, df_phot_this_field[photcat_cols_to_extract]])
+
+    df = pd.merge(df, df_master_speccat, on=['field', 'id'], how='left')    
+    df = pd.merge(df, df_master_photcat, on=['field', 'id'], how='left')
+
+    # -------merge with COSMOS-Web photcat--------------
+    cweb_photcat_name = args.root_dir / f'passage_data/{args.drv}/COSMOS/COSMOSWeb_mastercatalog_v1.1_only_objects_in_Huberty26.fits'
+    print(f'Merging with COSMOS-Web photcat from {cweb_photcat_name}..')
+    df_cw = Table.read(cweb_photcat_name).to_pandas()
+    df_cw = df_cw.rename(columns={'id':'cosmoswebid'})
+    cols_to_extract = ['a_image', 'b_image', 'theta_image']
+    df = df.merge(df_cw[np.hstack((['cosmoswebid'], cols_to_extract))], on='cosmoswebid', suffixes=['_passage', '_cweb'], how='left')
+    df['theta_image_cweb'] = np.radians(df['theta_image_cweb']) # originally PASSAGE PAs are in radians, but COSMOSWeb PAs are in degrees
+
+    # -------cut based on reliability of PA (i.e. based on inc)-------
+    if args.inc_cut is not None:
+        nobj2 = len(df)
+        df[f'inc_{survey_for_morphology}']=np.degrees(np.arccos(df[f'b_image_{survey_for_morphology}'] / df[f'a_image_{survey_for_morphology}']))
+        df = df[df[f'inc_{survey_for_morphology}'] > args.inc_cut]
+        print(f'\tOut of the {nobj2} objects, {len(df)} had inclination > {args.inc_cut}..')
+
     '''
     # ---------merge with Huberty catalog to get emission line fluxes--------------
     huberty_catalog_filename = args.output_dir / 'catalogs' / 'passage_cosmos_redshift_catalog_v3_internal_with_EW.dat'
@@ -968,7 +1060,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
         nobj3 = len(df)
         target_cols = [f'flux_{line}' for line in required_lines]
         df = df[(df[target_cols] > 0).all(axis=1)]
-        print(f'\tOut of the {nobj3} objects, {len(df)} made the redshift cut for required lines {required_lines}')
+        print(f'\tOut of the {nobj3} objects, {len(df)} objects from {len(pd.unique(df["field"]))} fields ({pd.unique(df["field"])}) made the redshift cut for required lines {required_lines}')
     
         # --------SNR cuts on some/all lines------------
         if args.sn_cut_all is not None:
@@ -1059,6 +1151,11 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     args.required_lines_text = '_lines_' + ','.join(required_lines) if len(required_lines) > 0 else ''
     args.zcut_text = f'_zcut_{args.zcut}' if args.zcut is not None else ''
     args.cut_z_flag_text = f'_zflag_cut_{args.cut_z_flag}{args.zcut_text}' if args.cut_z_flag is not None else f'{args.zcut_text}'
+    args.npa_text = f'_{args.npa:d}PA' if args.npa is not None else ''
+    args.inc_cut_text = f'_inccut_{args.inc_cut}' if args.inc_cut is not None else ''
+    args.par682_text = '_wPar682' if args.include_par682 else ''
+    args.hst_text = '_wHST' if args.include_hst else ''
+    args.cut_z_flag_text = args.cut_z_flag_text + args.npa_text + args.inc_cut_text + args.par682_text + args.hst_text
 
     if args.do_all_fields: root_dir = args.output_dir
     else: root_dir = args.output_dir / args.field
@@ -1158,6 +1255,7 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
     # ------------add new keywords to args---------------
     if set(required_lines) == set(['Ha', 'OIII']): args.line_list = ['OIII', 'Hb', 'Ha', 'SII']
     elif set(required_lines) == set(['Ha', 'OIII', 'Hb']): args.line_list = ['OIII', 'Hb', 'Ha', 'SII']
+    elif set(required_lines) == set(['OII', 'Ha', 'OIII', 'Hb']): args.line_list = ['OII', 'OIII', 'Hb', 'Ha', 'SII']
     elif set(required_lines) == set(['Ha', 'OIII', 'OII']): args.line_list = ['OIII', 'OII', 'NeIII-3867',  'Ha', 'SII']
     print(f'\nWill stack and compute metallicity using these {len(args.line_list)} lines: {args.line_list}.\n')
 
@@ -1166,9 +1264,15 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
     if 'NB' in args.Zdiag: args.C25_text = '_resetBD' if args.reset_bd else '_Zprior' if args.nb_prior else ''
     else: args.C25_text = '_wC25' if args.use_C25 else ''
     args.fold_text = '_folded' if args.fold_maps else ''
+    args.binned_text = f'_binned_{args.target_line}_{args.target_snr}' if args.bin_spatial else ''
     args.scaling_line_text = f'_scaleby_{args.scaling_line}'
     args.zcut_text = f'_zcut_{args.zcut}' if args.zcut is not None else ''
     args.cut_z_flag_text = f'_zflag_cut_{args.cut_z_flag}{args.zcut_text}' if args.cut_z_flag is not None else f'{args.zcut_text}'
+    args.npa_text = f'_{args.npa:d}PA' if args.npa is not None else ''
+    args.inc_cut_text = f'_inccut_{args.inc_cut}' if args.inc_cut is not None else ''
+    args.par682_text = '_wPar682' if args.include_par682 else ''
+    args.hst_text = '_wHST' if args.include_hst else ''
+    args.cut_z_flag_text = args.cut_z_flag_text + args.npa_text + args.inc_cut_text + args.par682_text + args.hst_text
     
     if len(required_lines) > 0:
         args.required_lines_text = '_lines_' + ','.join(required_lines)
@@ -1206,6 +1310,9 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
         args.fig_dir.mkdir(parents=True, exist_ok=True)
 
     else:
+        if plot_inc_hist:
+            plot_inc_histogram(df, f'bin_intervals{method_text}', f'mass_intervals{method_text}', args)
+        
         # -------------binning the mass-SFR plane-------------
         if args.adaptive_bins:
             if args.voronoi_bins:
@@ -1263,35 +1370,11 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
         args.fits_dir = output_dir / f'maps{args.deproject_text}{args.rescale_text}'
         args.fits_dir.mkdir(parents=True, exist_ok=True)
 
-        args.grad_filename = args.fits_dir / f'stacked_{args.binby_text}{args.fold_text}_fits_allbins_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}.fits'
-
-        if not skip_stacking:
-            # -------merge with all photcats by looping over fields--------------
-            print(f'Combining all photcats to one file before merging to df, might take a few seconds..')
-            fields = pd.unique(df['field'])
-            df_master_photcat = pd.DataFrame()
-            cols_to_extract = ['field', 'id', 'a_image', 'b_image', 'theta_image']
-            for this_field in fields:
-                df_phot_this_field = GTable.read(args.input_dir / this_field / 'Products' / f'{this_field}_photcat.fits').to_pandas()
-                df_phot_this_field['field'] = this_field
-                df_master_photcat = pd.concat([df_master_photcat, df_phot_this_field[cols_to_extract]])
-            
-            df = pd.merge(df, df_master_photcat, on=['field', 'id'], how='inner')
-            if plot_inc_hist:
-                plot_inc_histogram(df, f'bin_intervals{method_text}', f'mass_intervals{method_text}', args)
-
-            # -------merge with COSMOS-Web photcat--------------
-            cweb_photcat_name = args.root_dir / 'passage_data/v0.5/COSMOS/COSMOSWeb_mastercatalog_v1_photom_primary_only_objects_in_Huberty26.fits'
-            print(f'Merging with COSMOS-Web photcat from {cweb_photcat_name}..')
-            df_cw = Table.read(cweb_photcat_name).to_pandas()
-            df_cw = df_cw.rename(columns={'id':'cosmoswebid'})
-            cols_to_extract = ['a_image', 'b_image', 'theta_image']
-            df = df.merge(df_cw[np.hstack((['cosmoswebid'], cols_to_extract))], on='cosmoswebid', suffixes=['_passage', '_cweb'], how='left')
-            df['theta_image_cweb'] = np.radians(df['theta_image_cweb']) # originally PASSAGE PAs are in radians, but COSMOSWeb PAs are in degrees
+        args.grad_filename = args.fits_dir / f'stacked_{args.binby_text}{args.binned_text}{args.fold_text}_fits_allbins_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}.fits'
 
         # --------------curtailiug bins for debugging-------------------
-        if args.debug_bin: bin_list = bin_list[10:11]
-        #if args.debug_bin: bin_list = bin_list[2:3]
+        #if args.debug_bin: bin_list = bin_list[10:11]
+        if args.debug_bin: bin_list = bin_list[8:9]
 
         # ------determining field-specific paths, etc-----------
         if args.skip_re_scaling:
@@ -1345,8 +1428,9 @@ n_sfh_bins = 10 # number of bins in SFH parameter, adaptive, so that each bin co
 
 # required_lines =['Hb', 'OIII', 'Ha', 'SII']
 # required_lines =['OIII', 'Ha', 'SII']
-#required_lines =['OIII', 'Ha']
-required_lines =['Hb', 'OIII', 'Ha']
+# required_lines =['OIII', 'Ha']
+#required_lines =['Hb', 'OIII', 'Ha']
+required_lines =['OII', 'Hb', 'OIII', 'Ha']
 # required_lines =['OII', 'OIII', 'Ha']
 # required_lines =[]
 
@@ -1354,6 +1438,8 @@ passage_catalog = 'SED_fits_v1.3.2-photonly_cosmosweb.fits'
 # passage_catalog = 'SED_fits_v1.0.2_cosmosweb.fits'
 # passage_catalog = 'SED_fits_v1.0.3_best.fits'
 # passage_catalog = 'SED_fits_v1.2.0_best.fits'
+
+survey_for_morphology = 'passage' # choose between 'passage' or 'cweb' to grab the morhpological parameters from 
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":

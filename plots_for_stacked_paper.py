@@ -59,15 +59,12 @@ def plot_MZR_literature(ax):
     ax.plot(xarr, logOH_mid, color='orange', lw=2, ls='solid', label='1.7 < z < 3.4; H26', zorder=-5)
 
     # -------------Nedkova+26 MZR--------------------------
+    '''
     #N26_coeff = unp.uarray([-0.046, 0.992, 3.085], [0.012, 0.204, 0.863]) # from eq 1 of Nedkova+26
     N26_coeff = unp.uarray([-0.038, 0.856, 3.669], [0.021, 0.372, 1.613]) # from Kalina's slack msg
     logOH_mid = np.poly1d(unp.nominal_values(N26_coeff))(xarr)
     ax.plot(xarr, logOH_mid, color='darkgoldenrod', lw=2, ls='solid', label='1.7 < z < 3.4; N26', zorder=-5)
-    '''
-    # -------this is my attempt to propagate errors---------------
-    logOH_low = np.poly1d(unp.nominal_values(N26_coeff) - unp.std_devs(N26_coeff))(xarr)
-    logOH_high = np.poly1d(unp.nominal_values(N26_coeff) + unp.std_devs(N26_coeff))(xarr)
-    '''
+
     # --------the following is code from Kalina--------------
     # Covariance matrix extracted from the MCMC chains (accounting for correlation); Order of parameters: [a, b, c]
     cov_matrix = np.array([
@@ -87,7 +84,11 @@ def plot_MZR_literature(ax):
     # Define the true 1-sigma upper and lower bounds flanking the best fit
     logOH_low = logOH_mid - y_fit_err
     logOH_high = logOH_mid + y_fit_err
-    
+    '''
+    # the following is Kalina's updated version (from Slack on 19 Oct)
+    xarr, logOH_mid, logOH_low, logOH_high = np.loadtxt(args.output_dir / 'catalogs/passage_stacked_mzr_fit_band.txt', unpack=True)
+    ax.plot(xarr, logOH_mid, color='darkgoldenrod', lw=2, ls='solid', label='1.7 < z < 3.4; N26', zorder=-5)
+
     # -------plotting shaded region--------
     ax.fill_between(xarr, logOH_low, logOH_high, color='khaki', alpha=0.5, zorder=-10)
 
@@ -790,7 +791,7 @@ if __name__ == "__main__":
         df_grad = pd.merge(df_grad, df2, on=['log_mass_bin', 'log_sfr_bin'], how='left').reset_index(drop=True)
 
     # ------------plotting stacked MZR and MZGR--------------------------
-    qualifiers = f'{args.binby_text}{args.fold_text}_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}'
+    qualifiers = f'{args.binby_text}{args.binned_text}{args.fold_text}_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}'
     if args.bin_by_distance_mass:
         colorcol, cmap = 'delta_sfms_median', 'coolwarm' # diverging cmap
     else:
@@ -798,7 +799,7 @@ if __name__ == "__main__":
     
     results_dict = compute_correlations(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', qualifiers=qualifiers)
     
-    #fig_mzr = plot_stacked_MZR(df_grad, args, xcol='log_mass_median', ycol='logOH_int', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
+    fig_mzr = plot_stacked_MZR(df_grad, args, xcol='log_mass_median', ycol='logOH_int', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
     #fig_mzgr = plot_stacked_MZGR(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
     fig_corr = plot_correlation_summary_hatched(results_dict, args, qualifiers=qualifiers)
 

@@ -2,24 +2,29 @@ import os, sys, tarfile, fnmatch, shutil
 from pathlib import Path
 from box_sdk_gen import BoxClient, BoxDeveloperTokenAuth
 from datetime import datetime, timedelta
+import numpy as np
 
 start_time = datetime.now()
 
 # --- CONFIGURATION ---
-BOX_FOLDER_ID = '305422038072'  # Extracted directly from your URL
+BOX_FOLDER_ID = '372972375946'  # Extracted directly from your URL
 BOX_SHARED_LINK = 'https://app.box.com/folder/305422038072'
-DEVELOPER_TOKEN = '0UBpObUj4UlonxBFJBqeOPo6FD3Q3rHd' # Expires: 8 June 2026 at 04:03:15 GMT-7; Generate a new one here https://app.box.com/developers/console/app/2590971/configuration
+DEVELOPER_TOKEN = 'LDq2S9ztholKilnPmAq8uML6aLZzfn7v' # Expires: 5 Nov 2026 at 04:03:15 GMT-7; Generate a new one here https://app.box.com/developers/console
 
-FIELDS = ['Par003', 'Par017', 'Par023', 'Par024', 'Par025', 'Par026',
-          'Par028', 'Par029', 'Par051', 'Par052', 'Par053']
+COSMOS_FIELDS = ['Par003', 'Par005', 'Par006', 'Par017', 'Par020', 'Par023', 'Par024', 'Par025', 'Par026', 'Par028', 'Par029', 'Par049', 'Par051', 'Par052', 'Par053']
+HST_FIELDS = ['Par016', 'Par019', 'Par021', 'Par034', 'Par040', 'Par042', 'Par044']
+FIELDS = np.sort(COSMOS_FIELDS + HST_FIELDS)
+#FIELDS = FIELDS[:1] # for testing only
 
-BASE_TARGET_DIR = Path("/Volumes/Ayan_SSD/Ayan_macbook/Users/aacharyya/Work/astro/passage/passage_data/v0.6")
+BASE_TARGET_DIR = Path("/Volumes/Ayan_SSD/Ayan_macbook/Users/aacharyya/Work/astro/passage/passage_data/v1.0")
 # ---------------------
 
 def get_final_clean_name(raw_name):
     """Helper to predict what the file name will look like after processing."""
     if '_fixz' in raw_name:
         return raw_name.replace('_fixz', '')
+    if '_cwt' in raw_name:
+        return raw_name.replace('_cwt', '')
     return raw_name
 
 def clean_unpacked_directories(target_dir):
@@ -30,9 +35,9 @@ def clean_unpacked_directories(target_dir):
     # top_down=False ensures we rename inner subdirectories before outer parent directories
     for root, dirs, files in os.walk(target_dir, topdown=False):
         for dir_name in dirs:
-            if '_fixz' in dir_name:
+            if '_fixz' in dir_name or '_cwt' in dir_name:
                 old_dir_path = Path(root) / dir_name
-                clean_dir_name = dir_name.replace('_fixz', '')
+                clean_dir_name = dir_name.replace('_fixz', '').replace('_cwt', '')
                 new_dir_path = Path(root) / clean_dir_name
                 
                 # Check if the clean directory name already exists before moving
@@ -41,6 +46,16 @@ def clean_unpacked_directories(target_dir):
                     print(f"    Renamed Folder: {dir_name} -> {clean_dir_name}")
                 else:
                     print(f"    Folder {clean_dir_name} already exists; merged content manually if needed.")
+
+def get_folder_size_mb(folder_path: Path) -> float:
+    """Calculates total disk space used by a local directory in Gigabytes."""
+    total_bytes = 0
+    for root, _, files in os.walk(folder_path):
+        for f in files:
+            fp = os.path.join(root, f)
+            if not os.path.islink(fp):
+                total_bytes += os.path.getsize(fp)
+    return total_bytes / (1024 * 1024 * 1024)
 
 # ---------------------
 if __name__ == '__main__':
@@ -84,10 +99,13 @@ if __name__ == '__main__':
                 # Check match criteria: _fixz.tar.gz OR _photcat.fits OR *drz*.fits
                 name_lower = sub_item.name.lower()
                 is_tarball = '.tar.gz' in name_lower or name_lower.endswith('.tgz')
-                is_photcat = name_lower.endswith('_photcat.fits')
+                is_beams = 'beams' in name_lower
+                is_speccat = 'speccat' in name_lower
+                is_photcat = 'photcat' in name_lower
                 is_drz = fnmatch.fnmatch(name_lower, '*drz*.fits')
                 
-                if not (('fixz' in name_lower) or is_photcat or is_drz):
+                #if not (('fixz' in name_lower) or is_photcat or is_drz):
+                if is_beams or not (is_speccat or is_photcat or is_drz or is_tarball):
                     continue # Skip unrelated files in the directory
 
                 print(f"  Found matching file: {sub_item.name}")
@@ -101,6 +119,8 @@ if __name__ == '__main__':
                     # e.g., Par003_maps_fixz.tar.gz -> Par003_maps_fixz -> Par003_maps
                     base_archive_name = sub_item.name.split('.tar.gz')[0].split('.tgz')[0]
                     predicted_unpacked_name = get_final_clean_name(base_archive_name)
+                    if predicted_unpacked_name.startswith('Par'):
+                        predicted_unpacked_name = predicted_unpacked_name[7:]
                     
                     # We check if a directory or file starting with that clean string exists
                     already_exists = any(products_dir.glob(f"{predicted_unpacked_name}*"))
@@ -148,12 +168,16 @@ if __name__ == '__main__':
                 
                 # Handle straight flat files (FITS maps/catalogs)
                 else:
-                    if '_fixz' in temp_file_path.name:
-                        clean_name = temp_file_path.name.replace('_fixz', '')
+                    if '_fixz' in temp_file_path.name or '_cwt' in temp_file_path.name:
+                        clean_name = temp_file_path.name.replace('_fixz', '').replace('_cwt', '')
                         temp_file_path.rename(temp_file_path.with_name(clean_name))
                         print(f"    Cleaned filename: {clean_name}")
                     else:
                         print(f"    Saved: {temp_file_path.name}")
+
+            # Disk usage report for this field
+            size_mb = get_folder_size_mb(BASE_TARGET_DIR / field_name)
+            print(f"[COMPLETE] {field_name} finished. Total Disk Usage: {size_mb:.2f} GB")
 
     print(f"\n Processing complete in {timedelta(seconds=(datetime.now() - start_time).seconds)}!")
     print(f" Total files skipped (already completed): {skipped_count}")

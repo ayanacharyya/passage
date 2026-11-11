@@ -38,9 +38,11 @@ if __name__ == "__main__":
 
     # ---------determining list of fields----------------
     output_dir = args.output_dir / 'catalogs'
-
-    passage_catalog_filename = output_dir / 'SED_fits_v1.0.2_cosmosweb.fits'
-    df_sed = read_passage_sed_catalog(passage_catalog_filename, include_cosmos2020=args.include_cosmos2020)
+    cosmos_catalog_filename = output_dir / 'SED_fits_v1.3.2-photonly_cosmosweb.fits'
+    noncosmos_catalog_filename = output_dir / 'SED_fits_v1.3.2.fits'
+    df_c = read_passage_sed_catalog(cosmos_catalog_filename, include_cosmos2020=args.include_cosmos2020)
+    df_nc = read_passage_sed_catalog(noncosmos_catalog_filename)
+    df_sed = pd.concat([df_c, df_nc], ignore_index=True)
 
     if args.do_all_fields:
         #field_list = [os.path.split(item[:-1])[1] for item in glob.glob(str(args.input_dir / 'Par[0-9][0-9][0-9]') + '/')]

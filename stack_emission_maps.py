@@ -14,13 +14,15 @@
              run stack_emission_maps.py --system ssd --field Par28 --id 1982 --clobber --debug_bin --debug_align --adaptive_bins --bin_by_distance_mass
              run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --adaptive_bins --bin_by_distance_mass
              run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --cut_z_flag 4 --adaptive_bins --bin_by_sfh_mass --skip_deproject
+             run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --cut_z_flag 4 --adaptive_bins --bin_by_distance_mass --skip_deproject --npa 2 --scaling_line Ha
+             run stack_emission_maps.py --system ssd --do_all_fields --do_all_obj --cut_z_flag 4 --adaptive_bins --bin_by_distance_mass --skip_deproject --npa 2 --inc_cut 30
 '''
 
 from header import *
 from util import *
 setup_plot_style()
 from make_diagnostic_maps import trim_image, get_dereddened_flux, myimshow, get_offsets_from_center, get_cutout
-from make_sfms_bins import get_binned_df, required_lines, sfms
+from make_sfms_bins import get_binned_df, required_lines, sfms, survey_for_morphology
 
 start_time = datetime.now()
 
@@ -582,10 +584,9 @@ if __name__ == "__main__":
                         args.re_kpc, args.re_arcsec = obj['re_kpc'], obj['re_arcsec']
                         args.log_mass = obj['log_mass']
 
-                        survey = 'passage' # choose between 'passage' or 'cweb' to grab the morhpological parameters from 
-                        args.semi_major = obj[f'a_image_{survey}']
-                        args.semi_minor = obj[f'b_image_{survey}']
-                        args.pa = obj[f'theta_image_{survey}']
+                        args.semi_major = obj[f'a_image_{survey_for_morphology}']
+                        args.semi_minor = obj[f'b_image_{survey_for_morphology}']
+                        args.pa = obj[f'theta_image_{survey_for_morphology}']
                         
                         # --------determining true center of object rom direct image---------------------
                         args.ndelta_xpix, args.ndelta_ypix = get_offsets_from_center(full_hdu, args, filter=filter_for_direct_image, silent=not args.debug_align)

@@ -69,7 +69,7 @@ def parse_args():
     parser.add_argument('--clobber', dest='clobber', action='store_true', default=False, help='Over-write existing plots? Default is no.')
     parser.add_argument('--silent', dest='silent', action='store_true', default=False, help='Suppress some generic print statements? Default is no.')
     parser.add_argument('--keep', dest='keep', action='store_true', default=False, help='Keep existing plot windows open? Default is no.')
-    parser.add_argument('--drv', metavar='drv', type=str, action='store', default='v0.6', help='Which data reduction version? Default v0.6')
+    parser.add_argument('--drv', metavar='drv', type=str, action='store', default='v1.0', help='Which data reduction version? Default v0.6')
     parser.add_argument('--fontsize', metavar='fontsize', type=int, action='store', default=15, help='fontsize of plot labels, etc.; default is 15')
 
     parser.add_argument('--field', metavar='field', type=str, action='store', default='Par3', help='Which passage field? Default is Par50')
@@ -176,6 +176,7 @@ def read_passage_sed_catalog(filename, include_cosmos2020=False):
     if Path(filename).suffix == '.fits':
         print(f'Reading master PASSAGE SED catalog from {filename}..')
         full_df = Table.read(filename).to_pandas()
+        full_df['field'] = full_df['field'].astype(str)
     else:
         print(f'Reading PASSAGE line finding catalog from {filename}..')
         full_df = pd.read_csv(filename, header=0, sep='\t')
@@ -226,6 +227,8 @@ def read_passage_sed_catalog(filename, include_cosmos2020=False):
     full_df['delta_tform_ratio'] = full_df['delta_tform_90_50'] / full_df['delta_tform_50_10']
 
     # --------extracting relevant columns-----------
+    if 'cosmoswebid' not in full_df:
+        full_df['cosmoswebid'] = np.nan
     columns_to_extract = ['field', 'id', 'redshift', 'log_mass', 'log_mass_u', 'log_sfr', 'log_sfr_u', 'log_ssfr', 'log_ssfr_u', 'cosmoswebid', 'delta_tform_50_10', 'delta_tform_90_50', 'delta_tform_90_10', 'delta_tform_ratio']
     df = full_df[columns_to_extract]
     df['field'] = df['field'].astype(str)
@@ -388,6 +391,12 @@ def get_obs_params_from_drz_img(filter_name, args, keywords_to_extract=['EXPSTAR
     '''
     keyword_values_list = []
     drz_filename = full_filename.parent.parent / f'{args.field}_{filter_name.lower()}-gr150r_drz_sci.fits'
+    
+    if not os.path.exists(drz_filename):
+        print (f'Did not find {drz_filename}, so attempting to use', end='')
+        drz_filename = full_filename.parent.parent / f'jw04681-nis-b-{filter_name.lower()}-gr150r_drz_sci.fits'
+        print(f'{drz_filename} instead..')
+
     with fits.open(drz_filename, memmap=True) as beams_hdu:
         drz_header = beams_hdu[0].header
         for kwd in keywords_to_extract:
@@ -641,8 +650,11 @@ if __name__ == "__main__":
 
     # ---------determining list of fields----------------
     output_dir = args.output_dir / 'catalogs'
-    passage_catalog_filename = output_dir / 'SED_fits_v1.0.2_cosmosweb.fits'
-    df_sed = read_passage_sed_catalog(passage_catalog_filename, include_cosmos2020=args.include_cosmos2020)
+    cosmos_catalog_filename = output_dir / 'SED_fits_v1.3.2-photonly_cosmosweb.fits'
+    noncosmos_catalog_filename = output_dir / 'SED_fits_v1.3.2.fits'
+    df_c = read_passage_sed_catalog(cosmos_catalog_filename, include_cosmos2020=args.include_cosmos2020)
+    df_nc = read_passage_sed_catalog(noncosmos_catalog_filename)
+    df_sed = pd.concat([df_c, df_nc], ignore_index=True)
 
     if not args.do_all_fields:
         df_sed = df_sed[df_sed['field'].isin(args.field_arr)]
@@ -719,7 +731,11 @@ if __name__ == "__main__":
                 # -----------determine PSFs for PSF matching-----------------
                 if get_target_psf:
                     # ----------getting observation keywords from drz file----------
-                    args.obs_date, args.pa_aper = get_obs_params_from_drz_img('F200W', args, keywords_to_extract=['EXPSTART', 'PA_APER'])
+                    try:
+                        args.obs_date, args.pa_aper = get_obs_params_from_drz_img('F200W', args, keywords_to_extract=['EXPSTART', 'PA_APER'])
+                    except:
+                        print(f'\tCould not find drizzled image with F200W, so attempting to use F115W for obtaining obs_date and PA_APER, to generate target PSF..')
+                        args.obs_date, args.pa_aper = get_obs_params_from_drz_img('F115W', args, keywords_to_extract=['EXPSTART', 'PA_APER'])
                     img_wcs = pywcs.WCS(full_hdu['LINE'])                  
                     target_psf_hdu = get_niriss_psf(target_psf_wave, args)#, img_wcs=img_wcs) # not providing img_wcs to create target_psf becaus etarget_psf should not depend on the object/extension
                     get_target_psf = False

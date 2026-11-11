@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument('--keep', dest='keep', action='store_true', default=False, help='Keep existing plot windows open? Default is no.')
     parser.add_argument('--forpaper', dest='forpaper', action='store_true', default=False, help='Format plots to paper quality? Default is no.')
     parser.add_argument('--fortalk', dest='fortalk', action='store_true', default=False, help='Format plots suitable for putting in talks? Default is no.')
-    parser.add_argument('--drv', metavar='drv', type=str, action='store', default='v0.6', help='Which data reduction version? Default v0.6')
+    parser.add_argument('--drv', metavar='drv', type=str, action='store', default='v1.0', help='Which data reduction version? Default v0.6')
     parser.add_argument('--fontsize', metavar='fontsize', type=int, action='store', default=15, help='fontsize of plot labels, etc.; default is 15')
 
     parser.add_argument('--field', metavar='field', type=str, action='store', default='Par3', help='Which passage field? Default is Par50')
@@ -263,10 +263,14 @@ def parse_args():
 
     # ---- args added for make_sfms_bins.py ------------
     parser.add_argument('--plot_mex', dest='plot_mex', action='store_true', default=False, help='Plot the Mass excitation diagram for the passage sample? Default is no.')
+    parser.add_argument('--inc_cut', metavar='inc_cut', type=float, action='store', default=None, help='Restricts the sample to inclination > inc_cut. Default is None, i.e., no cut')
     parser.add_argument('--zcut', metavar='zcut', type=str, action='store', default=None, help='Restricts the sample to zlim[0] < z < zlim[1]. Default is None, i.e., no cut')
     parser.add_argument('--cut_z_flag', metavar='cut_z_flag', type=int, action='store', default=None, help='Restricts the sample to z_flag (from Huberty+26) < cut_z_flag. Default is None, i.e., no cut')
+    parser.add_argument('--npa', metavar='npa', type=int, action='store', default=None, help='Restricts the sample to number of PAs = npa. Default is None, i.e., no cut based on nPA')
     parser.add_argument('--annotate_bins', dest='annotate_bins', action='store_true', default=False, help='Annotate the number of galaxies in each bin? Default is no.')
     parser.add_argument('--nocolorbar', dest='nocolorbar', action='store_true', default=False, help='Hide the colorbar in the plots? Default is no.')
+    parser.add_argument('--include_hst', dest='include_hst', action='store_true', default=False, help='Include objects from the HST follow-up fields for stacking? Default is no.')
+    parser.add_argument('--include_par682', dest='include_par682', action='store_true', default=False, help='Include objects from Par682 for stacking? Default is no.')
     parser.add_argument('--include_cosmos2020', dest='include_cosmos2020', action='store_true', default=False, help='Include SED fit results from COSMOS2020 in addition to COSMOSWeb? Default is no.')
     parser.add_argument('--sn_cut_o3', metavar='sn_cut_o3', type=float, action='store', default=None, help='Restricts the sample to sn_OIII < sn_cut_OIII. Default is None, i.e., no cut')
     parser.add_argument('--sn_cut_ha', metavar='sn_cut_ha', type=float, action='store', default=None, help='Restricts the sample to sn_Ha < sn_cut_Ha. Default is None, i.e., no cut')
@@ -301,6 +305,11 @@ def parse_args():
     parser.add_argument('--plot_minor_major_profile', dest='plot_minor_major_profile', action='store_true', default=False, help='Plot the minor axis and major axis radial profiles separately? Default is no.')
     parser.add_argument('--reset_bd', dest='reset_bd', action='store_true', default=False, help='Manually reset the Hbeta flux to Halpha/2.86 if the measured Balmer decrement happens to be < 2.86, while running NB? Default is no.')
     parser.add_argument('--nb_prior', dest='nb_prior', action='store_true', default=False, help='Use low-Z branch favoring prior while running NB? Default is no.')
+    parser.add_argument('--bin_spatial', action='store_true', default=False, help='Enable 2D Voronoi spatial binning on stacked line maps')
+    parser.add_argument('--target_snr', type=float, default=2.0, help='Target S/N for Voronoi binning')
+    parser.add_argument('--target_line', type=str, default='HB', help='Target line used for Voronoi binning S/N criteria')
+    parser.add_argument('--outer_mask_line', type=str, default='OIII', help='Line map used for pre-binning outskirt S/N cut')
+    parser.add_argument('--outer_mask_snr', type=float, default=1.0, help='Minimum S/N for pre-binning footprint mask')
 
     # ---- args added for plot_stacked_gradients.py ------------
     parser.add_argument('--overplot_literature', dest='overplot_literature', action='store_true', default=False, help='Overplot the SFMS relations from the literature? Default is no.')
@@ -917,7 +926,10 @@ def get_passage_filter_dict(args=None, filename=None):
     Reads PASSAGE spreadsheet and returns a dictionary with PASSAGE field names and which filters are present in them
     '''
     if filename is None:
-        filename =  args.root_dir / 'passage_data' / 'v0.5' / 'JWST PASSAGE Cycle 1 - Cy1 Executed.csv'
+        if args is None: 
+            filename =  args.root_dir / 'passage_data' / 'v0.5' / 'JWST PASSAGE Cycle 1 - Cy1 Executed.csv'
+        else:
+            filename =  args.root_dir / 'passage_data' / args.drv / 'JWST PASSAGE Cycle 1 - Cy1 Executed.csv'
 
     df = pd.read_csv(filename)
     df = df[['Par#', 'Obs Date', 'Filter']]

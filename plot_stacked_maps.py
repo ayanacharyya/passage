@@ -17,6 +17,8 @@
              run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag NB --plot_line_and_metallicity --plot_radial_profiles --adaptive_bins --bin_by_distance_mass --fold_maps
              run plot_stacked_maps.py --system ssd --do_all_fields --plot_line_and_bpt --AGN_diag Ne3O2 --adaptive_bins --bin_by_distance_mass --fold_maps
              run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag NB --plot_line_and_metallicity --plot_radial_profiles --cut_z_flag 4 --adaptive_bins --bin_by_sfh_mass --fold_maps --skip_deproject
+             run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag NB --plot_line_and_metallicity --plot_radial_profiles --cut_z_flag 4 --adaptive_bins --bin_by_distance_mass --fold_maps --skip_deproject --npa 2 --inc_cut 30
+             run plot_stacked_maps.py --system ssd --do_all_fields --Zdiag NB --nb_prior --plot_line_and_metallicity --plot_radial_profiles --cut_z_flag 4 --adaptive_bins --bin_by_distance_mass --fold_maps --skip_deproject --npa 2 --inc_cut 30
 '''
 
 from header import *
@@ -43,7 +45,9 @@ def plot_stacked_line_maps(line_dict, args, bin_text='', cmin=None, cmax=None, t
     else:
         # -----------------setup the figure---------------
         ncols = n_lines
-        nrows = 2 if args.plot_radial_profiles else 1
+        nrows = 1
+        if args.plot_snr: nrows += 1
+        if args.plot_radial_profiles: nrows += 1
         
         fig, axes = plt.subplots(nrows, ncols, figsize=(3 * ncols, 3.5 * nrows))
         axes = np.atleast_2d(axes)
@@ -54,8 +58,17 @@ def plot_stacked_line_maps(line_dict, args, bin_text='', cmin=None, cmax=None, t
         for index3, this_line in enumerate(line_list):
             this_map, _ , _= get_emission_line_map(this_line, line_dict, args)
             nobj = line_dict[f'{this_line}_nobj']
+
+            this_row_id = 0
             if type(unp.nominal_values(this_map.data)) == np.ndarray:
-                axes[0][index3] = plot_2D_map(this_map, axes[0][index3], f'Stacked {this_line}: {nobj}', args, cmap='cividis', clabel='', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index3, hide_cbar=index3 < ncols - 1, hide_cbar_ticks=False, cticks_integer=True)
+                axes[this_row_id][index3] = plot_2D_map(this_map, axes[this_row_id][index3], f'Stacked {this_line}: {nobj}', args, cmap='cividis', clabel='', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=index3, hide_cbar=index3 < ncols - 1, hide_cbar_ticks=False, cticks_integer=True)
+                this_row_id += 1
+
+            # --------plot SNR maps--------------
+            if args.plot_snr:
+                if type(unp.std_devs(this_map.data)) == np.ndarray:
+                    axes[this_row_id][index3] = plot_2D_map(this_map, axes[this_row_id][index3], f'Stacked {this_line}: SNR', args, cmap='cividis', clabel='SNR', takelog=takelog, vmin=snr_min, vmax=snr_max, hide_xaxis=False, hide_yaxis=index3, hide_cbar=index3 < ncols - 1, hide_cbar_ticks=False, cticks_integer=True, plot_snr=True)
+                    this_row_id += 1
 
             # ----------getting distance maps, in case radial profile plotting-------------
             if args.plot_radial_profiles:
@@ -67,15 +80,22 @@ def plot_stacked_line_maps(line_dict, args, bin_text='', cmin=None, cmax=None, t
                 distance_map = np.array([[np.sqrt((i - center_ypix)**2 + (j - center_xpix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
                 minor_distance_map = np.array([[np.abs(j - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
                 major_distance_map = np.array([[np.abs(i - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
-                this_df = pd.DataFrame({'distance': distance_map.flatten(), 'minor_distance': minor_distance_map.flatten(), 'major_distance': major_distance_map.flatten()})
+                if args.bin_spatial:
+                    bin_ID_map = line_dict['bin_id_map']
+                else:
+                    bin_ID_map = np.arange(shape[0] * shape[1])
+                this_df = pd.DataFrame({'distance': distance_map.flatten(), 'minor_distance': minor_distance_map.flatten(), 'major_distance': major_distance_map.flatten(), 'bin_ID': bin_ID_map.flatten()})
 
                 this_df[f'{this_line}'] = unp.nominal_values(this_map.data).flatten()
                 this_df[f'{this_line}_u'] = unp.std_devs(this_map.data).flatten()
+                this_df = this_df.groupby(['bin_ID'], as_index=False).agg(np.mean)
+                
                 this_df = this_df.dropna(subset=[f'{this_line}', f'{this_line}_u'], axis=0)
                 this_df = this_df[this_df[f'{this_line}'] > 0] # drop negative fluxes before taking log for the radial profile plot
 
-                axes[1][index3], _, _, _ = plot_radial_profile(this_df, axes[1][index3], args, ylim=[cmin, cmax], takelog=takelog, xlim=None, hide_xaxis=False, hide_yaxis=index3, hide_cbar=True, skip_annotate=False, quant=this_line, skip_fitting=True)
-
+                axes[this_row_id][index3], _, _, _ = plot_radial_profile(this_df, axes[this_row_id][index3], args, ylim=[cmin, cmax], takelog=takelog, xlim=None, hide_xaxis=False, hide_yaxis=index3, hide_cbar=True, skip_annotate=False, quant=this_line, skip_fitting=True)
+                this_row_id += 1
+               
     return fig, line_list         
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -367,17 +387,19 @@ def custom_lower_branch_prior(DF_obs, obs_flux_arr_dict, obs_err_arr_dict, grids
     return prior
 
 # --------------------------------------------------------------------------------------------------------------------
-def compute_Z_NB(line_label_array, line_waves_array, line_flux_array):
+def compute_Z_NB(line_label_array, line_waves_array, line_flux_array, ID_map=None):
     '''
     Calculates and returns the NebulaBayes metallicity given a list of observed line fluxes
     '''
     line_flux_array = [np.atleast_1d(item) for item in line_flux_array]
     
     map_shape = np.shape(line_flux_array[0])
-    if len(map_shape) == 1: npixels = map_shape[0]
-    else: npixels = map_shape[0] * map_shape[1]
 
-    IDs_array = np.arange(npixels).flatten()
+    if ID_map is None:
+        if len(map_shape) == 1: npixels = map_shape[0]
+        else: npixels = map_shape[0] * map_shape[1]
+        ID_map = np.arange(npixels)
+    IDs_array = ID_map.flatten()
     unique_IDs_array = np.unique(IDs_array)  
 
     if len(line_label_array) <= 1:
@@ -558,8 +580,8 @@ def get_Z_NB(line_dict, args):
 
     # ----------calling NB----------------------
     logOH_int = compute_Z_NB(line_label_array, line_waves_array, line_int_array)
-    #sys.exit(f'logOH_int = {logOH_int}; exiting here for test') ###
-    logOH_map = compute_Z_NB(line_label_array, line_waves_array, line_map_array)
+    #sys.exit(f'logOH_int = {logOH_int}; exiting here for test') ###        
+    logOH_map = compute_Z_NB(line_label_array, line_waves_array, line_map_array, ID_map=line_dict['bin_id_map'] if args.bin_spatial else None)
 
     return logOH_map, logOH_int, line_label_array, np.min(nobj_array)
 
@@ -709,12 +731,15 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     return ax, minor_linefit_odr, major_linefit_odr, radial_linefit_odr
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True, annotate_minor_major=False):
+def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True, vmin=None, vmax=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, hide_cbar_ticks=False, cticks_integer=True, annotate_minor_major=False, plot_snr=False):
     '''
     Plots a given 2D image in a given axis
     Returns the axis handle
     '''
-    image = np.ma.masked_where(image.mask, unp.nominal_values(image.data))
+    if plot_snr:
+        image = np.ma.masked_where(image.mask, unp.nominal_values(image.data) / unp.std_devs(image.data))
+    else:
+        image = np.ma.masked_where(image.mask, unp.nominal_values(image.data))
 
     if takelog:
         new_mask = image <= 0
@@ -740,19 +765,31 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True,
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_metallicity_map(logOH_map, args, bin_text='', Zmin=None, Zmax=None):
+def plot_metallicity_map(logOH_map, args, bin_text='', Zmin=None, Zmax=None, bin_ID_map=None):
     '''
     Makes a nice plot of a given metallicity map
     Returns figure handle
     '''
     # -----------------setup the figure---------------
-    fig, axes = plt.subplots(1, 2 if args.plot_radial_profiles else 1, figsize=(10, 4) if args.plot_radial_profiles else (8, 6))
-    fig.subplots_adjust(left=0.1, right=0.98 if args.plot_radial_profiles else 0.85, top=0.98, bottom=0.14, wspace=0.6, hspace=0.)
+    nrows = 1
+    if args.plot_snr: nrows += 1
+    if args.plot_radial_profiles: nrows += 1
+
+    fig, axes = plt.subplots(1, nrows, figsize=(6, 3.5 * nrows))
+    fig.subplots_adjust(left=0.1, right=0.98, top=0.98, bottom=0.14, wspace=0.6, hspace=0.)
     axes = np.atleast_1d(axes)
     
     # -----------------plot metallicity maps of this bin---------------
-    axes[0] = plot_2D_map(logOH_map, axes[0], f'Stacked logOH {bin_text}', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', takelog=False, vmin=Zmin, vmax=Zmax, hide_cbar=False, cticks_integer=True)
-        
+    this_row_id = 0
+    axes[this_row_id] = plot_2D_map(logOH_map, axes[this_row_id], f'Stacked logOH {bin_text}', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', takelog=False, vmin=Zmin, vmax=Zmax, hide_cbar=False, cticks_integer=True)
+    this_row_id += 1
+
+    # --------plot metallicity SNR maps--------------
+    if args.plot_snr:
+        axes[this_row_id] = plot_2D_map(logOH_map, axes[this_row_id], f'logOH {args.Zdiag} SNR', args, cmap='plasma', clabel=r'SNR', takelog=False, vmin=snr_min, vmax=snr_max, hide_yaxis=False, hide_cbar=False, cticks_integer=True, plot_snr=True)
+        this_row_id += 1
+
+    # --------plot metallicity radial profile--------------
     if args.plot_radial_profiles:
         quant = 'log_OH'
         shape = np.shape(logOH_map)
@@ -764,18 +801,23 @@ def plot_metallicity_map(logOH_map, args, bin_text='', Zmin=None, Zmax=None):
         distance_map = np.array([[np.sqrt((i - center_ypix)**2 + (j - center_xpix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
         minor_distance_map = np.array([[np.abs(j - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
         major_distance_map = np.array([[np.abs(i - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size # Re or kpc
+        if bin_ID_map is None:
+            bin_ID_map = np.arange(shape[0] * shape[1])
 
         df = pd.DataFrame({'distance': distance_map.flatten(), \
                            'minor_distance': minor_distance_map.flatten(), \
                            'major_distance': major_distance_map.flatten(), \
                            f'{quant}': unp.nominal_values(logOH_map).flatten(), \
                            f'{quant}_u': unp.std_devs(logOH_map).flatten(), \
+                           'bin_ID': bin_ID_map.flatten(), \
                            })
+        df = df.groupby(['bin_ID'], as_index=False).agg(np.mean)
         df = df[np.isfinite(df[f'{quant}']) & np.isfinite(df[f'{quant}_u'])] 
         if quant == 'log_OH':
             df = df[df[f'{quant}'].between(7.1, 9.3)] # to eliminate cases that hit NB grid boundary
         
-        axes[1], minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(df, axes[1], args, ylim=[Zmin, Zmax], xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant, skip_fitting=False)
+        axes[this_row_id], minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(df, axes[this_row_id], args, ylim=[Zmin, Zmax], xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant, skip_fitting=False)
+        this_row_id += 1
     else:
         minor_linefit_odr, major_linefit_odr, radial_linefit_odr = None, None, None
 
@@ -868,6 +910,99 @@ def fold_image_to_quadrant(data_map, args, line='', is_mask=False):
     return folded_quadrant
 
 # --------------------------------------------------------------------------------------------------------------------
+def spatial_bin_stacked_maps(line_dict, args):
+    '''
+    Spatially bins 2D emission line maps in line_dict using Voronoi 2D binning.
+    First masks out low-SNR outskirts using outer_mask_line (default: OIII) SNR threshold.
+    Then Voronoi bins the remaining footprint up to args.target_snr in args.target_line (default: HB).
+    Returns updated line_dict with binned 2D maps.
+    '''    
+
+    line_list = [item for item in list(line_dict.keys()) if '_nobj' not in item and '_id' not in item]
+    avail_dict = {l.upper(): l for l in line_list}
+
+    if args.target_line not in avail_dict or args.outer_mask_line not in avail_dict:
+        print(f'Spatial binning skipped: target line ({args.target_line}) or outer line ({args.outer_mask_line}) not available in stack.')
+        return line_dict
+
+    target_key = avail_dict[args.target_line]
+    outer_key = avail_dict[args.outer_mask_line]
+
+    # ----------extract data for binning and pre-filtering------------
+    target_map = line_dict[target_key]
+    target_data = unp.nominal_values(target_map.data)
+    target_err = unp.std_devs(target_map.data)
+
+    outer_map = line_dict[outer_key]
+    outer_data = unp.nominal_values(outer_map.data)
+    outer_err = unp.std_devs(outer_map.data)
+
+    ny, nx = target_data.shape
+    grid_y, grid_x = np.indices((ny, nx))
+
+    # ----------pre-binning outer SNR footprint cut-------------------
+    with np.errstate(divide='ignore', invalid='ignore'):
+        outer_snr_map = np.where(outer_err > 0, outer_data / outer_err, 0)
+
+    valid_mask = (~target_map.mask) & (~outer_map.mask) & \
+                 (outer_snr_map >= args.outer_mask_snr) & \
+                 (target_data > 0) & (target_err > 0)
+
+    if np.sum(valid_mask) < 3:
+        print(f'Too few pixels ({np.sum(valid_mask)}) satisfy SNR>={args.outer_mask_snr} in {args.outer_mask_line}. Skipping spatial binning.')
+        return line_dict
+
+    x_valid = grid_x[valid_mask]
+    y_valid = grid_y[valid_mask]
+    signal = target_data[valid_mask]
+    noise = target_err[valid_mask]
+
+    # ----------voronoi 2D binning------------------------------------
+    print(f'\nVoronoi binning {np.sum(valid_mask)} pixels (pre-filtered by {args.outer_mask_line} SNR >= {args.outer_mask_snr}) to target SNR = {args.target_snr} in {args.target_line}...')
+    bin_num, _, _, _, _, _, _, _ = voronoi_2d_binning(x_valid, y_valid, signal, noise, args.target_snr, plot=False, quiet=True)
+    unique_bins = np.unique(bin_num)
+
+    # ----------Create 2D Bin ID Map----------
+    bin_id_map = np.full((ny, nx), -1, dtype=int)
+    bin_id_map[y_valid, x_valid] = bin_num
+    line_dict['bin_id_map'] = bin_id_map
+
+    # ----------apply binning across all line maps--------------------
+    for line_name in line_list:
+        map_obj = line_dict[line_name]
+        l_data = unp.nominal_values(map_obj.data)
+        l_err = unp.std_devs(map_obj.data)
+
+        out_data = np.full((ny, nx), np.nan)
+        out_err = np.full((ny, nx), np.nan)
+        out_mask = np.ones((ny, nx), dtype=bool)
+
+        for b_id in unique_bins:
+            b_indices = (bin_num == b_id)
+            bx = x_valid[b_indices]
+            by = y_valid[b_indices]
+
+            bin_fluxes = l_data[by, bx]
+            bin_errs = l_err[by, bx]
+
+            good = np.isfinite(bin_fluxes) & np.isfinite(bin_errs) & (bin_errs > 0)
+            if np.sum(good) > 0:
+                weights = 1.0 / (bin_errs[good] ** 2)
+                w_sum = np.sum(weights)
+                w_mean = np.sum(bin_fluxes[good] * weights) / w_sum
+                w_err = 1.0 / np.sqrt(w_sum)
+
+                out_data[by, bx] = w_mean
+                out_err[by, bx] = w_err
+                out_mask[by, bx] = False
+
+        binned_uarray = unp.uarray(out_data, out_err)
+        line_dict[line_name] = np.ma.masked_where(out_mask, binned_uarray)
+
+    print(f'Successfully binned maps into {len(unique_bins)} spatial Voronoi bins.')
+    return line_dict
+
+# --------------------------------------------------------------------------------------------------------------------
 def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin=None, cmax=None, Zmin=None, Zmax=None, takelog=True):
     '''
     Makes a nice plot of all emission lines present in a given list of stacked line maps along with the metallicity map
@@ -887,19 +1022,34 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
         distance_map = np.array([[np.sqrt((i - center_ypix)**2 + (j - center_xpix)**2) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size
         minor_distance_map = np.array([[np.abs(j - center_xpix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size
         major_distance_map = np.array([[np.abs(i - center_ypix) for j in range(shape[1])] for i in range(shape[0])]) * args.pix_size
-        df = pd.DataFrame({'distance': distance_map.flatten(), 'minor_distance': minor_distance_map.flatten(), 'major_distance': major_distance_map.flatten()})
+        if args.bin_spatial:
+            bin_ID_map = line_dict['bin_id_map']
+        else:
+            bin_ID_map = np.arange(shape[0] * shape[1])
+        df = pd.DataFrame({'distance': distance_map.flatten(), 'minor_distance': minor_distance_map.flatten(), 'major_distance': major_distance_map.flatten(), 'bin_ID': bin_ID_map.flatten()})
 
     # -----------------setup the figure with GridSpec---------------
-    nrows = 2 if args.plot_radial_profiles else 1
+    nrows = 1
+    if args.plot_snr: nrows += 1
+    if args.plot_radial_profiles: nrows += 1
     
-    # Figure width scales with (n_lines + metallicity panel + colorbar gap)
-    fig = plt.figure(figsize=(2.5 * (n_lines + 1.4), 3.5 * nrows))
+    ## Dynamic figure sizing for laptop displays (prevents vertical/horizontal stretching)
+    fig_width = min(14.0, 2.3 * n_lines + 3.0)
+    fig_height = 2.5 * nrows
+    fig = plt.figure(figsize=(fig_width, fig_height))
     
-    # Outer GridSpec: [Line panels block] | [Line Colorbar Gap] | [Metallicity Panel block]
-    outer_gs = fig.add_gridspec(1, 2, width_ratios=[n_lines, 1.0], wspace=0.3, left=0.07, right=0.93, top=0.92, bottom=0.08)
-    gs_lines = outer_gs[0, 0].subgridspec(nrows, n_lines, wspace=0.0, hspace=0.2)
-    #gs_cbar  = outer_gs[0, 1].subgridspec(nrows, 1, hspace=0.2)
-    gs_Z     = outer_gs[0, 1].subgridspec(nrows, 1, hspace=0.2)
+    # Adjust margins: add bottom margin space if 1D radial profiles are plotted at the bottom
+    bottom_margin = 0.08
+    top_margin = 0.97 - (0.015 * (nrows - 1))
+    
+    outer_gs = fig.add_gridspec(1, 2, width_ratios=[n_lines, 1.15], wspace=0.25, 
+                                left=0.06, right=0.94, top=top_margin, bottom=bottom_margin)
+    
+    # Vertical spacing: tight (0.0) when 2D maps sit on top of 2D maps, moderate gap before 1D profiles
+    sub_hspace = 0.28 if (args.plot_snr and args.plot_radial_profiles) else (0.0 if args.plot_snr else 0.22)
+    
+    gs_lines = outer_gs[0, 0].subgridspec(nrows, n_lines, wspace=0.0, hspace=sub_hspace)
+    gs_Z     = outer_gs[0, 1].subgridspec(nrows, 1, hspace=sub_hspace)
 
     axes_lines = np.empty((nrows, n_lines), dtype=object)
     for r in range(nrows):
@@ -910,39 +1060,61 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
     for r in range(nrows):
         axes_Z[r, 0] = fig.add_subplot(gs_Z[r, 0])
 
-    fig.text(0.05, 0.96, f'{bin_text}', fontsize=args.fontsize, c='k', ha='left', va='top')
+    fig.text(0.05, 0.99, f'{bin_text}', fontsize=args.fontsize, c='k', ha='left', va='top')
     
     # -----------------plot emission line maps and radial profiles of this bin---------------
     for index, this_line in enumerate(line_list):
         this_map, _ , _ = get_emission_line_map(this_line, line_dict, args)
         nobj = line_dict[f'{this_line}_nobj']
-        
-        if type(unp.nominal_values(this_map.data)) == np.ndarray:
-            axes_lines[0, index] = plot_2D_map(this_map, axes_lines[0, index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='Log (Normalised Line Flux)' if takelog else 'Normalised Line Flux', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=index < n_lines - 1, hide_cbar_ticks=False, cticks_integer=True, annotate_minor_major=index == 0)
 
+        # --------plot data map----------
+        this_row_id = 0
+        if type(unp.nominal_values(this_map.data)) == np.ndarray:
+            axes_lines[this_row_id, index] = plot_2D_map(this_map, axes_lines[this_row_id, index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='Log (Normalised Line Flux)' if takelog else 'Normalised Line Flux', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=args.plot_snr, hide_yaxis=(index > 0), hide_cbar=index < n_lines - 1, hide_cbar_ticks=False, cticks_integer=True, annotate_minor_major=index == 0)
+            this_row_id += 1
+        
+        # --------plot SNR maps--------------
+        if args.plot_snr:
+            if type(unp.std_devs(this_map.data)) == np.ndarray:
+                axes_lines[this_row_id, index] = plot_2D_map(this_map, axes_lines[this_row_id, index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='SNR', takelog=takelog, vmin=snr_min, vmax=snr_max, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=index < n_lines - 1, hide_cbar_ticks=False, cticks_integer=True, annotate_minor_major=index == 0, plot_snr=True)
+                this_row_id += 1
+
+        # -------plot radial profile-------
         if args.plot_radial_profiles:
             this_df = df.copy()
             this_df[f'{this_line}'] = unp.nominal_values(this_map.data).flatten()
             this_df[f'{this_line}_u'] = unp.std_devs(this_map.data).flatten()
             this_df = this_df.dropna(subset=[f'{this_line}', f'{this_line}_u'], axis=0)
             this_df = this_df[this_df[f'{this_line}'] > 0]
+            this_df = this_df.groupby(['bin_ID'], as_index=False).agg(np.mean)
             
-            axes_lines[1, index], _, _, _ = plot_radial_profile(this_df, axes_lines[1, index], args, ylim=[cmin, cmax], takelog=takelog, xlim=None, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=True, skip_annotate=False, quant=this_line, skip_fitting=True, annotate_minor_major=True)
+            axes_lines[this_row_id, index], _, _, _ = plot_radial_profile(this_df, axes_lines[this_row_id, index], args, ylim=[cmin, cmax], takelog=takelog, xlim=None, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=True, skip_annotate=False, quant=this_line, skip_fitting=True, annotate_minor_major=True)
+            this_row_id += 1
+                        
+    # -----------------plot metallicity map---------------
+    this_row_id = 0
+    axes_Z[this_row_id, 0] = plot_2D_map(logOH_map, axes_Z[this_row_id, 0], f'logOH {args.Zdiag}', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', takelog=False, vmin=Zmin, vmax=Zmax, hide_yaxis=False, hide_xaxis=args.plot_snr, hide_cbar=False, cticks_integer=True)
+    this_row_id += 1
 
-    # -----------------plot metallicity map & profile---------------
-    axes_Z[0, 0] = plot_2D_map(logOH_map, axes_Z[0, 0], f'logOH {args.Zdiag}', args, cmap='plasma', clabel=r'$\log$(O/H) + 12', takelog=False, vmin=Zmin, vmax=Zmax, hide_yaxis=False, hide_cbar=False, cticks_integer=True)
-    
+    # --------plot metallicity SNR maps--------------
+    if args.plot_snr:
+        axes_Z[this_row_id, 0] = plot_2D_map(logOH_map, axes_Z[this_row_id, 0], f'logOH {args.Zdiag} SNR', args, cmap='plasma', clabel=r'SNR', takelog=False, vmin=snr_min, vmax=snr_max, hide_yaxis=False, hide_cbar=False, cticks_integer=True, plot_snr=True)
+        this_row_id += 1
+
+    # --------plot metallicity radial profile--------------
     if args.plot_radial_profiles:
         quant = 'log_OH'
         logOH_df = df.copy()
         logOH_df[f'{quant}'] = unp.nominal_values(logOH_map).flatten()
         logOH_df[f'{quant}_u'] = unp.std_devs(logOH_map).flatten()
         logOH_df = logOH_df[np.isfinite(logOH_df[f'{quant}']) & np.isfinite(logOH_df[f'{quant}_u'])] 
+        logOH_df = logOH_df.groupby(['bin_ID'], as_index=False).agg(np.mean)
         if quant == 'log_OH':
             logOH_df = logOH_df[logOH_df[f'{quant}'].between(7.1, 9.3)] # to eliminate cases that hit NB grid boundary
 
         # Set yaxis_on_right=False so Y-axis labels sit on the left (in the gap)
-        axes_Z[1, 0], minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(logOH_df, axes_Z[1, 0], args, ylim=[Zmin, Zmax], xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant, skip_fitting=False)
+        axes_Z[this_row_id, 0], minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(logOH_df, axes_Z[this_row_id, 0], args, ylim=[Zmin, Zmax], xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant, skip_fitting=False)
+        this_row_id += 1
     else:
         minor_linefit_odr, major_linefit_odr, radial_linefit_odr = None, None, None
 
@@ -1092,6 +1264,7 @@ if __name__ == "__main__":
     if args.re_limit is None: args.re_limit = 2.
     args.fontfactor = 1.5
     args.dered_in_NB = True
+    snr_min, snr_max = 0, 3
 
     # ------------reading and binning dataframe-------------
     df, bin_list, args = get_binned_df(args, required_lines=required_lines, sfms=sfms)
@@ -1145,14 +1318,18 @@ if __name__ == "__main__":
             for line in line_list:
                 line_dict[line] = fold_line_map(line_dict[line], args, line=line)
 
+        # ---------spatially bin stacked emission line maps------------------------
+        if args.bin_spatial:
+            line_dict = spatial_bin_stacked_maps(line_dict, args)
+        
         # ---------------plot emission line maps of this bin---------------------
         if args.plot_line_maps:
             fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=0)
-            save_fig(fig_em, args.fig_dir, f'stacked{args.fold_text}_line_maps{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
+            save_fig(fig_em, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_line_maps{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -----------------computing metallicity maps of this bin---------------
         if args.plot_metallicity or args.plot_line_and_metallicity:
-            metallicity_map_fits_file = args.fits_dir / f'stacked{args.fold_text}_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.fits'
+            metallicity_map_fits_file = args.fits_dir / f'stacked{args.binned_text}{args.fold_text}_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.fits'
             if not os.path.exists(metallicity_map_fits_file) or args.clobber:
                 logOH_map, logOH_int, nobj = get_metallicity_map(line_dict, args)
                 if logOH_map is None:
@@ -1165,13 +1342,13 @@ if __name__ == "__main__":
         
         # -----------------plot metallicity maps of this bin---------------
         if args.plot_metallicity:
-            fig_met, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_metallicity_map(logOH_map, args, bin_text=bin_text, Zmin=None, Zmax=None)
-            save_fig(fig_met, args.fig_dir, f'stacked{args.fold_text}_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
+            fig_met, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_metallicity_map(logOH_map, args, bin_text=bin_text, Zmin=None, Zmax=None, bin_ID_map=line_dict['bin_id_map'] if args.bin_spatial else None)
+            save_fig(fig_met, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -----------------plot line maps and metallicity maps of this bin---------------
         if args.plot_line_and_metallicity:
             fig_met, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=0, Zmin=None, Zmax=None)
-            save_fig(fig_met, args.fig_dir, f'stacked{args.fold_text}_line_and_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
+            save_fig(fig_met, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_line_and_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -------------save fit results to dataframe-----------------------
         if args.plot_radial_profiles and (args.plot_metallicity or args.plot_line_and_metallicity):
@@ -1200,7 +1377,7 @@ if __name__ == "__main__":
         if args.plot_line_and_bpt:
             fig_bpt = plot_line_and_bpt_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-3.5, cmax=-2.5)
             if fig_bpt is not None:
-                save_fig(fig_bpt, args.fig_dir, f'stacked{args.fold_text}_line_and_bpt_map_{args.AGN_diag}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
+                save_fig(fig_bpt, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_line_and_bpt_map_{args.AGN_diag}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         if len(bin_list) > 5: plt.close('all')
         print(f'\nCompleted bin {bin_text} in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
