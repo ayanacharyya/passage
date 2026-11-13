@@ -971,7 +971,9 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
     df_master_speccat = pd.DataFrame()
     lines_to_extract = list(set(required_lines) | set(['OIII', 'Hb']))
     linecols = np.hstack([[f'flux_{item}', f'err_{item}', f'sn_{item}'] for item in lines_to_extract])
-    speccat_cols_to_extract = np.hstack([['field', 'id', 'redshift_grizli'], linecols])
+    speccat_cols_to_extract_wlf = np.hstack([['field', 'id', 'redshift_linefinding'], linecols])
+    speccat_cols_to_extract_wgr = np.hstack([['field', 'id', 'redshift_grizli'], linecols])
+    speccat_cols_to_extract_wlfgr = np.hstack([['field', 'id', 'redshift_linefinding', 'redshift_grizli'], linecols])
     multi_dim_cols = ['cdf_z']
 
     df_master_photcat = pd.DataFrame()
@@ -985,7 +987,8 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
         tab_spec_this_field = GTable.read(speccat_filename)
         tab_spec_this_field.remove_columns(multi_dim_cols)
         df_spec_this_field = tab_spec_this_field.to_pandas()
-        '''
+        df_spec_this_field = df_spec_this_field.rename(columns={'redshift': 'redshift_grizli'})
+        '''        
         # ------speccat from linefinding: these fluxes will be used for MEx and flux scaling-----
         linefinding_catalog = args.output_dir / 'catalogs' / f'{this_field}lines_catalog_master.dat' # first, will look for 'catalog_master'
         if not os.path.exists(linefinding_catalog): # if 'catalog_master' unavailable, will look for 'catalog_kalina'
@@ -1006,11 +1009,26 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
                                                                       f'{line_labels_dict[this_line]}_error': f'err_{this_line}'})
             df_spec_this_field[f'sn_{this_line}'] = df_spec_this_field[f'flux_{this_line}'] / df_spec_this_field[f'err_{this_line}']
             df_spec_this_field['id'] = df_spec_this_field['id'].astype(np.int64)
+        df_spec_this_field = df_spec_this_field.rename(columns={'redshift': 'redshift_linefinding'})
+        
+        # ------speccat from grizli: these redshifts will be used for comparison and sample cut-----
+        speccat_filename = args.input_dir / this_field / 'Products' / f'{this_field}_speccat.fits'
+        print(f'\tReading speccat from grizli {speccat_filename.name}')
+        tab_spec_this_field = GTable.read(speccat_filename)
+        tab_spec_this_field.remove_columns(multi_dim_cols)
+        df_grizli_this_field = tab_spec_this_field.to_pandas()
+        df_grizli_this_field = df_grizli_this_field.rename(columns={'redshift': 'redshift_grizli'})[['id', 'redshift_grizli']]
+        df_spec_this_field = pd.merge(df_spec_this_field, df_grizli_this_field, on=['id'], how='left')    
         
         # ------merging speccat-----
         df_spec_this_field['field'] = this_field
-        df_spec_this_field = df_spec_this_field.rename(columns={'redshift': 'redshift_grizli'})
-        df_master_speccat = pd.concat([df_master_speccat, df_spec_this_field[speccat_cols_to_extract]])
+        try:
+            df_master_speccat = pd.concat([df_master_speccat, df_spec_this_field[speccat_cols_to_extract_wlfgr]])
+        except:
+            try:
+                df_master_speccat = pd.concat([df_master_speccat, df_spec_this_field[speccat_cols_to_extract_wlf]])
+            except:
+                df_master_speccat = pd.concat([df_master_speccat, df_spec_this_field[speccat_cols_to_extract_wgr]])
 
         # ------merging photcat-----
         photcat_filename = args.input_dir / this_field / 'Products' / f'{this_field}_photcat.fits'
@@ -1022,6 +1040,11 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
 
     df = pd.merge(df, df_master_speccat, on=['field', 'id'], how='left')    
     df = pd.merge(df, df_master_photcat, on=['field', 'id'], how='left')
+
+    # -------removing redshifts that disagree between linefinding and grizli---------------
+    nobj4 = len(df)
+    df = df[np.abs(df['redshift_grizli'] - df['redshift_linefinding']) < 0.1]
+    print(f'\tOut of the {nobj4} objects, {len(df)} had grizli and linefinding redshifts within 0.1 of each other..')
 
     # -------merge with COSMOS-Web photcat--------------
     cweb_photcat_name = args.root_dir / f'passage_data/{args.drv}/COSMOS/COSMOSWeb_mastercatalog_v1.1_only_objects_in_Huberty26.fits'
@@ -1373,8 +1396,8 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
         args.grad_filename = args.fits_dir / f'stacked_{args.binby_text}{args.binned_text}{args.fold_text}_fits_allbins_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}.fits'
 
         # --------------curtailiug bins for debugging-------------------
-        #if args.debug_bin: bin_list = bin_list[10:11]
-        if args.debug_bin: bin_list = bin_list[8:9]
+        if args.debug_bin: bin_list = bin_list[1:2]
+        #if args.debug_bin: bin_list = bin_list[8:9]
 
         # ------determining field-specific paths, etc-----------
         if args.skip_re_scaling:

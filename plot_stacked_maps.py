@@ -958,8 +958,20 @@ def spatial_bin_stacked_maps(line_dict, args):
     noise = target_err[valid_mask]
 
     # ----------voronoi 2D binning------------------------------------
-    print(f'\nVoronoi binning {np.sum(valid_mask)} pixels (pre-filtered by {args.outer_mask_line} SNR >= {args.outer_mask_snr}) to target SNR = {args.target_snr} in {args.target_line}...')
-    bin_num, _, _, _, _, _, _, _ = voronoi_2d_binning(x_valid, y_valid, signal, noise, args.target_snr, plot=False, quiet=True)
+    target_snr = args.target_snr
+    vorbin_completed = False
+    while not vorbin_completed:
+        print(f'\nVoronoi binning {np.sum(valid_mask)} pixels (pre-filtered by {args.outer_mask_line} SNR >= {args.outer_mask_snr}) to target SNR = {target_snr} in {args.target_line}...')
+        try:
+            bin_num, _, _, _, _, _, _, _ = voronoi_2d_binning(x_valid, y_valid, signal, noise, target_snr, plot=False, quiet=True)
+            vorbin_completed = True
+        except ValueError:
+            print(f'\n!!!WARNING!!! Could not Voronoi bin to target SNR = {target_snr}; trying with reduced target SNR by 0.5...')
+            target_snr = target_snr - 0.5
+            if target_snr < 1.0:
+                sys.exit(f'Could not Voronoi bin, as target SNR {target_snr} reached below 1.0')
+
+
     unique_bins = np.unique(bin_num)
 
     # ----------Create 2D Bin ID Map----------
