@@ -305,6 +305,8 @@ def parse_args():
     parser.add_argument('--plot_minor_major_profile', dest='plot_minor_major_profile', action='store_true', default=False, help='Plot the minor axis and major axis radial profiles separately? Default is no.')
     parser.add_argument('--reset_bd', dest='reset_bd', action='store_true', default=False, help='Manually reset the Hbeta flux to Halpha/2.86 if the measured Balmer decrement happens to be < 2.86, while running NB? Default is no.')
     parser.add_argument('--nb_prior', dest='nb_prior', action='store_true', default=False, help='Use low-Z branch favoring prior while running NB? Default is no.')
+    parser.add_argument('--nb_mass_prior', dest='nb_mass_prior', action='store_true', default=False, help='Use Z branch as per mass, while running NB? Default is no.')
+    parser.add_argument('--nb_central_prior', dest='nb_central_prior', action='store_true', default=False, help='Use Z branch of the integrated measurement as the branch for all spatial bins, while running NB? Default is no.')
     parser.add_argument('--bin_spatial', action='store_true', default=False, help='Enable 2D Voronoi spatial binning on stacked line maps')
     parser.add_argument('--target_snr', type=float, default=2.0, help='Target S/N for Voronoi binning')
     parser.add_argument('--target_line', type=str, default='HB', help='Target line used for Voronoi binning S/N criteria')

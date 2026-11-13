@@ -67,7 +67,7 @@ def plot_stacked_line_maps(line_dict, args, bin_text='', cmin=None, cmax=None, t
             # --------plot SNR maps--------------
             if args.plot_snr:
                 if type(unp.std_devs(this_map.data)) == np.ndarray:
-                    axes[this_row_id][index3] = plot_2D_map(this_map, axes[this_row_id][index3], f'Stacked {this_line}: SNR', args, cmap='cividis', clabel='SNR', takelog=takelog, vmin=snr_min, vmax=snr_max, hide_xaxis=False, hide_yaxis=index3, hide_cbar=index3 < ncols - 1, hide_cbar_ticks=False, cticks_integer=True, plot_snr=True)
+                    axes[this_row_id][index3] = plot_2D_map(this_map, axes[this_row_id][index3], f'Stacked {this_line}: SNR', args, cmap='cividis', clabel='SNR', takelog=takelog, vmin=line_snr_min, vmax=line_snr_max, hide_xaxis=False, hide_yaxis=index3, hide_cbar=index3 < ncols - 1, hide_cbar_ticks=False, cticks_integer=True, plot_snr=True)
                     this_row_id += 1
 
             # ----------getting distance maps, in case radial profile plotting-------------
@@ -369,6 +369,64 @@ def get_Z_C19(line_dict, args):
     return logOH_map, logOH_int, nobj
 
 # --------------------------------------------------------------------------------------------------------------------
+def get_centralZ_prior(central_logOH, turnover=8.4, scale=0.08):
+    '''
+    Returns a NebulaBayes prior function that selects the lower Z branch if central_logOH < turnover,
+    and the upper Z branch otherwise. Falls back to Uniform if central_logOH is NaN.
+    '''
+    def custom_centralZ_prior(DF_obs, obs_flux_arr_dict, obs_err_arr_dict, grids_dict, grid_spec, grid_rel_err):
+        if not np.isfinite(central_logOH):
+            print(f'Central logOH is NaN; falling back to Uniform prior')
+            return np.ones(grid_spec.shape)
+
+        param_ind = grid_spec.param_names.index('12 + log O/H')
+        all_logOH_values = grid_spec.param_values_arrs[param_ind]  # Sorted 1D array
+
+        if central_logOH < turnover:  # Select lower Z branch (suppress Z > turnover)
+            print(f'Using smooth step prior favouring lower Z branch since central logOH ({central_logOH:.2f}) < {turnover}')
+            logOH_1D_prior = 1.0 / (1.0 + np.exp((all_logOH_values - turnover) / scale))
+        else:  # Select upper Z branch (suppress Z < turnover)
+            print(f'Using smooth step prior favouring upper Z branch since central logOH ({central_logOH:.2f}) >= {turnover}')
+            logOH_1D_prior = 1.0 / (1.0 + np.exp((turnover - all_logOH_values) / scale))
+
+        slice_ND = [np.newaxis for _ in grid_spec.shape]
+        slice_ND[param_ind] = slice(None)
+
+        prior = np.ones(grid_spec.shape) * logOH_1D_prior[tuple(slice_ND)]
+        return prior
+
+    return custom_centralZ_prior
+
+# --------------------------------------------------------------------------------------------------------------------
+def get_mass_prior(log_mass, log_mass_turnover=8.2, turnover=8.4, scale=0.08):
+    '''
+    Returns a NebulaBayes prior function that selects the lower Z branch if log_mass < log_mass_turnover,
+    and the upper Z branch otherwise. Expects log_mass in log10(M_star / M_sun).
+    '''
+    def custom_mass_prior(DF_obs, obs_flux_arr_dict, obs_err_arr_dict, grids_dict, grid_spec, grid_rel_err):
+        if not np.isfinite(log_mass):
+            print(f'Galaxy log_mass is NaN; falling back to Uniform prior')
+            return np.ones(grid_spec.shape)
+
+        param_ind = grid_spec.param_names.index('12 + log O/H')
+        all_logOH_values = grid_spec.param_values_arrs[param_ind]  # Sorted 1D array
+
+        if log_mass < log_mass_turnover:  # Select lower Z branch (suppress Z > turnover)
+            print(f'Using smooth step prior favouring lower Z branch since log(M*) ({log_mass:.2f}) < {log_mass_turnover}')
+            logOH_1D_prior = 1.0 / (1.0 + np.exp((all_logOH_values - turnover) / scale))
+        else:  # Select upper Z branch (suppress Z < turnover)
+            print(f'Using smooth step prior favouring upper Z branch since log(M*) ({log_mass:.2f}) >= {log_mass_turnover}')
+            logOH_1D_prior = 1.0 / (1.0 + np.exp((turnover - all_logOH_values) / scale))
+
+        slice_ND = [np.newaxis for _ in grid_spec.shape]
+        slice_ND[param_ind] = slice(None)
+
+        prior = np.ones(grid_spec.shape) * logOH_1D_prior[tuple(slice_ND)]
+        return prior
+
+    return custom_mass_prior
+
+# --------------------------------------------------------------------------------------------------------------------
 def custom_lower_branch_prior(DF_obs, obs_flux_arr_dict, obs_err_arr_dict, grids_dict, grid_spec, grid_rel_err):
     '''
     Calculates custom prior to favour the lower Z branch
@@ -387,7 +445,7 @@ def custom_lower_branch_prior(DF_obs, obs_flux_arr_dict, obs_err_arr_dict, grids
     return prior
 
 # --------------------------------------------------------------------------------------------------------------------
-def compute_Z_NB(line_label_array, line_waves_array, line_flux_array, ID_map=None):
+def compute_Z_NB(line_label_array, line_waves_array, line_flux_array, args, ID_map=None):
     '''
     Calculates and returns the NebulaBayes metallicity given a list of observed line fluxes
     '''
@@ -427,7 +485,6 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array, ID_map=Non
     net_mask_array = net_mask.flatten()
 
     # -----loading the NB HII region model grid---------
-    print(f'Deb390: line label array = {line_label_array}') ##
     NB_Model_HII = NB_Model("HII", line_list=line_label_array)
 
     out_dir = args.fits_dir / f'{bin_text}_NB_results'
@@ -498,7 +555,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array, ID_map=Non
                         'deredden': dered,
                         'propagate_dered_errors': dered,
                         'obs_wavelengths': line_waves if dered else None,
-                        'prior': custom_lower_branch_prior if args.nb_prior else 'Uniform',
+                        'prior': custom_lower_branch_prior if args.nb_prior else get_mass_prior(args.this_stack_mass) if args.nb_mass_prior else get_centralZ_prior(getattr(args, 'central_logOH', np.nan)) if args.nb_central_prior else 'Uniform',
                         }
                 
                 # -------running NB--------------
@@ -579,9 +636,10 @@ def get_Z_NB(line_dict, args):
             line_waves_array.append(rest_wave_dict[line] * 10) # factor of 10 to convert from nm to Angstroms
 
     # ----------calling NB----------------------
-    logOH_int = compute_Z_NB(line_label_array, line_waves_array, line_int_array)
+    logOH_int = compute_Z_NB(line_label_array, line_waves_array, line_int_array, args)
+    args.central_logOH = unp.nominal_values(logOH_int)
     #sys.exit(f'logOH_int = {logOH_int}; exiting here for test') ###        
-    logOH_map = compute_Z_NB(line_label_array, line_waves_array, line_map_array, ID_map=line_dict['bin_id_map'] if args.bin_spatial else None)
+    logOH_map = compute_Z_NB(line_label_array, line_waves_array, line_map_array, args, ID_map=line_dict['bin_id_map'] if args.bin_spatial else None)
 
     return logOH_map, logOH_int, line_label_array, np.min(nobj_array)
 
@@ -786,7 +844,7 @@ def plot_metallicity_map(logOH_map, args, bin_text='', Zmin=None, Zmax=None, bin
 
     # --------plot metallicity SNR maps--------------
     if args.plot_snr:
-        axes[this_row_id] = plot_2D_map(logOH_map, axes[this_row_id], f'logOH {args.Zdiag} SNR', args, cmap='plasma', clabel=r'SNR', takelog=False, vmin=snr_min, vmax=snr_max, hide_yaxis=False, hide_cbar=False, cticks_integer=True, plot_snr=True)
+        axes[this_row_id] = plot_2D_map(logOH_map, axes[this_row_id], f'logOH {args.Zdiag} SNR', args, cmap='plasma', clabel=r'SNR', takelog=False, vmin=Z_snr_min, vmax=Z_snr_max, hide_yaxis=False, hide_cbar=False, cticks_integer=True, plot_snr=True)
         this_row_id += 1
 
     # --------plot metallicity radial profile--------------
@@ -1088,7 +1146,7 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
         # --------plot SNR maps--------------
         if args.plot_snr:
             if type(unp.std_devs(this_map.data)) == np.ndarray:
-                axes_lines[this_row_id, index] = plot_2D_map(this_map, axes_lines[this_row_id, index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='SNR', takelog=takelog, vmin=snr_min, vmax=snr_max, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=index < n_lines - 1, hide_cbar_ticks=False, cticks_integer=True, annotate_minor_major=index == 0, plot_snr=True)
+                axes_lines[this_row_id, index] = plot_2D_map(this_map, axes_lines[this_row_id, index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='SNR', takelog=False, vmin=line_snr_min, vmax=line_snr_max, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=index < n_lines - 1, hide_cbar_ticks=False, cticks_integer=True, annotate_minor_major=index == 0, plot_snr=True)
                 this_row_id += 1
 
         # -------plot radial profile-------
@@ -1110,7 +1168,8 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
 
     # --------plot metallicity SNR maps--------------
     if args.plot_snr:
-        axes_Z[this_row_id, 0] = plot_2D_map(logOH_map, axes_Z[this_row_id, 0], f'logOH {args.Zdiag} SNR', args, cmap='plasma', clabel=r'SNR', takelog=False, vmin=snr_min, vmax=snr_max, hide_yaxis=False, hide_cbar=False, cticks_integer=True, plot_snr=True)
+        linOH_map = np.ma.masked_where(logOH_map.mask, 10**(logOH_map.data - 12)) # in order to propagate SNR in linear space appropriately, for visualisation
+        axes_Z[this_row_id, 0] = plot_2D_map(linOH_map, axes_Z[this_row_id, 0], f'logOH {args.Zdiag} SNR', args, cmap='plasma', clabel=r'SNR', takelog=False, vmin=Z_snr_min, vmax=Z_snr_max, hide_yaxis=False, hide_cbar=False, cticks_integer=True, plot_snr=True)
         this_row_id += 1
 
     # --------plot metallicity radial profile--------------
@@ -1276,7 +1335,8 @@ if __name__ == "__main__":
     if args.re_limit is None: args.re_limit = 2.
     args.fontfactor = 1.5
     args.dered_in_NB = True
-    snr_min, snr_max = 0, 3
+    line_snr_min, line_snr_max = 0, 20
+    Z_snr_min, Z_snr_max = 0, 3
 
     # ------------reading and binning dataframe-------------
     df, bin_list, args = get_binned_df(args, required_lines=required_lines, sfms=sfms)
@@ -1343,6 +1403,7 @@ if __name__ == "__main__":
         if args.plot_metallicity or args.plot_line_and_metallicity:
             metallicity_map_fits_file = args.fits_dir / f'stacked{args.binned_text}{args.fold_text}_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.fits'
             if not os.path.exists(metallicity_map_fits_file) or args.clobber:
+                args.this_stack_mass = df[(df['bin_intervals'] == this_delta_sfms_bin) & (df['mass_intervals'] == this_mass_bin)]['log_mass'].median()
                 logOH_map, logOH_int, nobj = get_metallicity_map(line_dict, args)
                 if logOH_map is None:
                     print(f'Unable to compute {args.Zdiag} metallicity for {bin_text}. So Skipping.')

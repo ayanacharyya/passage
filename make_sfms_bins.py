@@ -1284,7 +1284,7 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
 
     args.deproject_text = '_nodeproject' if args.skip_deproject else ''
     args.rescale_text = '_norescale' if args.skip_re_scaling else ''
-    if 'NB' in args.Zdiag: args.C25_text = '_resetBD' if args.reset_bd else '_Zprior' if args.nb_prior else ''
+    if 'NB' in args.Zdiag: args.C25_text = '_resetBD' if args.reset_bd else '_Zprior' if args.nb_prior else '_Z_massprior' if args.nb_mass_prior else '_Z_centralprior' if args.nb_central_prior else ''
     else: args.C25_text = '_wC25' if args.use_C25 else ''
     args.fold_text = '_folded' if args.fold_maps else ''
     args.binned_text = f'_binned_{args.target_line}_{args.target_snr}' if args.bin_spatial else ''
@@ -1396,8 +1396,8 @@ def get_binned_df(args, skip_binning=False, df=None, method_text='', skip_stacki
         args.grad_filename = args.fits_dir / f'stacked_{args.binby_text}{args.binned_text}{args.fold_text}_fits_allbins_Zdiag_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}.fits'
 
         # --------------curtailiug bins for debugging-------------------
-        if args.debug_bin: bin_list = bin_list[1:2]
-        #if args.debug_bin: bin_list = bin_list[8:9]
+        #if args.debug_bin: bin_list = bin_list[1:2]
+        if args.debug_bin: bin_list = bin_list[8:9]
 
         # ------determining field-specific paths, etc-----------
         if args.skip_re_scaling:
