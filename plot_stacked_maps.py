@@ -636,6 +636,7 @@ def get_Z_NB(line_dict, args):
             line_waves_array.append(rest_wave_dict[line] * 10) # factor of 10 to convert from nm to Angstroms
 
     # ----------calling NB----------------------
+    args.central_logOH = np.nan
     logOH_int = compute_Z_NB(line_label_array, line_waves_array, line_int_array, args)
     args.central_logOH = unp.nominal_values(logOH_int)
     #sys.exit(f'logOH_int = {logOH_int}; exiting here for test') ###        
