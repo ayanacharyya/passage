@@ -398,7 +398,7 @@ def get_centralZ_prior(central_logOH, turnover=8.4, scale=0.08):
     return custom_centralZ_prior
 
 # --------------------------------------------------------------------------------------------------------------------
-def get_mass_prior(log_mass, log_mass_turnover=8.2, turnover=8.4, scale=0.08):
+def get_mass_prior(log_mass, log_mass_turnover=8.8, turnover=8.4, scale=0.08):
     '''
     Returns a NebulaBayes prior function that selects the lower Z branch if log_mass < log_mass_turnover,
     and the upper Z branch otherwise. Expects log_mass in log10(M_star / M_sun).
@@ -487,7 +487,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array, args, ID_m
     # -----loading the NB HII region model grid---------
     NB_Model_HII = NB_Model("HII", line_list=line_label_array)
 
-    out_dir = args.fits_dir / f'{bin_text}_NB_results'
+    out_dir = args.fits_dir / f'{args.bin_text}_NB_results'
     out_subdirs = [out_dir / 'prior_plots', out_dir / 'likelihood_plots', out_dir / 'posterior_plots', out_dir / 'best_model_catalogs', out_dir / 'param_estimates_catalogs']
     for this_out_subdir in out_subdirs: this_out_subdir.mkdir(exist_ok=True, parents=True)
 
@@ -1360,27 +1360,27 @@ if __name__ == "__main__":
         if args.debug_bin and nbin_good > 0: continue
         start_time3 = datetime.now()
         if args.bin_by_distance:
-            bin_text = f'delta_sfms_bin_{this_bin.left}-{this_bin.right}'
+            args.bin_text = f'delta_sfms_bin_{this_bin.left}-{this_bin.right}'
         elif args.bin_by_distance_mass:
             this_delta_sfms_bin = this_bin[0]
             this_mass_bin = this_bin[1]
-            bin_text = f'delta_sfms_bin_{this_delta_sfms_bin.left}-{this_delta_sfms_bin.right}_mass_bin_{this_mass_bin.left}-{this_mass_bin.right}'
+            args.bin_text = f'delta_sfms_bin_{this_delta_sfms_bin.left}-{this_delta_sfms_bin.right}_mass_bin_{this_mass_bin.left}-{this_mass_bin.right}'
         elif args.bin_by_sfh_mass:
             this_delta_sfms_bin = this_bin[0]
             this_mass_bin = this_bin[1]
-            bin_text = f'tform_ratio_bin_{this_delta_sfms_bin.left}-{this_delta_sfms_bin.right}_mass_bin_{this_mass_bin.left}-{this_mass_bin.right}'
+            args.bin_text = f'tform_ratio_bin_{this_delta_sfms_bin.left}-{this_delta_sfms_bin.right}_mass_bin_{this_mass_bin.left}-{this_mass_bin.right}'
         else:
-            bin_text = f'logmassbin_{this_bin[0].left}-{this_bin[0].right}_logsfrbin_{this_bin[1].left}-{this_bin[1].right}'
-        print(f'\n\tStarting ({index2 + 1}/{len(bin_list)}) {bin_text}..', end=' ')
+            args.bin_text = f'logmassbin_{this_bin[0].left}-{this_bin[0].right}_logsfrbin_{this_bin[1].left}-{this_bin[1].right}'
+        print(f'\n\tStarting ({index2 + 1}/{len(bin_list)}) {args.bin_text}..', end=' ')
         
         # -------reading previously saved stacked fits file------------
-        stacked_filename = args.fits_dir / f'stacked_maps{args.deproject_text}{args.rescale_text}_{bin_text}.fits'
+        stacked_filename = args.fits_dir / f'stacked_maps{args.deproject_text}{args.rescale_text}_{args.bin_text}.fits'
         if not stacked_filename.exists():
-            print(f'No stacked fits file found for {bin_text}, so skipping this bin.')
+            print(f'No stacked fits file found for {args.bin_text}, so skipping this bin.')
             continue
         line_dict = read_stacked_maps(stacked_filename, args)
         if not line_dict:
-            print(f'No lines found for {bin_text}. So Skipping.')
+            print(f'No lines found for {args.bin_text}. So Skipping.')
             continue
         nbin_good += 1
 
@@ -1397,8 +1397,8 @@ if __name__ == "__main__":
         
         # ---------------plot emission line maps of this bin---------------------
         if args.plot_line_maps:
-            fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=0)
-            save_fig(fig_em, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_line_maps{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
+            fig_em, line_list = plot_stacked_line_maps(line_dict, args, bin_text=args.bin_text, takelog=True, cmin=-3, cmax=0)
+            save_fig(fig_em, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_line_maps{args.deproject_text}{args.rescale_text}_{args.bin_text}.png', args) # saving the figure
 
         # -----------------computing metallicity maps of this bin---------------
         if args.plot_metallicity or args.plot_line_and_metallicity:
@@ -1407,7 +1407,7 @@ if __name__ == "__main__":
                 args.this_stack_mass = df[(df['bin_intervals'] == this_delta_sfms_bin) & (df['mass_intervals'] == this_mass_bin)]['log_mass'].median()
                 logOH_map, logOH_int, nobj = get_metallicity_map(line_dict, args)
                 if logOH_map is None:
-                    print(f'Unable to compute {args.Zdiag} metallicity for {bin_text}. So Skipping.')
+                    print(f'Unable to compute {args.Zdiag} metallicity for {args.bin_text}. So Skipping.')
                     continue
                 else:
                     write_metallicity_map(logOH_map, logOH_int, metallicity_map_fits_file, args, nobj=nobj) # saving the metallicity maps as fits files
@@ -1416,12 +1416,12 @@ if __name__ == "__main__":
         
         # -----------------plot metallicity maps of this bin---------------
         if args.plot_metallicity:
-            fig_met, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_metallicity_map(logOH_map, args, bin_text=bin_text, Zmin=None, Zmax=None, bin_ID_map=line_dict['bin_id_map'] if args.bin_spatial else None)
+            fig_met, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_metallicity_map(logOH_map, args, bin_text=args.bin_text, Zmin=None, Zmax=None, bin_ID_map=line_dict['bin_id_map'] if args.bin_spatial else None)
             save_fig(fig_met, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -----------------plot line maps and metallicity maps of this bin---------------
         if args.plot_line_and_metallicity:
-            fig_met, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=bin_text, takelog=True, cmin=-3, cmax=0, Zmin=None, Zmax=None)
+            fig_met, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=args.bin_text, takelog=True, cmin=-3, cmax=0, Zmin=None, Zmax=None)
             save_fig(fig_met, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_line_and_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
 
         # -------------save fit results to dataframe-----------------------
@@ -1449,12 +1449,12 @@ if __name__ == "__main__":
 
         # -----------------plot line maps and metallicity maps of this bin---------------
         if args.plot_line_and_bpt:
-            fig_bpt = plot_line_and_bpt_maps(line_dict, args, bin_text=bin_text, takelog=True, cmin=-3.5, cmax=-2.5)
+            fig_bpt = plot_line_and_bpt_maps(line_dict, args, bin_text=args.bin_text, takelog=True, cmin=-3.5, cmax=-2.5)
             if fig_bpt is not None:
-                save_fig(fig_bpt, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_line_and_bpt_map_{args.AGN_diag}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
+                save_fig(fig_bpt, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_line_and_bpt_map_{args.AGN_diag}{args.deproject_text}{args.rescale_text}_{args.bin_text}.png', args) # saving the figure
 
         if len(bin_list) > 5: plt.close('all')
-        print(f'\nCompleted bin {bin_text} in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
+        print(f'\nCompleted bin {args.bin_text} in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
     
     # --------------------save master dataframe-----------------------------------
     if nbin_good > 1 and args.plot_radial_profiles:

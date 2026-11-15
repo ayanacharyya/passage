@@ -324,7 +324,7 @@ def make_heatmap_distance(ax, df, sfms, quant, args, method_text='', cmap='virid
         #m_grid = np.linspace(row['log_mass_min'], row['log_mass_max'], 50)
         m_grid = np.linspace(row[f'log_mass_bin'].left, row[f'log_mass_bin'].right, 50)
         sfms_line = sfms_func(m_grid)
-        
+
         color = sm.to_rgba(row[quant])
         ax.fill_between(m_grid, sfms_line + interval.left, sfms_line + interval.right, color=color, alpha=None if np.isnan(row[quant]) else 0.8, edgecolor='w' if args.fortalk else 'k', lw=0.5)
         
@@ -455,7 +455,7 @@ label_dict = {'minor_logOH_grad': 'Minor' + r'$\nabla$Z$_r$ [dex/R$_e$]',\
 lim_dict = {'minor_logOH_grad': [-0.5, 0.5],\
                 'major_logOH_grad': [-0.5, 0.5],\
                 'radial_logOH_grad': [-0.5, 0.5],\
-                'logOH_int': [None, None], # [7.0, 9.0],\
+                'logOH_int': [7.0, 9.0],\
                 'delta_sfms_median': [-0.5, 0.5],\
                 'log_mass_median': [7.9, 10.1],\
                 'tform_ratio_median': [0, 1],\
@@ -503,7 +503,7 @@ if __name__ == "__main__":
         # ------------reading and binning dataframe-------------
         interval_cols = ['delta_sfms_bin', 'log_mass_bin', 'log_sfr_bin', 'mass_interval', 'mass_intervals', 'bin_intervals', 'sfr_interval', 'sfr_intervals']
         df = df_input.copy()
-        df, bin_list, args = get_binned_df(args, df=df, skip_stacking=True, required_lines=required_lines, sfms=sfms)
+        df, bin_list, args = get_binned_df(args, df=df, required_lines=required_lines, sfms=sfms)
         for col in interval_cols:
             if col in df: 
                 try: df[col] = fix_interval_precision(df[col], precision=3)
@@ -518,7 +518,7 @@ if __name__ == "__main__":
         # -------------merging the two dataframes-----------------------
         if args.bin_by_distance_mass:
             df2 = df.rename(columns={'mass_interval':'log_mass_bin', 'mass_intervals':'log_mass_bin', 'bin_intervals':'delta_sfms_bin'})
-            df2 = df2.groupby(['delta_sfms_bin', 'log_mass_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()
+            df2 = df2.groupby(['delta_sfms_bin', 'log_mass_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median'), logOH_indiv_median=('logOH_indiv_int', 'median'), logOH_indiv_median_u=('logOH_indiv_int_u', 'median')).reset_index()
             df_grad = pd.merge(df_grad, df2, on=['delta_sfms_bin', 'log_mass_bin'], how='left').reset_index(drop=True)
         elif args.bin_by_distance:
             df2 = df.rename(columns={'bin_intervals':'delta_sfms_bin'})

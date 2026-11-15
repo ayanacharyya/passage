@@ -276,6 +276,7 @@ def parse_args():
     parser.add_argument('--sn_cut_ha', metavar='sn_cut_ha', type=float, action='store', default=None, help='Restricts the sample to sn_Ha < sn_cut_Ha. Default is None, i.e., no cut')
     parser.add_argument('--sn_cut_hb', metavar='sn_cut_hb', type=float, action='store', default=None, help='Restricts the sample to sn_Hb < sn_cut_Hb. Default is None, i.e., no cut')
     parser.add_argument('--sn_cut_all', metavar='sn_cut_all', type=float, action='store', default=None, help='Restricts the sample to S/N of ALL required lines to < sn_cut_all. Default is None, i.e., no cut')
+    parser.add_argument('--clobber_sample', dest='clobber_sample', action='store_true', default=False, help='Re-make the sample dataframe? Default is no.')
 
     # ---- args added for stack_emission_maps.py ------------
     parser.add_argument('--debug_align', dest='debug_align', action='store_true', default=False, help='Debug the alignment, deprojection, rotation of emission line maps? Default is no.')

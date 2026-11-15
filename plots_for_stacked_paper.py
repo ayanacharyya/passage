@@ -95,7 +95,7 @@ def plot_MZR_literature(ax):
     return ax
 
 # --------------------------------------------------------------------------------------------------------------------
-def plot_stacked_MZR(df, args, xcol='log_mass_median', ycol='logOH_int', colorcol=None, cmap='RdBu', qualifiers=''):
+def plot_stacked_MZR(df, args, xcol='log_mass_median', ycol='logOH_int', colorcol=None, cmap='RdBu', qualifiers='', df_sample=None):
     '''
     Plots the stacked mass-metallicity relation, overplotted with relations from the literature
     Saves the figure
@@ -119,6 +119,23 @@ def plot_stacked_MZR(df, args, xcol='log_mass_median', ycol='logOH_int', colorco
     if f'{ycol}_u' in df:
         ax.errorbar(df[xcol], df[ycol], yerr=df[f'{ycol}_u'], c='grey', lw=0.7, fmt='none', alpha=1)
 
+    # -----plot median of individuals in the stack-----------
+    if 'logOH_indiv_median' in df:
+        print(f'Overplotting median of integrated metallicities of individual galaxies in each stack..')
+        ycol2 = 'logOH_indiv_median'
+        p = ax.scatter(df[xcol], df[ycol2], s=50, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker='s')
+        if f'{ycol2}_u' in df:
+            ax.errorbar(df[xcol], df[ycol2], yerr=df[f'{ycol2}_u'], c='grey', lw=0.5, fmt='none', alpha=1)
+
+    # -----plot individuals in the stack-----------
+    if df_sample is not None: 
+        print(f'Overplotting integrated metallicities of individual galaxies in each stack..')
+        ycol2 = 'logOH_indiv_int'
+        p = ax.scatter(df_sample['log_mass'], df_sample[ycol2], s=20, c=df_sample['delta_sfms'], lw=0.3, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker='*')
+        if f'{ycol2}_u' in df:
+            ax.errorbar(df_sample['log_mass'], df_sample[ycol2], yerr=df_sample[f'{ycol2}_u'], c='grey', lw=0.3, fmt='none', alpha=1)
+
+       
     # -----plot literature---------
     ax = plot_MZR_literature(ax)
     args.fontfactor *= 1.3
@@ -753,14 +770,9 @@ if __name__ == "__main__":
     if args.re_limit is None: args.re_limit = 2.
     args.fontfactor = 1.4
     
-    # ---------reading in the master SED catalog----------------
-    passage_catalog_filename = args.output_dir / 'catalogs' / passage_catalog
-    df_input, args = get_stacking_sample(passage_catalog_filename, args, required_lines=required_lines, sfms=sfms)
-
     # ------------reading and binning dataframe-------------
     interval_cols = ['delta_sfms_bin', 'log_mass_bin', 'log_sfr_bin', 'mass_interval', 'mass_intervals', 'bin_intervals', 'sfr_interval', 'sfr_intervals']
-    df = df_input.copy()
-    df, bin_list, args = get_binned_df(args, df=df, skip_stacking=True, required_lines=required_lines, sfms=sfms)
+    df, bin_list, args = get_binned_df(args, required_lines=required_lines, sfms=sfms)
     for col in interval_cols:
         if col in df: 
             try: df[col] = fix_interval_precision(df[col], precision=3)
@@ -775,7 +787,7 @@ if __name__ == "__main__":
     # -------------merging the two dataframes-----------------------
     if args.bin_by_distance_mass:
         df2 = df.rename(columns={'mass_interval':'log_mass_bin', 'mass_intervals':'log_mass_bin', 'bin_intervals':'delta_sfms_bin'})
-        df2 = df2.groupby(['delta_sfms_bin', 'log_mass_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median')).reset_index()
+        df2 = df2.groupby(['delta_sfms_bin', 'log_mass_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median'), logOH_indiv_median=('logOH_indiv_int', 'median'), logOH_indiv_median_u=('logOH_indiv_int_u', 'median')).reset_index()
         df_grad = pd.merge(df_grad, df2, on=['delta_sfms_bin', 'log_mass_bin'], how='left').reset_index(drop=True)
     elif args.bin_by_distance:
         df2 = df.rename(columns={'bin_intervals':'delta_sfms_bin'})
@@ -799,8 +811,8 @@ if __name__ == "__main__":
     
     results_dict = compute_correlations(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', qualifiers=qualifiers)
     
-    fig_mzgr = plot_stacked_MZGR(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
-    fig_corr = plot_correlation_summary_hatched(results_dict, args, qualifiers=qualifiers)
-    fig_mzr = plot_stacked_MZR(df_grad, args, xcol='log_mass_median', ycol='logOH_int', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
+    #fig_mzgr = plot_stacked_MZGR(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
+    #fig_corr = plot_correlation_summary_hatched(results_dict, args, qualifiers=qualifiers)
+    fig_mzr = plot_stacked_MZR(df_grad, args, xcol='log_mass_median', ycol='logOH_int', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap, df_sample=df)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
