@@ -450,8 +450,12 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array, args, ID_m
     Calculates and returns the NebulaBayes metallicity given a list of observed line fluxes
     '''
     line_flux_array = [np.atleast_1d(item) for item in line_flux_array]
-    
     map_shape = np.shape(line_flux_array[0])
+
+    if len(np.shape(args.this_stack_mass)) == 0:
+        this_stack_mass_arr = np.tile(args.this_stack_mass, map_shape).flatten()
+    else:
+        this_stack_mass_arr = args.this_stack_mass
 
     if ID_map is None:
         if len(map_shape) == 1: npixels = map_shape[0]
@@ -555,7 +559,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array, args, ID_m
                         'deredden': dered,
                         'propagate_dered_errors': dered,
                         'obs_wavelengths': line_waves if dered else None,
-                        'prior': custom_lower_branch_prior if args.nb_prior else get_mass_prior(args.this_stack_mass) if args.nb_mass_prior else get_centralZ_prior(getattr(args, 'central_logOH', np.nan)) if args.nb_central_prior else 'Uniform',
+                        'prior': custom_lower_branch_prior if args.nb_prior else get_mass_prior(this_stack_mass_arr[index]) if args.nb_mass_prior else get_centralZ_prior(getattr(args, 'central_logOH', np.nan)) if args.nb_central_prior else 'Uniform',
                         }
                 
                 # -------running NB--------------
@@ -1402,7 +1406,7 @@ if __name__ == "__main__":
 
         # -----------------computing metallicity maps of this bin---------------
         if args.plot_metallicity or args.plot_line_and_metallicity:
-            metallicity_map_fits_file = args.fits_dir / f'stacked{args.binned_text}{args.fold_text}_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.fits'
+            metallicity_map_fits_file = args.fits_dir / f'stacked{args.binned_text}{args.fold_text}_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{args.bin_text}.fits'
             if not os.path.exists(metallicity_map_fits_file) or args.clobber:
                 args.this_stack_mass = df[(df['bin_intervals'] == this_delta_sfms_bin) & (df['mass_intervals'] == this_mass_bin)]['log_mass'].median()
                 logOH_map, logOH_int, nobj = get_metallicity_map(line_dict, args)
@@ -1417,12 +1421,12 @@ if __name__ == "__main__":
         # -----------------plot metallicity maps of this bin---------------
         if args.plot_metallicity:
             fig_met, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_metallicity_map(logOH_map, args, bin_text=args.bin_text, Zmin=None, Zmax=None, bin_ID_map=line_dict['bin_id_map'] if args.bin_spatial else None)
-            save_fig(fig_met, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
+            save_fig(fig_met, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{args.bin_text}.png', args) # saving the figure
 
         # -----------------plot line maps and metallicity maps of this bin---------------
         if args.plot_line_and_metallicity:
             fig_met, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=args.bin_text, takelog=True, cmin=-3, cmax=0, Zmin=None, Zmax=None)
-            save_fig(fig_met, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_line_and_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{bin_text}.png', args) # saving the figure
+            save_fig(fig_met, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_line_and_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{args.bin_text}.png', args) # saving the figure
 
         # -------------save fit results to dataframe-----------------------
         if args.plot_radial_profiles and (args.plot_metallicity or args.plot_line_and_metallicity):

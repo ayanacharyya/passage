@@ -52,7 +52,20 @@ def plot_MZR_literature(ax):
     for i in range(len(zahid_data)):
         xarr = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 20)
         ax.plot(xarr, zahid_func(xarr, zahid_data['Z0'][i], zahid_data['M0'][i], zahid_data['gamma'][i]), color=col_ar[i], lw=2, ls=zahid_data['linestyle'][i], label= 'z = '+str(zahid_data['Redshift'][i]) + '; ' + zahid_data['Sample'][i], zorder=-5)
-
+    '''
+    # ----------1D stacked results from Farhan but with NB metallicities-----------
+    NB_text = '_resetBD' if args.reset_bd else '_Zprior' if args.nb_prior else '_Z_massprior' if args.nb_mass_prior else '_Z_centralprior' if args.nb_central_prior else ''
+    infilename = args.output_dir / 'catalogs' / f'logOH_1dstacking{NB_text}.csv'
+    if os.path.exists(infilename):
+        print(f'Overplotting 1D stacked metallicities..')
+        df = pd.read_csv(infilename)
+        xcol, ycol = 'log_mass', 'logOH'
+        ax.scatter(df[xcol], df[ycol], s=70, c='yellow', lw=1, edgecolors='brown', marker='D', zorder=-3, label='1D stacked')
+        if f'{ycol}_u' in df:
+            ax.errorbar(df[xcol], df[ycol], yerr=df[f'{ycol}_u'], c='brown', lw=0.7, fmt='none', alpha=1, zorder=-5)
+    else:
+        print(f'Not overplotting 1D stacked metallicities..')
+    '''
     # -------------Hasan+26 MZR--------------------------
     H26_coeff = [-0.06, 0.31, 8.21] # from Farhan's Fig 11
     logOH_mid = np.poly1d(H26_coeff)(xarr - 9) # from Farhan's Eq 1
@@ -118,7 +131,7 @@ def plot_stacked_MZR(df, args, xcol='log_mass_median', ycol='logOH_int', colorco
     p = ax.scatter(df[xcol], df[ycol], s=100, c=color, lw=1, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker='o')
     if f'{ycol}_u' in df:
         ax.errorbar(df[xcol], df[ycol], yerr=df[f'{ycol}_u'], c='grey', lw=0.7, fmt='none', alpha=1)
-
+    '''
     # -----plot median of individuals in the stack-----------
     if 'logOH_indiv_median' in df:
         print(f'Overplotting median of integrated metallicities of individual galaxies in each stack..')
@@ -134,8 +147,7 @@ def plot_stacked_MZR(df, args, xcol='log_mass_median', ycol='logOH_int', colorco
         p = ax.scatter(df_sample['log_mass'], df_sample[ycol2], s=20, c=df_sample['delta_sfms'], lw=0.3, vmin=cmin, vmax=cmax, edgecolors='k', cmap=cmap, marker='*')
         if f'{ycol2}_u' in df:
             ax.errorbar(df_sample['log_mass'], df_sample[ycol2], yerr=df_sample[f'{ycol2}_u'], c='grey', lw=0.3, fmt='none', alpha=1)
-
-       
+    '''
     # -----plot literature---------
     ax = plot_MZR_literature(ax)
     args.fontfactor *= 1.3
@@ -811,8 +823,8 @@ if __name__ == "__main__":
     
     results_dict = compute_correlations(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', qualifiers=qualifiers)
     
-    #fig_mzgr = plot_stacked_MZGR(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
-    #fig_corr = plot_correlation_summary_hatched(results_dict, args, qualifiers=qualifiers)
+    fig_mzgr = plot_stacked_MZGR(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
+    fig_corr = plot_correlation_summary_hatched(results_dict, args, qualifiers=qualifiers)
     fig_mzr = plot_stacked_MZR(df_grad, args, xcol='log_mass_median', ycol='logOH_int', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap, df_sample=df)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
