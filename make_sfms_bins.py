@@ -941,13 +941,6 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
             df = df[df['field'].isin(fields_with_2PA)]
             print(f'\tOut of the {nobj0} objects, {len(df)} had {args.npa:d} PAs from {len(pd.unique(df["field"]))} fields ({pd.unique(df["field"])})')
 
-        # ----------discard based on redshift--------------------------
-        if args.zcut is not None:
-            zcut = [float(item) for item in args.zcut.split(',')]
-            nobj0 = len(df)
-            df = df[df['redshift'].between(zcut[0], zcut[1])]
-            print(f'\tOut of the {nobj0} objects, {len(df)} had {zcut[0]:.2f} < z < {zcut[1]:.2f} from {len(pd.unique(df["field"]))} fields ({pd.unique(df["field"])})')
-
         # ----------discard based on redshift flag--------------------------
         if args.cut_z_flag is not None:
             nobj1 = len(df)
@@ -1006,6 +999,13 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
         # --------curtailing to desired SFR-mass limits--------------
         df = df[(df['log_sfr'].between(log_sfr_bins.min(), log_sfr_bins.max())) & (df['log_mass'].between(log_mass_bins.min(), log_mass_bins.max()))]
         print(f'\tOut of which {len(df)} made the extreme mass-sfr cut: log mass within ({log_mass_bins.min()}, {log_mass_bins.max()}) amd log sfr within ({log_sfr_bins.min()}, {log_sfr_bins.max()})')
+
+        # ----------discard based on redshift--------------------------
+        if args.zcut is not None:
+            zcut = [float(item) for item in args.zcut.split(',')]
+            nobj0 = len(df)
+            df = df[df['redshift'].between(zcut[0], zcut[1])]
+            print(f'\tOut of the {nobj0} objects, {len(df)} had {zcut[0]:.2f} < z < {zcut[1]:.2f} from {len(pd.unique(df["field"]))} fields ({pd.unique(df["field"])})')
 
         # ------------------determine file and path names---------
         if args.do_all_fields:
@@ -1462,7 +1462,7 @@ def get_int_Z_NB(df, args):
 
         # ----------calling NB----------------------
         args.this_stack_mass = obj['log_mass']
-        logOH_int = compute_Z_NB(line_label_array, line_waves_array, line_int_array, args)
+        logOH_int = compute_Z_NB(line_label_array, line_waves_array, line_int_array, args, ID_map=obj['id'])
         df.loc[index, 'logOH_indiv_int'] = logOH_int.n
         df.loc[index, 'logOH_indiv_int_u'] = logOH_int.s
 

@@ -461,6 +461,8 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array, args, ID_m
         if len(map_shape) == 1: npixels = map_shape[0]
         else: npixels = map_shape[0] * map_shape[1]
         ID_map = np.arange(npixels)
+    else:
+        ID_map = np.atleast_1d(ID_map)
     IDs_array = ID_map.flatten()
     unique_IDs_array = np.unique(IDs_array)  
 
