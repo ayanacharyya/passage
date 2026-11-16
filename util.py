@@ -343,9 +343,9 @@ def parse_args():
     args.field = args.field_arr[0]
 
     if args.id is not None: args.id = [int(item) for item in args.id.split(',')]
-    if args.slice_at_quantity1 is not None: args.slice_at_quantity1 = [float(item) for item in args.slice_at_quantity1.split(',')]
-    if args.slice_at_quantity2 is not None: args.slice_at_quantity2 = [float(item) for item in args.slice_at_quantity2.split(',')]
-    if args.slice_at_quantity3 is not None: args.slice_at_quantity3 = [float(item) for item in args.slice_at_quantity3.split(',')]
+    if args.slice_at_quantity1 is not None: args.slice_at_quantity1 = [np.float32(item) for item in args.slice_at_quantity1.split(',')]
+    if args.slice_at_quantity2 is not None: args.slice_at_quantity2 = [np.float32(item) for item in args.slice_at_quantity2.split(',')]
+    if args.slice_at_quantity3 is not None: args.slice_at_quantity3 = [np.float32(item) for item in args.slice_at_quantity3.split(',')]
 
     if args.system == 'hd' and not os.path.exists('/Volumes/Elements/'): args.system = 'local'
     if args.system == 'ssd' and not os.path.exists('/Volumes/Ayan_SSD/'): args.system = 'local'

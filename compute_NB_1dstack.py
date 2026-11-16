@@ -11,7 +11,6 @@
 from header import *
 from util import *
 from plot_stacked_maps import compute_Z_NB
-from stack_emission_maps import correct_ha_F18
 
 start_time = datetime.now()
 

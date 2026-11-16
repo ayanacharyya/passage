@@ -367,7 +367,7 @@ if __name__ == "__main__":
         df_grid['log q'] = np.round(df_grid['log U'] + np.log10(3e10), 1)
 
         quant_names_dict = {'Z':'12 + log O/H', 'log(q)':'log q', 'log(P/k)':'log P/k', 'log(U)':'log U'}
-        line_label_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OIII-4363': 'OIII4363', 
+        line_label_dict = smart_dict({'OII': 'OII3726_29', 'Hb': 'Hbeta', 'OIII': 'OIII5007', 'OII,OIII':'OII3726_29,OIII5007', 'OIII-4363': 'OIII4363', 
                                       'OI-6302': 'OI6300', 'Ha': 'Halpha', 'NII':'NII6583', 'Ha,NII': 'Halpha,NII6583', 
                                       'SII': 'SII6716_31', 'NeIII': 'NeIII3869', 'NeIII,HeI': 'NeIII3869_HeI3889',
                                       'NeIII155000':'[NeIII]155000', 'NeII128000':'[NeII]128000'})
@@ -375,8 +375,8 @@ if __name__ == "__main__":
         quant_names = [quant_names_dict[quant] for quant in [args.quantity1, args.quantity2, args.quantity3]]
         df_ratios = df_grid[quant_names].sort_values(by=quant_names)
         df_ratios = df_ratios.rename(columns={v: k for k, v in quant_names_dict.items()})
-        df_ratios[f'{line_label_dict[args.xnum_line]}/{line_label_dict[args.xden_line]}'] = df_grid[line_label_dict[args.xnum_line]] / df_grid[line_label_dict[args.xden_line]]
-        df_ratios[f'{line_label_dict[args.ynum_line]}/{line_label_dict[args.yden_line]}'] = df_grid[line_label_dict[args.ynum_line]] / df_grid[line_label_dict[args.yden_line]]
+        df_ratios[f'{line_label_dict[args.xnum_line]}/{line_label_dict[args.xden_line]}'] = pd.Series(np.vstack([df_grid[line_label_dict[this_line]] for this_line in args.xnum_line.split(',')]).sum(axis=0)) / pd.Series(np.vstack([df_grid[line_label_dict[this_line]] for this_line in args.xden_line.split(',')]).sum(axis=0))
+        df_ratios[f'{line_label_dict[args.ynum_line]}/{line_label_dict[args.yden_line]}'] = pd.Series(np.vstack([df_grid[line_label_dict[this_line]] for this_line in args.ynum_line.split(',')]).sum(axis=0)) / pd.Series(np.vstack([df_grid[line_label_dict[this_line]] for this_line in args.yden_line.split(',')]).sum(axis=0))
 
     # --------plot the ratio grid---------------
     if args.plot_grid: fig_grid = plot_ratio_grid_fig(df_ratios, args)
