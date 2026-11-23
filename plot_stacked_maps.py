@@ -493,7 +493,8 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array, args, ID_m
     # -----loading the NB HII region model grid---------
     NB_Model_HII = NB_Model("HII", line_list=line_label_array)
 
-    out_dir = args.fits_dir / f'{args.bin_text}_NB_results'
+    NB_text = '_resetBD' if args.reset_bd else '_Zprior' if args.nb_prior else '_Z_massprior' if args.nb_mass_prior else '_Z_centralprior' if args.nb_central_prior else ''
+    out_dir = args.fits_dir / f'{args.bin_text}_NB_results{NB_text}'
     out_subdirs = [out_dir / 'prior_plots', out_dir / 'likelihood_plots', out_dir / 'posterior_plots', out_dir / 'best_model_catalogs', out_dir / 'param_estimates_catalogs']
     for this_out_subdir in out_subdirs: this_out_subdir.mkdir(exist_ok=True, parents=True)
 
@@ -518,7 +519,7 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array, args, ID_m
             # ------getting all line fluxes-------------
             obs_fluxes = obs_flux_array[:,index]
             obs_errs = obs_err_array[:, index]
-            print(f'\n\tDeb425: binID {this_ID} ({index + 1}/{len(obs_flux_array[0])}): initally nlines={len(obs_fluxes)}, {dict(zip(line_label_array, unp.uarray(obs_fluxes, obs_errs)))}') ##
+            print(f'\n\tDeb425: binID {this_ID} ({index + 1}/{len(obs_flux_array[0])}({len(unique_IDs_array)})): initally nlines={len(obs_fluxes)}, {dict(zip(line_label_array, unp.uarray(obs_fluxes, obs_errs)))}') ##
 
             # ------discarding lines with negative fluxes-------------
             good_obs = (obs_fluxes >= 0) & (obs_errs > 0)
@@ -554,8 +555,8 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array, args, ID_m
                 kwargs = {'prior_plot': os.path.join(out_dir, 'prior_plots', f'{this_ID}_HII_prior_plot.pdf'),
                         'likelihood_plot': os.path.join(out_dir, 'likelihood_plots', f'{this_ID}_HII_likelihood_plot.pdf'),
                         'posterior_plot': os.path.join( out_dir, 'posterior_plots', f'{this_ID}_HII_posterior_plot.pdf'),
-                        'estimate_table': os.path.join(out_dir, 'best_model_catalogs', f'{this_ID}_HII_param_estimates.csv'),
-                        'best_model_table': os.path.join(out_dir, 'param_estimates_catalogs', f'{this_ID}_HII_best_model.csv'),
+                        'estimate_table': os.path.join(out_dir, 'param_estimates_catalogs', f'{this_ID}_HII_param_estimates.csv'),
+                        'best_model_table': os.path.join(out_dir, 'best_model_catalogs', f'{this_ID}_HII_best_model.csv'),
                         'verbosity': 'ERROR',
                         'norm_line':norm_line,
                         'deredden': dered,
@@ -568,6 +569,22 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array, args, ID_m
                 print(f'\n\tDeb450: binID {this_ID}: finally nlines={len(obs_fluxes)}, {dict(zip(line_labels, unp.uarray(obs_fluxes, obs_errs)))}, norm_line = {norm_line}, balmer decrement (if available) = {balm_dec}, dereddening on the fly? {dered}') ##
                 Result = NB_Model_HII(obs_fluxes, obs_errs, line_labels, **kwargs)
 
+                # --------determining success-------------
+                best_tbl = Result.Posterior.best_model['table']
+                best_tbl = best_tbl.rename(columns={'Obs_dered':'Obs', 'Obs_S/N_dered':'Obs_S/N'})
+                obs_norm = best_tbl['Obs'].values
+                obs_err_norm = best_tbl['Obs'].values / best_tbl['Obs_S/N'].values
+                mod_norm = best_tbl['Model'].values
+                resid_std = best_tbl['Resid_Stds'].values
+
+                grid_rel_err = 0.15 # NebulaBayes default systematic grid uncertainty
+                tot_err = np.sqrt(obs_err_norm**2 + (grid_rel_err * mod_norm)**2)
+                sigma_pulls = np.abs(obs_norm - mod_norm) / tot_err
+                red_chi2 = np.sum(sigma_pulls**2) / max(len(obs_norm) - 1, 1)
+
+                is_out_of_grid = (np.max(sigma_pulls) > 3.0) or (red_chi2 > 5.0)
+                print(f'\n\tDeb585: bin ID {this_ID}: sig_pulls = {sigma_pulls}, max of sig_pulls = {np.max(sigma_pulls)}, red_chi2={red_chi2}, resid_std = {resid_std}, is out of grid = {is_out_of_grid}')
+
                 # -------estimating the resulting logOH, and associated uncertainty-----------
                 df_estimates = Result.Posterior.DF_estimates # pandas DataFrame
                 logOH_est = df_estimates.loc['12 + log O/H', 'Estimate']
@@ -576,13 +593,17 @@ def compute_Z_NB(line_label_array, line_waves_array, line_flux_array, args, ID_m
                 logOH_err = np.mean([logOH_est - logOH_low, logOH_high - logOH_est])
                 logOH = ufloat(logOH_est, logOH_err)
                 
-                print(f'Derived NB logOH = {logOH} for unique ID {this_ID} ({counter + 1} out of {len(unique_IDs_array)}) with {len(obs_fluxes)} good fluxes in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
-
+                if is_out_of_grid:
+                    print(f'Could not assign NB logOH = {logOH} for unique ID {this_ID} ({counter + 1} out of {len(unique_IDs_array)}) because observed flux was beyond grid limits, so assigning NaN instead')
+                    logOH = ufloat(np.nan, np.nan)
+                else:
+                    print(f'Derived NB logOH = {logOH} for unique ID {this_ID} ({counter + 1} out of {len(unique_IDs_array)}) with {len(obs_fluxes)} good fluxes in {timedelta(seconds=(datetime.now() - start_time4).seconds)}')
+                '''
                 best_model_dict = Result.Posterior.best_model
                 if 'Halpha' in line_labels and 'NII6583' in line_labels:
                     N2Ha_model = best_model_dict['table'].loc['NII6583', 'Model'] / best_model_dict['table'].loc['Halpha', 'Model']
                     print(f'N2Ha = {N2Ha_model}')
-            
+                '''
                 counter += 1
             else:
                 logOH = ufloat(np.nan, np.nan)
@@ -773,11 +794,17 @@ def plot_radial_profile(df, ax, args, ylim=None, xlim=None, hide_xaxis=False, hi
     # -------fitting by various methods--------------
     width = 1 if args.re_limit is None else 0.2 # 1 kpc or 0.2 Re
     df_minor = df[df['major_distance'] <= width]
+    if 'OH' in quant and 'bin_ID' in df_minor:
+        df_minor = df_minor.groupby(['bin_ID'], as_index=False).agg(np.mean)
     minor_linefit_odr = wls_fit(df_minor, quant_x='minor_distance', quant_y=quant)
     
     df_major = df[df['minor_distance'] <= width]
+    if 'OH' in quant and 'bin_ID' in df_major:
+        df_major = df_major.groupby(['bin_ID'], as_index=False).agg(np.mean)
     major_linefit_odr = wls_fit(df_major, quant_x='major_distance', quant_y=quant)
     
+    if 'OH' in quant and 'bin_ID' in df:
+        df = df.groupby(['bin_ID'], as_index=False).agg(np.mean)
     radial_linefit_odr = wls_fit(df, quant_x='distance', quant_y=quant)
 
     ax = plot_profile(df, ax, radial_linefit_odr, 'distance', quant, col='darkgoldenrod' if args.fortalk else 'grey', skip_fitting=skip_fitting)
@@ -821,8 +848,8 @@ def plot_2D_map(image, ax, label, args, cmap='cividis', clabel='', takelog=True,
     if args.plot_minor_major_profile or annotate_minor_major:
         width = 1 if args.re_limit is None else 0.2 # 1 kpc or 0.2 Re
         if args.fold_maps:
-            ax.add_patch(plt.Rectangle((0, 0), args.extent[1], width, lw=2, color='salmon', fill=False))
-            ax.add_patch(plt.Rectangle((0, 0), width, args.extent[3], lw=2, color='cornflowerblue', fill=False))
+            ax.add_patch(plt.Rectangle((0 + args.extent[0], 0 + args.extent[2]), args.extent[1], width, lw=4, color='salmon', fill=False))
+            ax.add_patch(plt.Rectangle((0 + args.extent[0], 0 + args.extent[2]), width, args.extent[3], lw=4, color='cornflowerblue', fill=False))
         else:
             ax.add_patch(plt.Rectangle((args.extent[0], -width/2), args.extent[1] - args.extent[0], width, lw=2, color='salmon', fill=False))
             ax.add_patch(plt.Rectangle((-width/2, args.extent[2]), width, args.extent[3] - args.extent[2], lw=2, color='cornflowerblue', fill=False))
@@ -1147,13 +1174,13 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
         # --------plot data map----------
         this_row_id = 0
         if type(unp.nominal_values(this_map.data)) == np.ndarray:
-            axes_lines[this_row_id, index] = plot_2D_map(this_map, axes_lines[this_row_id, index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='Log (Normalised Line Flux)' if takelog else 'Normalised Line Flux', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=args.plot_snr, hide_yaxis=(index > 0), hide_cbar=index < n_lines - 1, hide_cbar_ticks=False, cticks_integer=True, annotate_minor_major=index == 0)
+            axes_lines[this_row_id, index] = plot_2D_map(this_map, axes_lines[this_row_id, index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='Log (Normalised flux)' if takelog else 'Normalised flux', takelog=takelog, vmin=cmin, vmax=cmax, hide_xaxis=args.plot_snr, hide_yaxis=(index > 0), hide_cbar=index < n_lines - 1, hide_cbar_ticks=False, cticks_integer=True, annotate_minor_major=index == 0)
             this_row_id += 1
         
         # --------plot SNR maps--------------
         if args.plot_snr:
             if type(unp.std_devs(this_map.data)) == np.ndarray:
-                axes_lines[this_row_id, index] = plot_2D_map(this_map, axes_lines[this_row_id, index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='SNR', takelog=False, vmin=line_snr_min, vmax=line_snr_max, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=index < n_lines - 1, hide_cbar_ticks=False, cticks_integer=True, annotate_minor_major=index == 0, plot_snr=True)
+                axes_lines[this_row_id, index] = plot_2D_map(this_map, axes_lines[this_row_id, index], f'{this_line}: {nobj}', args, cmap='cividis', clabel='SNR', takelog=False, vmin=line_snr_min, vmax=line_snr_max, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=index < n_lines - 1, hide_cbar_ticks=False, cticks_integer=True, annotate_minor_major=False, plot_snr=True)
                 this_row_id += 1
 
         # -------plot radial profile-------
@@ -1164,8 +1191,9 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
             this_df = this_df.dropna(subset=[f'{this_line}', f'{this_line}_u'], axis=0)
             this_df = this_df[this_df[f'{this_line}'] > 0]
             this_df = this_df.groupby(['bin_ID'], as_index=False).agg(np.mean)
-            
-            axes_lines[this_row_id, index], _, _, _ = plot_radial_profile(this_df, axes_lines[this_row_id, index], args, ylim=[cmin, cmax], takelog=takelog, xlim=None, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=True, skip_annotate=False, quant=this_line, skip_fitting=True, annotate_minor_major=True)
+
+            if args.re_limit is not None: xlim = [0, args.re_limit]
+            axes_lines[this_row_id, index], _, _, _ = plot_radial_profile(this_df, axes_lines[this_row_id, index], args, ylim=[cmin, cmax], takelog=takelog, xlim=xlim, hide_xaxis=False, hide_yaxis=(index > 0), hide_cbar=True, skip_annotate=False, quant=this_line, skip_fitting=True, annotate_minor_major=True)
             this_row_id += 1
                         
     # -----------------plot metallicity map---------------
@@ -1186,12 +1214,13 @@ def plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text='', cmin
         logOH_df[f'{quant}'] = unp.nominal_values(logOH_map).flatten()
         logOH_df[f'{quant}_u'] = unp.std_devs(logOH_map).flatten()
         logOH_df = logOH_df[np.isfinite(logOH_df[f'{quant}']) & np.isfinite(logOH_df[f'{quant}_u'])] 
-        logOH_df = logOH_df.groupby(['bin_ID'], as_index=False).agg(np.mean)
+        #logOH_df = logOH_df.groupby(['bin_ID'], as_index=False).agg(np.mean) #omit this line here and put it inside plot_radial_profile(), this helps in computing minor major gradients in case of sptial binning
         if quant == 'log_OH':
             logOH_df = logOH_df[logOH_df[f'{quant}'].between(7.1, 9.3)] # to eliminate cases that hit NB grid boundary
 
         # Set yaxis_on_right=False so Y-axis labels sit on the left (in the gap)
-        axes_Z[this_row_id, 0], minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(logOH_df, axes_Z[this_row_id, 0], args, ylim=[Zmin, Zmax], xlim=None, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant, skip_fitting=False)
+        axes_Z[this_row_id, 0], minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_radial_profile(logOH_df, axes_Z[this_row_id, 0], args, ylim=[Zmin, Zmax], xlim=xlim, hide_xaxis=False, hide_yaxis=False, hide_cbar=True, skip_annotate=False, quant=quant, skip_fitting=False)
+        #axes_Z[this_row_id, 0].axhline(8.4, c='brown',ls='--', lw=0.5)
         this_row_id += 1
     else:
         minor_linefit_odr, major_linefit_odr, radial_linefit_odr = None, None, None
@@ -1427,7 +1456,7 @@ if __name__ == "__main__":
 
         # -----------------plot line maps and metallicity maps of this bin---------------
         if args.plot_line_and_metallicity:
-            fig_met, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=args.bin_text, takelog=True, cmin=-3, cmax=0, Zmin=None, Zmax=None)
+            fig_met, line_list, minor_linefit_odr, major_linefit_odr, radial_linefit_odr = plot_line_and_metallicity_maps(line_dict, logOH_map, args, bin_text=args.bin_text, takelog=True, cmin=-3, cmax=0, Zmin=7.1, Zmax=9.3)
             save_fig(fig_met, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_line_and_metallicity_map_{args.Zdiag}{args.C25_text}{args.deproject_text}{args.rescale_text}_{args.bin_text}.png', args) # saving the figure
 
         # -------------save fit results to dataframe-----------------------
@@ -1459,7 +1488,7 @@ if __name__ == "__main__":
             if fig_bpt is not None:
                 save_fig(fig_bpt, args.fig_dir, f'stacked{args.binned_text}{args.fold_text}_line_and_bpt_map_{args.AGN_diag}{args.deproject_text}{args.rescale_text}_{args.bin_text}.png', args) # saving the figure
 
-        if len(bin_list) > 5: plt.close('all')
+        if len(bin_list) > 10: plt.close('all')
         print(f'\nCompleted bin {args.bin_text} in {timedelta(seconds=(datetime.now() - start_time3).seconds)}, {len(bin_list) - index2 - 1} to go!')
     
     # --------------------save master dataframe-----------------------------------

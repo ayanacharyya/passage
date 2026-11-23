@@ -156,10 +156,13 @@ if __name__ == "__main__":
         df_2dratios = pd.read_csv(df_2dratios_filename)
 
     # ---------set up the figure-------------
-    fig, axes = plt.subplots(2, 2, figsize=(9, 6))
-    fig.subplots_adjust(left=0.08, right=0.88, top=0.98, bottom=0.1, wspace=0.1, hspace=0.1)
     xcol, colorcol = 'log_mass_median', 'delta_sfms_median'
-    ycol_arr = ['R3_int', 'R23_int']
+    ycol_arr = ['R23_int']#, 'R3_int']
+
+    nrow = len(ycol_arr)
+    fig, axes = plt.subplots(nrow, 2, figsize=(9, 2 + 2 * nrow))
+    axes = np.atleast_2d(axes)
+    fig.subplots_adjust(left=0.08, right=0.88, top=0.98, bottom=0.14 if nrow == 1 else 0.1, wspace=0.1, hspace=0.1)
     cmin, cmax, cmap = -0.6, 0.6, 'RdBu'
 
     label_dict = {
@@ -223,7 +226,7 @@ if __name__ == "__main__":
             args.ynum_line, args.yden_line = 'OII,OIII', 'Hb'
         ax, ratio_name = plot_ratio_model(df_ratios, ax, args)
         ax = annotate_axes(ax, label_dict[args.quantity1], label_dict[ycol], ylim=[0, 1.1], args=args, hide_xaxis=index < len(ycol_arr) - 1)
-    ax.legend(fontsize = args.fontsize / args.fontfactor / 1.5, loc='upper left')
+    ax.legend(fontsize = args.fontsize / args.fontfactor, loc='upper left')
 
     # ------saving---------
     figname = f'ratio_2d_vs_1d_comparison_{args.binby_text}{args.deproject_text}{args.rescale_text}.png'

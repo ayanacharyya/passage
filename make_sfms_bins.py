@@ -1240,15 +1240,15 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
         mask = idx_df.isin(idx_agns)
         df = df[~mask]
         print(f'\tOut of which, {mask.sum()} are removed based on known AGN flags from COSMOS, yielding a final sample is {len(df)} galaxies.')
-
+        '''
         # ---------computing and adding individual galaxy integrated metallicities column-------
         if calculate_indiv_logOH:
             df = get_int_Z_NB(df, args)
-
+        '''
         # --------writing sample to file--------------
         df.to_csv(sample_filename, index=None)
         print(f'Saved sample at {sample_filename}\n')
-    
+        
     # -----------reading existing sample file-----------------------
     else:
         print(f'Reading from existing sample list {sample_filename}\n')
@@ -1404,7 +1404,7 @@ def get_binned_df(args, df=None, method_text='', required_lines=[], sfms='Popess
 
     # --------------curtailiug bins for debugging-------------------
     #if args.debug_bin: bin_list = bin_list[1:2]
-    if args.debug_bin: bin_list = bin_list[8:9]
+    if args.debug_bin: bin_list = bin_list[0:1]
 
     # ------determining field-specific paths, etc-----------
     if args.skip_re_scaling:

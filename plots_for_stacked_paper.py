@@ -322,23 +322,39 @@ def generate_latex_table(results_dict, outfilename):
     '''
     Constructs LaTeX tabular code from collected correlation statistics and prints/saves it
     '''
-    
-    header = (
-        "\\begin{tabular}{l|c|c||c|c}\n"
-        "\\toprule\n"
-        "& \\multicolumn{2}{c||}{Stellar mass ($\\log{(M_*/M_\\odot)}$)} & \\multicolumn{2}{c}{Offset from SFMS ($\\delta_{\\rm SFMS}$)} \\\\\n"
-        "\\cmidrule(lr){2-3} \\cmidrule(lr){4-5}\n"
-        "Quantity & Zero-Order & Partial\\tnote{a} & Zero-Order & Partial\\tnote{a} \\\\\n"
-        "\\midrule\n"
-    )
+
+    if plot_partial:
+        header = (
+            "\\begin{tabular}{l|c|c||c|c}\n"
+            "\\toprule\n"
+            "& \\multicolumn{2}{c||}{Stellar mass ($\\log{(M_*/M_\\odot)}$)} & \\multicolumn{2}{c}{Offset from SFMS ($\\delta_{\\rm SFMS}$)} \\\\\n"
+            "\\cmidrule(lr){2-3} \\cmidrule(lr){4-5}\n"
+            "Quantity & Zero-Order & Partial\\tnote{a} & Zero-Order & Partial\\tnote{a} \\\\\n"
+            "\\midrule\n"
+        )
+    else:
+        header = (
+            "\\begin{tabular}{l|c|c}\n"
+            "\\toprule\n"
+            "& Stellar mass & Offset from SFMS \\\\\n"
+            "Quantity & ($\\log{(M_*/M_\\odot)}$) & ($\\delta_{\\rm SFMS}$) \\\\\n"
+            "\\midrule\n"
+        )
     
     body = ""
-    sections = [
-        ('full', r"\multicolumn{5}{l}{\textit{Full mass range ($7.5 \lesssim \log{(M_*/M_\odot)} \lesssim 10.5$)}} \\[5pt]"),
-        ('low', r"\multicolumn{5}{l}{\textit{Lower-mass regime ($\log{(M_*/M_\odot)} < 9$)}} \\[5pt]"),
-        ('high', r"\multicolumn{5}{l}{\textit{Higher-mass regime ($\log{(M_*/M_\odot)} > 9$)}} \\[5pt]")
-    ]
-    
+    if plot_partial:
+        sections = [
+            ('full', r"\multicolumn{5}{l}{\textit{Full mass range ($7.5 \lesssim \log{(M_*/M_\odot)} \lesssim 10.5$)}} \\[5pt]"),
+            ('low', r"\multicolumn{5}{l}{\textit{Lower-mass regime ($\log{(M_*/M_\odot)} < 9$)}} \\[5pt]"),
+            ('high', r"\multicolumn{5}{l}{\textit{Higher-mass regime ($\log{(M_*/M_\odot)} > 9$)}} \\[5pt]")
+        ]
+    else:
+        sections = [
+            ('full', r"\multicolumn{3}{l}{\textit{Full mass range ($7.5 \lesssim \log{(M_*/M_\odot)} \lesssim 10.5$)}} \\[5pt]"),
+            ('low', r"\multicolumn{3}{l}{\textit{Lower-mass regime ($\log{(M_*/M_\odot)} < 9$)}} \\[5pt]"),
+            ('high', r"\multicolumn{3}{l}{\textit{Higher-mass regime ($\log{(M_*/M_\odot)} > 9$)}} \\[5pt]")
+        ]
+
     labels = {
         'logOH_int': 'Integrated metallicity',
         'radial_logOH_grad': 'Radial gradient',
@@ -363,13 +379,17 @@ def generate_latex_table(results_dict, outfilename):
             q_label = labels[q_key]
             stats = rows[q_key]
             
-            c1 = format_latex_cell(stats['x_zero'][0], stats['x_zero'][1])
-            c2 = format_latex_cell(stats['x_partial'][0], stats['x_partial'][1])
-            c3 = format_latex_cell(stats['c_zero'][0], stats['c_zero'][1])
-            c4 = format_latex_cell(stats['c_partial'][0], stats['c_partial'][1])
-            
             spacing = "\\\\[12pt]\n" if q_key != list(rows.keys())[-1] else "\\\\[8pt]\n"
-            body += f"{q_label}\n  & {c1}\n  & {c2}\n  & {c3}\n  & {c4} {spacing}"
+
+            c1 = format_latex_cell(stats['x_zero'][0], stats['x_zero'][1])
+            c3 = format_latex_cell(stats['c_zero'][0], stats['c_zero'][1])
+
+            if plot_partial:
+                c2 = format_latex_cell(stats['x_partial'][0], stats['x_partial'][1])
+                c4 = format_latex_cell(stats['c_partial'][0], stats['c_partial'][1])
+                body += f"{q_label}\n  & {c1}\n  & {c2}\n  & {c3}\n  & {c4} {spacing}"
+            else:
+                body += f"{q_label}\n  & {c1}\n  & {c3} {spacing}"
             
         body += "\\midrule\n" if sec_key != 'high' else ""
 
@@ -478,9 +498,9 @@ def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad'
     axes[0].axhline(0, ls='dashed', lw=0.5, c='k')
 
     # -------running median: radial gradient------------
-    if len(df) >= window:
-        y_radial_med = df[ycol].rolling(window=window, center=True, min_periods=1).median()
-        axes[0].plot(df[xcol], y_radial_med, c='olivedrab', ls='-', lw=1.5, zorder=15)
+    # if len(df) >= window:
+    #     y_radial_med = df[ycol].rolling(window=window, center=True, min_periods=1).median()
+    #     axes[0].plot(df[xcol], y_radial_med, c='olivedrab', ls='-', lw=1.5, zorder=15)
 
     # -----plot literature---------
     axes[0] = plot_MZGR_literature(axes[0], skip_legend=True)
@@ -489,13 +509,13 @@ def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad'
     axes[0] = annotate_axes(axes[0], label_dict[xcol], label_dict[ycol], xlim=lim_dict[xcol], ylim=lim_dict[ycol], args=args, 
                        clabel=label_dict[colorcol] if colorcol is not None else '', hide_cbar=colorcol is None, cbar_width=2,
                        p=p, hide_cbar_ticks=False, cticks_integer=False, hide_xaxis=True)    
-
+    '''
     vline_col = 'sienna'
     axes[0].axvline(log_mass_cut, ls='dotted', lw=1., c=vline_col)
     axes[0].text(log_mass_cut - 0.1, axes[0].get_ylim()[1] * 0.95, 'Lower mass regime', c=vline_col, fontsize=args.fontsize / args.fontfactor, ha='right', va='top')
     axes[0].text(log_mass_cut + 0.1, axes[0].get_ylim()[1] * 0.95, 'Higher mass regime', c=vline_col, fontsize=args.fontsize / args.fontfactor, ha='left', va='top')
     axes[1].axvline(log_mass_cut, ls='dotted', lw=1., c=vline_col)
-
+    '''
     # -------plot minor & major gradient------------
     ycol_arr = [ycol.replace('radial', 'minor'), ycol.replace('radial', 'major')]
     marker_arr = ['s', 'D']
@@ -510,9 +530,9 @@ def plot_stacked_MZGR(df, args, xcol='log_mass_median', ycol='radial_logOH_grad'
         axes[1].axhline(0, ls='dashed', lw=0.5, c='k')
 
         # -------running median: minor & major gradients------------
-        if len(df) >= window:
-            y_axis_med = df[curr_ycol].rolling(window=window, center=True, min_periods=1).median()
-            axes[1].plot(df[xcol], y_axis_med, c='olivedrab', ls=ls_arr[index], lw=1.5, zorder=15)
+        # if len(df) >= window:
+        #     y_axis_med = df[curr_ycol].rolling(window=window, center=True, min_periods=1).median()
+        #     axes[1].plot(df[xcol], y_axis_med, c='olivedrab', ls=ls_arr[index], lw=1.5, zorder=15)
 
     # -----plot literature---------
     axes[1] = plot_MZGR_literature(axes[1], this_work_legend=this_work_legend)
@@ -679,24 +699,31 @@ def plot_correlation_summary_hatched(results_dict, args, qualifiers=''):
     nonsig_color = 'lightgrey' # for p > 0.05
 
     # ------setting up figure with shared x-axis and small panel spacing--------------
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 7.5), sharex=True)
-    fig.subplots_adjust(left=0.07, right=0.99, top=0.99, bottom=0.07, hspace=0.02)
+    if plot_partial:
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 7.5), sharex=True)
+        fig.subplots_adjust(left=0.07, right=0.99, top=0.99, bottom=0.07, hspace=0.02)
+        panels = [
+            (ax1, items_zero, r'Zeroth-Order Spearman ($r$)', 'Zeroth-Order Correlations'),
+            (ax2, items_partial, r'Partial Spearman ($r_{\partial}$)', r'Partial Correlations (controlling for $\delta_{\rm SFMS}$ or $\log M_*$)')
+        ]
+    else:
+        fig, ax1 = plt.subplots(1, 1, figsize=(13, 4.5))
+        fig.subplots_adjust(left=0.07, right=0.99, top=0.99, bottom=0.1, hspace=0.02)
+        panels = [
+            (ax1, items_zero, r'Spearman correlation coefficient ($r$)', ''),
+        ]
 
     x = np.arange(len(items_zero))
     width = 0.25  # bar width
-
-    panels = [
-        (ax1, items_zero, r'Zeroth-Order Spearman ($r$)', 'Zeroth-Order Correlations'),
-        (ax2, items_partial, r'Partial Spearman ($r_{\partial}$)', r'Partial Correlations (controlling for $\delta_{\rm SFMS}$ or $\log M_*$)')
-    ]
 
     for ax, items, ylabel_str, panel_title in panels:
         # -----------looping through each mass regime to plot grouped bars-----------
         for i, (reg, r_label, hatch) in enumerate(zip(regimes, regime_labels, regime_hatches)):
             r_vals, p_vals = [], []
-            
+
             for q_key, corr_type, _ in items:
-                stat = results_dict.get(reg, {}).get(q_key, {}).get(corr_type, [np.nan, np.nan])
+                show_bar = (reg == 'full') if q_key == 'logOH_int' else (reg in ['low', 'high'])
+                stat = results_dict.get(reg, {}).get(q_key, {}).get(corr_type, [np.nan, np.nan]) if show_bar else [np.nan, np.nan]
                 r_vals.append(stat[0])
                 p_vals.append(stat[1])
             
@@ -727,16 +754,22 @@ def plot_correlation_summary_hatched(results_dict, args, qualifiers=''):
         ax.set_ylabel(ylabel_str, fontsize=args.fontsize)
         ax.yaxis.set_major_locator(ticker.MaxNLocator(nbins=5, prune='lower'))
         ax.tick_params(axis='y', which='both', labelsize=args.fontsize)
-        ax.set_ylim(-1.1, 1.1)
+        ax.set_ylim(-1.5, 1.5)
         ax.grid(axis='y', linestyle=':', alpha=0.6, zorder=0)
 
         ax.text(0.5, 0.98, panel_title, transform=ax.transAxes, ha='center', va='top', fontsize=args.fontsize / args.fontfactor, fontweight='bold', zorder=5)
 
     # -------shared x-axis tick marks & labels---------
-    ax1.tick_params(axis='x', which='both', bottom=True, labelbottom=False) # Top panel
-    ax2.tick_params(axis='x', which='both', bottom=True, labelbottom=True) # Bottom panel
-    ax2.set_xticks(x)
-    ax2.set_xticklabels([item[2] for item in items_partial], fontsize=args.fontsize)
+    if plot_partial:
+        ax1.tick_params(axis='x', which='both', bottom=True, labelbottom=False) # Top panel
+        ax2.tick_params(axis='x', which='both', bottom=True, labelbottom=True) # Bottom panel
+        ax2.set_xticklabels([item[2] for item in items_partial], fontsize=args.fontsize)
+        ax = ax2
+    else:
+        ax1.tick_params(axis='x', which='both', bottom=True, labelbottom=True) # Top panel
+        ax1.set_xticklabels([item[2] for item in items], fontsize=args.fontsize / args.fontfactor)
+        ax = ax1
+    ax.set_xticks(x)
 
     # --------making significance legend (left on top panel)---------
     if args.nocolorcoding:
@@ -744,11 +777,11 @@ def plot_correlation_summary_hatched(results_dict, args, qualifiers=''):
     else:
         legend_sig = [patches.Patch(facecolor=cfg['color'], edgecolor='black', label=cfg['label'])for cfg in p_value_color_config]
     leg1 = ax1.legend(handles=legend_sig, loc='best', frameon=True, fontsize=args.fontsize / args.fontfactor)
-    #ax1.add_artist(leg1)
+    ax1.add_artist(leg1)
 
     # -------making mass legend (right on top panel)-------------------
     legend_regime = [patches.Patch(facecolor='white', edgecolor='black', hatch=h, label=lbl) for h, lbl in zip(regime_hatches, regime_labels)]
-    ax2.legend(handles=legend_regime, loc='best', frameon=True, fontsize=args.fontsize / args.fontfactor)
+    ax.legend(handles=legend_regime, loc='upper right', frameon=True, fontsize=args.fontsize / args.fontfactor / 1.2)
 
     # -------save fig--------
     figname = f'correlation_summary_{qualifiers}.png'
@@ -759,7 +792,7 @@ def plot_correlation_summary_hatched(results_dict, args, qualifiers=''):
 # --------------------------------------------------------------------------------------------------------------------
 lim_dict = {'minor_logOH_grad': [-1.2, 1.2],\
                 'major_logOH_grad': [-1.2, 1.2],\
-                'radial_logOH_grad': [-1.2, 1.2],\
+                'radial_logOH_grad': [-1.7, 1.0],\
                 'logOH_int': [7.0, 9.0],\
                 'delta_sfms_median': [-0.6, 0.6],\
                 'log_mass_median': [7.5, 10.5],\
@@ -774,6 +807,7 @@ p_value_color_config = [
 ]
 
 log_mass_cut = 9.0
+plot_partial = False
 
 # --------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -799,6 +833,8 @@ if __name__ == "__main__":
     # -------------merging the two dataframes-----------------------
     if args.bin_by_distance_mass:
         df2 = df.rename(columns={'mass_interval':'log_mass_bin', 'mass_intervals':'log_mass_bin', 'bin_intervals':'delta_sfms_bin'})
+        for col in ['logOH_indiv_int', 'logOH_indiv_int_u']:
+            if col not in df2: df2[col] = np.nan
         df2 = df2.groupby(['delta_sfms_bin', 'log_mass_bin']).agg(log_mass_min=('log_mass', 'min'), log_mass_max=('log_mass', 'max'), log_mass_median=('log_mass', 'median'), delta_sfms_median=('delta_sfms', 'median'), logOH_indiv_median=('logOH_indiv_int', 'median'), logOH_indiv_median_u=('logOH_indiv_int_u', 'median')).reset_index()
         df_grad = pd.merge(df_grad, df2, on=['delta_sfms_bin', 'log_mass_bin'], how='left').reset_index(drop=True)
     elif args.bin_by_distance:
@@ -824,7 +860,7 @@ if __name__ == "__main__":
     results_dict = compute_correlations(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', qualifiers=qualifiers)
     
     fig_mzgr = plot_stacked_MZGR(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
-    fig_corr = plot_correlation_summary_hatched(results_dict, args, qualifiers=qualifiers)
-    fig_mzr = plot_stacked_MZR(df_grad, args, xcol='log_mass_median', ycol='logOH_int', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap, df_sample=df)
+    #fig_corr = plot_correlation_summary_hatched(results_dict, args, qualifiers=qualifiers)
+    #fig_mzr = plot_stacked_MZR(df_grad, args, xcol='log_mass_median', ycol='logOH_int', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap, df_sample=df)
 
     print(f'Completed in {timedelta(seconds=(datetime.now() - start_time).seconds)}')
