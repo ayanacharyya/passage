@@ -158,7 +158,7 @@ def parse_args():
     parser.add_argument('--use_elliptical_bins', dest='use_elliptical_bins', action='store_true', default=False, help='Make elliptical bins instead of radial? Default is no.')
 
     # ------- args added for get_field_stats.py ------------------------------
-    parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=300.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
+    parser.add_argument('--EW_thresh', metavar='EW_thresh', type=float, action='store', default=100.0, help='Rest-frame EW threshold to consider good detection for emission line maps; default is 300')
     parser.add_argument('--SNR_thresh', metavar='SNR_thresh', type=float, action='store', default=10.0, help='SNR threshold to consider good detection for emission line maps; default is 10')
     parser.add_argument('--log_SFR_thresh', metavar='log_SFR_thresh', type=float, action='store', default=0, help='SFR threshold (in log) to consider highly star-forming; default is 0')
     parser.add_argument('--log_sSFR_thresh', metavar='log_sSFR_thresh', type=float, action='store', default=-9, help='specific SFR threshold (in log) to consider highly star-forming; default is 0')
@@ -329,6 +329,9 @@ def parse_args():
 
     # ---- args added for plot_stacked_dig.py ------------
     parser.add_argument('--plot_quant', metavar='plot_quant', type=str, action='store', default='sfr', help='Radial profile of which quantity to plot? Choose between sfr, logOH and cdig, default is sfr')
+
+    # ---- args added for explore_ngdeep.py ------------
+    parser.add_argument('--log_mass_cut', metavar='log_mass_cut', type=float, action='store', default=None, help='Consider only galaxies above this stellar mass cut-off; default is None, so no mass-based cut')
 
     # ------- wrap up and processing args ------------------------------
     args = parser.parse_args()

@@ -14,27 +14,56 @@ import os
 directory_path = "/Users/acharyya/Work/conferences/IAU_ECRWG_Nov2026/"
 submission_file = os.path.join(directory_path, "Synergies between Observational and Theoretical Astronomy_ Results, Challenges and Future Prospects (odpovede).xlsx")
 schedule_file = os.path.join(directory_path, "IAU November conference talk schedule.xlsx")
+poster_submission_file = os.path.join(directory_path, "Poster submission for IAU ECRWG Conference 2026 (Responses).xlsx")
 html_file = os.path.join(directory_path, "IAU ECRWG Abstract Booklet.html")
 pdf_file = os.path.join(directory_path, "IAU ECRWG Abstract Booklet.pdf")
 
 # ---------------generate dataframe from excel sheet-------------------
 df_requested_talks = pd.read_excel(schedule_file, sheet_name='All abstracts')
 df_requested_talks = df_requested_talks.rename(columns=str.strip) # to strp leading and trailing whitespaces in column names
+#df_requested_talks = df_requested_talks.drop_duplicates(subset='Full name', keep='last')
 df_requested_talks = df_requested_talks[['ID', 'Full name', 'Affiliation', 'Presentation title', 'Abstract']]
 
 df_schedule = pd.read_excel(schedule_file, sheet_name='Tentative talk schedule Ayan')
 df_schedule = df_schedule.rename(columns=str.strip) # to strp leading and trailing whitespaces in column names
-df_talks = df_requested_talks[df_requested_talks['ID'].isin(df_schedule['Sl no.'])] # some abstracts submitted for talks made it to the schedule
+df_talks_offered = df_requested_talks[df_requested_talks['ID'].isin(df_schedule['Sl no.'])] # some abstracts submitted for talks made it to the schedule
 df_nontalks = df_requested_talks[~(df_requested_talks['ID'].isin(df_schedule['Sl no.']))] # the rest of the abstracts submitted for talks became posters
 df_nontalks = df_nontalks[df_nontalks['ID']!='T117'] # removing the abtract about trojan stuff from the talks-converted-to-poster list
 
-# --- Load poster abstracts-----
+# ---load poster abstracts-----
 df_all_submissions = pd.read_excel(submission_file)
 df_all_submissions = df_all_submissions.rename(columns=str.strip) # to strp leading and trailing whitespaces in column names
+df_all_submissions = df_all_submissions.drop_duplicates(subset='Full name', keep='last')
+
 df_requested_posters = df_all_submissions[df_all_submissions['Presentation type'] == 'Poster']
 df_requested_posters = df_requested_posters[['Full name', 'Affiliation', 'Presentation title', 'Abstract']]
 df_nontalks = df_nontalks.drop(labels=['ID'], axis=1) # so that now this also has the exact same columns as df_poster
-df_posters = pd.concat([df_nontalks, df_requested_posters], ignore_index=True)
+df_posters_offered = pd.concat([df_nontalks, df_requested_posters], ignore_index=True)
+df_posters_offered = df_posters_offered.replace({'Full name': {'Mansouri Sabah': 'Sabah Mansouri', 
+                                                               'RIDIMA SUR': 'Ridima Sur',
+                                                               'Postnikova Ekaterina': 'Ekaterina Postnikova',
+                                                               'Elena Díaz-Márquez': 'Elena Diaz-Marquez',
+                                                               'Dr. Simthembile Dlamini': 'Simthembile Dlamini',
+                                                               'MERAGALGE SARALA SHALINI GUNASEKARA': 'M. Gunasekara',
+                                                               'Lukasz Tychoniec': 'Łukasz Tychoniec',
+                                                               }}) # manually modifying certain names so hat they match the poster submission spreadsheet
+
+#df_posters = df_posters_offered
+#df_talks = df_talks_offered
+# ----load final talks and posters actually presented---------
+df_posters_offered['Last name'] = df_posters_offered['Full name'].map(lambda x: x.split()[-1])
+df_posters_offered['First name'] = df_posters_offered['Full name'].map(lambda x: x.split()[0])
+
+df_posters_submitted = pd.read_excel(poster_submission_file)
+df_posters_submitted['Last name'] = df_posters_submitted['Your last name'].map(lambda x: x.split()[-1])
+df_posters_submitted['First name'] = df_posters_submitted['Your first name'].map(lambda x: x.split()[0])
+df_posters_submitted = df_posters_submitted.sort_values('Timestamp').drop_duplicates(subset='Last name', keep='last')
+df_posters = df_posters_offered[(df_posters_offered['Last name'].str.lower().isin(df_posters_submitted['Last name'].str.lower())) &
+                                (df_posters_offered['First name'].str.lower().isin(df_posters_submitted['First name'].str.lower()))
+                                ]
+
+talk_absences = ["Charles Mpho Takalana", "Dr. Mu'allim Yakubu", "Toushif Alam"]
+df_talks = df_talks_offered[~df_talks_offered['Full name'].isin(talk_absences)]
 
 # ---------------generate booklet from dataframe-----------------------
 title_col = [c for c in df_talks.columns if 'title' in c.lower()][0]
