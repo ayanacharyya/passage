@@ -857,7 +857,7 @@ if __name__ == "__main__":
     else:
         colorcol, cmap = 'tform_ratio_median', 'viridis' # sequential cmap
     
-    results_dict = compute_correlations(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', qualifiers=qualifiers)
+    #results_dict = compute_correlations(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', qualifiers=qualifiers)
     
     fig_mzgr = plot_stacked_MZGR(df_grad, args, xcol='log_mass_median', ycol='radial_logOH_grad', colorcol=colorcol, qualifiers=qualifiers, cmap=cmap)
     #fig_corr = plot_correlation_summary_hatched(results_dict, args, qualifiers=qualifiers)

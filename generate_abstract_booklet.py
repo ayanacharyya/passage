@@ -22,7 +22,7 @@ pdf_file = os.path.join(directory_path, "IAU ECRWG Abstract Booklet.pdf")
 df_requested_talks = pd.read_excel(schedule_file, sheet_name='All abstracts')
 df_requested_talks = df_requested_talks.rename(columns=str.strip) # to strp leading and trailing whitespaces in column names
 #df_requested_talks = df_requested_talks.drop_duplicates(subset='Full name', keep='last')
-df_requested_talks = df_requested_talks[['ID', 'Full name', 'Affiliation', 'Presentation title', 'Abstract']]
+df_requested_talks = df_requested_talks[['ID', 'Full name', 'Affiliation', 'Presentation title', 'Abstract', 'Email address']]
 
 df_schedule = pd.read_excel(schedule_file, sheet_name='Tentative talk schedule Ayan')
 df_schedule = df_schedule.rename(columns=str.strip) # to strp leading and trailing whitespaces in column names
@@ -36,7 +36,8 @@ df_all_submissions = df_all_submissions.rename(columns=str.strip) # to strp lead
 df_all_submissions = df_all_submissions.drop_duplicates(subset='Full name', keep='last')
 
 df_requested_posters = df_all_submissions[df_all_submissions['Presentation type'] == 'Poster']
-df_requested_posters = df_requested_posters[['Full name', 'Affiliation', 'Presentation title', 'Abstract']]
+df_requested_posters = df_requested_posters[['Full name', 'Affiliation', 'Presentation title', 'Abstract', 'E-mailová adresa', 'Career stage']]
+df_requested_posters = df_requested_posters.rename(columns={'E-mailová adresa': 'Email address'})
 df_nontalks = df_nontalks.drop(labels=['ID'], axis=1) # so that now this also has the exact same columns as df_poster
 df_posters_offered = pd.concat([df_nontalks, df_requested_posters], ignore_index=True)
 df_posters_offered = df_posters_offered.replace({'Full name': {'Mansouri Sabah': 'Sabah Mansouri', 

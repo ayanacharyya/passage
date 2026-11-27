@@ -867,10 +867,9 @@ def get_suffixes_and_paths(args, required_lines=[]):
     Returns args
     '''
     # ------------add new keywords to args---------------
-    if set(required_lines) == set(['Ha', 'OIII']): args.line_list = ['OIII', 'Hb', 'Ha', 'SII']
-    elif set(required_lines) == set(['Ha', 'OIII', 'Hb']): args.line_list = ['OIII', 'Hb', 'Ha', 'SII']
-    elif set(required_lines) == set(['OII', 'Ha', 'OIII', 'Hb']): args.line_list = ['OII', 'OIII', 'Hb', 'Ha', 'SII']
-    elif set(required_lines) == set(['Ha', 'OIII', 'OII']): args.line_list = ['OIII', 'OII', 'NeIII-3867',  'Ha', 'SII']
+    args.line_list = required_lines.copy()
+    if 'Ha' in required_lines and 'SII' not in args.line_list: args.line_list += ['SII'] # if Halpha is required so usually SII must also be present, so might as well use it for stacking where available
+    if 'OII' in required_lines and 'NeIII-3867' not in args.line_list: args.line_list += ['NeIII-3867'] # if OII is required so usually NeIII must also be present, so might as well use it for stacking where available
     print(f'\nWill stack and compute metallicity using these {len(args.line_list)} lines: {args.line_list}.\n')
 
     args.deproject_text = '_nodeproject' if args.skip_deproject else ''
@@ -889,7 +888,7 @@ def get_suffixes_and_paths(args, required_lines=[]):
     args.cut_z_flag_text = args.cut_z_flag_text + args.npa_text + args.inc_cut_text + args.par682_text + args.hst_text
     
     if len(required_lines) > 0:
-        args.required_lines_text = '_lines_' + ','.join(required_lines)
+        args.required_lines_text = '_lines_' + ','.join(args.line_list)
         if args.sn_cut_all is not None:
             args.snr_cut_text = f'_sn_all_{args.sn_cut_all}'
         else:
@@ -1067,7 +1066,7 @@ def get_stacking_sample(passage_catalog_filename, args, required_lines=[], sfms=
             df_spec_this_field = pd.read_table(linefinding_catalog, delim_whitespace=True, comment='#')
             df_spec_this_field = df_spec_this_field.rename(columns={'objid':'id'})
             
-            line_labels_dict = {'OII':'o2_3727_3730', 'OIII':'o3_5007', 'Ha':'ha_6565', 'Hb':'hb_4863', 'SII':'s2_6716_6731'}
+            line_labels_dict = {'OII':'o2_3727_3730', 'OIII':'o3_5007', 'Ha':'ha_6565', 'Hb':'hb_4863', 'SII':'s2_6716_6731', 'NeIII-3867':'ne3_3869'}
             for this_line in lines_to_extract: # modifying column names to match that from grizli speccat
                 df_spec_this_field = df_spec_this_field.rename(columns = {f'{line_labels_dict[this_line]}_flux': f'flux_{this_line}', 
                                                                         f'{line_labels_dict[this_line]}_error': f'err_{this_line}'})
